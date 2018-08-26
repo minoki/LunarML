@@ -1,18 +1,18 @@
 structure Syntax = struct
 datatype SCon = IntegerConstant of int (* decimal / hexadecimal *)
               | WordConstant of word (* decimal / hexadecimal *)
-              | RealConstant (* decimal *)
+              | RealConstant of real (* decimal *)
               | StringConstant of string
               | CharacterConstant of string
-datatype VId = VId of string
-datatype TyVar = TyVar of string
-datatype TyCon = TyCon of string
+datatype VId = MkVId of string
+datatype TyVar = MkTyVar of string
+datatype TyCon = MkTyCon of string
 datatype Label = NumericLabel of int
                | IdentifierLabel of string
-datatype StrId = StrId of string
-datatype LongVId = LongVId of StrId list * VId
-datatype LongTyCon = LongTyCon of StrId list * TyCon
-datatype LongStrId = LongStrId of StrId list * StrId
+datatype StrId = MkStrId of string
+datatype LongVId = MkLongVId of StrId list * VId
+datatype LongTyCon = MkLongTyCon of StrId list * TyCon
+datatype LongStrId = MkLongStrId of StrId list * StrId
 
 datatype Ty = TyVar of TyVar (* type variable *)
             | RecordType of (Label * Ty) list (* record type expression *)
@@ -47,8 +47,8 @@ datatype Exp = SConExp of SCon (* special constant *)
              | TypeDec of TypBind list
              | DatatypeDec of DatBind list
              | DatatypeRepDec of TyCon * LongTyCon
-             | AbstypeDec of DatBind * Dec list
-             | ExceptionDec of ExBind
+             | AbstypeDec of DatBind list * Dec list
+             | ExceptionDec of ExBind list
              | LocalDec of Dec list * Dec list
              | OpenDec of LongStrId list
              | InfixDec of int option * VId list

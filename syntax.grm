@@ -29,7 +29,7 @@
     | WITHTYPE | WHERE | WHILE
     (* other *)
     | EOF
-%nonterm START of Syntax.Program
+%nonterm START of Syntax.Exp
        | IntConst of int
        | SCon of Syntax.SCon
        | TyVar of Syntax.TyVar
@@ -65,9 +65,9 @@
        | HandleExp of Syntax.Exp
        | Exp_NoMatch of Syntax.Exp
        | Exp of Syntax.Exp
-       | Match of (Syntax.Pat * Syntax.Exp) list
+       | MatchClauses of (Syntax.Pat * Syntax.Exp) list
        | MRule of Syntax.Pat * Syntax.Exp
-       | Dec of Syntax.Dec
+       | Dec of Syntax.Dec list
        | LongStrIds of Syntax.LongStrId list
        | VIds of Syntax.VId list
        | ValBind of Syntax.ValBind
@@ -97,28 +97,28 @@ START : Exp (Exp)
 IntConst : PosInt (PosInt)
          | ZNIntConst (ZNIntConst)
 
-SCon : IntConst (Syntax.IntegerConst IntConst)
+SCon : IntConst (Syntax.IntegerConstant IntConst)
      | WordConst (Syntax.WordConstant WordConst)
      | RealConst (Syntax.RealConstant RealConst)
      | StringConst (Syntax.StringConstant StringConst)
      | CharacterConst (Syntax.CharacterConstant CharacterConst)
 
 (* type variable *)
-TyVar : PrimeIdent (Syntax.TyVar PrimeIdent)
+TyVar : PrimeIdent (Syntax.MkTyVar PrimeIdent)
 
 (* value identifiers *)
-VId : AlnumIdent (Syntax.VId AlnumIdent)
-    | SymbolicIdent (Syntax.VId SymbolicIdent)
-    | ASTERISK (Syntax.VId "*")
-    | EQUAL (Syntax.VId "=") (* ? *)
+VId : AlnumIdent (Syntax.MkVId AlnumIdent)
+    | SymbolicIdent (Syntax.MkVId SymbolicIdent)
+    | ASTERISK (Syntax.MkVId "*")
+    | EQUAL (Syntax.MkVId "=") (* ? *)
 
 (* value identifiers, excluding '=' *)
-BoundVId : AlnumIdent (Syntax.VId AlnumIdent)
-         | SymbolicIdent (Syntax.VId SymbolicIdent)
-         | ASTERISK (Syntax.VId "*")
+BoundVId : AlnumIdent (Syntax.MkVId AlnumIdent)
+         | SymbolicIdent (Syntax.MkVId SymbolicIdent)
+         | ASTERISK (Syntax.MkVId "*")
 
 (* structure identifier *)
-StrId : AlnumIdent (Syntax.StrId AlnumIdent)
+StrId : AlnumIdent (Syntax.MkStrId AlnumIdent)
 
 (* record labels *)
 Lab : AlnumIdent (Syntax.IdentifierLabel AlnumIdent)
@@ -127,24 +127,24 @@ Lab : AlnumIdent (Syntax.IdentifierLabel AlnumIdent)
     | PosInt (Syntax.NumericLabel PosInt) (* numeric labels *)
 
 (* type constructors; "*" is not included *)
-TyCon : AlnumIdent (Syntax.TyCon AlnumIdent)
-      | SymbolicIdent (Syntax.TyCon SymbolicIdent)
+TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
+      | SymbolicIdent (Syntax.MkTyCon SymbolicIdent)
 
 (* long value identifiers *)
-LongVId : VId ((nil, VId))
-        | StrId DOT LongVId (case LongVId of (s,t) => (StrId :: s, t))
+LongVId : VId (Syntax.MkLongVId (nil, VId))
+        | StrId DOT LongVId (case LongVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
 
 (* long value identifiers *)
-LongBoundVId : BoundVId ((nil, BoundVId))
-             | StrId DOT LongBoundVId (case LongBoundVId of (s,t) => (StrId :: s, t))
+LongBoundVId : BoundVId (Syntax.MkLongVId (nil, BoundVId))
+             | StrId DOT LongBoundVId (case LongBoundVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
 
 (* long type constructors *)
-LongTyCon : TyCon ((nil, TyCon))
-          | StrId DOT LongTyCon (case LongTyCon of (s,t) => (StrId :: s, t))
+LongTyCon : TyCon (Syntax.MkLongTyCon (nil, TyCon))
+          | StrId DOT LongTyCon (case LongTyCon of Syntax.MkLongTyCon (s,t) => Syntax.MkLongTyCon (StrId :: s, t))
 
 (* long structure identifiers *)
-LongStrId : StrId ((nil, StrId))
-          | StrId DOT LongStrId (case LongStrId of (s,t) => (StrId :: s, t))
+LongStrId : StrId (Syntax.MkLongStrId (nil, StrId))
+          | StrId DOT LongStrId (case LongStrId of Syntax.MkLongStrId (s,t) => Syntax.MkLongStrId (StrId :: s, t))
 
 Opt_OP : (* empty *) (false)
        | OP (true)
@@ -152,7 +152,7 @@ Opt_OP : (* empty *) (false)
 (* atomic patterns *)
 AtPat : UNDERSCORE (Syntax.WildcardPat) (* wildcard *)
       | SCon (Syntax.SConPat SCon) (* special constant *)
-      | Opt_OP LongBoundVId (Syntax.VIdPat LongVId) (* value identifier *)
+      | Opt_OP LongBoundVId (Syntax.VIdPat LongBoundVId) (* value identifier *)
       | LBRACE RBRACE (Syntax.RecordPat (nil, false)) (* empty record *)
       | LBRACE PatRow RBRACE (Syntax.RecordPat PatRow) (* record *)
       | LPAREN Pat RPAREN (Pat)
@@ -171,7 +171,7 @@ Pat : AtPat (AtPat) (* atomic patterns *)
 (* patterns *)
 Pat : UNDERSCORE (Syntax.WildcardPat) (* wildcard *)
     | SCon (Syntax.SConPat SCon) (* special constant *)
-    | Opt_OP LongBoundVId (Syntax.VIdPat LongVId) (* value identifier *)
+    | Opt_OP LongBoundVId (Syntax.VIdPat LongBoundVId) (* value identifier *)
 (*
     | LBRACE RBRACE (Syntax.RecordPat (nil, false)) (* empty record *)
     | LBRACE PatRow RBRACE (Syntax.RecordPat PatRow) (* record *)
@@ -185,7 +185,7 @@ Pat : UNDERSCORE (Syntax.WildcardPat) (* wildcard *)
 
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
-       | Lab EQUAL Pat COMMA PatRow (case PatRow of (s,t) => (Pat :: s, t)) (* pattern row *)
+       | Lab EQUAL Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
        | Lab EQUAL Pat (([(Lab, Pat)], false))
 
 AtTy : TyVar (Syntax.TyVar TyVar)
@@ -194,13 +194,13 @@ AtTy : TyVar (Syntax.TyVar TyVar)
      | LPAREN Ty RPAREN (Ty)
 
 ConTy : AtTy (AtTy)
-      | ConTy LongTyCon (Syntax.TyCon [Ty] LongTyCon) (* type construction *)
-      | LongTyCon (Syntax.TyCon nil LongTyCon) (* type construction *)
-      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (Ty1 :: Ty2 :: TySeqRest) LongTyCon) (* type construction *)
+      | ConTy LongTyCon (Syntax.TyCon ([ConTy], LongTyCon)) (* type construction *)
+      | LongTyCon (Syntax.TyCon (nil, LongTyCon)) (* type construction *)
+      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
 
 (* type expressions *)
 Ty : ConTy (ConTy)
-   | ConTy ARROW Ty (Syntax.FnType Ty1 Ty2) (* function type expression (R) *)
+   | ConTy ARROW Ty (Syntax.FnType (ConTy, Ty)) (* function type expression (R) *)
    (* tuple type *)
 
 TySeq : Ty ([Ty]) (* singleton sequence *)
@@ -214,7 +214,7 @@ TyVarSeq : TyVar ([TyVar]) (* singleton sequence *)
          | (nil) (* empty sequence *)
          | LPAREN TyVar TyVarSeqRest RPAREN (TyVar :: TyVarSeqRest) (* sequence *)
 
-TyVarSeqRest : COMMA TyVar TyVarSeqRest (Ty :: TySeqRest) (* *)
+TyVarSeqRest : COMMA TyVar TyVarSeqRest (TyVar :: TyVarSeqRest) (* *)
              | (nil) (* empty *)
 
 (* type-expression rows *)
@@ -226,7 +226,7 @@ AtExp : SCon (Syntax.SConExp SCon) (* special constant *)
       | Opt_OP LongVId (Syntax.VarExp LongVId) (* value identifier *)
       | LBRACE RBRACE (Syntax.RecordExp nil) (* record *)
       | LBRACE ExpRow RBRACE (Syntax.RecordExp ExpRow) (* record *)
-      | LET Dec IN Exp END (Syntax.LetInExp Dec Exp) (* local declaration *)
+      | LET Dec IN Exp END (Syntax.LetInExp (Dec, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (Exp) (* parenthesized expression *)
       | LPAREN RPAREN (Syntax.RecordExp nil) (* [derived] 0-tuple *)
 (*
@@ -262,41 +262,41 @@ AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
 *)
 
 AppExp : AtExp (AtExp)
-       | AppExp AtExp (Syntax.AppExp AppExp AtExp) (* function application *)
+       | AppExp AtExp (Syntax.AppExp (AppExp, AtExp)) (* function application *)
 
 TypedExp : AppExp (AppExp)
-         | TypedExp COLON Ty (Syntax.TypedExp Exp Ty) (* typed (L) *)
+         | TypedExp COLON Ty (Syntax.TypedExp (TypedExp, Ty)) (* typed (L) *)
 
 HandleExp : TypedExp (TypedExp)
-          (* | TypedExp HANDLE Match (Syntax.HandleExp Exp Match) *)
+          (* | TypedExp HANDLE MatchClauses (Syntax.HandleExp Exp MatchClauses) *)
 (* expressions *)
 Exp : HandleExp (HandleExp)
 (*
     | Exp ANDALSO Exp () (* [derived] conjunction *)
     | Exp ORELSE Exp () (* [derived] disjunction *)
 *)
-(*    | Exp HANDLE Match (Syntax.HandleExp Exp Match) (* handle exception *) *)
+(*    | Exp HANDLE MatchClauses (Syntax.HandleExp Exp MatchClauses) (* handle exception *) *)
 (*    | RAISE Exp (Syntax.RaiseExp Exp) (* raise exception *) *)
 (*
     | IF Exp THEN Exp ELSE Exp () (* [derived] conditional *)
     | WHILE Exp DO Exp () (* [derived] iteration *)
-    | CASE Exp OF Match () (* [derived] pattern match: (fn Match)(Exp) *)
+    | CASE Exp OF MatchClauses () (* [derived] pattern match: (fn MatchClauses)(Exp) *)
 *)
-    | FN Match (Syntax.FnExp Match) (* function *)
+    | FN MatchClauses (Syntax.FnExp MatchClauses) (* function *)
 
 Exp_NoMatch : HandleExp (HandleExp)
 
 (* matches *)
-Match : Pat DARROW Exp_NoMatch BAR Match ((Pat,Exp) :: Match)
-      | Pat DARROW Exp ((Pat,Exp) :: nil)
+MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
+             | Pat DARROW Exp ((Pat, Exp) :: nil)
 
 (* match rules *)
-MRule : Pat DARROW Exp ((Pat,Exp))
+MRule : Pat DARROW Exp ((Pat, Exp))
 
 (* declarations *)
-Dec : VAL TyVar ValBind Dec (Syntax.ValDec [TyVar] ValBind :: Dec) (* value declaration *)
-    | VAL ValBind Dec (Syntax.ValDec nil ValBind :: Dec) (* value declaration *)
-    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (Syntax.ValDec (TyVar :: TyVarSeqRest) ValBind :: Dec) (* value declaration *)
+Dec : VAL TyVar ValBind Dec (Syntax.ValDec ([TyVar], ValBind) :: Dec) (* value declaration *)
+    | VAL ValBind Dec (Syntax.ValDec (nil, ValBind) :: Dec) (* value declaration *)
+    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (Syntax.ValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration *)
     (* | FUN TyVarSeq FValBind Dec () function declaration: not implemented yet *)
     | TYPE TypBind Dec (Syntax.TypeDec TypBind :: Dec) (* type declaration *)
     | DATATYPE DatBind Dec (Syntax.DatatypeDec DatBind :: Dec) (* datatype declaration *)
