@@ -42,6 +42,8 @@ datatype Exp = SConExp of SCon (* special constant *)
              | TypedExp of Exp * Ty
              | HandleExp of Exp * (Pat * Exp) list
              | RaiseExp of Exp
+             | IfThenElseExp of Exp * Exp * Exp
+             | CaseExp of Exp * (Pat * Exp) list
              | FnExp of (Pat * Exp) list
      and Dec = ValDec of TyVar list * ValBind
              | TypeDec of TypBind list
@@ -70,11 +72,12 @@ fun print_Label (NumericLabel x) = "NumericLabel " ^ Int.toString x
   | print_Label (IdentifierLabel x) = "IdentifierLabel \"" ^ String.toString x ^ "\""
 fun print_StrId (MkStrId x) = "MkStrId \"" ^ String.toString x ^ "\""
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
+fun print_pair (f,g) (x,y) = "(" ^ f x ^ "," ^ g y ^ ")"
 fun print_LongVId (MkLongVId(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^ "," ^ print_VId y ^ ")"
 fun print_LongTyCon (MkLongTyCon(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkLongStrId(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
-  | print_Ty (RecordType xs) = "RecordType " ^ print_list (fn (x,y) => "(" ^ print_Label x ^ "," ^ print_Ty y ^ ")") xs
+  | print_Ty (RecordType xs) = "RecordType " ^ print_list (print_pair (print_Label,print_Ty)) xs
   | print_Ty (TyCon(x,y)) = "TyCon(" ^ print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
@@ -84,6 +87,8 @@ fun print_Pat WildcardPat = "WildcardPat"
 fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (VarExp x) = "VarExp(" ^ print_LongVId x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+  | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
+  | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp _ = "<Exp>"
 and print_Dec _ = "<Dec>"
 and print_ValBind _ = "<ValBind>"

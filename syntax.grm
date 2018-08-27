@@ -277,14 +277,15 @@ Exp : HandleExp (HandleExp)
 *)
 (*    | Exp HANDLE MatchClauses (Syntax.HandleExp Exp MatchClauses) (* handle exception *) *)
 (*    | RAISE Exp (Syntax.RaiseExp Exp) (* raise exception *) *)
+    | IF Exp THEN Exp ELSE Exp (Syntax.IfThenElseExp (Exp1, Exp2, Exp3)) (* [derived] conditional *)
 (*
-    | IF Exp THEN Exp ELSE Exp () (* [derived] conditional *)
     | WHILE Exp DO Exp () (* [derived] iteration *)
-    | CASE Exp OF MatchClauses () (* [derived] pattern match: (fn MatchClauses)(Exp) *)
 *)
+    | CASE Exp OF MatchClauses (Syntax.CaseExp (Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
     | FN MatchClauses (Syntax.FnExp MatchClauses) (* function *)
 
 Exp_NoMatch : HandleExp (HandleExp)
+            | IF Exp THEN Exp ELSE Exp_NoMatch (Syntax.IfThenElseExp (Exp1, Exp2, Exp_NoMatch))
 
 (* matches *)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
