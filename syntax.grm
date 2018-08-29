@@ -1,3 +1,13 @@
+val trueExp = Syntax.VarExp (Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
+val falseExp = Syntax.VarExp (Syntax.MkLongVId (nil, Syntax.MkVId ("false")))
+val nilExp = Syntax.VarExp (Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
+val consOp = Syntax.VarExp (Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
+fun MkAndAlsoExp (e1,e2) = Syntax.IfThenElseExp (e1, e2, falseExp)
+fun MkOrElseExp (e1,e2) = Syntax.IfThenElseExp (e1, trueExp, e2)
+fun MkPairExp (e1,e2) = Syntax.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]
+fun MkConsExp (e1,e2) = Syntax.AppExp (consOp, MkPairExp (e1,e2))
+fun MkListExp nil = nilExp
+  | MkListExp (x :: xs) = MkConsExp (x, MkListExp xs)
 %%
 
 %eop EOF
@@ -51,7 +61,6 @@
        | ConTy of Syntax.Ty
        | Ty_NoARROW of Syntax.Ty
        | Ty of Syntax.Ty
-       | TySeq of Syntax.Ty list
        | TySeqRest of Syntax.Ty list
        | TyVarSeq of Syntax.TyVar list
        | TyVarSeqRest of Syntax.TyVar list
@@ -62,7 +71,7 @@
        | ExpCSeqRest of Syntax.Exp list
        | ExpSSeqRest of Syntax.Exp list
        | TypedExp of Syntax.Exp
-       | HandleExp of Syntax.Exp
+       | OrElseExp of Syntax.Exp
        | Exp_NoMatch of Syntax.Exp
        | Exp of Syntax.Exp
        | MatchClauses of (Syntax.Pat * Syntax.Exp) list
@@ -84,9 +93,10 @@
 %nodefault
 
 %right ARROW (* function type expression *)
-%right HANDLE
 %right RAISE
-%right BAR
+%right HANDLE
+%left ORELSE
+%left ANDALSO
 
 %verbose
 
@@ -203,10 +213,6 @@ Ty : ConTy (ConTy)
    | ConTy ARROW Ty (Syntax.FnType (ConTy, Ty)) (* function type expression (R) *)
    (* tuple type *)
 
-TySeq : Ty ([Ty]) (* singleton sequence *)
-      | (nil) (* empty sequence *)
-      | LPAREN Ty TySeqRest RPAREN (Ty :: TySeqRest) (* sequence *)
-
 TySeqRest : COMMA Ty TySeqRest (Ty :: TySeqRest) (* *)
           | (nil) (* empty *)
 
@@ -224,16 +230,19 @@ TyRow : Lab COLON Ty COMMA TyRow ((Lab, Ty) :: TyRow) (* type-expression row *)
 (* atomic expressions *)
 AtExp : SCon (Syntax.SConExp SCon) (* special constant *)
       | Opt_OP LongVId (Syntax.VarExp LongVId) (* value identifier *)
-      | LBRACE RBRACE (Syntax.RecordExp nil) (* record *)
+      | LBRACE RBRACE (Syntax.RecordExp nil) (* empty record *)
       | LBRACE ExpRow RBRACE (Syntax.RecordExp ExpRow) (* record *)
       | LET Dec IN Exp END (Syntax.LetInExp (Dec, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (Exp) (* parenthesized expression *)
       | LPAREN RPAREN (Syntax.RecordExp nil) (* [derived] 0-tuple *)
+      | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (Syntax.TupleExp (Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
 (*
-      | LPAREN Exp COMMA ExpCSeqRest RPAREN () (* [derived] tuple: {1=Exp1,...,n=Expn} *)
-      | LPAREN Exp SEMICOLON ExpSSeqRest RPAREN () (* [derived] sequential execution *)
-      | LET Dec IN Exp SEMICOLON ExpSSeqRest END () (* [derived] local declaration *)
-      | LBRACK ExpCSeq RBRACK () (* [derived]list: Exp1 :: ... :: Expn :: nil *)
+      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN () (* [derived] sequential execution *)
+      | LET Dec IN Exp SEMICOLON Exp ExpSSeqRest END () (* [derived] local declaration *)
+*)
+      | LBRACK RBRACK (MkListExp []) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
+      | LBRACK Exp ExpCSeqRest RBRACK (MkListExp (Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
+(*
       | HASH Lab () (* [derived] projection: fn {Lab=VId,...} => VId *)
 *)
 
@@ -267,16 +276,14 @@ AppExp : AtExp (AtExp)
 TypedExp : AppExp (AppExp)
          | TypedExp COLON Ty (Syntax.TypedExp (TypedExp, Ty)) (* typed (L) *)
 
-HandleExp : TypedExp (TypedExp)
-          (* | TypedExp HANDLE MatchClauses (Syntax.HandleExp Exp MatchClauses) *)
+OrElseExp : TypedExp (TypedExp)
+          | OrElseExp ANDALSO OrElseExp (MkAndAlsoExp (OrElseExp1, OrElseExp2)) (* [derived] conjunction *)
+          | OrElseExp ORELSE OrElseExp (MkOrElseExp (OrElseExp1, OrElseExp2)) (* [derived] disjunction *)
+
 (* expressions *)
-Exp : HandleExp (HandleExp)
-(*
-    | Exp ANDALSO Exp () (* [derived] conjunction *)
-    | Exp ORELSE Exp () (* [derived] disjunction *)
-*)
-(*    | Exp HANDLE MatchClauses (Syntax.HandleExp Exp MatchClauses) (* handle exception *) *)
-(*    | RAISE Exp (Syntax.RaiseExp Exp) (* raise exception *) *)
+Exp : OrElseExp (OrElseExp)
+    | OrElseExp HANDLE MatchClauses (Syntax.HandleExp (OrElseExp, MatchClauses)) (* handle exception *)
+    | RAISE Exp (Syntax.RaiseExp Exp) (* raise exception *)
     | IF Exp THEN Exp ELSE Exp (Syntax.IfThenElseExp (Exp1, Exp2, Exp3)) (* [derived] conditional *)
 (*
     | WHILE Exp DO Exp () (* [derived] iteration *)
@@ -284,15 +291,13 @@ Exp : HandleExp (HandleExp)
     | CASE Exp OF MatchClauses (Syntax.CaseExp (Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
     | FN MatchClauses (Syntax.FnExp MatchClauses) (* function *)
 
-Exp_NoMatch : HandleExp (HandleExp)
+Exp_NoMatch : OrElseExp (OrElseExp)
+            | RAISE Exp_NoMatch (Syntax.RaiseExp Exp_NoMatch) (* raise exception *)
             | IF Exp THEN Exp ELSE Exp_NoMatch (Syntax.IfThenElseExp (Exp1, Exp2, Exp_NoMatch))
 
 (* matches *)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
              | Pat DARROW Exp ((Pat, Exp) :: nil)
-
-(* match rules *)
-MRule : Pat DARROW Exp ((Pat, Exp))
 
 (* declarations *)
 Dec : VAL TyVar ValBind Dec (Syntax.ValDec ([TyVar], ValBind) :: Dec) (* value declaration *)

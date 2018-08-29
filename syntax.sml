@@ -38,7 +38,6 @@ datatype Exp = SConExp of SCon (* special constant *)
              | RecordExp of (Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | AppExp of Exp * Exp (* function, argument *)
-             | OpAppExp of Exp * Exp * Exp (* operator, lhs, rhs *)
              | TypedExp of Exp * Ty
              | HandleExp of Exp * (Pat * Exp) list
              | RaiseExp of Exp
@@ -59,6 +58,11 @@ datatype Exp = SConExp of SCon (* special constant *)
      and ValBind = PatBind of Pat * Exp * ValBind option
                  | RecValBind of ValBind
 type Program = Dec list
+
+fun TupleExp xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordExp (doFields 1 xs)
+                  end
 
 fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ Int.toString x
   | print_SCon (WordConstant x) = "WordConstant " ^ Word.toString x
@@ -85,10 +89,27 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (VIdPat x) = "VIdPat(" ^ print_LongVId x ^ ")"
   | print_Pat _ = "<Pat>"
 fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
+  | print_Exp (VarExp(MkLongVId([],MkVId x))) = "SimpleVarExp(\"" ^ String.toString x ^ "\")"
   | print_Exp (VarExp x) = "VarExp(" ^ print_LongVId x ^ ")"
+  | print_Exp (RecordExp x) = let fun extractTuple (i, nil) = SOME nil
+                                    | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
+                                                                                      case extractTuple (i + 1, xs) of
+                                                                                          NONE => NONE
+                                                                                        | SOME ys => SOME (e :: ys)
+                                                                                  else
+                                                                                      NONE
+                                    | extractTuple _ = NONE
+                              in case extractTuple (1, x) of
+                                     NONE => "RecordExp " ^ print_list (print_pair (print_Label, print_Exp)) x
+                                   | SOME ys => "TupleExp " ^ print_list print_Exp ys
+                              end
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+  | print_Exp (TypedExp(x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
+  | print_Exp (HandleExp(x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat, print_Exp)) y ^ ")"
+  | print_Exp (RaiseExp x) = "RaiseExp(" ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (FnExp x) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
   | print_Exp _ = "<Exp>"
 and print_Dec _ = "<Dec>"
 and print_ValBind _ = "<ValBind>"
