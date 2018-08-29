@@ -1,8 +1,10 @@
 Group is
 
 $/basis.cm
+$/smlnj-lib.cm
 $/ml-yacc-lib.cm
 tokenizer.sml
 syntax.sml
 syntax.grm
 parser.sml
+typing.sml
