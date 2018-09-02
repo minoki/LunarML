@@ -14,7 +14,7 @@ datatype LongVId = MkLongVId of StrId list * VId
 datatype LongTyCon = MkLongTyCon of StrId list * TyCon
 datatype LongStrId = MkLongStrId of StrId list * StrId
 
-(* BinaryMapFn: from smlnj-lib *)
+(* BinaryMapFn, BinarySetFn: from smlnj-lib *)
 structure VIdMap = BinaryMapFn(struct
                                 type ord_key = VId
                                 fun compare (MkVId x, MkVId y) = String.compare (x,y)
@@ -26,6 +26,10 @@ structure TyConMap = BinaryMapFn(struct
 structure StrIdMap = BinaryMapFn(struct
                                   type ord_key = StrId
                                   fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
+                                  end)
+structure TyVarSet = BinarySetFn(struct
+                                  type ord_key = TyVar
+                                  fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
                                   end)
 
 datatype Ty = TyVar of TyVar (* type variable *)
