@@ -73,6 +73,8 @@ datatype Exp = SConExp of SCon (* special constant *)
                  | RecValBind of ValBind
 type Program = Dec list
 
+fun SimpleVIdPat vid = VIdPat (MkLongVId ([], vid))
+fun SimpleVarExp vid = VarExp (MkLongVId ([], vid))
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
@@ -90,6 +92,8 @@ fun print_Label (NumericLabel x) = "NumericLabel " ^ Int.toString x
   | print_Label (IdentifierLabel x) = "IdentifierLabel \"" ^ String.toString x ^ "\""
 fun print_StrId (MkStrId x) = "MkStrId \"" ^ String.toString x ^ "\""
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
+fun print_option p (SOME x) = "SOME(" ^ p x ^ ")"
+  | print_option p NONE = "NONE"
 fun print_pair (f,g) (x,y) = "(" ^ f x ^ "," ^ g y ^ ")"
 fun print_LongVId (MkLongVId(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^ "," ^ print_VId y ^ ")"
 fun print_LongTyCon (MkLongTyCon(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
@@ -100,10 +104,13 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ print_SCon x ^ ")"
+  | print_Pat (VIdPat (MkLongVId([], vid))) = "SimpleVIdPat(" ^ print_VId vid ^ ")"
   | print_Pat (VIdPat x) = "VIdPat(" ^ print_LongVId x ^ ")"
+  | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
+  | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat _ = "<Pat>"
 fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
-  | print_Exp (VarExp(MkLongVId([],MkVId x))) = "SimpleVarExp(\"" ^ String.toString x ^ "\")"
+  | print_Exp (VarExp(MkLongVId([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
   | print_Exp (VarExp x) = "VarExp(" ^ print_LongVId x ^ ")"
   | print_Exp (RecordExp x) = let fun extractTuple (i, nil) = SOME nil
                                     | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
@@ -117,6 +124,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
                                      NONE => "RecordExp " ^ print_list (print_pair (print_Label, print_Exp)) x
                                    | SOME ys => "TupleExp " ^ print_list print_Exp ys
                               end
+  | print_Exp (LetInExp(decls,x)) = "LetInExp(" ^ print_list print_Dec decls ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (TypedExp(x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
   | print_Exp (HandleExp(x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat, print_Exp)) y ^ ")"
@@ -124,7 +132,8 @@ fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp x) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
-  | print_Exp _ = "<Exp>"
-and print_Dec _ = "<Dec>"
-and print_ValBind _ = "<ValBind>"
+and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_ValBind valbind  ^ ")"
+  | print_Dec _ = "<Dec>"
+and print_ValBind (PatBind (pat, exp, ovalbind)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ "," ^ print_option print_ValBind ovalbind ^ ")"
+  | print_ValBind (RecValBind valbind) = "RecValBind(" ^ print_ValBind valbind ^ ")"
 end
