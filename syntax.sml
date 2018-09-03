@@ -32,10 +32,13 @@ structure TyVarSet = BinarySetFn(struct
                                   fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
                                   end)
 
-datatype Ty = TyVar of TyVar (* type variable *)
-            | RecordType of (Label * Ty) list (* record type expression *)
-            | TyCon of Ty list * LongTyCon (* type construction *)
-            | FnType of Ty * Ty (* function type expression *)
+datatype ('tv, 'tycon) GTy
+  = TyVar of 'tv (* type variable *)
+  | RecordType of (Label * ('tv, 'tycon) GTy) list (* record type expression *)
+  | TyCon of (('tv, 'tycon) GTy) list * 'tycon (* type construction *)
+  | FnType of ('tv, 'tycon) GTy * ('tv, 'tycon) GTy (* function type expression *)
+
+type Ty = (TyVar, LongTyCon) GTy
 
 datatype Pat = WildcardPat
              | SConPat of SCon (* special constant *)
