@@ -1,3 +1,16 @@
+structure USyntax = struct
+datatype UTyVar = UTyVar of Syntax.TyVar * int
+datatype UTyCon = UTyCon of Syntax.TyCon * int
+datatype ULongTyCon = ULongTyCon of Syntax.LongTyCon * int
+structure SyntaxTree = Syntax.GenericSyntaxTree(type TyVar = UTyVar
+                                                type TyCon = UTyCon
+                                                type LongTyCon = ULongTyCon
+                                               )
+type TyVar = UTyVar
+type TyCon = UTyCon
+type LongTyCon = ULongTyCon
+open SyntaxTree
+end
 structure PostParsing = struct
 (* structure TyVarSet = Syntax.TyVarSet *)
 local
@@ -85,4 +98,90 @@ val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
 end
 end
+
+exception NameError of string
+
+local structure S = Syntax
+      structure U = USyntax
+      datatype BoundTyCon = BTyAlias of U.TyVar list * U.Ty
+                          | BTyCon of int
+      datatype ConEnv = MkConEnv of { tyConMap : BoundTyCon Syntax.TyConMap.map
+                                    , strMap : ConEnv Syntax.StrIdMap.map
+                                    }
+      type Context = { nextTyVar : int ref
+                     , nextTyCon : int ref
+                     , tyVarMap : int Syntax.TyVarMap.map
+                     , conEnv : ConEnv
+                     }
+
+      fun genTyVarId(ctx : Context)
+          = let val id = !(#nextTyVar ctx)
+            in #nextTyVar ctx := id + 1 ; id end
+      fun genTyVar(ctx, tv) = USyntax.UTyVar(tv, genTyVarId(ctx))
+
+      fun genTyConId(ctx : Context)
+          = let val id = !(#nextTyCon ctx)
+            in #nextTyCon ctx := id + 1 ; id end
+      fun genTyCon(ctx, tycon) = USyntax.UTyCon(tycon, genTyConId(ctx))
+
+      fun lookupTyVar(ctx : Context, tv as Syntax.MkTyVar name)
+          = case Syntax.TyVarMap.find(#tyVarMap ctx, tv) of
+                NONE => raise NameError("unknown type variable " ^ name)
+              | SOME id => USyntax.UTyVar(tv, id)
+
+      fun lookupTyConInConEnv(MkConEnv env, tycon as Syntax.MkTyCon name)
+          = case Syntax.TyConMap.find(#tyConMap env, tycon) of
+                NONE => raise NameError("unknown type constructor " ^ name)
+              | SOME b => b
+      fun lookupTyCon(ctx : Context, tycon) = lookupTyConInConEnv(#conEnv ctx, tycon)
+
+      fun lookupStr(env, nil) = env
+        | lookupStr(env as MkConEnv { strMap = strMap, ... }, (str0 as S.MkStrId name) :: str1)
+          = case Syntax.StrIdMap.find(strMap, str0) of
+                NONE => raise NameError("unknown structure name " ^ name)
+              | SOME innerEnv => lookupStr(innerEnv, str1)
+
+      fun lookupLongTyConInConEnv(env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyConInConEnv(lookupStr(env, strpath), tycon)
+      fun lookupLongTyCon(ctx : Context, longtycon) = lookupLongTyConInConEnv(#conEnv ctx, longtycon)
+in
+fun toUTy(ctx, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
+  | toUTy(ctx, S.RecordType row) = U.RecordType(toUTyRow(ctx, row))
+  | toUTy(ctx, S.TyCon(args, tycon)) = (case lookupLongTyCon(ctx, tycon) of
+                                            BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, ty)) args, U.ULongTyCon(tycon, id))
+                                          | BTyAlias _ => raise NameError "type alias not supported yet"
+                                       )
+  | toUTy(ctx, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, ty1), toUTy(ctx, ty2))
+and toUTyRow(ctx, row) = let fun oneField(label, ty) = (label, toUTy(ctx, ty))
+                         in List.map oneField row
+                         end
+fun toUPat(ctx, S.WildcardPat) = U.WildcardPat
+  | toUPat(ctx, S.SConPat sc) = U.SConPat sc
+  | toUPat(ctx, S.VIdPat longvid) = U.VIdPat longvid
+  | toUPat(ctx, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, row), wildcard)
+  | toUPat(ctx, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, pat))
+  | toUPat(ctx, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, pat), toUTy(ctx, ty))
+  | toUPat(ctx, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, SOME(toUTy(ctx, ty)), toUPat(ctx, pat))
+  | toUPat(ctx, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, NONE, toUPat(ctx, pat))
+and toUPatRow(ctx, _) = raise NameError("not implemented yet")
+fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
+                                                        val tycon' = 
+                                                  in U.TypBind(params', tycon *) raise NameError("not implemented yet")
+fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise NameError("not implemented yet")
+fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise NameError("not implemented yet") (* genTyCon *)
+fun toUExBind(ctx, _ : S.ExBind) = raise NameError("not implemented yet")
+fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
+  | toUExp(ctx, S.VarExp(longvid)) = U.VarExp(longvid)
+  | toUExp(ctx, S.RecordExp(row)) = raise NameError("not implemented yet")
+  | toUExp(ctx, S.LetInExp(decls, exp)) = raise NameError("not impl")
+  | toUExp(ctx, S.AppExp(exp1, exp2)) = U.AppExp(toUExp(ctx, exp1), toUExp(ctx, exp2))
+  | toUExp(ctx, S.TypedExp(exp, ty)) = U.TypedExp(toUExp(ctx, exp), toUTy(ctx, ty))
+  | toUExp(ctx, S.HandleExp(exp, ty)) = raise NameError("not implemented yet")
+  | toUExp(ctx, S.RaiseExp(exp)) = U.RaiseExp(toUExp(ctx, exp))
+  | toUExp(ctx, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, exp1), toUExp(ctx, exp2), toUExp(ctx, exp3))
+  | toUExp(ctx, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, exp), toUMatch(ctx, match))
+  | toUExp(ctx, S.FnExp(match)) = U.FnExp(toUMatch(ctx, match))
+and toUMatch(ctx, _ : (S.Pat * S.Exp) list) = raise NameError("not implemented yet")
+and toUDec(ctx, _) = raise NameError("not implemented yet")
 end
+end
+

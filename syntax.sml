@@ -27,58 +27,69 @@ structure StrIdMap = BinaryMapFn(struct
                                   type ord_key = StrId
                                   fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
                                   end)
+structure TyVarMap = BinaryMapFn(struct
+                                  type ord_key = TyVar
+                                  fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
+                                  end)
 structure TyVarSet = BinarySetFn(struct
                                   type ord_key = TyVar
                                   fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
                                   end)
 
-datatype ('tv, 'tycon) GTy
-  = TyVar of 'tv (* type variable *)
-  | RecordType of (Label * ('tv, 'tycon) GTy) list (* record type expression *)
-  | TyCon of (('tv, 'tycon) GTy) list * 'tycon (* type construction *)
-  | FnType of ('tv, 'tycon) GTy * ('tv, 'tycon) GTy (* function type expression *)
+functor GenericSyntaxTree(type TyVar; type TyCon; type LongTyCon) = struct
+        datatype Ty
+          = TyVar of TyVar (* type variable *)
+          | RecordType of (Label * Ty) list (* record type expression *)
+          | TyCon of Ty list * LongTyCon (* type construction *)
+          | FnType of Ty * Ty (* function type expression *)
 
-type Ty = (TyVar, LongTyCon) GTy
+        datatype Pat
+          = WildcardPat
+          | SConPat of SCon (* special constant *)
+          | VIdPat of LongVId
+          | RecordPat of (Label * Pat) list * bool
+          | ConPat of LongVId * Pat (* constructed pattern *)
+          | TypedPat of Pat * Ty (* typed *)
+          | LayeredPat of VId * Ty option * Pat (* layered *)
 
-datatype Pat = WildcardPat
-             | SConPat of SCon (* special constant *)
-             | VIdPat of LongVId
-             | RecordPat of (Label * Pat) list * bool
-             | ConPat of LongVId * Pat (* constructed pattern *)
-             | TypedPat of Pat * Ty (* typed *)
-             | LayeredPat of VId * Ty option * Pat (* layered *)
+        datatype TypBind = TypBind of TyVar list * TyCon * Ty
+        datatype ConBind = ConBind of VId * Ty option
+        datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
+        datatype ExBind = ExBind1 of VId * Ty option (* <op> vid <of ty> *)
+                        | ExBind2 of VId * LongVId (* <op> vid = <op> longvid *)
 
-datatype TypBind = TypBind of TyVar list * TyCon * Ty
-datatype ConBind = ConBind of VId * Ty option
-datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
-datatype ExBind = ExBind1 of VId * Ty option (* <op> vid <of ty> *)
-                | ExBind2 of VId * LongVId (* <op> vid = <op> longvid *)
+        datatype Exp = SConExp of SCon (* special constant *)
+                     | VarExp of LongVId (* value identifier, with or without 'op'  *)
+                     | RecordExp of (Label * Exp) list (* record *)
+                     | LetInExp of Dec list * Exp (* local declaration *)
+                     | AppExp of Exp * Exp (* function, argument *)
+                     | TypedExp of Exp * Ty
+                     | HandleExp of Exp * (Pat * Exp) list
+                     | RaiseExp of Exp
+                     | IfThenElseExp of Exp * Exp * Exp
+                     | CaseExp of Exp * (Pat * Exp) list
+                     | FnExp of (Pat * Exp) list
+             and Dec = ValDec of TyVar list * ValBind
+                     | TypeDec of TypBind list
+                     | DatatypeDec of DatBind list
+                     | DatatypeRepDec of TyCon * LongTyCon
+                     | AbstypeDec of DatBind list * Dec list
+                     | ExceptionDec of ExBind list
+                     | LocalDec of Dec list * Dec list
+                     | OpenDec of LongStrId list
+                     | InfixDec of int option * VId list
+                     | InfixrDec of int option * VId list
+                     | NonfixDec of VId list
+             and ValBind = PatBind of Pat * Exp * ValBind option
+                         | RecValBind of ValBind
+        type Program = Dec list
+        end
 
-datatype Exp = SConExp of SCon (* special constant *)
-             | VarExp of LongVId (* value identifier, with or without 'op'  *)
-             | RecordExp of (Label * Exp) list (* record *)
-             | LetInExp of Dec list * Exp (* local declaration *)
-             | AppExp of Exp * Exp (* function, argument *)
-             | TypedExp of Exp * Ty
-             | HandleExp of Exp * (Pat * Exp) list
-             | RaiseExp of Exp
-             | IfThenElseExp of Exp * Exp * Exp
-             | CaseExp of Exp * (Pat * Exp) list
-             | FnExp of (Pat * Exp) list
-     and Dec = ValDec of TyVar list * ValBind
-             | TypeDec of TypBind list
-             | DatatypeDec of DatBind list
-             | DatatypeRepDec of TyCon * LongTyCon
-             | AbstypeDec of DatBind list * Dec list
-             | ExceptionDec of ExBind list
-             | LocalDec of Dec list * Dec list
-             | OpenDec of LongStrId list
-             | InfixDec of int option * VId list
-             | InfixrDec of int option * VId list
-             | NonfixDec of VId list
-     and ValBind = PatBind of Pat * Exp * ValBind option
-                 | RecValBind of ValBind
-type Program = Dec list
+structure SyntaxTree = GenericSyntaxTree(type TyVar = TyVar
+                                         type TyCon = TyCon
+                                         type LongTyCon = LongTyCon
+                                        )
+open SyntaxTree
 
 fun SimpleVIdPat vid = VIdPat (MkLongVId ([], vid))
 fun SimpleVarExp vid = VarExp (MkLongVId ([], vid))
