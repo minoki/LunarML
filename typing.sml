@@ -52,8 +52,12 @@ fun freshTyVar(ctx : Context) : USyntax.TyVar
 
 datatype Constraint
   = EqConstr of USyntax.Ty * USyntax.Ty (* ty1 = ty2 *)
-  | FieldConstr of Syntax.Label * USyntax.Ty * USyntax.Ty (* ty1 = {label: ty2, ...} *)
-(* | Is(Int|Word|Real|String|Char) of ('tv, 'tycon) GTy *)
+  | FieldConstr of { label : Syntax.Label
+                   , recordTy : USyntax.Ty
+                   , fieldTy : USyntax.Ty
+                   } (* recordTy = {label: fieldTy, ...} *)
+  | IsEqType of USyntax.Ty
+(* | Is(Int|Word|Real|String|Char) of USyntax.Ty *)
 (* IsWordInt|IsRealInt|IsNum|IsNumTxt *)
 
 local open USyntax
@@ -64,23 +68,20 @@ local open USyntax
       val PrimTy_char   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 0))
       val PrimTy_exn    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 0))
       val PrimTy_bool   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 0))
+      val PrimTyCon_ref   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 0)
       fun lookupVariable(env) = raise TypeError "not implemented yet"
 in
 (* constraints : Context * USyntax.Exp -> Constraint list * USyntax.Ty *)
-fun constraints(ctx : Context, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* TODO: overloaded literals *)
+fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* TODO: overloaded literals *)
   | constraints(ctx, SConExp(Syntax.WordConstant x))      = ([], PrimTy_word) (* TODO: overloaded literals *)
   | constraints(ctx, SConExp(Syntax.RealConstant x))      = ([], PrimTy_real) (* TODO: overloaded literals *)
   | constraints(ctx, SConExp(Syntax.StringConstant x))    = ([], PrimTy_string) (* TODO: overloaded literals *)
   | constraints(ctx, SConExp(Syntax.CharacterConstant x)) = ([], PrimTy_char) (* TODO: overloaded literals *)
-  | constraints(ctx as {env = MkEnv env, ...},
-                VarExp(Syntax.MkLongVId([], vid as Syntax.MkVId vidstr)))
-    = (case Syntax.VIdMap.find(#valMap env, vid) of (* lookup the variable *)
-          NONE => raise TypeError("variable not found: " ^ vidstr)
-        | SOME(TypeScheme([], ty), ids) => raise TypeError("not impl")
+  | constraints(ctx, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name)))
+    = (case lookupValInEnv(lookupStr(#env ctx, str), vid) of
+          (TypeScheme([], ty), ids) => raise TypeError("not impl")
         | _ => raise TypeError("not impl")
       )
-  | constraints(ctx, VarExp(longvid))
-    = raise TypeError "longvid not implemented yet"
   | constraints(ctx, RecordExp(row))
     = let val (ct, row') = constraintsFromRow(ctx, row)
       in (ct, RecordType(row'))
@@ -128,7 +129,7 @@ fun constraints(ctx : Context, SConExp(Syntax.IntegerConstant x))   = ([], PrimT
       end
   | constraints(ctx, FnExp([(VIdPat(Syntax.MkLongVId([], vid)), body)]))
     = let val argTy = TyVar(freshTyVar(ctx))
-          val (ct1, retTy) = constraints(ctx, body) (* TODO: Add vid to the ctxironment *)
+          val (ct1, retTy) = constraints(ctx, body) (* TODO: Add vid to the ctx *)
       in (ct1, USyntax.FnType(argTy, retTy))
       end
   | constraints(ctx, FnExp(matches))
@@ -170,7 +171,7 @@ and constraintsFromPat(ctx, WildcardPat)
     = let val (ct, row') = constraintsFromPatRow(ctx, row)
       in if wildcard then
              let val recordTy = TyVar(freshTyVar(ctx))
-                 fun oneField(label, ty) = FieldConstr(label, recordTy, ty)
+                 fun oneField(label, ty) = FieldConstr { label = label, recordTy = recordTy, fieldTy = ty }
                  val fieldCts = List.map oneField row'
              in (fieldCts @ ct, recordTy)
              end
@@ -195,5 +196,80 @@ and constraintsFromPatRow(ctx, xs)
           val (cts, row) = ListPair.unzip (List.map oneField xs)
       in (List.concat cts, row)
       end
+
+local (* occurCheck : TyVar -> Ty -> bool; returns true if the type variable occurs in the type *)
+      fun occurCheck tv = let fun check (TyVar tv') = tv = tv'
+                                | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
+                                | check (TyCon(tyargs, longtycon)) = List.exists check tyargs
+                                | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
+                          in check
+                          end
+      (* substituteTy : TyVar * Ty -> Ty -> Ty *)
+      fun substituteTy (tv, replacement) =
+          let fun substTy (ty as TyVar tv') = if tv = tv' then
+                                                  replacement
+                                              else
+                                                  ty
+                | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
+                | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
+                | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
+          in substTy
+          end
+      (* substituteConstraint : TyVar * Ty -> Constraint -> Constraint *)
+      fun substituteConstraint (tv, replacement) =
+          let val substTy = substituteTy (tv, replacement)
+          in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
+              | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy } => FieldConstr{label = label, recordTy = substTy recordTy, fieldTy = substTy fieldTy}
+              | IsEqType ty => IsEqType(substTy ty)
+          end
+in
+type Subst = (TyVar * Ty) list
+
+ (* unify : Context * Constraint list -> Subst *)
+fun unify(ctx, EqConstr(TyVar(tv), ty) :: ctrs)
+    = if occurCheck tv ty then
+          raise TypeError("unification failed: occurrence check")
+      else
+          (tv, ty) :: unify(ctx, List.map (substituteConstraint (tv, ty)) ctrs)
+  | unify(ctx, EqConstr(ty, TyVar(tv)) :: ctrs)
+    = if occurCheck tv ty then
+          raise TypeError("unification failed: occurrence check")
+      else
+          (tv, ty) :: unify(ctx, List.map (substituteConstraint (tv, ty)) ctrs)
+  | unify(ctx, EqConstr(FnType(s0, s1), FnType(t0, t1)) :: ctrs) = unify(ctx, EqConstr(s0, t0) :: EqConstr(s1, t1) :: ctrs)
+  | unify(ctx, EqConstr(RecordType(fields), RecordType(fields')) :: ctrs)
+    = if List.length fields <> List.length fields then
+          raise TypeError("unification failed: incompatible record types (different number of fields)")
+      else
+          unify(ctx, List.foldl (fn ((label, ty), acc) => case List.find (fn (label', _) => label = label') fields' of
+                                                              NONE => raise TypeError("unification failed: incompatible record types")
+                                                            | SOME(_,ty') => EqConstr(ty, ty') :: acc) ctrs fields)
+  | unify(ctx, EqConstr(TyCon(tyarg, con), TyCon(tyarg', con')) :: ctrs)
+    = if con = con' then
+          unify(ctx, ListPair.mapEq EqConstr (tyarg, tyarg') @ ctrs)
+          handle ListPair.UnequalLengths => raise TypeError("unification failed: the number of type arguments differ")
+      else
+          raise TypeError("unification failed: type constructor mismatch")
+  | unify(ctx, EqConstr(_, _) :: ctrs) = raise TypeError("unification failed: not match")
+  | unify(ctx, FieldConstr{label = label, recordTy = RecordType(fields), fieldTy = fieldTy} :: ctrs)
+    = (case List.find (fn (label', _) => label = label') fields of
+           NONE => raise TypeError("unification failed: no field")
+         | SOME(_, ty') => unify(ctx, EqConstr(fieldTy, ty') :: ctrs)
+      )
+  | unify(ctx, FieldConstr{label = label, recordTy = TyCon(_, _), fieldTy = fieldTy} :: ctrs) = raise TypeError("record field for a non-record type")
+  | unify(ctx, FieldConstr{label = label, recordTy = FnType(_, _), fieldTy = fieldTy} :: ctrs) = raise TypeError("record field for a function type")
+  | unify(ctx, FieldConstr{label = label, recordTy = TyVar tv, fieldTy = fieldTy} :: ctrs) = raise TypeError("not impl")
+  | unify(ctx, IsEqType(RecordType fields) :: ctrs) = unify(ctx, List.map (fn (label, ty) => IsEqType ty) fields @ ctrs)
+  | unify(ctx, IsEqType(FnType _) :: ctrs) = raise TypeError("function type does not admit equality")
+  | unify(ctx, IsEqType(TyCon(tyargs, longtycon)) :: ctrs)
+    = if longtycon = PrimTyCon_ref then
+          unify(ctx, ctrs)
+      else
+          (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
+          raise TypeError("not impl")
+  | unify(ctx, IsEqType(TyVar(_)) :: ctrs) = raise TypeError("not impl")
+  | unify(ctx, nil) = nil
 end
 end
+end
+
