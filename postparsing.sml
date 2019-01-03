@@ -5,12 +5,16 @@ datatype ULongTyCon = ULongTyCon of Syntax.LongTyCon * int
 structure SyntaxTree = Syntax.GenericSyntaxTree(type TyVar = UTyVar
                                                 type TyCon = UTyCon
                                                 type LongTyCon = ULongTyCon
+                                                fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
+                                                fun print_TyCon(UTyCon(tycon, n)) = "UTyCon(" ^ Syntax.print_TyCon tycon ^ "," ^ Int.toString n ^ ")"
+                                                fun print_LongTyCon(ULongTyCon(longtycon, n)) = "ULongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
                                                )
 type TyVar = UTyVar
 type TyCon = UTyCon
 type LongTyCon = ULongTyCon
 open SyntaxTree
-end
+end (* structure USyntax *)
+
 structure PostParsing = struct
 (* structure TyVarSet = Syntax.TyVarSet *)
 local
@@ -56,7 +60,7 @@ local
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind -> TyVarSet.set = collectValBind
-end
+end (* local *)
 
 (* The Definition 4.6 *)
 (* scopeTyVarsInDec: TyVarSet.set * Dec -> Dec *)
@@ -96,23 +100,35 @@ local
 in
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
-end
-end
+end (* local *)
+end (* local *)
 
 exception NameError of string
 
+datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
+                    | BTyCon of int
+datatype ConEnv = MkConEnv of { tyConMap : BoundTyCon Syntax.TyConMap.map
+                              , strMap : ConEnv Syntax.StrIdMap.map
+                              }
+type Context = { nextTyVar : int ref
+               , nextTyCon : int ref
+               , tyVarMap : int Syntax.TyVarMap.map
+               , conEnv : ConEnv
+               }
+
+val emptyConEnv : ConEnv
+    = MkConEnv { tyConMap = Syntax.TyConMap.empty
+               , strMap = Syntax.StrIdMap.empty
+               }
+fun newContext(conEnv : ConEnv) : Context
+    = { nextTyVar = ref 100
+      , nextTyCon = ref 100
+      , tyVarMap = Syntax.TyVarMap.empty
+      , conEnv = conEnv
+      }
+
 local structure S = Syntax
       structure U = USyntax
-      datatype BoundTyCon = BTyAlias of U.TyVar list * U.Ty
-                          | BTyCon of int
-      datatype ConEnv = MkConEnv of { tyConMap : BoundTyCon Syntax.TyConMap.map
-                                    , strMap : ConEnv Syntax.StrIdMap.map
-                                    }
-      type Context = { nextTyVar : int ref
-                     , nextTyCon : int ref
-                     , tyVarMap : int Syntax.TyVarMap.map
-                     , conEnv : ConEnv
-                     }
 
       fun genTyVarId(ctx : Context)
           = let val id = !(#nextTyVar ctx)
@@ -144,6 +160,17 @@ local structure S = Syntax
       fun lookupLongTyConInConEnv(env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyConInConEnv(lookupStr(env, strpath), tycon)
       fun lookupLongTyCon(ctx : Context, longtycon) = lookupLongTyConInConEnv(#conEnv ctx, longtycon)
 in
+(* toUTy : Context * Syntax.Ty -> USyntax.Ty *)
+(* toUTyRow : Context * (Label * Syntax.Ty) list -> (Label * USyntax.Ty) list *)
+(* toUPat : Context * Syntax.Pat -> USyntax.Pat *)
+(* toUPatRow : Context * (Label * USyntax.Pat) list -> (Label * USyntax.Pat) list *)
+(* toUTypBind : Context * Syntax.TypBind -> USyntax.TypBind *)
+(* toUConBind : Context * Syntax.ConBind -> USyntax.ConBind *)
+(* toUDatBind : Context * Syntax.DatBind -> USyntax.DatBind *)
+(* toUExBind : Context * Syntax.ExBind -> USyntax.ExBind *)
+(* toUExp : Context * Syntax.Exp -> USyntax.Exp *)
+(* toUMatch : Context * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
+(* toUDec : Context * Syntax.Dec -> USyntax.Dec *)
 fun toUTy(ctx, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
   | toUTy(ctx, S.RecordType row) = U.RecordType(toUTyRow(ctx, row))
   | toUTy(ctx, S.TyCon(args, tycon)) = (case lookupLongTyCon(ctx, tycon) of
@@ -172,7 +199,24 @@ fun toUExBind(ctx, _ : S.ExBind) = raise NameError("not implemented yet")
 fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, S.VarExp(longvid)) = U.VarExp(longvid)
   | toUExp(ctx, S.RecordExp(row)) = raise NameError("not implemented yet")
-  | toUExp(ctx, S.LetInExp(decls, exp)) = raise NameError("not impl")
+  | toUExp(ctx, S.LetInExp(decls, exp))
+    = let fun doDecl(ctx, nil, acc) = (ctx, List.rev acc)
+            | doDecl(ctx, decl :: decls, acc)
+              = (case decl of
+                     S.ValDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.TypeDec(typbinds) => doDecl(ctx, decls, decl :: acc)
+                   | S.DatatypeDec(datbinds) => doDecl(ctx, decls, decl :: acc)
+                   | S.DatatypeRepDec(tycon, longtycon) => doDecl(ctx, decls, decl :: acc)
+                   | S.AbstypeDec(datbinds, dec) => doDecl(ctx, decls, decl :: acc)
+                   | S.ExceptionDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.LocalDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.OpenDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.InfixDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.InfixrDec(_) => doDecl(ctx, decls, decl :: acc)
+                   | S.NonfixDec(_) => doDecl(ctx, decls, decl :: acc)
+                )
+      in U.LetInExp(decls', toUExp(ctx', exp))
+      end
   | toUExp(ctx, S.AppExp(exp1, exp2)) = U.AppExp(toUExp(ctx, exp1), toUExp(ctx, exp2))
   | toUExp(ctx, S.TypedExp(exp, ty)) = U.TypedExp(toUExp(ctx, exp), toUTy(ctx, ty))
   | toUExp(ctx, S.HandleExp(exp, ty)) = raise NameError("not implemented yet")
@@ -182,6 +226,5 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, S.FnExp(match)) = U.FnExp(toUMatch(ctx, match))
 and toUMatch(ctx, _ : (S.Pat * S.Exp) list) = raise NameError("not implemented yet")
 and toUDec(ctx, _) = raise NameError("not implemented yet")
-end
-end
-
+end (* local *)
+end (* structure PostParsing *)

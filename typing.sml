@@ -33,7 +33,7 @@ fun lookupValInEnv(MkEnv env, vid as Syntax.MkVId name)
          | SOME x => x
       )
 
-fun emptyEnv() : Env
+val emptyEnv : Env
     = MkEnv { tyConMap = Syntax.TyConMap.empty
             , valMap = Syntax.VIdMap.empty
             , strMap = Syntax.StrIdMap.empty
@@ -75,7 +75,6 @@ local open USyntax
       val PrimTy_exn    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 0))
       val PrimTy_bool   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 0))
       val PrimTyCon_ref   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 0)
-      fun lookupVariable(env) = raise TypeError "not implemented yet"
 in
 (* constraints : Context * USyntax.Exp -> Constraint list * USyntax.Ty *)
 fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* TODO: overloaded literals *)
