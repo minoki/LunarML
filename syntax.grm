@@ -18,7 +18,7 @@ fun MkListExp nil = nilExp
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
     | SymbolicIdent of string
     | PosInt of int (* positive integer literal not starting with 0 *)
-    | ZNIntConst of int
+    | ZNIntConst of int (* starting with 0, or negative integer literal *)
     | WordConst of word
     | RealConst of real
     | StringConst of string

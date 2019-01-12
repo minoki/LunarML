@@ -6,6 +6,9 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
         type result = (svalue,pos) token
         end
         exception TokError of string;
+        datatype NumericLitType = NLTUnsigned
+                                | NLTNegative
+                                | NLTWord
         (* read a token *)
         fun tokenizeAllString s = tokenizeAll (String.explode s)
         and tokenizeAll xs = case tokenizeOne xs of
@@ -29,17 +32,32 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
           | tokenizeOne (#"\"" :: xs) = let val (str, rest) = readStringLit (nil, xs)
                                         in SOME (Tokens.StringConst (implode str,0,0), rest)
                                         end
-          | tokenizeOne (#"~" :: (xs as x :: xss)) = if Char.isDigit x then
-                                                         readNumericConstant (#"~" :: xs)
-                                                     else
-                                                         readSymbolicIdentifier ([#"~"], xs)
-          | tokenizeOne (#"0" :: #"w" :: #"x" :: xs) = raise TokError "Word constant: not implemented yet"
-          | tokenizeOne (#"0" :: #"w" :: xs) = raise TokError "Word constant: not implemented yet"
-          | tokenizeOne (#"0" :: #"x" :: xs) = raise TokError "Hexadecimal constant: not implemented yet"
+          | tokenizeOne (#"~" :: #"0" :: (zr as #"x" :: x :: xs)) = if Char.isHexDigit x then
+                                                                        readHexadecimalConstant (NLTNegative, hexDigitToInt x, xs)
+                                                                    else
+                                                                        SOME (Tokens.ZNIntConst (0,0,0), zr) (* should emit a warning? *)
+          | tokenizeOne (#"~" :: (rest0 as x :: xs)) = if Char.isDigit x then
+                                                           readDecimalConstant (NLTNegative, digitToInt x, xs)
+                                                       else
+                                                           readSymbolicIdentifier ([#"~"], rest0)
+          | tokenizeOne (#"0" :: (rest0 as #"w" :: #"x" :: x :: xs)) = if Char.isHexDigit x then
+                                                                           readHexadecimalConstant (NLTWord, hexDigitToInt x, xs)
+                                                                       else
+                                                                           SOME (Tokens.ZNIntConst (0,0,0), rest0) (* should emit a warning? *)
+          | tokenizeOne (#"0" :: (rest0 as #"w" :: x :: xs)) = if Char.isDigit x then
+                                                                   readDecimalConstant (NLTWord, digitToInt x, xs)
+                                                               else
+                                                                   SOME (Tokens.ZNIntConst (0,0,0), rest0) (* should emit a warning? *)
+          | tokenizeOne (#"0" :: (rest0 as #"x" :: x :: xs)) = if Char.isHexDigit x then
+                                                                   readHexadecimalConstant (NLTUnsigned, hexDigitToInt x, xs)
+                                                               else
+                                                                   SOME (Tokens.ZNIntConst (0,0,0), rest0) (* should emit a warning? *)
+          (* TODO: binary constant *)
           | tokenizeOne (x :: xs) = if Char.isAlpha x orelse x = #"_" orelse x = #"'" then
                                         readIdentifierOrKeyword ([x], xs)
                                     else if Char.isDigit x then
-                                        raise Fail "not impl"
+                                        (* integer in decimal notation, or real constant *)
+                                        readDecimalConstant (NLTUnsigned, digitToInt x, xs)
                                     else if isSymbolChar x then
                                         readSymbolicIdentifier ([x], xs)
                                     else if Char.isSpace x then
@@ -142,7 +160,87 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
           | isSymbolChar #"|" = true
           | isSymbolChar #"*" = true
           | isSymbolChar _ = false
-        and readNumericConstant xs = raise TokError "Notimpl"
+        and readDecimalConstant (numericLitType : NumericLitType, x0 : int, xs : char list)
+            (* x0 is a decimal digit *)
+            = let fun mkIntConst a = if numericLitType = NLTWord then
+                                         Tokens.WordConst (Word.fromInt a,0,0)
+                                     else if numericLitType = NLTNegative then
+                                         Tokens.ZNIntConst (~a,0,0)
+                                     else if x0 <> 0 andalso numericLitType = NLTUnsigned then
+                                         Tokens.PosInt (a,0,0)
+                                     else
+                                         Tokens.ZNIntConst (a,0,0)
+                  fun mkRealConst (intPart, fracPart, expPart)
+                      = let val s = if fracPart = "" then
+                                        Int.toString intPart ^ "e" ^ Int.toString expPart
+                                    else
+                                        Int.toString intPart ^ "." ^ fracPart ^ "e" ^ Int.toString expPart
+                        in case Real.fromString s of
+                               SOME a => Tokens.RealConst (a,0,0)
+                             | NONE => raise Fail "impossible"
+                        end
+                  fun parseIntPart (a, rest0 as #"." :: x2 :: rest1)
+                      = if numericLitType <> NLTWord andalso Char.isDigit x2 then
+                            parseFracPart (a, String.str x2, rest1)
+                        else
+                            SOME (mkIntConst a, rest0) (* emit a warning? *)
+                    | parseIntPart (a, rest0 as x1 :: #"~" :: x2 :: rest1)
+                      = if numericLitType <> NLTWord andalso (x1 = #"e" orelse x1 = #"E") andalso Char.isDigit x2 then
+                            parseExpPart (a, "", ~1, digitToInt x2, rest1)
+                        else
+                            parseMoreIntPart (a, rest0)
+                    | parseIntPart (a, rest0 as x1 :: x2 :: rest1)
+                      = if numericLitType <> NLTWord andalso (x1 = #"e" orelse x1 = #"E") andalso Char.isDigit x2 then
+                            parseExpPart (a, "", 1, digitToInt x2, rest1)
+                        else
+                            parseMoreIntPart (a, rest0)
+                    | parseIntPart (a, rest) = parseMoreIntPart (a, rest)
+                  and parseMoreIntPart (a, rest0 as x1 :: rest1) = if Char.isDigit x1 then
+                                                                       parseIntPart (a * 10 + digitToInt x1, rest1)
+                                                                   else
+                                                                       SOME (mkIntConst a, rest0) (* emit a warning if x1 = #"e" or x1 = #"E"? *)
+                    | parseMoreIntPart (a, rest0) = SOME (mkIntConst a, rest0)
+                  and parseFracPart (intPart, fracPart : string, rest0 as x :: rest1)
+                      = if Char.isDigit x then
+                            parseFracPart (intPart, fracPart ^ String.str x, rest1) (* TODO: a better impl? *)
+                        else if x = #"e" orelse x = #"E" then
+                            case rest1 of
+                                #"~" :: y :: ys => if Char.isDigit y then
+                                                       parseExpPart (intPart, fracPart, ~1, digitToInt y, ys)
+                                                   else
+                                                       SOME (mkRealConst (intPart, fracPart, 0), rest0)
+                              | y :: ys => if Char.isDigit y then
+                                               parseExpPart (intPart, fracPart, 1, digitToInt y, ys)
+                                           else
+                                               SOME (mkRealConst (intPart, fracPart, 0), rest0)
+                              | _ => SOME (mkRealConst (intPart, fracPart, 0), rest0)
+                        else
+                            SOME (mkRealConst (intPart, fracPart, 0), rest0)
+                    | parseFracPart (intPart, fracPart, rest0 as nil) = SOME (mkRealConst (intPart, fracPart, 0), rest0)
+                  and parseExpPart (intPart : int, fracPart : string, expSign : int, expPart : int, rest0 as x :: rest1)
+                      = if Char.isDigit x then
+                            parseExpPart (intPart, fracPart, expSign, expPart * 10 + digitToInt x, rest1)
+                        else
+                            SOME (mkRealConst (intPart, fracPart, expSign * expPart), rest0)
+                    | parseExpPart (intPart, fracPart, expSign, expPart, rest0)
+                      = SOME (mkRealConst (intPart, fracPart, expSign * expPart), rest0)
+              in parseIntPart (x0, xs)
+              end
+        and readHexadecimalConstant (numericLitType : NumericLitType, x : int, xs : char list)
+            (* x is a hexadecimal digit *)
+            = let fun mkIntConst a = if numericLitType = NLTWord then
+                                         Tokens.WordConst (Word.fromInt a,0,0)
+                                     else if numericLitType = NLTNegative then
+                                         Tokens.ZNIntConst (~a,0,0)
+                                     else
+                                         Tokens.ZNIntConst (a,0,0)
+                  fun parseIntPart (a, rest0 as x1 :: rest1) = if Char.isHexDigit x1 then
+                                                                   parseIntPart (a * 16 + hexDigitToInt x1, rest1)
+                                                               else
+                                                                   SOME (mkIntConst a, rest0)
+                    | parseIntPart (a, rest0) = SOME (mkIntConst a, rest0)
+              in parseIntPart (x, xs)
+              end
         and readStringLit (_, nil) = raise TokError "Unterminated string literal"
           | readStringLit (accum, #"\"" :: xs) = (rev accum, xs)
           | readStringLit (accum, #"\\" :: #"a" :: xs) = readStringLit (#"\a" :: accum, xs) (* bell *)
