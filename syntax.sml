@@ -150,6 +150,7 @@ functor GenericSyntaxTree(type TyVar;
           | print_Dec _ = "<Dec>"
         and print_ValBind (PatBind (pat, exp, ovalbind)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ "," ^ print_option print_ValBind ovalbind ^ ")"
           | print_ValBind (RecValBind valbind) = "RecValBind(" ^ print_ValBind valbind ^ ")"
+        val print_TyVar = print_TyVar
         end (* functor GenericSyntaxTree *)
 
 structure SyntaxTree = GenericSyntaxTree(type TyVar = TyVar

@@ -1,5 +1,5 @@
 structure Typing = struct
-datatype TypeScheme = TypeScheme of Syntax.TyVar list * Syntax.Ty
+datatype TypeScheme = TypeScheme of USyntax.TyVar list * USyntax.Ty
 datatype IdStatus = ValueVariable
                   | ValueConstructor
                   | ExceptionConstructor
@@ -67,24 +67,24 @@ datatype TyVarConstraint
   | TVIsEqType
 
 local open USyntax
-      val PrimTy_int    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0))
-      val PrimTy_word   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 0))
-      val PrimTy_real   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "real"), 0))
-      val PrimTy_string = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "string"), 0))
-      val PrimTy_char   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 0))
-      val PrimTy_exn    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 0))
-      val PrimTy_bool   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 0))
-      val PrimTyCon_ref   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 0)
+      val primTy_int    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0))
+      val primTy_word   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 0))
+      val primTy_real   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "real"), 0))
+      val primTy_string = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "string"), 0))
+      val primTy_char   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 0))
+      val primTy_exn    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 0))
+      val primTy_bool   = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 0))
+      val primTyCon_ref = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 0)
 in
 (* constraints : Context * USyntax.Exp -> Constraint list * USyntax.Ty *)
-fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* TODO: overloaded literals *)
-  | constraints(ctx, SConExp(Syntax.WordConstant x))      = ([], PrimTy_word) (* TODO: overloaded literals *)
-  | constraints(ctx, SConExp(Syntax.RealConstant x))      = ([], PrimTy_real) (* TODO: overloaded literals *)
-  | constraints(ctx, SConExp(Syntax.StringConstant x))    = ([], PrimTy_string) (* TODO: overloaded literals *)
-  | constraints(ctx, SConExp(Syntax.CharacterConstant x)) = ([], PrimTy_char) (* TODO: overloaded literals *)
+fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], primTy_int) (* TODO: overloaded literals *)
+  | constraints(ctx, SConExp(Syntax.WordConstant x))      = ([], primTy_word) (* TODO: overloaded literals *)
+  | constraints(ctx, SConExp(Syntax.RealConstant x))      = ([], primTy_real) (* TODO: overloaded literals *)
+  | constraints(ctx, SConExp(Syntax.StringConstant x))    = ([], primTy_string) (* TODO: overloaded literals *)
+  | constraints(ctx, SConExp(Syntax.CharacterConstant x)) = ([], primTy_char) (* TODO: overloaded literals *)
   | constraints(ctx, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name)))
     = (case lookupValInEnv(lookupStr(#env ctx, str), vid) of
-          (TypeScheme([], ty), ids) => raise TypeError("not impl")
+          (TypeScheme([], ty), ids) => ([], ty)
         | _ => raise TypeError("not impl")
       )
   | constraints(ctx, RecordExp(row))
@@ -113,7 +113,7 @@ fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* 
   | constraints(ctx, RaiseExp(exp))
     = let val (ct1, expTy) = constraints(ctx, exp)
           (* expTy = exn *)
-          val ct = EqConstr(expTy, PrimTy_exn)
+          val ct = EqConstr(expTy, primTy_exn)
           val retTy = TyVar(freshTyVar(ctx))
       in (ct :: ct1, retTy)
       end
@@ -122,7 +122,7 @@ fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* 
           val (ct2, thenTy) = constraints(ctx, thenPart)
           val (ct3, elseTy) = constraints(ctx, elsePart)
           (* condTy = bool *)
-          val ect1 = EqConstr(condTy, PrimTy_bool)
+          val ect1 = EqConstr(condTy, primTy_bool)
           (* thenTy = elseTy *)
           val ect2 = EqConstr(thenTy, elseTy)
       in (ect1 :: ect2 :: (ct1 @ ct2 @ ct3), thenTy)
@@ -134,10 +134,22 @@ fun constraints(ctx, SConExp(Syntax.IntegerConstant x))   = ([], PrimTy_int) (* 
       end
   | constraints(ctx, FnExp([(VIdPat(Syntax.MkLongVId([], vid)), body)]))
     = let val argTy = TyVar(freshTyVar(ctx))
-          val (ct1, retTy) = constraints(ctx, body) (* TODO: Add vid to the ctx *)
+          val MkEnv env = #env ctx
+          val valMap' = Syntax.VIdMap.insert(#valMap env, vid, (TypeScheme([], argTy), ValueVariable))
+          val env' = MkEnv { tyConMap = #tyConMap env, valMap = valMap', strMap = #strMap env }
+          val ctx' = { nextTyVar = #nextTyVar ctx, env = env' }
+          val (ct1, retTy) = constraints(ctx', body) (* TODO: Add vid to the ctx *)
       in (ct1, USyntax.FnType(argTy, retTy))
       end
-  | constraints(ctx, FnExp(matches))
+  | constraints(ctx, FnExp([(TypedPat(VIdPat(Syntax.MkLongVId([], vid)), argTy), body)]))
+    = let val MkEnv env = #env ctx
+          val valMap' = Syntax.VIdMap.insert(#valMap env, vid, (TypeScheme([], argTy), ValueVariable))
+          val env' = MkEnv { tyConMap = #tyConMap env, valMap = valMap', strMap = #strMap env }
+          val ctx' = { nextTyVar = #nextTyVar ctx, env = env' }
+          val (ct1, retTy) = constraints(ctx', body) (* TODO: Add vid to the ctx *)
+      in (ct1, USyntax.FnType(argTy, retTy))
+      end
+  | constraints(ctx, FnExp(matches)) (* not really implemented yet *)
     = let val (ct, argTy, retTy) = constraintsFromMatch(ctx, matches)
       in (ct, USyntax.FnType(argTy, retTy))
       end
@@ -149,7 +161,7 @@ and constraintsFromRow(ctx, xs)
           val (cts, row) = ListPair.unzip (List.map oneField xs)
       in (List.concat cts, row)
       end
- (* constraintsFromMatch : Ctx * (Pat * Exp) list -> Constraint list * Syntax.Ty * Syntax.Ty *)
+ (* constraintsFromMatch : Ctx * (Pat * Exp) list -> Constraint list * (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty *)
 and constraintsFromMatch(ctx, (pat0, exp0) :: rest)
     = let val (ct0p, patTy) = constraintsFromPat(ctx, pat0)
           val (ct0e, expTy) = constraints(ctx, exp0)
@@ -166,11 +178,11 @@ and constraintsFromPat(ctx, WildcardPat)
     = let val ty = TyVar(freshTyVar(ctx))
       in ([], ty)
       end
-  | constraintsFromPat(ctx, SConPat(Syntax.IntegerConstant(_)))   = ([], PrimTy_int)
-  | constraintsFromPat(ctx, SConPat(Syntax.WordConstant(_)))      = ([], PrimTy_word)
-  | constraintsFromPat(ctx, SConPat(Syntax.RealConstant(_)))      = ([], PrimTy_real)
-  | constraintsFromPat(ctx, SConPat(Syntax.StringConstant(_)))    = ([], PrimTy_string)
-  | constraintsFromPat(ctx, SConPat(Syntax.CharacterConstant(_))) = ([], PrimTy_char)
+  | constraintsFromPat(ctx, SConPat(Syntax.IntegerConstant(_)))   = ([], primTy_int)
+  | constraintsFromPat(ctx, SConPat(Syntax.WordConstant(_)))      = ([], primTy_word)
+  | constraintsFromPat(ctx, SConPat(Syntax.RealConstant(_)))      = ([], primTy_real)
+  | constraintsFromPat(ctx, SConPat(Syntax.StringConstant(_)))    = ([], primTy_string)
+  | constraintsFromPat(ctx, SConPat(Syntax.CharacterConstant(_))) = ([], primTy_char)
   | constraintsFromPat(ctx, VIdPat(longvid)) = raise TypeError "VIdPat: not implemented yet"
   | constraintsFromPat(ctx, RecordPat(row, wildcard))
     = let val (ct, row') = constraintsFromPatRow(ctx, row)
@@ -184,6 +196,10 @@ and constraintsFromPat(ctx, WildcardPat)
              (ct, RecordType(row'))
       end
   | constraintsFromPat(ctx, ConPat(_, _)) = raise TypeError "ConPat"
+  | constraintsFromPat(ctx, TypedPat(WildcardPat, ty))
+    = ([], ty)
+  | constraintsFromPat(ctx, TypedPat(VIdPat(Syntax.MkLongVId([], vid)), ty)) (* fresh variable? *)
+    = ([], ty)
   | constraintsFromPat(ctx, TypedPat(pat, ty))
     = let val (ct, inferredTy) = constraintsFromPat(ctx, pat)
       in (EqConstr(ty, inferredTy) :: ct, ty)
@@ -202,55 +218,54 @@ and constraintsFromPatRow(ctx, xs)
       in (List.concat cts, row)
       end
 
-local (* occurCheck : TyVar -> Ty -> bool; returns true if the type variable occurs in the type *)
-      fun occurCheck tv = let fun check (TyVar tv') = tv = tv'
-                                | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
-                                | check (TyCon(tyargs, longtycon)) = List.exists check tyargs
-                                | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
-                          in check
-                          end
-      (* substituteTy : TyVar * Ty -> Ty -> Ty *)
-      fun substituteTy (tv, replacement) =
-          let fun substTy (ty as TyVar tv') = if tv = tv' then
-                                                  replacement
-                                              else
-                                                  ty
-                | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
-                | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
-                | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
-          in substTy
-          end
-      (* substituteConstraint : TyVar * Ty -> Constraint -> Constraint *)
-      fun substituteConstraint (tv, replacement) =
-          let val substTy = substituteTy (tv, replacement)
-          in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
-              | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy } => FieldConstr{label = label, recordTy = substTy recordTy, fieldTy = substTy fieldTy}
-              | IsEqType ty => IsEqType(substTy ty)
-          end
-in
+(* occurCheck : TyVar -> Ty -> bool; returns true if the type variable occurs in the type *)
+fun occurCheck tv = let fun check (TyVar tv') = tv = tv'
+                          | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
+                          | check (TyCon(tyargs, longtycon)) = List.exists check tyargs
+                          | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
+                    in check
+                    end
+
+(* substituteTy : TyVar * Ty -> Ty -> Ty *)
+fun substituteTy (tv, replacement) =
+    let fun substTy (ty as TyVar tv') = if tv = tv' then
+                                            replacement
+                                        else
+                                            ty
+          | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
+          | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
+          | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
+    in substTy
+    end
+
+(* substituteConstraint : TyVar * Ty -> Constraint -> Constraint *)
+fun substituteConstraint (tv, replacement) =
+    let val substTy = substituteTy (tv, replacement)
+    in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
+     | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy } => FieldConstr{label = label, recordTy = substTy recordTy, fieldTy = substTy fieldTy}
+     | IsEqType ty => IsEqType(substTy ty)
+    end
+
 type Subst = (TyVar * Ty) list
 
+(* applySubstTy : Subst -> Ty -> Ty *)
+fun applySubstTy subst =
+    let fun substTy (ty as TyVar tv')
+            = (case List.find (fn (tv, _) => tv = tv') subst of
+                   NONE => ty
+                 | SOME (_, replacement) => replacement (* TODO: single replacement is sufficient? *)
+              )
+          | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
+          | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
+          | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
+    in substTy
+    end
+
  (* unify : Context * (TyVar * TyVarConstraint) list * Constraint list -> Subst * (TyVar * TyVarConstraint) list *)
-fun unify(ctx : Context, tvc : (TyVar * TyVarConstraint) list, EqConstr(TyVar(tv), ty) :: ctrs : Constraint list) : Subst * (TyVar * TyVarConstraint) list
-    = if occurCheck tv ty then
-          raise TypeError("unification failed: occurrence check")
-      else
-          let val (e, tvc') = List.partition (fn (tv', c) => tv = tv') tvc
-              fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
-                | toConstraint (_, TVIsEqType) = IsEqType ty
-              val (ss, tvc'') = unify(ctx, tvc', List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
-          in ((tv, ty) :: ss, tvc'')
-          end
+fun unify(ctx, tvc, EqConstr(TyVar(tv), ty) :: ctrs) : Subst * (TyVar * TyVarConstraint) list
+    = unifyTyVarAndTy(ctx, tvc, tv, ty, ctrs)
   | unify(ctx, tvc, EqConstr(ty, TyVar(tv)) :: ctrs)
-    = if occurCheck tv ty then
-          raise TypeError("unification failed: occurrence check")
-      else
-          let val (e, tvc') = List.partition (fn (tv', c) => tv = tv') tvc
-              fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
-                | toConstraint (_, TVIsEqType) = IsEqType ty
-              val (ss, tvc'') = unify(ctx, tvc', List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
-          in ((tv, ty) :: ss, tvc'')
-          end
+    = unifyTyVarAndTy(ctx, tvc, tv, ty, ctrs)
   | unify(ctx, tvc, EqConstr(FnType(s0, s1), FnType(t0, t1)) :: ctrs) = unify(ctx, tvc, EqConstr(s0, t0) :: EqConstr(s1, t1) :: ctrs)
   | unify(ctx, tvc, EqConstr(RecordType(fields), RecordType(fields')) :: ctrs)
     = if List.length fields <> List.length fields then
@@ -277,14 +292,31 @@ fun unify(ctx : Context, tvc : (TyVar * TyVarConstraint) list, EqConstr(TyVar(tv
   | unify(ctx, tvc, IsEqType(RecordType fields) :: ctrs) = unify(ctx, tvc, List.map (fn (label, ty) => IsEqType ty) fields @ ctrs)
   | unify(ctx, tvc, IsEqType(FnType _) :: ctrs) = raise TypeError("function type does not admit equality")
   | unify(ctx, tvc, IsEqType(TyCon(tyargs, longtycon)) :: ctrs)
-    = if longtycon = PrimTyCon_ref then
+    = if longtycon = primTyCon_ref then
           unify(ctx, tvc, ctrs)
       else
           (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
           raise TypeError("not impl")
   | unify(ctx, tvc, IsEqType(TyVar(tv)) :: ctrs) = unify(ctx, (tv, TVIsEqType) :: tvc, ctrs)
   | unify(ctx, tvc, nil) = (nil, tvc)
-end
-end
-end
+and unifyTyVarAndTy(ctx : Context, tvc : (TyVar * TyVarConstraint) list, tv : TyVar, ty : Ty, ctrs : Constraint list)
+    = if (case ty of TyVar(tv') => tv = tv' | _ => false) then (* ty = TyVar tv *)
+          ([], []) (* do nothing *)
+      else if occurCheck tv ty then
+          raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
+      else
+          let val (e, tvc') = List.partition (fn (tv', c) => tv = tv') tvc
+              fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
+                | toConstraint (_, TVIsEqType) = IsEqType ty
+              val (ss, tvc'') = unify(ctx, tvc', List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
+          in ((tv, ty) :: ss, tvc'')
+          end
 
+(* typeCheckExp : Context * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
+fun typeCheckExp(ctx, exp) = let val (constraints, ty) = constraints(ctx, exp)
+                                 val (subst, tvc) = unify(ctx, [], constraints)
+                                 val applySubst = applySubstTy subst
+                             in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
+                             end
+end (* local *)
+end (* structure Typing *)

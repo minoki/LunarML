@@ -13,6 +13,46 @@ type TyVar = UTyVar
 type TyCon = UTyCon
 type LongTyCon = ULongTyCon
 open SyntaxTree
+
+exception NotImpl of string
+
+(* mapTyInExp : (Ty -> Ty) -> Exp -> Exp *)
+fun mapTyInExp doTy =
+    (* assumes that doTy only acts on type variables *)
+    let fun doExp(e as SConExp _) = e
+          | doExp(e as VarExp _) = e
+          | doExp(RecordExp fields) = RecordExp(List.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doExp(LetInExp(decls, e)) = LetInExp(List.map doDec decls, doExp e)
+          | doExp(AppExp(e1, e2)) = AppExp(doExp e1, doExp e2)
+          | doExp(TypedExp(e, ty)) = TypedExp(doExp e, doTy ty)
+          | doExp(HandleExp(e, matches)) = HandleExp(doExp e, List.map doMatch matches)
+          | doExp(RaiseExp e) = RaiseExp(doExp e)
+          | doExp(IfThenElseExp(e1, e2, e3)) = IfThenElseExp(doExp e1, doExp e2, doExp e3)
+          | doExp(CaseExp(e, matches)) = CaseExp(doExp e, List.map doMatch matches)
+          | doExp(FnExp matches) = FnExp(List.map doMatch matches)
+        and doDec(ValDec(tyvars, valbind)) = ValDec(tyvars, doValBind valbind)
+          | doDec(TypeDec _) = raise NotImpl "doDec(TypeDec) not implemented yet"
+          | doDec(DatatypeDec _) = raise NotImpl "doDec(DatatypeDec) not implemented yet"
+          | doDec(DatatypeRepDec _) = raise NotImpl "doDec(DatatypeRepDec) not implemented yet"
+          | doDec(AbstypeDec _) = raise NotImpl "doDec(AbstypeDec) not implemented yet"
+          | doDec(ExceptionDec _) = raise NotImpl "doDec(ExceptionDec) not implemented yet"
+          | doDec(LocalDec _) = raise NotImpl "doDec(LocalDec) not implemented yet"
+          | doDec(OpenDec _) = raise NotImpl "doDec(OpenDec) not implemented yet"
+          | doDec(dec as InfixDec _) = dec
+          | doDec(dec as InfixrDec _) = dec
+          | doDec(dec as NonfixDec _) = dec
+        and doValBind(PatBind(pat, exp, opt)) = PatBind(doPat pat, doExp exp, Option.map doValBind opt)
+          | doValBind(RecValBind valbind) = RecValBind(doValBind valbind)
+        and doMatch(pat, exp) = (doPat pat, doExp exp)
+        and doPat WildcardPat = WildcardPat
+          | doPat(s as SConPat _) = s
+          | doPat(s as VIdPat _) = s
+          | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
+          | doPat(ConPat(ct, pat)) = ConPat(ct, doPat pat)
+          | doPat(TypedPat(pat, ty)) = TypedPat(doPat pat, doTy ty)
+          | doPat(LayeredPat(vid, tyopt, pat)) = LayeredPat(vid, Option.map doTy tyopt, doPat pat)
+    in doExp
+    end
 end (* structure USyntax *)
 
 structure PostParsing = struct
@@ -134,6 +174,7 @@ local structure S = Syntax
           = let val id = !(#nextTyVar ctx)
             in #nextTyVar ctx := id + 1 ; id end
       fun genTyVar(ctx, tv) = USyntax.UTyVar(tv, genTyVarId(ctx))
+      fun freshTyVar(ctx : Context) = genTyVar(ctx, Syntax.MkTyVar "_")
 
       fun genTyConId(ctx : Context)
           = let val id = !(#nextTyCon ctx)
@@ -181,11 +222,12 @@ fun toUTy(ctx, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
 and toUTyRow(ctx, row) = let fun oneField(label, ty) = (label, toUTy(ctx, ty))
                          in List.map oneField row
                          end
-fun toUPat(ctx, S.WildcardPat) = U.WildcardPat
+fun toUPat(ctx, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, S.VIdPat longvid) = U.VIdPat longvid
+  | toUPat(ctx, S.VIdPat longvid) = U.TypedPat(U.VIdPat longvid, USyntax.TyVar(freshTyVar(ctx))) (* TODO: identifier status *)
   | toUPat(ctx, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, row), wildcard)
   | toUPat(ctx, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, pat))
+  | toUPat(ctx, S.TypedPat(S.VIdPat longvid, ty)) = U.TypedPat(U.VIdPat longvid, toUTy(ctx, ty))
   | toUPat(ctx, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, pat), toUTy(ctx, ty))
   | toUPat(ctx, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, SOME(toUTy(ctx, ty)), toUPat(ctx, pat))
   | toUPat(ctx, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, NONE, toUPat(ctx, pat))
@@ -203,18 +245,19 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
     = let fun doDecl(ctx, nil, acc) = (ctx, List.rev acc)
             | doDecl(ctx, decl :: decls, acc)
               = (case decl of
-                     S.ValDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.TypeDec(typbinds) => doDecl(ctx, decls, decl :: acc)
-                   | S.DatatypeDec(datbinds) => doDecl(ctx, decls, decl :: acc)
-                   | S.DatatypeRepDec(tycon, longtycon) => doDecl(ctx, decls, decl :: acc)
-                   | S.AbstypeDec(datbinds, dec) => doDecl(ctx, decls, decl :: acc)
-                   | S.ExceptionDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.LocalDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.OpenDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.InfixDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.InfixrDec(_) => doDecl(ctx, decls, decl :: acc)
-                   | S.NonfixDec(_) => doDecl(ctx, decls, decl :: acc)
+                     S.ValDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.TypeDec(typbinds) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.DatatypeDec(datbinds) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.DatatypeRepDec(tycon, longtycon) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.AbstypeDec(datbinds, dec) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.ExceptionDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.LocalDec(_) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.OpenDec(_) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.InfixDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.InfixrDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.NonfixDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
                 )
+          val (ctx', decls') = doDecl(ctx, decls, nil)
       in U.LetInExp(decls', toUExp(ctx', exp))
       end
   | toUExp(ctx, S.AppExp(exp1, exp2)) = U.AppExp(toUExp(ctx, exp1), toUExp(ctx, exp2))
@@ -224,7 +267,13 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, exp1), toUExp(ctx, exp2), toUExp(ctx, exp3))
   | toUExp(ctx, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, exp), toUMatch(ctx, match))
   | toUExp(ctx, S.FnExp(match)) = U.FnExp(toUMatch(ctx, match))
-and toUMatch(ctx, _ : (S.Pat * S.Exp) list) = raise NameError("not implemented yet")
-and toUDec(ctx, _) = raise NameError("not implemented yet")
+and toUMatch(ctx, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, pat), toUExp(ctx, exp))) matches
+and toUDec(ctx, S.ValDec(tyvars, valbind)) = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, toUValBind(ctx, valbind))
+  | toUDec(ctx, S.TypeDec(typbinds)) = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, typbind)) typbinds)
+  | toUDec(ctx, S.DatatypeDec _) = raise NameError("not implemented yet")
+  | toUDec(ctx, _) = raise NameError("not implemented yet")
+and toUValBind(ctx, S.PatBind(pat, exp, valbind)) = U.PatBind(toUPat(ctx, pat), toUExp(ctx, exp), Option.map (fn x => toUValBind(ctx, x)) valbind)
+  | toUValBind(ctx, S.RecValBind(valbind)) = U.RecValBind(toUValBind(ctx, valbind))
+and toUTypBind(ctx, _) = raise NameError("not implemented yet")
 end (* local *)
 end (* structure PostParsing *)

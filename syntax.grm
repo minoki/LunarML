@@ -86,6 +86,8 @@ fun MkListExp nil = nilExp
        | Opt_BAR_ConBind of Syntax.ConBind list
        | ExBind of Syntax.ExBind list
        | Opt_AND_ExBind of Syntax.ExBind list
+       | TopDec of Syntax.Dec list
+       | Program of Syntax.Dec list
 
 %name DamepoML
 
@@ -356,3 +358,8 @@ ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, SOME Ty
 
 Opt_AND_ExBind : AND ExBind (ExBind)
                | (nil)
+
+TopDec : Dec (Dec)
+Program : TopDec SEMICOLON Program (TopDec @ Program)
+        | Exp SEMICOLON Program (Syntax.ValDec(nil, Syntax.PatBind(Syntax.VIdPat(Syntax.MkLongVId([], Syntax.MkVId "it")), Exp, NONE)) :: Program) (* val it = Exp *)
+        | (nil)
