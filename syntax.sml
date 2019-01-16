@@ -14,6 +14,11 @@ datatype LongVId = MkLongVId of StrId list * VId
 datatype LongTyCon = MkLongTyCon of StrId list * TyCon
 datatype LongStrId = MkLongStrId of StrId list * StrId
 
+datatype InfixAssociativity = LeftAssoc of int
+                            | RightAssoc of int
+datatype FixityStatus = Nonfix
+                      | Infix of InfixAssociativity
+
 (* pretty printing *)
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
 fun print_option p (SOME x) = "SOME(" ^ p x ^ ")"
@@ -73,7 +78,7 @@ functor GenericSyntaxTree(type TyVar;
         datatype Pat
           = WildcardPat
           | SConPat of SCon (* special constant *)
-          | VIdPat of LongVId
+          | VIdPat of LongVId (* constructor or variable *)
           | RecordPat of (Label * Pat) list * bool
           | ConPat of LongVId * Pat (* constructed pattern *)
           | TypedPat of Pat * Ty (* typed *)
@@ -104,9 +109,7 @@ functor GenericSyntaxTree(type TyVar;
                      | ExceptionDec of ExBind list
                      | LocalDec of Dec list * Dec list
                      | OpenDec of LongStrId list
-                     | InfixDec of int option * VId list
-                     | InfixrDec of int option * VId list
-                     | NonfixDec of VId list
+                     | FixityDec of FixityStatus * VId list
              and ValBind = PatBind of Pat * Exp * ValBind option
                          | RecValBind of ValBind
         type Program = Dec list
@@ -122,7 +125,21 @@ functor GenericSyntaxTree(type TyVar;
           | print_Pat (VIdPat x) = "VIdPat(" ^ print_LongVId x ^ ")"
           | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
           | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
-          | print_Pat _ = "<Pat>"
+          | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
+          | print_Pat (RecordPat(x, false)) = let fun extractTuple (i, nil) = SOME nil
+                                                    | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
+                                                                                                       case extractTuple (i + 1, xs) of
+                                                                                                           NONE => NONE
+                                                                                                         | SOME ys => SOME (e :: ys)
+                                                                                                   else
+                                                                                                       NONE
+                                                    | extractTuple _ = NONE
+                                              in case extractTuple (1, x) of
+                                                     NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",false)"
+                                                   | SOME ys => "TuplePat " ^ print_list print_Pat ys
+                                              end
+          | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",true)"
+          (* | print_Pat _ = "<Pat>" *)
         fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
           | print_Exp (VarExp(MkLongVId([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
           | print_Exp (VarExp x) = "VarExp(" ^ print_LongVId x ^ ")"
@@ -169,4 +186,44 @@ fun TupleExp xs = let fun doFields i nil = nil
                   in RecordExp (doFields 1 xs)
                   end
 
+fun MkInfixConPat(pat1, vid, pat2) = ConPat(MkLongVId([], vid), RecordPat([(NumericLabel 1, pat1), (NumericLabel 2, pat2)], false))
+fun MkInfixExp(exp1, vid, exp2) = AppExp(VarExp(MkLongVId([], vid)), RecordExp([(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
+
 end (* structure Syntax *)
+
+structure UnfixedSyntax = struct
+datatype Pat
+  = WildcardPat
+  | SConPat of Syntax.SCon (* special constant *)
+  | NonInfixVIdPat of Syntax.LongVId (* value identifier, with 'op' or structure identifiers *)
+  | InfixOrVIdPat of Syntax.VId (* value identifier, without 'op' or structure identifers *)
+  | JuxtapositionPat of Pat list (* constructed pattern, maybe with binary operator  *)
+  | RecordPat of (Syntax.Label * Pat) list * bool
+  | TypedPat of Pat * Syntax.Ty (* typed *)
+  | LayeredPat of Syntax.VId * Syntax.Ty option * Pat (* layered *)
+
+datatype Exp = SConExp of Syntax.SCon (* special constant *)
+             | NonInfixVIdExp of Syntax.LongVId (* value identifier, with or without 'op'  *)
+             | InfixOrVIdExp of Syntax.VId (* value identifier, without 'op' or structure identifiers *)
+             | RecordExp of (Syntax.Label * Exp) list (* record *)
+             | LetInExp of Dec list * Exp (* local declaration *)
+             | JuxtapositionExp of Exp list (* application, or binary operator *)
+             | TypedExp of Exp * Syntax.Ty
+             | HandleExp of Exp * (Pat * Exp) list
+             | RaiseExp of Exp
+             | IfThenElseExp of Exp * Exp * Exp
+             | CaseExp of Exp * (Pat * Exp) list
+             | FnExp of (Pat * Exp) list
+     and Dec = ValDec of Syntax.TyVar list * ValBind
+             | TypeDec of Syntax.TypBind list
+             | DatatypeDec of Syntax.DatBind list
+             | DatatypeRepDec of Syntax.TyCon * Syntax.LongTyCon
+             | AbstypeDec of Syntax.DatBind list * Dec list
+             | ExceptionDec of Syntax.ExBind list
+             | LocalDec of Dec list * Dec list
+             | OpenDec of Syntax.LongStrId list
+             | FixityDec of Syntax.FixityStatus * Syntax.VId list
+     and ValBind = PatBind of Pat * Exp * ValBind option
+                 | RecValBind of ValBind
+type Program = Dec list
+end (* structure UnfixedSyntax *)
