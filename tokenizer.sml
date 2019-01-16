@@ -257,7 +257,7 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
                   raise TokError "Invalid control character"
           | readStringLit (accum, #"\\" :: #"u" :: x0 :: x1 :: x2 :: x3 :: xs)
             = if Char.isHexDigit x0 andalso Char.isHexDigit x1 andalso Char.isHexDigit x2 andalso Char.isHexDigit x3 then
-                  let val charOrd = ((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x3) + hexDigitToInt x3;
+                  let val charOrd = ((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x3) * 16 + hexDigitToInt x3;
                   in if charOrd > Char.maxOrd then
                          raise TokError "Char ordinal too large"
                      else
