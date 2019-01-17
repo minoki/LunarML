@@ -5,5 +5,5 @@ structure DamepoMLParser = Join(structure Lex = DamepoMLLex
                                 structure LrParser = LrParser)
 structure SimpleParser = struct
 fun print_error (s,p1,p2) = print s
-fun parse str = #1 (DamepoMLParser.parse(0, DamepoMLParser.makeLexer(DamepoMLLex.makeInputFromString str), print_error, ()))
+fun parse str = Fixity.doExp(Fixity.initialFixity, #1 (DamepoMLParser.parse(0, DamepoMLParser.makeLexer(DamepoMLLex.makeInputFromString str), print_error, ())))
 end

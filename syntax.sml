@@ -198,6 +198,7 @@ datatype Pat
   | NonInfixVIdPat of Syntax.LongVId (* value identifier, with 'op' or structure identifiers *)
   | InfixOrVIdPat of Syntax.VId (* value identifier, without 'op' or structure identifers *)
   | JuxtapositionPat of Pat list (* constructed pattern, maybe with binary operator  *)
+  | ConPat of Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
   | RecordPat of (Syntax.Label * Pat) list * bool
   | TypedPat of Pat * Syntax.Ty (* typed *)
   | LayeredPat of Syntax.VId * Syntax.Ty option * Pat (* layered *)
@@ -208,6 +209,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | RecordExp of (Syntax.Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | JuxtapositionExp of Exp list (* application, or binary operator *)
+             | AppExp of Exp * Exp (* application, used by desugaring of list expression *)
              | TypedExp of Exp * Syntax.Ty
              | HandleExp of Exp * (Pat * Exp) list
              | RaiseExp of Exp
@@ -226,4 +228,10 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
      and ValBind = PatBind of Pat * Exp * ValBind option
                  | RecValBind of ValBind
 type Program = Dec list
+
+fun TupleExp xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordExp (doFields 1 xs)
+                  end
+
 end (* structure UnfixedSyntax *)

@@ -192,7 +192,7 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
             | doInfix(lhs, _) = raise Fail "invalid pattern"
       in resolveFixity Syntax.MkInfixConPat (doPrefix patterns)
       end
-  (* | doPat(env, UnfixedSyntax.ParenthesizedPat pat) = doPat(env, pat) *)
+  | doPat(env, UnfixedSyntax.ConPat(longvid, pat)) = Syntax.ConPat(longvid, doPat(env, pat))
   | doPat(env, UnfixedSyntax.TypedPat(pat, ty)) = Syntax.TypedPat(doPat(env, pat), ty)
   | doPat(env, UnfixedSyntax.LayeredPat(vid, ty, pat)) = Syntax.LayeredPat(vid, ty, doPat(env, pat))
 fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
@@ -217,7 +217,7 @@ fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
             | doInfix(lhs, nil) = Leaf lhs
       in resolveFixity Syntax.MkInfixExp (doPrefix expressions)
       end
-  (* | doExp(env, UnfixedSyntax.ParenthesizedExp exp) = doExp(env, exp) *)
+  | doExp(env, UnfixedSyntax.AppExp(exp1, exp2)) = Syntax.AppExp(doExp(env, exp1), doExp(env, exp2))
   | doExp(env, UnfixedSyntax.TypedExp(exp, ty)) = Syntax.TypedExp(doExp(env, exp), ty)
   | doExp(env, UnfixedSyntax.HandleExp(exp, matches)) = Syntax.HandleExp(doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
   | doExp(env, UnfixedSyntax.RaiseExp exp) = Syntax.RaiseExp(doExp(env, exp))
