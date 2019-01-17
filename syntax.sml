@@ -78,7 +78,9 @@ functor GenericSyntaxTree(type TyVar;
         datatype Pat
           = WildcardPat
           | SConPat of SCon (* special constant *)
-          | VIdPat of LongVId (* constructor or variable *)
+          | ConOrVarPat of VId (* constructor or variable *)
+          | VarPat of VId (* variable *)
+          | NulConPat of LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
           | RecordPat of (Label * Pat) list * bool
           | ConPat of LongVId * Pat (* constructed pattern *)
           | TypedPat of Pat * Ty (* typed *)
@@ -121,8 +123,9 @@ functor GenericSyntaxTree(type TyVar;
           | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
         fun print_Pat WildcardPat = "WildcardPat"
           | print_Pat (SConPat x) = "SConPat(" ^ print_SCon x ^ ")"
-          | print_Pat (VIdPat (MkLongVId([], vid))) = "SimpleVIdPat(" ^ print_VId vid ^ ")"
-          | print_Pat (VIdPat x) = "VIdPat(" ^ print_LongVId x ^ ")"
+          | print_Pat (ConOrVarPat vid) = "ConOrVarPat(" ^ print_VId vid ^ ")"
+          | print_Pat (VarPat vid) = "VarPat(" ^ print_VId vid ^ ")"
+          | print_Pat (NulConPat longvid) = "NulConPat(" ^ print_LongVId longvid ^ ")"
           | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
           | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
           | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
@@ -179,7 +182,7 @@ structure SyntaxTree = GenericSyntaxTree(type TyVar = TyVar
                                         )
 open SyntaxTree
 
-fun SimpleVIdPat vid = VIdPat (MkLongVId ([], vid))
+fun SimpleVIdPat vid = ConOrVarPat vid
 fun SimpleVarExp vid = VarExp (MkLongVId ([], vid))
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs

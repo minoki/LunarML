@@ -44,7 +44,9 @@ fun mapTyInExp doTy =
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
-          | doPat(s as VIdPat _) = s
+          | doPat(s as ConOrVarPat _) = s
+          | doPat(s as VarPat _) = s
+          | doPat(s as NulConPat _) = s
           | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
           | doPat(ConPat(ct, pat)) = ConPat(ct, doPat pat)
           | doPat(TypedPat(pat, ty)) = TypedPat(doPat pat, doTy ty)
@@ -150,17 +152,18 @@ fun resolveFixity f
 fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
   | doPat(env, UnfixedSyntax.SConPat scon) = Syntax.SConPat scon
   | doPat(env, UnfixedSyntax.InfixOrVIdPat(vid)) = (case getFixityStatus(env, vid) of
-                                                        Syntax.Nonfix => Syntax.VIdPat(Syntax.MkLongVId([], vid))
+                                                        Syntax.Nonfix => Syntax.ConOrVarPat vid
                                                       | _ => raise Fail "infix operator used in non-infix position"
                                                    )
-  | doPat(env, UnfixedSyntax.NonInfixVIdPat(longvid)) = Syntax.VIdPat longvid
+  | doPat(env, UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))) = Syntax.ConOrVarPat vid
+  | doPat(env, UnfixedSyntax.NonInfixVIdPat(longvid)) = Syntax.NulConPat longvid
   | doPat(env, UnfixedSyntax.RecordPat(fields, r)) = Syntax.RecordPat(List.map (fn (label, pat) => (label, doPat(env, pat))) fields, r)
   | doPat(env, UnfixedSyntax.JuxtapositionPat patterns) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(vid) :: UnfixedSyntax.InfixOrVIdPat(vid') :: pats)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => (case getFixityStatus(env, vid') of
-                                           Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), Syntax.VIdPat(Syntax.MkLongVId([], vid'))), pats)
-                                         | Syntax.Infix assoc => Tree(Syntax.VIdPat(Syntax.MkLongVId([], vid)), assoc, vid', doPrefix(pats))
+                                           Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), Syntax.ConOrVarPat(vid')), pats)
+                                         | Syntax.Infix assoc => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
                                       )
                    | Syntax.Infix assoc => raise Fail "infix operator used in prefix position"
                 )
@@ -171,8 +174,10 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(longvid) :: UnfixedSyntax.InfixOrVIdPat(vid') :: pats)
               = (case getFixityStatus(env, vid') of
-                     Syntax.Nonfix => doInfix(Syntax.ConPat(longvid, Syntax.VIdPat(Syntax.MkLongVId([], vid'))), pats)
-                   | Syntax.Infix assoc => Tree(Syntax.VIdPat(longvid), assoc, vid', doPrefix(pats))
+                     Syntax.Nonfix => doInfix(Syntax.ConPat(longvid, Syntax.ConOrVarPat(vid')), pats)
+                   | Syntax.Infix assoc => case longvid of
+                                               Syntax.MkLongVId([], vid) => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
+                                             | _ => Tree(Syntax.NulConPat(longvid), assoc, vid', doPrefix(pats))
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(longvid) :: atpat :: pats)
               = doInfix(Syntax.ConPat(longvid, doPat(env, atpat)), pats)
@@ -265,7 +270,9 @@ fun freeTyVarsInTy(bound, TyVar tv) = if TyVarSet.member(bound, tv) then
 (* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
 fun freeTyVarsInPat(_, WildcardPat) = TyVarSet.empty
   | freeTyVarsInPat(_, SConPat _) = TyVarSet.empty
-  | freeTyVarsInPat(_, VIdPat _) = TyVarSet.empty
+  | freeTyVarsInPat(_, ConOrVarPat _) = TyVarSet.empty
+  | freeTyVarsInPat(_, VarPat _) = TyVarSet.empty
+  | freeTyVarsInPat(_, NulConPat _) = TyVarSet.empty
   | freeTyVarsInPat(bound, RecordPat(xs, _)) = List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
   | freeTyVarsInPat(bound, ConPat(_, pat)) = freeTyVarsInPat(bound, pat)
   | freeTyVarsInPat(bound, TypedPat(pat, ty)) = TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
@@ -407,7 +414,7 @@ fun toUTy(ctx, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
   | toUTy(ctx, S.RecordType row) = U.RecordType(toUTyRow(ctx, row))
   | toUTy(ctx, S.TyCon(args, tycon)) = (case lookupLongTyCon(ctx, tycon) of
                                             BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, ty)) args, U.ULongTyCon(tycon, id))
-                                          | BTyAlias _ => raise NameError "type alias not supported yet"
+                                          | BTyAlias _ => raise Fail "type alias not supported yet"
                                        )
   | toUTy(ctx, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, ty1), toUTy(ctx, ty2))
 and toUTyRow(ctx, row) = let fun oneField(label, ty) = (label, toUTy(ctx, ty))
@@ -415,23 +422,26 @@ and toUTyRow(ctx, row) = let fun oneField(label, ty) = (label, toUTy(ctx, ty))
                          end
 fun toUPat(ctx, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, S.VIdPat longvid) = U.TypedPat(U.VIdPat longvid, USyntax.TyVar(freshTyVar(ctx))) (* TODO: identifier status *)
+  | toUPat(ctx, S.ConOrVarPat vid) = U.TypedPat(U.ConOrVarPat vid, USyntax.TyVar(freshTyVar(ctx))) (* TODO: identifier status *)
+  | toUPat(ctx, S.VarPat vid) = U.TypedPat(U.VarPat vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
+  | toUPat(ctx, S.NulConPat longvid) = U.NulConPat longvid
   | toUPat(ctx, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, row), wildcard)
   | toUPat(ctx, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, pat))
-  | toUPat(ctx, S.TypedPat(S.VIdPat longvid, ty)) = U.TypedPat(U.VIdPat longvid, toUTy(ctx, ty))
+  | toUPat(ctx, S.TypedPat(S.ConOrVarPat vid, ty)) = U.TypedPat(U.ConOrVarPat vid, toUTy(ctx, ty))
+  | toUPat(ctx, S.TypedPat(S.VarPat vid, ty)) = U.TypedPat(U.VarPat vid, toUTy(ctx, ty))
   | toUPat(ctx, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, pat), toUTy(ctx, ty))
   | toUPat(ctx, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, SOME(toUTy(ctx, ty)), toUPat(ctx, pat))
   | toUPat(ctx, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, NONE, toUPat(ctx, pat))
-and toUPatRow(ctx, _) = raise NameError("not implemented yet")
+and toUPatRow(ctx, row : (Syntax.Label * Syntax.Pat) list) = List.map (fn (label, pat) => (label, toUPat(ctx, pat))) row
 fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
                                                         val tycon' = 
-                                                  in U.TypBind(params', tycon *) raise NameError("not implemented yet")
-fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise NameError("not implemented yet")
-fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise NameError("not implemented yet") (* genTyCon *)
-fun toUExBind(ctx, _ : S.ExBind) = raise NameError("not implemented yet")
+                                                  in U.TypBind(params', tycon *) raise Fail "toUTypBind: not implemented yet"
+fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implemented yet"
+fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
+fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, S.VarExp(longvid)) = U.VarExp(longvid)
-  | toUExp(ctx, S.RecordExp(row)) = raise NameError("not implemented yet")
+  | toUExp(ctx, S.RecordExp(row)) = raise Fail "not implemented yet"
   | toUExp(ctx, S.LetInExp(decls, exp))
     = let fun doDecl(ctx, nil, acc) = (ctx, List.rev acc)
             | doDecl(ctx, decl :: decls, acc)
@@ -459,10 +469,10 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
 and toUMatch(ctx, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, pat), toUExp(ctx, exp))) matches
 and toUDec(ctx, S.ValDec(tyvars, valbind)) = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, toUValBind(ctx, valbind))
   | toUDec(ctx, S.TypeDec(typbinds)) = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, typbind)) typbinds)
-  | toUDec(ctx, S.DatatypeDec _) = raise NameError("not implemented yet")
-  | toUDec(ctx, _) = raise NameError("not implemented yet")
+  | toUDec(ctx, S.DatatypeDec _) = raise Fail "not implemented yet"
+  | toUDec(ctx, _) = raise Fail "not implemented yet"
 and toUValBind(ctx, S.PatBind(pat, exp, valbind)) = U.PatBind(toUPat(ctx, pat), toUExp(ctx, exp), Option.map (fn x => toUValBind(ctx, x)) valbind)
   | toUValBind(ctx, S.RecValBind(valbind)) = U.RecValBind(toUValBind(ctx, valbind))
-and toUTypBind(ctx, _) = raise NameError("not implemented yet")
+and toUTypBind(ctx, _) = raise Fail "not implemented yet"
 end (* local *)
 end (* structure PostParsing *)
