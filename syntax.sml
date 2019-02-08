@@ -128,6 +128,16 @@ functor GenericSyntaxTree(type TyVar;
                          | RecValBind of ValBind
         type Program = Dec list
 
+        (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
+        fun extractTuple (i, nil) = SOME nil
+          | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
+                                                             case extractTuple (i + 1, xs) of
+                                                                 NONE => NONE
+                                                               | SOME ys => SOME (e :: ys)
+                                                         else
+                                                             NONE
+          | extractTuple _ = NONE
+
         (* pretty printing *)
         fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
           | print_Ty (RecordType xs) = "RecordType " ^ print_list (print_pair (print_Label,print_Ty)) xs
@@ -141,35 +151,19 @@ functor GenericSyntaxTree(type TyVar;
           | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
           | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
           | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
-          | print_Pat (RecordPat(x, false)) = let fun extractTuple (i, nil) = SOME nil
-                                                    | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
-                                                                                                       case extractTuple (i + 1, xs) of
-                                                                                                           NONE => NONE
-                                                                                                         | SOME ys => SOME (e :: ys)
-                                                                                                   else
-                                                                                                       NONE
-                                                    | extractTuple _ = NONE
-                                              in case extractTuple (1, x) of
-                                                     NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",false)"
-                                                   | SOME ys => "TuplePat " ^ print_list print_Pat ys
-                                              end
+          | print_Pat (RecordPat(x, false)) = (case extractTuple (1, x) of
+                                                   NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",false)"
+                                                 | SOME ys => "TuplePat " ^ print_list print_Pat ys
+                                              )
           | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",true)"
           (* | print_Pat _ = "<Pat>" *)
         fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
           | print_Exp (VarExp(MkLongVId([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
           | print_Exp (VarExp x) = "VarExp(" ^ print_LongVId x ^ ")"
-          | print_Exp (RecordExp x) = let fun extractTuple (i, nil) = SOME nil
-                                            | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
-                                                                                               case extractTuple (i + 1, xs) of
-                                                                                                   NONE => NONE
-                                                                                                 | SOME ys => SOME (e :: ys)
-                                                                                           else
-                                                                                               NONE
-                                            | extractTuple _ = NONE
-                                      in case extractTuple (1, x) of
-                                             NONE => "RecordExp " ^ print_list (print_pair (print_Label, print_Exp)) x
-                                           | SOME ys => "TupleExp " ^ print_list print_Exp ys
-                                      end
+          | print_Exp (RecordExp x) = (case extractTuple (1, x) of
+                                           NONE => "RecordExp " ^ print_list (print_pair (print_Label, print_Exp)) x
+                                         | SOME ys => "TupleExp " ^ print_list print_Exp ys
+                                      )
           | print_Exp (LetInExp(decls,x)) = "LetInExp(" ^ print_list print_Dec decls ^ "," ^ print_Exp x ^ ")"
           | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
           | print_Exp (TypedExp(x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
