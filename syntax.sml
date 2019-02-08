@@ -41,6 +41,10 @@ fun print_LongTyCon (MkLongTyCon(x,y)) = "MkLongTyCon(" ^ print_list print_StrId
 fun print_LongStrId (MkLongStrId(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"
 
 (* BinaryMapFn, BinarySetFn: from smlnj-lib *)
+structure VIdSet = BinarySetFn(struct
+                                type ord_key = VId
+                                fun compare (MkVId x, MkVId y) = String.compare (x,y)
+                                end)
 structure VIdMap = BinaryMapFn(struct
                                 type ord_key = VId
                                 fun compare (MkVId x, MkVId y) = String.compare (x,y)
@@ -60,6 +64,14 @@ structure TyVarMap = BinaryMapFn(struct
 structure TyVarSet = BinarySetFn(struct
                                   type ord_key = TyVar
                                   fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
+                                  end)
+structure LabelSet = BinarySetFn(struct
+                                  type ord_key = Label
+                                  (* NumericLabel _ < IdentifierLabel _ *)
+                                  fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
+                                    | compare (NumericLabel _, IdentifierLabel _) = LESS
+                                    | compare (IdentifierLabel _, NumericLabel _) = GREATER
+                                    | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
                                   end)
 
 functor GenericSyntaxTree(type TyVar;
