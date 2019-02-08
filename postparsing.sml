@@ -2,6 +2,9 @@ structure USyntax = struct
 datatype UTyVar = UTyVar of Syntax.TyVar * int
 datatype UTyCon = UTyCon of Syntax.TyCon * int
 datatype ULongTyCon = ULongTyCon of Syntax.LongTyCon * int
+fun eqUTyVar(UTyVar(_,a),UTyVar(_,b)) = a = b
+fun eqUTyCon(UTyCon(_,a),UTyCon(_,b)) = a = b
+fun eqULongTyCon(ULongTyCon(_,a),ULongTyCon(_,b)) = a = b
 structure SyntaxTree = Syntax.GenericSyntaxTree(type TyVar = UTyVar
                                                 type TyCon = UTyCon
                                                 type LongTyCon = ULongTyCon
@@ -339,6 +342,102 @@ in
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
 end (* local *)
+end (* local *)
+
+exception SyntaxError of string
+
+(* Check syntactic restrictions (The Definition 2.9) *)
+local
+    structure S = Syntax
+
+    (* checkRow : (Label * 'a) list -> bool, returns true if the same label is bound twice *)
+    fun checkRow(row: (S.Label * 'a) list) = doCheckRow(S.LabelSet.empty, row)
+    and doCheckRow(seen, []) = false
+      | doCheckRow(seen, (label, _) :: xs) = if S.LabelSet.member(seen, label) then
+                                                 true
+                                             else
+                                                 doCheckRow(S.LabelSet.add(seen, label), xs)
+
+    (* checkTyVarSeq : TyVar list -> bool, returns true if the same TyVar is bound twice *)
+    fun checkTyVarSeq(xs: S.TyVar list) = doCheckTyVarSeq(S.TyVarSet.empty, xs)
+    and doCheckTyVarSeq(seen, []) = false
+      | doCheckTyVarSeq(seen, tv :: xs) = if S.TyVarSet.member(seen, tv) then
+                                              true
+                                          else
+                                              doCheckTyVarSeq(S.TyVarSet.add(seen, tv), xs)
+
+
+    (* doTy : S.Ty -> unit *)
+    fun doTy(S.TyVar _) = ()
+      | doTy(S.RecordType row) = if checkRow row then
+                                     raise SyntaxError "No type-expression row may bind the same label twice"
+                                 else
+                                     ()
+      | doTy(S.TyCon(arg, longtycon)) = ()
+      | doTy(S.FnType(s, t)) = (doTy s ; doTy t)
+
+    (* doPat : S.Pat -> unit *)
+    fun doPat(S.WildcardPat) = ()
+      | doPat(S.SConPat(S.RealConstant _)) = raise SyntaxError "No real constant may occur in a pattern"
+      | doPat(S.SConPat _) = ()
+      | doPat(S.ConOrVarPat _) = ()
+      | doPat(S.VarPat _) = ()
+      | doPat(S.NulConPat _) = ()
+      | doPat(S.RecordPat(row, ellip)) = if checkRow row then
+                                             raise SyntaxError "No pattern row may bind the same label twice"
+                                         else
+                                             List.app (fn (_, pat) => doPat pat) row
+      | doPat(S.ConPat(longvid, pat)) = doPat pat
+      | doPat(S.TypedPat(pat, ty)) = (doPat pat ; doTy ty)
+      | doPat(S.LayeredPat(vid, NONE, pat)) = (doPat pat)
+      | doPat(S.LayeredPat(vid, SOME ty, pat)) = (doTy ty ; doPat pat)
+
+    fun doTypBind(S.TypBind(tyvarseq, tycon, ty))
+        = if checkTyVarSeq tyvarseq then
+              raise SyntaxError "No tyvarseq may contain the same tyvar twice"
+          else
+              doTy ty
+
+    val invalidBoundNames = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true", S.MkVId "false", S.MkVId "nil", S.MkVId "::", S.MkVId "ref"]
+
+    (* doExBind : S.DatBind -> unit *)
+    fun doDatBind(S.DatBind(tyvarseq, tycon, conbinds))
+        = if checkTyVarSeq tyvarseq then
+              raise SyntaxError "No tyvarseq may contain the same tyvar twice"
+          else
+              doConBinds(S.VIdSet.empty, conbinds)
+    and doConBinds(seen, []) = ()
+      | doConBinds(seen, S.ConBind(vid, tyopt) :: conbinds) = if S.VIdSet.member(seen, vid) then
+                                                                  raise SyntaxError "No datbind may bind the same identifier twice"
+                                                              else
+                                                                  if vid = S.MkVId "it" orelse S.VIdSet.member(invalidBoundNames, vid) then
+                                                                      raise SyntaxError "Invalid bound name"
+                                                                  else
+                                                                      doConBinds(S.VIdSet.add(seen, vid), conbinds)
+
+    (* doExBind : S.ExBind -> unit *)
+    fun doExBind(_: S.ExBind): unit = raise Fail "not implemented yet"
+
+    (* doExp : S.TyVarSet * S.Exp -> unit *)
+    (* doDec : S.TyVarSet * S.Dec -> unit *)
+    (* doValBind : S.TyVarSet * S.ValBind -> unit *)
+    fun doExp(tyvarenv : S.TyVarSet.set, S.SConExp _) = ()
+      | doExp(tyvarenv, S.VarExp _) = ()
+      | doExp(tyvarenv, S.RecordExp row) = if checkRow row then
+                                               raise SyntaxError "No expression row may bind the same label twice"
+                                           else
+                                               ()
+      | doExp(tyvarenv, S.LetInExp(decls, exp)) = (List.app (fn dec => doDec(tyvarenv, dec)) decls ; doExp(tyvarenv, exp))
+      | doExp(tyvarenv, S.AppExp(e1, e2)) = (doExp(tyvarenv, e1) ; doExp(tyvarenv, e2))
+      | doExp(tyvarenv, S.TypedExp(exp, ty)) = (doExp(tyvarenv, exp) ; doTy ty)
+      | doExp _ = raise Fail "not implemented yet"
+    and doDec(tyvarenv : S.TyVarSet.set, S.ValDec(tyvarseq, valbind)) = raise Fail "not implemented yet"
+      | doDec _ = raise Fail "not implemented yet"
+    and doValBind(tyvarenv, S.PatBind(pat, exp, valbindopt)) = (doPat pat ; doExp(tyvarenv, exp))
+      | doValBind(tyvarenv, S.RecValBind(valbind)) = raise Fail "not implemented yet"
+in
+val checkExp = doExp
+val checkDec = doDec
 end (* local *)
 
 exception NameError of string
