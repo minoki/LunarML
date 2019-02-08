@@ -42,10 +42,9 @@ val ast2 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
 - print (USyntax.print_Exp ast2);
 LetInExp([ValDec([],PatBind(TypedPat(SimpleVIdPat(MkVId "x"),TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],PatBind(TypedPat(SimpleVIdPat(MkVId "id"),FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(TypedPat(SimpleVIdPat(MkVId "z"),TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z"))]),NONE))],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))),NONE))],SimpleVarExp(MkVId "x"))val it = () : unit
 - val ctx = Typing.newContext(Typing.emptyEnv);
-val ctx = {env=MkEnv {strMap=E,tyConMap=E,valMap=E},nextTyVar=ref 100}
-  : Typing.Context
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, ast2);
+val ctx = {nextTyVar=ref 100} : Typing.Context
+- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.emptyEnv, ast2);
 
 uncaught exception Fail [Fail: let-in not implemented yet]
-  raised at: typing.sml:274.13-274.46
+  raised at: typing.sml:272.13-272.46
 ```
