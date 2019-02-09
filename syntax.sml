@@ -115,7 +115,8 @@ functor GenericSyntaxTree(type TyVar;
                      | IfThenElseExp of Exp * Exp * Exp
                      | CaseExp of Exp * (Pat * Exp) list
                      | FnExp of (Pat * Exp) list
-             and Dec = ValDec of TyVar list * ValBind
+             and Dec = ValDec of TyVar list * ValBind list (* non-recursive *)
+                     | RecValDec of TyVar list * ValBind list (* recursive (val rec) *)
                      | TypeDec of TypBind list
                      | DatatypeDec of DatBind list
                      | DatatypeRepDec of TyCon * LongTyCon
@@ -124,8 +125,7 @@ functor GenericSyntaxTree(type TyVar;
                      | LocalDec of Dec list * Dec list
                      | OpenDec of LongStrId list
                      | FixityDec of FixityStatus * VId list
-             and ValBind = PatBind of Pat * Exp * ValBind option
-                         | RecValBind of ValBind
+             and ValBind = PatBind of Pat * Exp
         type Program = Dec list
 
         (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
@@ -172,10 +172,10 @@ functor GenericSyntaxTree(type TyVar;
           | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
           | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
           | print_Exp (FnExp x) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
-        and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_ValBind valbind  ^ ")"
+        and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
+          | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
           | print_Dec _ = "<Dec>"
-        and print_ValBind (PatBind (pat, exp, ovalbind)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ "," ^ print_option print_ValBind ovalbind ^ ")"
-          | print_ValBind (RecValBind valbind) = "RecValBind(" ^ print_ValBind valbind ^ ")"
+        and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
         val print_TyVar = print_TyVar
         end (* functor GenericSyntaxTree *)
 
@@ -225,7 +225,8 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of Exp * (Pat * Exp) list
              | FnExp of (Pat * Exp) list
-     and Dec = ValDec of Syntax.TyVar list * ValBind
+     and Dec = ValDec of Syntax.TyVar list * ValBind list
+             | RecValDec of Syntax.TyVar list * ValBind list
              | TypeDec of Syntax.TypBind list
              | DatatypeDec of Syntax.DatBind list
              | DatatypeRepDec of Syntax.TyCon * Syntax.LongTyCon
@@ -234,8 +235,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | LocalDec of Dec list * Dec list
              | OpenDec of Syntax.LongStrId list
              | FixityDec of Syntax.FixityStatus * Syntax.VId list
-     and ValBind = PatBind of Pat * Exp * ValBind option
-                 | RecValBind of ValBind
+     and ValBind = PatBind of Pat * Exp
 type Program = Dec list
 
 fun TupleExp xs = let fun doFields i nil = nil

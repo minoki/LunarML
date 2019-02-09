@@ -80,7 +80,7 @@ fun MkListExp nil = nilExp
        | Dec of UnfixedSyntax.Dec list
        | LongStrIds of Syntax.LongStrId list
        | VIds of Syntax.VId list
-       | ValBind of UnfixedSyntax.ValBind
+       | ValBind of UnfixedSyntax.ValBind list
        | TypBind of Syntax.TypBind list
        | DatBind of Syntax.DatBind list
        | ConBind of Syntax.ConBind list
@@ -303,9 +303,12 @@ MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: Ma
              | Pat DARROW Exp ((Pat, Exp) :: nil)
 
 (* declarations *)
-Dec : VAL TyVar ValBind Dec (UnfixedSyntax.ValDec ([TyVar], ValBind) :: Dec) (* value declaration *)
-    | VAL ValBind Dec (UnfixedSyntax.ValDec (nil, ValBind) :: Dec) (* value declaration *)
-    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (UnfixedSyntax.ValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration *)
+Dec : VAL TyVar ValBind Dec (UnfixedSyntax.ValDec ([TyVar], ValBind) :: Dec) (* value declaration (non-recursive) *)
+    | VAL ValBind Dec (UnfixedSyntax.ValDec (nil, ValBind) :: Dec) (* value declaration (non-recursive) *)
+    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (UnfixedSyntax.ValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration (non-recursive) *)
+    | VAL REC TyVar ValBind Dec (UnfixedSyntax.RecValDec ([TyVar], ValBind) :: Dec) (* value declaration (recursive) *)
+    | VAL REC ValBind Dec (UnfixedSyntax.RecValDec (nil, ValBind) :: Dec) (* value declaration (recursive) *)
+    | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration (non-recursive) *)
     (* | FUN TyVarSeq FValBind Dec () function declaration: not implemented yet *)
     | TYPE TypBind Dec (UnfixedSyntax.TypeDec TypBind :: Dec) (* type declaration *)
     | DATATYPE DatBind Dec (UnfixedSyntax.DatatypeDec DatBind :: Dec) (* datatype declaration *)
@@ -331,9 +334,9 @@ VIds : VId VIds (VId :: VIds)
      | VId (VId :: nil)
 
 (* value bindings *)
-ValBind : Pat EQUAL Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp, SOME ValBind))
-        | Pat EQUAL Exp (UnfixedSyntax.PatBind (Pat, Exp, NONE))
-        | REC ValBind (UnfixedSyntax.RecValBind ValBind)
+ValBind : Pat EQUAL Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp) :: ValBind)
+        | Pat EQUAL Exp (UnfixedSyntax.PatBind (Pat, Exp) :: nil)
+        (* | REC ValBind (UnfixedSyntax.RecValBind ValBind) *)
 
 (* type bindings *)
 TypBind : TyVarSeq TyCon EQUAL Ty AND TypBind (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: TypBind)
@@ -360,5 +363,5 @@ Opt_AND_ExBind : AND ExBind (ExBind)
 
 TopDec : Dec (Dec)
 Program : TopDec SEMICOLON Program (TopDec @ Program)
-        | Exp SEMICOLON Program (UnfixedSyntax.ValDec(nil, UnfixedSyntax.PatBind(UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], Syntax.MkVId "it")), Exp, NONE)) :: Program) (* val it = Exp *)
+        | Exp SEMICOLON Program (UnfixedSyntax.ValDec(nil, [UnfixedSyntax.PatBind(UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)]) :: Program) (* val it = Exp *)
         | (nil)

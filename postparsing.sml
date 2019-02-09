@@ -33,7 +33,8 @@ fun mapTyInExp doTy =
           | doExp(IfThenElseExp(e1, e2, e3)) = IfThenElseExp(doExp e1, doExp e2, doExp e3)
           | doExp(CaseExp(e, matches)) = CaseExp(doExp e, List.map doMatch matches)
           | doExp(FnExp matches) = FnExp(List.map doMatch matches)
-        and doDec(ValDec(tyvars, valbind)) = ValDec(tyvars, doValBind valbind)
+        and doDec(ValDec(tyvars, valbind)) = ValDec(tyvars, List.map doValBind valbind)
+          | doDec(RecValDec(tyvars, valbind)) = RecValDec(tyvars, List.map doValBind valbind)
           | doDec(TypeDec _) = raise NotImpl "doDec(TypeDec) not implemented yet"
           | doDec(DatatypeDec _) = raise NotImpl "doDec(DatatypeDec) not implemented yet"
           | doDec(DatatypeRepDec _) = raise NotImpl "doDec(DatatypeRepDec) not implemented yet"
@@ -42,8 +43,7 @@ fun mapTyInExp doTy =
           | doDec(LocalDec _) = raise NotImpl "doDec(LocalDec) not implemented yet"
           | doDec(OpenDec _) = raise NotImpl "doDec(OpenDec) not implemented yet"
           | doDec(dec as FixityDec _) = dec
-        and doValBind(PatBind(pat, exp, opt)) = PatBind(doPat pat, doExp exp, Option.map doValBind opt)
-          | doValBind(RecValBind valbind) = RecValBind(doValBind valbind)
+        and doValBind(PatBind(pat, exp)) = PatBind(doPat pat, doExp exp)
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
@@ -237,7 +237,8 @@ and doDecs(env, nil) = (Syntax.VIdMap.empty, nil)
                                    val (env'', decs') = doDecs(Syntax.VIdMap.unionWith #2 (env, env'), decs)
                                in (Syntax.VIdMap.unionWith #2 (env', env''), dec' :: decs')
                                end
-and doDec(env, UnfixedSyntax.ValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(tyvars, doValBind(env, valbind)))
+and doDec(env, UnfixedSyntax.ValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
+  | doDec(env, UnfixedSyntax.RecValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.RecValDec(tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
   | doDec(env, UnfixedSyntax.TypeDec(typbinds)) = (Syntax.VIdMap.empty, Syntax.TypeDec(typbinds))
   | doDec(env, UnfixedSyntax.DatatypeDec(datbinds)) = (Syntax.VIdMap.empty, Syntax.DatatypeDec(datbinds))
   | doDec(env, UnfixedSyntax.DatatypeRepDec(tycon, longtycon)) = (Syntax.VIdMap.empty, Syntax.DatatypeRepDec(tycon, longtycon))
@@ -251,9 +252,7 @@ and doDec(env, UnfixedSyntax.ValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Sy
                                                        end
   | doDec(env, UnfixedSyntax.OpenDec strid) = (Syntax.VIdMap.empty, Syntax.OpenDec strid)
   | doDec(env, UnfixedSyntax.FixityDec(fixity, vids)) = (List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids, Syntax.FixityDec(fixity, vids))
-and doValBind(env, UnfixedSyntax.PatBind(pat, exp, SOME valbind)) = Syntax.PatBind(doPat(env, pat), doExp(env, exp), SOME (doValBind(env, valbind)))
-  | doValBind(env, UnfixedSyntax.PatBind(pat, exp, NONE)) = Syntax.PatBind(doPat(env, pat), doExp(env, exp), NONE)
-  | doValBind(env, UnfixedSyntax.RecValBind valbind) = Syntax.RecValBind(doValBind(env, valbind))
+and doValBind(env, UnfixedSyntax.PatBind(pat, exp)) = Syntax.PatBind(doPat(env, pat), doExp(env, exp))
 end (* structure Fixity *)
 
 structure PostParsing = struct
@@ -297,12 +296,10 @@ local
       | collectExp(bound, CaseExp(x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, FnExp match) = collectMatch(bound, match)
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
-    and collectValBind(bound, PatBind(pat, e, SOME rest)) = union3(freeTyVarsInPat(bound, pat), collectExp(bound, e), collectValBind(bound, rest))
-      | collectValBind(bound, PatBind(pat, e, NONE)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
-      | collectValBind(bound, RecValBind(valbind)) = collectValBind(bound, valbind)
+    and collectValBind(bound, PatBind(pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
-val unguardedTyVarsInValBind : TyVarSet.set * ValBind -> TyVarSet.set = collectValBind
+val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds
 end (* local *)
 
 (* The Definition 4.6 *)
@@ -312,8 +309,14 @@ local
                                                       val unguarded = unguardedTyVarsInValBind(bound', valbind)
                                                       val expbound' = TyVarSet.listItems(unguarded)
                                                       val bound'' = TyVarSet.union(bound', unguarded)
-                                                  in ValDec(expbound', doValBind(bound'', valbind))
+                                                  in ValDec(expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
                                                   end
+      | doDec(bound, RecValDec(expbound, valbind)) = let val bound' = TyVarSet.addList(bound, expbound)
+                                                         val unguarded = unguardedTyVarsInValBind(bound', valbind)
+                                                         val expbound' = TyVarSet.listItems(unguarded)
+                                                         val bound'' = TyVarSet.union(bound', unguarded)
+                                                     in RecValDec(expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
+                                                     end
       | doDec(bound, dec as TypeDec _) = dec
       | doDec(bound, dec as DatatypeDec _) = dec
       | doDec(bound, dec as DatatypeRepDec _) = dec
@@ -323,9 +326,7 @@ local
       | doDec(bound, dec as OpenDec _) = dec
       | doDec(bound, dec as FixityDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
-    and doValBind(bound, PatBind(pat, e, SOME valbind)) = PatBind(pat, doExp(bound, e), SOME(doValBind(bound, valbind)))
-      | doValBind(bound, PatBind(pat, e, NONE)) = PatBind(pat, doExp(bound, e), NONE)
-      | doValBind(bound, RecValBind(valbind)) = RecValBind(doValBind(bound, valbind))
+    and doValBind(bound, PatBind(pat, e)) = PatBind(pat, doExp(bound, e))
     and doExp(bound, exp as SConExp _) = exp
       | doExp(bound, exp as VarExp _) = exp
       | doExp(bound, exp as RecordExp _) = exp
@@ -432,9 +433,9 @@ local
       | doExp(tyvarenv, S.TypedExp(exp, ty)) = (doExp(tyvarenv, exp) ; doTy ty)
       | doExp _ = raise Fail "not implemented yet"
     and doDec(tyvarenv : S.TyVarSet.set, S.ValDec(tyvarseq, valbind)) = raise Fail "not implemented yet"
+      | doDec(tyvarenv : S.TyVarSet.set, S.RecValDec(tyvarseq, valbind)) = raise Fail "not implemented yet"
       | doDec _ = raise Fail "not implemented yet"
-    and doValBind(tyvarenv, S.PatBind(pat, exp, valbindopt)) = (doPat pat ; doExp(tyvarenv, exp))
-      | doValBind(tyvarenv, S.RecValBind(valbind)) = raise Fail "not implemented yet"
+    and doValBind(tyvarenv, S.PatBind(pat, exp)) = (doPat pat ; doExp(tyvarenv, exp))
 in
 val checkExp = doExp
 val checkDec = doDec
@@ -546,6 +547,7 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
             | doDecl(ctx, decl :: decls, acc)
               = (case decl of
                      S.ValDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
+                   | S.RecValDec(_) => doDecl(ctx, decls, toUDec(ctx, decl) :: acc)
                    | S.TypeDec(typbinds) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
                    | S.DatatypeDec(datbinds) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
                    | S.DatatypeRepDec(tycon, longtycon) => doDecl((* TODO: add type ctor *) ctx, decls, toUDec(ctx, decl) :: acc)
@@ -566,12 +568,12 @@ fun toUExp(ctx, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, exp), toUMatch(ctx, match))
   | toUExp(ctx, S.FnExp(match)) = U.FnExp(toUMatch(ctx, match))
 and toUMatch(ctx, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, pat), toUExp(ctx, exp))) matches
-and toUDec(ctx, S.ValDec(tyvars, valbind)) = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, toUValBind(ctx, valbind))
+and toUDec(ctx, S.ValDec(tyvars, valbind)) = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, vb)) valbind)
+  | toUDec(ctx, S.RecValDec(tyvars, valbind)) = U.RecValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, vb)) valbind)
   | toUDec(ctx, S.TypeDec(typbinds)) = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, typbind)) typbinds)
   | toUDec(ctx, S.DatatypeDec _) = raise Fail "not implemented yet"
   | toUDec(ctx, _) = raise Fail "not implemented yet"
-and toUValBind(ctx, S.PatBind(pat, exp, valbind)) = U.PatBind(toUPat(ctx, pat), toUExp(ctx, exp), Option.map (fn x => toUValBind(ctx, x)) valbind)
-  | toUValBind(ctx, S.RecValBind(valbind)) = U.RecValBind(toUValBind(ctx, valbind))
+and toUValBind(ctx, S.PatBind(pat, exp)) = U.PatBind(toUPat(ctx, pat), toUExp(ctx, exp))
 and toUTypBind(ctx, _) = raise Fail "not implemented yet"
 end (* local *)
 end (* structure PostParsing *)
