@@ -1,9 +1,6 @@
 structure Typing = struct
 datatype TypeScheme = TypeScheme of USyntax.TyVar list * USyntax.Ty
-datatype IdStatus = ValueVariable
-                  | ValueConstructor
-                  | ExceptionConstructor
-type ValEnv = (TypeScheme * IdStatus) Syntax.VIdMap.map
+type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
 type TyConEnv = (int) Syntax.TyConMap.map
 datatype TyStr = TyStr (* of TypeFunction * ValEnv *)
 
@@ -72,9 +69,9 @@ and isConexp(env, USyntax.TypedExp(e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"))) = false
   | isConexp(env, USyntax.VarExp(Syntax.MkLongVId(strid, tycon)))
     = (case lookupValInEnv(lookupStr(env, strid), tycon) of
-           (_, ValueVariable) => false
-         | (_, ValueConstructor) => true
-         | (_, ExceptionConstructor) => true
+           (_, Syntax.ValueVariable) => false
+         | (_, Syntax.ValueConstructor) => true
+         | (_, Syntax.ExceptionConstructor) => true
       )
   | isConexp(env, _) = false
 
@@ -356,32 +353,32 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
   | constraintsFromPat(ctx, env, SConPat(Syntax.CharacterConstant(_))) = ([], primTy_char, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, MkEnv env, ConOrVarPat(vid))
     = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME (tysc, ValueConstructor) => raise Fail "NulConPat: not implemented yet"
-         | SOME (tysc, ExceptionConstructor) => ([], primTy_exn, Syntax.VIdMap.empty)
-         | SOME (_, ValueVariable) => (* shadowing *) let val ty = TyVar(freshTyVar(ctx))
-                                                      in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+           SOME (tysc, Syntax.ValueConstructor) => raise Fail "NulConPat: not implemented yet"
+         | SOME (tysc, Syntax.ExceptionConstructor) => ([], primTy_exn, Syntax.VIdMap.empty)
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) let val ty = TyVar(freshTyVar(ctx))
+                                                      in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
                                                       end
          | NONE => let val ty = TyVar(freshTyVar(ctx))
-                   in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+                   in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
                    end
       )
   | constraintsFromPat(ctx, MkEnv env, VarPat(vid))
     = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME (tysc, ValueConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (tysc, ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (_, ValueVariable) => (* shadowing *) let val ty = TyVar(freshTyVar(ctx))
-                                                      in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+           SOME (tysc, Syntax.ValueConstructor) => raise TypeError "VarPat: invalid pattern"
+         | SOME (tysc, Syntax.ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) let val ty = TyVar(freshTyVar(ctx))
+                                                      in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
                                                       end
          | NONE => let val ty = TyVar(freshTyVar(ctx))
-                   in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+                   in ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
                    end
       )
   | constraintsFromPat(ctx, env, NulConPat(Syntax.MkLongVId(strid, vid)))
     = let val MkEnv strEnv = lookupStr(env, strid)
       in case Syntax.VIdMap.find(#valMap strEnv, vid) of
-             SOME (tysc, ValueConstructor) => raise Fail "NulConPat: not implemented yet"
-           | SOME (tysc, ExceptionConstructor) => ([], primTy_exn, Syntax.VIdMap.empty)
-           | SOME (_, ValueVariable) => raise TypeError "invalid pattern"
+             SOME (tysc, Syntax.ValueConstructor) => raise Fail "NulConPat: not implemented yet"
+           | SOME (tysc, Syntax.ExceptionConstructor) => ([], primTy_exn, Syntax.VIdMap.empty)
+           | SOME (_, Syntax.ValueVariable) => raise TypeError "invalid pattern"
            | NONE => raise TypeError "invalid pattern"
       end
   | constraintsFromPat(ctx, env, RecordPat(row, wildcard))
@@ -400,17 +397,17 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
     = ([], ty, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, MkEnv env, TypedPat(ConOrVarPat(vid), ty)) (* fresh variable? *)
     = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME (tysc, ValueConstructor) => raise Fail "NulConPat: not implemented yet"
-         | SOME (tysc, ExceptionConstructor) => ([EqConstr(primTy_exn, ty)], ty, Syntax.VIdMap.empty)
-         | SOME (_, ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
-         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+           SOME (tysc, Syntax.ValueConstructor) => raise Fail "NulConPat: not implemented yet"
+         | SOME (tysc, Syntax.ExceptionConstructor) => ([EqConstr(primTy_exn, ty)], ty, Syntax.VIdMap.empty)
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
+         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
       )
   | constraintsFromPat(ctx, MkEnv env, TypedPat(VarPat(vid), ty)) (* fresh variable? *)
     = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME (tysc, ValueConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (tysc, ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (_, ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
-         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), ValueVariable)))
+           SOME (tysc, Syntax.ValueConstructor) => raise TypeError "VarPat: invalid pattern"
+         | SOME (tysc, Syntax.ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
+         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
       )
   | constraintsFromPat(ctx, env, TypedPat(pat, ty))
     = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
@@ -419,13 +416,13 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
   | constraintsFromPat(ctx, env, LayeredPat(vid, SOME ty, pat))
     = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
       in case Syntax.VIdMap.find(vars, vid) of
-             NONE => (EqConstr(ty, inferredTy) :: ct, ty, Syntax.VIdMap.insert(vars, vid, (TypeScheme([], ty), ValueVariable)))
+             NONE => (EqConstr(ty, inferredTy) :: ct, ty, Syntax.VIdMap.insert(vars, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
            | SOME _ => raise TypeError "trying to bind the same identifier twice"
       end
   | constraintsFromPat(ctx, env, LayeredPat(vid, NONE, pat))
     = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
       in case Syntax.VIdMap.find(vars, vid) of
-             NONE => (ct, inferredTy, Syntax.VIdMap.insert(vars, vid, (TypeScheme([], inferredTy), ValueVariable)))
+             NONE => (ct, inferredTy, Syntax.VIdMap.insert(vars, vid, (TypeScheme([], inferredTy), Syntax.ValueVariable)))
            | SOME _ => raise TypeError "trying to bind the same identifier twice"
       end
  (* constraintsFromPatRow : Ctx * Env * (Label * Pat) list -> Constraint list * (Label * Syntax.Ty) list * Syntax.Ty Syntax.VIdMap.map *)

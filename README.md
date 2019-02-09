@@ -36,15 +36,15 @@ val ast1 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
   : DamepoMLParser.result
 - print (Syntax.print_Exp ast1);
 LetInExp([ValDec([],PatBind(SimpleVIdPat(MkVId "x"),LetInExp([ValDec([],PatBind(TypedPat(SimpleVIdPat(MkVId "id"),FnType(TyVar(MkTyVar "'a"),TyVar(MkTyVar "'a"))),FnExp([(SimpleVIdPat(MkVId "z"),SimpleVarExp(MkVId "z"))]),NONE))],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))),NONE))],SimpleVarExp(MkVId "x"))val it = () : unit
-- val ast2 = PostParsing.toUExp(PostParsing.newContext(PostParsing.emptyConEnv), PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
+- val ast2 = PostParsing.toUExp(PostParsing.newContext(), PostParsing.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
 val ast2 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
   : USyntax.SyntaxTree.Exp
 - print (USyntax.print_Exp ast2);
 LetInExp([ValDec([],PatBind(TypedPat(SimpleVIdPat(MkVId "x"),TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],PatBind(TypedPat(SimpleVIdPat(MkVId "id"),FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(TypedPat(SimpleVIdPat(MkVId "z"),TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z"))]),NONE))],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))),NONE))],SimpleVarExp(MkVId "x"))val it = () : unit
-- val ctx = Typing.newContext(Typing.emptyEnv);
+- val ctx = Typing.newContext();
 val ctx = {nextTyVar=ref 100} : Typing.Context
 - val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.emptyEnv, ast2);
 
 uncaught exception Fail [Fail: let-in not implemented yet]
-  raised at: typing.sml:272.13-272.46
+  raised at: typing.sml:275.13-275.46
 ```

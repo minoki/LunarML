@@ -19,6 +19,10 @@ datatype InfixAssociativity = LeftAssoc of int
 datatype FixityStatus = Nonfix
                       | Infix of InfixAssociativity
 
+datatype IdStatus = ValueVariable
+                  | ValueConstructor
+                  | ExceptionConstructor
+
 (* pretty printing *)
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
 fun print_option p (SOME x) = "SOME(" ^ p x ^ ")"
