@@ -50,7 +50,6 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | ExceptionDec of ExBind list
              | LocalDec of Dec list * Dec list
              | OpenDec of Syntax.LongStrId list
-             | FixityDec of Syntax.FixityStatus * Syntax.VId list
      and ValBind = PatBind of Pat * Exp
 type Program = Dec list
 
@@ -120,7 +119,6 @@ fun mapTyInExp doTy =
           | doDec(ExceptionDec _) = raise NotImpl "doDec(ExceptionDec) not implemented yet"
           | doDec(LocalDec _) = raise NotImpl "doDec(LocalDec) not implemented yet"
           | doDec(OpenDec _) = raise NotImpl "doDec(OpenDec) not implemented yet"
-          | doDec(dec as FixityDec _) = dec
         and doValBind(PatBind(pat, exp)) = PatBind(doPat pat, doExp exp)
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
