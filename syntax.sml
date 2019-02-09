@@ -43,6 +43,9 @@ fun print_StrId (MkStrId x) = "MkStrId \"" ^ String.toString x ^ "\""
 fun print_LongVId (MkLongVId(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^ "," ^ print_VId y ^ ")"
 fun print_LongTyCon (MkLongTyCon(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkLongStrId(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"
+fun print_IdStatus ValueVariable = "ValueVariable"
+  | print_IdStatus ValueConstructor = "ValueConstructor"
+  | print_IdStatus ExceptionConstructor = "ExceptionConstructor"
 
 (* BinaryMapFn, BinarySetFn: from smlnj-lib *)
 structure VIdSet = BinarySetFn(struct

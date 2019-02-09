@@ -32,7 +32,7 @@ datatype ExBind = ExBind1 of Syntax.VId * Ty option (* <op> vid <of ty> *)
                 | ExBind2 of Syntax.VId * Syntax.LongVId (* <op> vid = <op> longvid *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
-             | VarExp of Syntax.LongVId (* value identifier, with or without 'op'  *)
+             | VarExp of Syntax.LongVId * Syntax.IdStatus (* value identifier *)
              | RecordExp of (Syntax.Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | AppExp of Exp * Exp (* function, argument *)
@@ -78,8 +78,8 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
-  | print_Exp (VarExp(Syntax.MkLongVId([], vid))) = "SimpleVarExp(" ^ Syntax.print_VId vid ^ ")"
-  | print_Exp (VarExp x) = "VarExp(" ^ Syntax.print_LongVId x ^ ")"
+  | print_Exp (VarExp(Syntax.MkLongVId([], vid), idstatus)) = "SimpleVarExp(" ^ Syntax.print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
+  | print_Exp (VarExp(x, idstatus)) = "VarExp(" ^ Syntax.print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                  | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
@@ -642,7 +642,12 @@ fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implem
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
-  | toUExp(ctx, env, S.VarExp(longvid)) = U.VarExp(longvid)
+  | toUExp(ctx, env, S.VarExp(longvid as Syntax.MkLongVId(strpath, vid)))
+    = let val MkEnv { valMap = valMap, ...} = lookupStr(env, strpath)
+      in case Syntax.VIdMap.find(valMap, vid) of
+             SOME idstatus => U.VarExp(longvid, idstatus)
+           | NONE => U.VarExp(longvid, Syntax.ValueVariable)
+      end
   | toUExp(ctx, env, S.RecordExp(row)) = raise Fail "not implemented yet"
   | toUExp(ctx, env, S.LetInExp(decls, exp))
     = let fun doDecl(env, nil, acc) = (env, List.rev acc)

@@ -66,12 +66,12 @@ fun isNonexpansive(env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.FnExp _) = true
   | isNonexpansive(env, _) = false
 and isConexp(env, USyntax.TypedExp(e, _)) = isConexp(env, e)
-  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"))) = false
-  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId(strid, tycon)))
-    = (case lookupValInEnv(lookupStr(env, strid), tycon) of
-           (_, Syntax.ValueVariable) => false
-         | (_, Syntax.ValueConstructor) => true
-         | (_, Syntax.ExceptionConstructor) => true
+  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"), _)) = false
+  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId(strid, tycon), idstatus))
+    = (case idstatus of
+           Syntax.ValueVariable => false
+         | Syntax.ValueConstructor => true
+         | Syntax.ExceptionConstructor => true
       )
   | isConexp(env, _) = false
 
@@ -259,7 +259,7 @@ fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
          | Syntax.StringConstant x    => ([], primTy_string)
          | Syntax.CharacterConstant x => ([], primTy_char)
       )
-  | constraintsExp(ctx, env, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name)))
+  | constraintsExp(ctx, env, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name), idstatus))
     = (case lookupValInEnv(lookupStr(env, str), vid) of
           (TypeScheme([], ty), ids) => ([], ty)
         | _ => raise Fail "type scheme: not impl"
