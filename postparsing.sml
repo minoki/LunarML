@@ -575,18 +575,20 @@ local structure S = Syntax
                 NONE => raise NameError("unknown type variable " ^ name)
               | SOME id => USyntax.UTyVar(tv, id)
 
-      fun lookupTyCon(MkEnv env, tycon as Syntax.MkTyCon name)
-          = case Syntax.TyConMap.find(#tyConMap env, tycon) of
-                NONE => raise NameError("unknown type constructor " ^ name)
-              | SOME b => b
-
       fun lookupStr(env, nil) = env
         | lookupStr(MkEnv { strMap = strMap, ... }, (str0 as S.MkStrId name) :: str1)
           = case Syntax.StrIdMap.find(strMap, str0) of
                 NONE => raise NameError("unknown structure name " ^ name)
               | SOME innerEnv => lookupStr(innerEnv, str1)
 
+      fun lookupTyCon(MkEnv env, tycon as Syntax.MkTyCon name)
+          = case Syntax.TyConMap.find(#tyConMap env, tycon) of
+                NONE => raise NameError("unknown type constructor " ^ name)
+              | SOME b => b
       fun lookupLongTyCon(env : Env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
+
+      fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
+      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVId(lookupStr(env, strpath), vid)
 in
 (* toUTy : Context * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUTyRow : Context * Env * (Label * Syntax.Ty) list -> (Label * USyntax.Ty) list *)
@@ -611,8 +613,8 @@ and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, e
                               end
 fun toUPat(ctx : Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, env as MkEnv { valMap = valMap, ... }, S.ConOrVarPat vid)
-    = (case Syntax.VIdMap.find(valMap, vid) of
+  | toUPat(ctx, env, S.ConOrVarPat vid)
+    = (case lookupVId(env, vid) of
            SOME Syntax.ValueConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
          | SOME Syntax.ExceptionConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
          | _ => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
@@ -621,8 +623,8 @@ fun toUPat(ctx : Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: sho
   | toUPat(ctx, env, S.NulConPat longvid) = U.NulConPat longvid
   | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, env, row), wildcard)
   | toUPat(ctx, env, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, env, pat))
-  | toUPat(ctx, env as MkEnv { valMap = valMap, ... }, S.TypedPat(S.ConOrVarPat vid, ty))
-    = (case Syntax.VIdMap.find(valMap, vid) of
+  | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
+    = (case lookupVId(env, vid) of
            SOME Syntax.ValueConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
          | SOME Syntax.ExceptionConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
          | _ => U.VarPat(vid, toUTy(ctx, env, ty))
@@ -639,12 +641,11 @@ fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implem
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
-  | toUExp(ctx, env, S.VarExp(longvid as Syntax.MkLongVId(strpath, vid)))
-    = let val MkEnv { valMap = valMap, ...} = lookupStr(env, strpath)
-      in case Syntax.VIdMap.find(valMap, vid) of
-             SOME idstatus => U.VarExp(longvid, idstatus)
-           | NONE => U.VarExp(longvid, Syntax.ValueVariable)
-      end
+  | toUExp(ctx, env, S.VarExp(longvid))
+    = (case lookupLongVId(env, longvid) of
+           SOME idstatus => U.VarExp(longvid, idstatus)
+         | NONE => U.VarExp(longvid, Syntax.ValueVariable)
+      )
   | toUExp(ctx, env, S.RecordExp(row)) = raise Fail "not implemented yet"
   | toUExp(ctx, env, S.LetInExp(decls, exp))
     = let fun doDecl(env, nil, acc) = (env, List.rev acc)
