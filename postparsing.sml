@@ -5,17 +5,97 @@ datatype ULongTyCon = ULongTyCon of Syntax.LongTyCon * int
 fun eqUTyVar(UTyVar(_,a),UTyVar(_,b)) = a = b
 fun eqUTyCon(UTyCon(_,a),UTyCon(_,b)) = a = b
 fun eqULongTyCon(ULongTyCon(_,a),ULongTyCon(_,b)) = a = b
-structure SyntaxTree = Syntax.GenericSyntaxTree(type TyVar = UTyVar
-                                                type TyCon = UTyCon
-                                                type LongTyCon = ULongTyCon
-                                                fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
-                                                fun print_TyCon(UTyCon(tycon, n)) = "UTyCon(" ^ Syntax.print_TyCon tycon ^ "," ^ Int.toString n ^ ")"
-                                                fun print_LongTyCon(ULongTyCon(longtycon, n)) = "ULongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
-                                               )
+
 type TyVar = UTyVar
 type TyCon = UTyCon
 type LongTyCon = ULongTyCon
-open SyntaxTree
+
+datatype Ty = TyVar of TyVar (* type variable *)
+            | RecordType of (Syntax.Label * Ty) list (* record type expression *)
+            | TyCon of Ty list * LongTyCon (* type construction *)
+            | FnType of Ty * Ty (* function type expression *)
+
+datatype Pat = WildcardPat
+             | SConPat of Syntax.SCon (* special constant *)
+             | ConOrVarPat of Syntax.VId (* constructor or variable *)
+             | VarPat of Syntax.VId (* variable *)
+             | NulConPat of Syntax.LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
+             | RecordPat of (Syntax.Label * Pat) list * bool
+             | ConPat of Syntax.LongVId * Pat (* constructed pattern *)
+             | TypedPat of Pat * Ty (* typed *)
+             | LayeredPat of Syntax.VId * Ty option * Pat (* layered *)
+
+datatype TypBind = TypBind of TyVar list * TyCon * Ty
+datatype ConBind = ConBind of Syntax.VId * Ty option
+datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
+datatype ExBind = ExBind1 of Syntax.VId * Ty option (* <op> vid <of ty> *)
+                | ExBind2 of Syntax.VId * Syntax.LongVId (* <op> vid = <op> longvid *)
+
+datatype Exp = SConExp of Syntax.SCon (* special constant *)
+             | VarExp of Syntax.LongVId (* value identifier, with or without 'op'  *)
+             | RecordExp of (Syntax.Label * Exp) list (* record *)
+             | LetInExp of Dec list * Exp (* local declaration *)
+             | AppExp of Exp * Exp (* function, argument *)
+             | TypedExp of Exp * Ty
+             | HandleExp of Exp * (Pat * Exp) list
+             | RaiseExp of Exp
+             | IfThenElseExp of Exp * Exp * Exp
+             | CaseExp of Exp * (Pat * Exp) list
+             | FnExp of (Pat * Exp) list
+     and Dec = ValDec of TyVar list * ValBind list (* non-recursive *)
+             | RecValDec of TyVar list * ValBind list (* recursive (val rec) *)
+             | TypeDec of TypBind list
+             | DatatypeDec of DatBind list
+             | DatatypeRepDec of TyCon * LongTyCon
+             | AbstypeDec of DatBind list * Dec list
+             | ExceptionDec of ExBind list
+             | LocalDec of Dec list * Dec list
+             | OpenDec of Syntax.LongStrId list
+             | FixityDec of Syntax.FixityStatus * Syntax.VId list
+     and ValBind = PatBind of Pat * Exp
+type Program = Dec list
+
+(* pretty printing *)
+fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
+fun print_TyCon(UTyCon(tycon, n)) = "UTyCon(" ^ Syntax.print_TyCon tycon ^ "," ^ Int.toString n ^ ")"
+fun print_LongTyCon(ULongTyCon(longtycon, n)) = "ULongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
+fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
+  | print_Ty (RecordType xs) = "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
+  | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
+fun print_Pat WildcardPat = "WildcardPat"
+  | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
+  | print_Pat (ConOrVarPat vid) = "ConOrVarPat(" ^ Syntax.print_VId vid ^ ")"
+  | print_Pat (VarPat vid) = "VarPat(" ^ Syntax.print_VId vid ^ ")"
+  | print_Pat (NulConPat longvid) = "NulConPat(" ^ Syntax.print_LongVId longvid ^ ")"
+  | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
+  | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ Syntax.print_VId vid ^ "," ^ Syntax.print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
+                                           NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
+                                         | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
+                                      )
+  | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
+(* | print_Pat _ = "<Pat>" *)
+fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
+  | print_Exp (VarExp(Syntax.MkLongVId([], vid))) = "SimpleVarExp(" ^ Syntax.print_VId vid ^ ")"
+  | print_Exp (VarExp x) = "VarExp(" ^ Syntax.print_LongVId x ^ ")"
+  | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
+                                   NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
+                                 | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
+                              )
+  | print_Exp (LetInExp(decls,x)) = "LetInExp(" ^ Syntax.print_list print_Dec decls ^ "," ^ print_Exp x ^ ")"
+  | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+  | print_Exp (TypedExp(x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
+  | print_Exp (HandleExp(x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat, print_Exp)) y ^ ")"
+  | print_Exp (RaiseExp x) = "RaiseExp(" ^ print_Exp x ^ ")"
+  | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
+  | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (FnExp x) = "FnExp(" ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) x ^ ")"
+and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
+  | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
+  | print_Dec _ = "<Dec>"
+and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
 
 exception NotImpl of string
 
@@ -534,20 +614,20 @@ and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, e
                               end
 fun toUPat(ctx : Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, env, S.ConOrVarPat vid)
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME Syntax.ValueConstructor => U.NulConPat(MkLongVId([], vid))
-         | SOME Syntax.ExceptionConstructor => U.NulConPat(MkLongVId([], vid))
+  | toUPat(ctx, env as MkEnv { valMap = valMap, ... }, S.ConOrVarPat vid)
+    = (case Syntax.VIdMap.find(valMap, vid) of
+           SOME Syntax.ValueConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
+         | SOME Syntax.ExceptionConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
          | _ => U.TypedPat(U.VarPat vid, USyntax.TyVar(freshTyVar(ctx)))
       )
   | toUPat(ctx, env, S.VarPat vid) = U.TypedPat(U.VarPat vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
   | toUPat(ctx, env, S.NulConPat longvid) = U.NulConPat longvid
   | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, env, row), wildcard)
   | toUPat(ctx, env, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, env, pat))
-  | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME Syntax.ValueConstructor => U.TypedPat(U.NulConPat(MkLongVId([], vid)), toUTy(ctx, env, ty))
-         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.NulConPat(MkLongVId([], vid)), toUTy(ctx, env, ty))
+  | toUPat(ctx, env as MkEnv { valMap = valMap, ... }, S.TypedPat(S.ConOrVarPat vid, ty))
+    = (case Syntax.VIdMap.find(valMap, vid) of
+           SOME Syntax.ValueConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
+         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
          | _ => U.TypedPat(U.VarPat vid, toUTy(ctx, env, ty))
       )
   | toUPat(ctx, env, S.TypedPat(S.VarPat vid, ty)) = U.TypedPat(U.VarPat vid, toUTy(ctx, env, ty))
