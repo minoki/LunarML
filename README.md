@@ -35,12 +35,12 @@ LetInExp([<Dec>],AppExp(SimpleVarExp(MkVId "-"),TupleExp [SConExp(IntegerConstan
 val ast1 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
   : DamepoMLParser.result
 - print (Syntax.print_Exp ast1);
-LetInExp([ValDec([],PatBind(SimpleVIdPat(MkVId "x"),LetInExp([ValDec([],PatBind(TypedPat(SimpleVIdPat(MkVId "id"),FnType(TyVar(MkTyVar "'a"),TyVar(MkTyVar "'a"))),FnExp([(SimpleVIdPat(MkVId "z"),SimpleVarExp(MkVId "z"))]),NONE))],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))),NONE))],SimpleVarExp(MkVId "x"))val it = () : unit
+LetInExp([ValDec([],[PatBind(ConOrVarPat(MkVId "x"),LetInExp([ValDec([],[PatBind(TypedPat(ConOrVarPat(MkVId "id"),FnType(TyVar(MkTyVar "'a"),TyVar(MkTyVar "'a"))),FnExp([(ConOrVarPat(MkVId "z"),SimpleVarExp(MkVId "z"))]))])],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))))])],SimpleVarExp(MkVId "x"))val it = () : unit
 - val ast2 = PostParsing.toUExp(PostParsing.newContext(), PostParsing.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
 val ast2 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
   : USyntax.SyntaxTree.Exp
 - print (USyntax.print_Exp ast2);
-LetInExp([ValDec([],PatBind(TypedPat(SimpleVIdPat(MkVId "x"),TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],PatBind(TypedPat(SimpleVIdPat(MkVId "id"),FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(TypedPat(SimpleVIdPat(MkVId "z"),TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z"))]),NONE))],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))),NONE))],SimpleVarExp(MkVId "x"))val it = () : unit
+LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
 - val ctx = Typing.newContext();
 val ctx = {nextTyVar=ref 100} : Typing.Context
 - val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.emptyEnv, ast2);
