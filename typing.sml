@@ -254,11 +254,14 @@ and unifyTyVarAndTy(ctx : Context, tvc : (TyVar * TyVarConstraint) list, tv : Ty
           end
 
 (* constraintsExp : Context * Env * USyntax.Exp -> Constraint list * USyntax.Ty *)
-fun constraintsExp(ctx : Context, env : Env, SConExp(Syntax.IntegerConstant x))   = ([], primTy_int) (* TODO: overloaded literals *)
-  | constraintsExp(ctx, env, SConExp(Syntax.WordConstant x))      = ([], primTy_word) (* TODO: overloaded literals *)
-  | constraintsExp(ctx, env, SConExp(Syntax.RealConstant x))      = ([], primTy_real) (* TODO: overloaded literals *)
-  | constraintsExp(ctx, env, SConExp(Syntax.StringConstant x))    = ([], primTy_string) (* TODO: overloaded literals *)
-  | constraintsExp(ctx, env, SConExp(Syntax.CharacterConstant x)) = ([], primTy_char) (* TODO: overloaded literals *)
+fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
+    = (case scon of (* TODO: overloaded literals *)
+           Syntax.IntegerConstant x   => ([], primTy_int)
+         | Syntax.WordConstant x      => ([], primTy_word)
+         | Syntax.RealConstant x      => ([], primTy_real)
+         | Syntax.StringConstant x    => ([], primTy_string)
+         | Syntax.CharacterConstant x => ([], primTy_char)
+      )
   | constraintsExp(ctx, env, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name)))
     = (case lookupValInEnv(lookupStr(env, str), vid) of
           (TypeScheme([], ty), ids) => ([], ty)
