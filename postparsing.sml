@@ -534,12 +534,22 @@ and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, e
                               end
 fun toUPat(ctx : Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, env, S.ConOrVarPat vid) = U.TypedPat(U.ConOrVarPat vid, USyntax.TyVar(freshTyVar(ctx))) (* TODO: identifier status *)
+  | toUPat(ctx, env, S.ConOrVarPat vid)
+    = (case Syntax.VIdMap.find(#valMap env, vid) of
+           SOME Syntax.ValueConstructor => U.NulConPat(MkLongVId([], vid))
+         | SOME Syntax.ExceptionConstructor => U.NulConPat(MkLongVId([], vid))
+         | _ => U.TypedPat(U.VarPat vid, USyntax.TyVar(freshTyVar(ctx)))
+      )
   | toUPat(ctx, env, S.VarPat vid) = U.TypedPat(U.VarPat vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
   | toUPat(ctx, env, S.NulConPat longvid) = U.NulConPat longvid
   | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, env, row), wildcard)
   | toUPat(ctx, env, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, env, pat))
-  | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty)) = U.TypedPat(U.ConOrVarPat vid, toUTy(ctx, env, ty))
+  | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
+    = (case Syntax.VIdMap.find(#valMap env, vid) of
+           SOME Syntax.ValueConstructor => U.TypedPat(U.NulConPat(MkLongVId([], vid)), toUTy(ctx, env, ty))
+         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.NulConPat(MkLongVId([], vid)), toUTy(ctx, env, ty))
+         | _ => U.TypedPat(U.VarPat vid, toUTy(ctx, env, ty))
+      )
   | toUPat(ctx, env, S.TypedPat(S.VarPat vid, ty)) = U.TypedPat(U.VarPat vid, toUTy(ctx, env, ty))
   | toUPat(ctx, env, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, env, pat), toUTy(ctx, env, ty))
   | toUPat(ctx, env, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, SOME(toUTy(ctx, env, ty)), toUPat(ctx, env, pat))
