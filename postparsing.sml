@@ -17,7 +17,6 @@ datatype Ty = TyVar of TyVar (* type variable *)
 
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
-             | ConOrVarPat of Syntax.VId (* constructor or variable *)
              | VarPat of Syntax.VId (* variable *)
              | NulConPat of Syntax.LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
              | RecordPat of (Syntax.Label * Pat) list * bool
@@ -65,7 +64,6 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
-  | print_Pat (ConOrVarPat vid) = "ConOrVarPat(" ^ Syntax.print_VId vid ^ ")"
   | print_Pat (VarPat vid) = "VarPat(" ^ Syntax.print_VId vid ^ ")"
   | print_Pat (NulConPat longvid) = "NulConPat(" ^ Syntax.print_LongVId longvid ^ ")"
   | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
@@ -127,7 +125,6 @@ fun mapTyInExp doTy =
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
-          | doPat(s as ConOrVarPat _) = s
           | doPat(s as VarPat _) = s
           | doPat(s as NulConPat _) = s
           | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
