@@ -67,12 +67,9 @@ fun isNonexpansive(env, USyntax.SConExp _) = true
   | isNonexpansive(env, _) = false
 and isConexp(env, USyntax.TypedExp(e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"), _)) = false
-  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId(strid, tycon), idstatus))
-    = (case idstatus of
-           Syntax.ValueVariable => false
-         | Syntax.ValueConstructor => true
-         | Syntax.ExceptionConstructor => true
-      )
+  | isConexp(env, USyntax.VarExp(_, Syntax.ValueVariable)) = false
+  | isConexp(env, USyntax.VarExp(_, Syntax.ValueConstructor)) = true
+  | isConexp(env, USyntax.VarExp(_, Syntax.ExceptionConstructor)) = true
   | isConexp(env, _) = false
 
 val primTy_int    = USyntax.TyCon([], USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0))
@@ -195,6 +192,12 @@ fun instantiate(ctx, TypeScheme(vars, ty)) = List.foldl (fn (v, ty) => let val v
                                                                        in substituteTy (v, TyVar(v')) ty
                                                                        end) ty vars
 
+(* mergeEnv : Env * Env -> Env *)
+fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
+                                             , valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
+                                             , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2) (* TODO *)
+                                             }
+
  (* unify : Context * (TyVar * TyVarConstraint) list * Constraint -> Subst * (TyVar * TyVarConstraint) list *)
 fun unify(ctx, tvc, EqConstr(TyVar(tv), ty) :: ctrs) : Subst * (TyVar * TyVarConstraint) list
     = unifyTyVarAndTy(ctx, tvc, tv, ty, ctrs)
@@ -268,8 +271,37 @@ fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
     = let val (ct, row') = constraintsFromRow(ctx, env, row)
       in (ct, RecordType(row'))
       end
-  | constraintsExp(ctx, env, LetInExp(decls, inner))
-    = raise Fail "let-in not implemented yet"
+  | constraintsExp(ctx, env, LetInExp(decls, innerExp))
+    = let fun doDecl(env, nil, ct) = (ct, env)
+            | doDecl(env, decl :: decls, ct)
+              = (case decl of
+                     ValDec(tyvarseq, valbinds) => let val (modifiedEnv, ct') = doValBinds(env, emptyEnv, valbinds, ct)
+                                                   in doDecl(mergeEnv(env, modifiedEnv), decls, ct')
+                                                   end
+                   | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
+                   | TypeDec(_) => raise Fail "let-in: type: not impl"
+                   | DatatypeDec(_) => raise Fail "let-in: datatype: not impl"
+                   | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
+                   | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
+                   | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
+                   | LocalDec(localDecls, decls') => let val (ct', env') = doDecl(env, localDecls, ct)
+                                                         val (ct'', env'') = doDecl (env', decls', ct')
+                                                     in doDecl(mergeEnv(env, env''), decls, ct'')
+                                                     end
+                   | OpenDec(_) => raise Fail "let-in: open: not impl"
+                )
+          and doValBinds(outerEnv, modifiedEnv, [], ct) = (modifiedEnv, ct)
+            | doValBinds(outerEnv, modifiedEnv, PatBind(pat, exp) :: rest, ct)
+              = let val (ct', patTy, vars) = constraintsFromPat(ctx, outerEnv, pat)
+                    val (ct'', expTy) = constraintsExp(ctx, outerEnv, exp)
+                    val MkEnv { valMap = valMap, tyConMap = tyConMap, strMap = strMap } = modifiedEnv
+                    val valMap' = Syntax.VIdMap.unionWith #2 (valMap, vars) (* TODO: generalize *)
+                in doValBinds(outerEnv, MkEnv { valMap = valMap', tyConMap = tyConMap, strMap = strMap }, rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
+                end
+          val (ct1, env') = doDecl(env, decls, [])
+          val (ct2, innerTy) = constraintsExp(ctx, mergeEnv(env, env'), innerExp)
+      in (ct1 @ ct2, innerTy)
+      end
   | constraintsExp(ctx, env, AppExp(f, x))
           (* f: s -> t, x: s *)
     = let val (ct1, funcTy) = constraintsExp(ctx, env, f)
@@ -341,7 +373,7 @@ and constraintsFromMatchBranch(ctx : Context, env as MkEnv env' : Env, pat, exp)
           val (cte, expTy) = constraintsExp(ctx, env'', exp)
       in (ctp @ cte, patTy, expTy)
       end
- (* constraintsFromPat : Ctx * Env * Pat -> Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map *)
+ (* constraintsFromPat : Ctx * Env * Pat -> Constraint list * USyntax.Ty * ValEnv *)
 and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * ValEnv
     = let val ty = TyVar(freshTyVar(ctx))
       in ([], ty, Syntax.VIdMap.empty)
