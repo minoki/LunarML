@@ -299,7 +299,7 @@ fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
                    | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
                    | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
                    | LocalDec(localDecls, decls') => let val (ct', env') = doDecl(env, localDecls, ct)
-                                                         val (ct'', env'') = doDecl (env', decls', ct')
+                                                         val (ct'', env'') = doDecl(mergeEnv(env, env'), decls', ct')
                                                      in doDecl(mergeEnv(env, env''), decls, ct'')
                                                      end
                    | OpenDec(_) => raise Fail "let-in: open: not impl"
@@ -394,7 +394,7 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
       end
   | constraintsFromPat(ctx, env, SConPat(Syntax.IntegerConstant(_)))   = ([], primTy_int, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, env, SConPat(Syntax.WordConstant(_)))      = ([], primTy_word, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, SConPat(Syntax.RealConstant(_)))      = ([], primTy_real, Syntax.VIdMap.empty)
+  | constraintsFromPat(ctx, env, SConPat(Syntax.RealConstant(_)))      = raise PostParsing.SyntaxError "No real constant may occur in a pattern"
   | constraintsFromPat(ctx, env, SConPat(Syntax.StringConstant(_)))    = ([], primTy_string, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, env, SConPat(Syntax.CharacterConstant(_))) = ([], primTy_char, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, MkEnv env, VarPat(vid, ty))

@@ -612,6 +612,7 @@ and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, e
                               in List.map oneField row
                               end
 fun toUPat(ctx : Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
+  | toUPat(ctx, env, S.SConPat(Syntax.RealConstant _)) = raise SyntaxError "No real constant may occur in a pattern"
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
   | toUPat(ctx, env, S.ConOrVarPat vid)
     = (case lookupVId(env, vid) of
