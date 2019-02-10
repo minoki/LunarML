@@ -56,6 +56,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
 type Program = Dec list
 
 (* pretty printing *)
+structure PrettyPrint = struct
 fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
 fun print_TyCon(UTyCon(tycon, n)) = "UTyCon(" ^ Syntax.print_TyCon tycon ^ "," ^ Int.toString n ^ ")"
 fun print_LongTyCon(ULongTyCon(longtycon, n)) = "ULongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
@@ -95,6 +96,8 @@ and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyV
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
+end
+open PrettyPrint
 
 exception NotImpl of string
 
@@ -140,13 +143,11 @@ exception NameError of string
 
 type Context = { nextTyVar : int ref
                , nextTyCon : int ref
-               , tyVarMap : int Syntax.TyVarMap.map
                }
 
 fun newContext() : Context
     = { nextTyVar = ref 100
       , nextTyCon = ref 100
-      , tyVarMap = Syntax.TyVarMap.empty
       }
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
@@ -187,11 +188,6 @@ local structure S = Syntax
           = let val id = !(#nextTyCon ctx)
             in #nextTyCon ctx := id + 1 ; id end
       fun genTyCon(ctx, tycon) = USyntax.UTyCon(tycon, genTyConId(ctx))
-
-      fun lookupTyVar(ctx : Context, tv as Syntax.MkTyVar name)
-          = case Syntax.TyVarMap.find(#tyVarMap ctx, tv) of
-                NONE => raise NameError("unknown type variable " ^ name)
-              | SOME id => USyntax.UTyVar(tv, id)
 
       fun lookupStr(env, nil) = env
         | lookupStr(MkEnv { strMap = strMap, ... }, (str0 as S.MkStrId name) :: str1)
