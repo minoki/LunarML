@@ -15,6 +15,8 @@ datatype Ty = TyVar of TyVar (* type variable *)
             | TyCon of Ty list * LongTyCon (* type construction *)
             | FnType of Ty * Ty (* function type expression *)
 
+fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
              | VarPat of Syntax.VId * Ty (* variable *)
