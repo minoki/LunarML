@@ -205,6 +205,8 @@ fun TupleExp xs = let fun doFields i nil = nil
 fun MkInfixConPat(pat1, vid, pat2) = ConPat(MkLongVId([], vid), RecordPat([(NumericLabel 1, pat1), (NumericLabel 2, pat2)], false))
 fun MkInfixExp(exp1, vid, exp2) = AppExp(VarExp(MkLongVId([], vid)), RecordExp([(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
 
+exception SyntaxError of string
+
 end (* structure Syntax *)
 
 structure UnfixedSyntax = struct

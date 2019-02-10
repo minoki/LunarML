@@ -8,4 +8,5 @@ syntax.sml
 syntax.grm
 parser.sml
 postparsing.sml
+typed.sml
 typing.sml

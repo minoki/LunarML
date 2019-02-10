@@ -396,7 +396,7 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * U
       end
   | constraintsFromPat(ctx, env, SConPat(Syntax.IntegerConstant(_)))   = ([], primTy_int, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, env, SConPat(Syntax.WordConstant(_)))      = ([], primTy_word, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, SConPat(Syntax.RealConstant(_)))      = raise PostParsing.SyntaxError "No real constant may occur in a pattern"
+  | constraintsFromPat(ctx, env, SConPat(Syntax.RealConstant(_)))      = raise Syntax.SyntaxError "No real constant may occur in a pattern"
   | constraintsFromPat(ctx, env, SConPat(Syntax.StringConstant(_)))    = ([], primTy_string, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, env, SConPat(Syntax.CharacterConstant(_))) = ([], primTy_char, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, MkEnv env, VarPat(vid, ty))
