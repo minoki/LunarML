@@ -55,6 +55,13 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
      and ValBind = PatBind of Pat * Exp
 type Program = Dec list
 
+structure TyVarSet = BinarySetFn(struct
+                                  type ord_key = TyVar
+                                  fun compare (UTyVar(Syntax.MkTyVar x, a), UTyVar(Syntax.MkTyVar y, b)) = case String.compare (x,y) of
+                                                                                                               EQUAL => Int.compare(a, b)
+                                                                                                             | x => x
+                                  end)
+
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
@@ -136,6 +143,65 @@ fun mapTyInExp doTy =
           | doPat(LayeredPat(vid, ty, pat)) = LayeredPat(vid, doTy ty, doPat pat)
     in doExp
     end
+
+(* freeTyVarsInTy : TyVarSet * Ty -> TyVarSet *)
+fun freeTyVarsInTy(bound, ty)
+    = (case ty of
+           TyVar tv => if TyVarSet.member(bound, tv) then
+                           TyVarSet.empty
+                       else
+                           TyVarSet.singleton tv
+         | RecordType xs => List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+         | TyCon(xs,_) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+         | FnType(s,t) => TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
+      )
+
+(* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
+fun freeTyVarsInPat(bound, pat)
+    = (case pat of
+           WildcardPat => TyVarSet.empty
+         | SConPat _ => TyVarSet.empty
+         | VarPat _ => TyVarSet.empty
+         | NulConPat _ => TyVarSet.empty
+         | RecordPat(xs, _) => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
+         | ConPat(_, pat) => freeTyVarsInPat(bound, pat)
+         | TypedPat(pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
+         | LayeredPat(_, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
+      )
+
+(* freeTyVarsInExp : TyVarSet * Exp -> TyVarSet *)
+fun freeTyVarsInExp(bound, exp)
+    = (case exp of
+           SConExp _ => TyVarSet.empty
+         | VarExp(_, _) => TyVarSet.empty
+         | RecordExp(xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
+         | LetInExp(decls, exp) => raise Fail "not impl"
+         | AppExp(exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
+         | TypedExp(exp, ty) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInTy(bound, ty))
+         | HandleExp(exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
+         | RaiseExp(exp) => freeTyVarsInExp(bound, exp)
+         | IfThenElseExp(exp1, exp2, exp3) => TyVarSet.union(freeTyVarsInExp(bound, exp1), TyVarSet.union(freeTyVarsInExp(bound, exp2), freeTyVarsInExp(bound, exp3)))
+         | CaseExp(exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
+         | FnExp(matches) => freeTyVarsInMatches(bound, matches, TyVarSet.empty)
+      )
+and freeTyVarsInMatches(bound, nil, acc) = acc
+  | freeTyVarsInMatches(bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
+and freeTyVarsInDecs(bound, decls) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInDec(bound, dec))) TyVarSet.empty decls
+and freeTyVarsInDec(bound, dec)
+    = (case dec of
+           ValDec(tyvarseq, valbinds) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
+         | RecValDec(tyvarseq, valbinds) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
+         | TypeDec(_) => TyVarSet.empty (* ??? *)
+         | DatatypeDec(_) => TyVarSet.empty
+         | DatatypeRepDec(_, _) => TyVarSet.empty
+         | AbstypeDec(_, _) => TyVarSet.empty
+         | ExceptionDec(_) => TyVarSet.empty
+         | LocalDec(dec1, dec2) => TyVarSet.union(freeTyVarsInDecs(bound, dec1), freeTyVarsInDecs(bound, dec2))
+         | OpenDec(_) => TyVarSet.empty
+      )
+and freeTyVarsInValBinds(bound, nil, acc) = acc
+  | freeTyVarsInValBinds(bound, PatBind(pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
+
 end (* structure USyntax *)
 
 structure ToTypedSyntax = struct
