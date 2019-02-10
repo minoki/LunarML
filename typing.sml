@@ -286,33 +286,7 @@ fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
       in (ct, RecordType(row'))
       end
   | constraintsExp(ctx, env, LetInExp(decls, innerExp))
-    = let fun doDecl(env, nil, ct) = (ct, env)
-            | doDecl(env, decl :: decls, ct)
-              = (case decl of
-                     ValDec(tyvarseq, valbinds) => let val (modifiedEnv, ct') = doValBinds(env, emptyEnv, valbinds, ct)
-                                                   in doDecl(mergeEnv(env, modifiedEnv), decls, ct')
-                                                   end
-                   | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
-                   | TypeDec(_) => raise Fail "let-in: type: not impl"
-                   | DatatypeDec(_) => raise Fail "let-in: datatype: not impl"
-                   | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
-                   | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
-                   | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
-                   | LocalDec(localDecls, decls') => let val (ct', env') = doDecl(env, localDecls, ct)
-                                                         val (ct'', env'') = doDecl(mergeEnv(env, env'), decls', ct')
-                                                     in doDecl(mergeEnv(env, env''), decls, ct'')
-                                                     end
-                   | OpenDec(_) => raise Fail "let-in: open: not impl"
-                )
-          and doValBinds(outerEnv, modifiedEnv, [], ct) = (modifiedEnv, ct)
-            | doValBinds(outerEnv, modifiedEnv, PatBind(pat, exp) :: rest, ct)
-              = let val (ct', patTy, vars) = constraintsFromPat(ctx, outerEnv, pat)
-                    val (ct'', expTy) = constraintsExp(ctx, outerEnv, exp)
-                    val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = modifiedEnv
-                    val valMap' = Syntax.VIdMap.unionWith #2 (valMap, vars) (* TODO: generalize *)
-                in doValBinds(outerEnv, MkEnv { valMap = valMap', tyMap = tyMap, strMap = strMap }, rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
-                end
-          val (ct1, env') = doDecl(env, decls, [])
+    = let val (ct1, env') = constraintsDecl(ctx, env, decls, [])
           val (ct2, innerTy) = constraintsExp(ctx, mergeEnv(env, env'), innerExp)
       in (ct1 @ ct2, innerTy)
       end
@@ -359,7 +333,35 @@ fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
     = let val (ct, argTy, retTy) = constraintsFromMatch(ctx, env, matches)
       in (ct, USyntax.FnType(argTy, retTy))
       end
- (* constraintsFromRow : Ctx * Env * (Label * Exp) list -> Constraint list * (Label * Syntax.Ty) list *)
+(* constraintsDecl : Context * Env * Dec list * Constraints list -> Constraints list * Env *)
+and constraintsDecl(ctx, env, nil, ct) = (ct, env)
+  | constraintsDecl(ctx, env, decl :: decls, ct)
+    = (case decl of
+           ValDec(tyvarseq, valbinds) => let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
+                                             val (ct', vars) = constraintsValBinds(ctx, env, Syntax.VIdMap.empty, valbinds, ct)
+                                             val valMap' = Syntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars
+                                         in constraintsDecl(ctx, MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap'), tyMap = tyMap, strMap = strMap }, decls, ct')
+                                         end
+         | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
+         | TypeDec(_) => raise Fail "let-in: type: not impl"
+         | DatatypeDec(_) => raise Fail "let-in: datatype: not impl"
+         | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
+         | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
+         | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
+         | LocalDec(localDecls, decls') => let val (ct', env') = constraintsDecl(ctx, env, localDecls, ct)
+                                               val (ct'', env'') = constraintsDecl(ctx, mergeEnv(env, env'), decls', ct')
+                                           in constraintsDecl(ctx, mergeEnv(env, env''), decls, ct'')
+                                           end
+         | OpenDec(_) => raise Fail "let-in: open: not impl"
+      )
+and constraintsValBinds(ctx, outerEnv, vars, [], ct) = (ct, vars)
+  | constraintsValBinds(ctx, outerEnv, vars, PatBind(pat, exp) :: rest, ct)
+    = let val (ct', patTy, vars) = constraintsFromPat(ctx, outerEnv, pat)
+          val (ct'', expTy) = constraintsExp(ctx, outerEnv, exp)
+          val vars' = Syntax.VIdMap.unionWith #2 (vars, vars) (* TODO: generalize *)
+      in constraintsValBinds(ctx, outerEnv, vars', rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
+      end
+(* constraintsFromRow : Ctx * Env * (Label * Exp) list -> Constraint list * (Label * Syntax.Ty) list *)
 and constraintsFromRow(ctx, env, xs)
     = let fun oneField(label, exp) = let val (ct, ty) = constraintsExp(ctx, env, exp)
                                      in (ct, (label, ty))
@@ -381,14 +383,14 @@ and constraintsFromMatch(ctx, env, (pat0, exp0) :: rest)
 and constraintsFromMatchBranch(ctx : Context, env as MkEnv env' : Env, pat, exp)
     = let val (ctp, patTy, vars) = constraintsFromPat(ctx, env, pat)
           val env'' = MkEnv { tyMap = #tyMap env'
-                            , valMap = Syntax.VIdMap.unionWith #2 (#valMap env', vars)
+                            , valMap = Syntax.VIdMap.unionWith #2 (#valMap env', Syntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars)
                             , strMap = #strMap env'
                             }
           val (cte, expTy) = constraintsExp(ctx, env'', exp)
       in (ctp @ cte, patTy, expTy)
       end
- (* constraintsFromPat : Ctx * Env * Pat -> Constraint list * USyntax.Ty * ValEnv *)
-and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * ValEnv
+ (* constraintsFromPat : Ctx * Env * Pat -> Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map *)
+and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map
     = let val ty = TyVar(freshTyVar(ctx))
       in ([], ty, Syntax.VIdMap.empty)
       end
@@ -401,8 +403,8 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
     = (case Syntax.VIdMap.find(#valMap env, vid) of
            SOME (tysc, Syntax.ValueConstructor) => raise TypeError "VarPat: invalid pattern"
          | SOME (tysc, Syntax.ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (_, Syntax.ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
-         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
+         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
       )
   | constraintsFromPat(ctx, env, NulConPat(Syntax.MkLongVId(strid, vid)))
     = let val MkEnv strEnv = lookupStr(env, strid)
@@ -433,7 +435,7 @@ and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * V
   | constraintsFromPat(ctx, env, LayeredPat(vid, ty, pat))
     = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
       in case Syntax.VIdMap.find(vars, vid) of
-             NONE => (EqConstr(ty, inferredTy) :: ct, ty, Syntax.VIdMap.insert(vars, vid, (TypeScheme([], ty), Syntax.ValueVariable)))
+             NONE => (EqConstr(ty, inferredTy) :: ct, ty, Syntax.VIdMap.insert(vars, vid, ty))
            | SOME _ => raise TypeError "trying to bind the same identifier twice"
       end
  (* constraintsFromPatRow : Ctx * Env * (Label * Pat) list -> Constraint list * (Label * Syntax.Ty) list * Syntax.Ty Syntax.VIdMap.map *)
