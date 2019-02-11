@@ -238,6 +238,20 @@ fun applySubstTy subst =
           | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
     in substTy
     end
+fun applySubstEnv subst =
+    let val substTy = applySubstTy subst
+        fun substTypeScheme(TypeScheme(tyvars, ty))
+            = let val subst' = USyntax.TyVarMap.filteri (fn (tv, ty) => not (List.exists (fn tv' => eqUTyVar(tv', tv)) tyvars)) subst
+              in TypeScheme(tyvars, applySubstTy subst' ty)
+                 (* TODO: unwanted capture? e.g. 'a. 'a list * 'c, 'c := 'b * 'a *)
+              end
+        fun substEnv (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
+            = MkEnv { tyMap = tyMap (* ??? *)
+                    , valMap = Syntax.VIdMap.map (fn (tysc, ids) => (substTypeScheme(tysc), ids)) valMap
+                    , strMap = Syntax.StrIdMap.map substEnv strMap
+                    }
+    in substEnv
+    end
 
 (* instantiate : Context * TypeScheme -> Ty *)
 fun instantiate(ctx, TypeScheme(vars, ty))
@@ -251,7 +265,7 @@ fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith
                                              , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2) (* TODO *)
                                              }
 
- (* unify : Context * (TyVar * TyVarConstraint) list * Constraint -> Subst * (TyVar * TyVarConstraint) list *)
+ (* unify : Context * (TyVar * TyVarConstraint) list * Constraint list -> Subst * (TyVar * TyVarConstraint) list *)
 fun unify(ctx, tvc, EqConstr(TyVar(tv), ty) :: ctrs) : Subst * (TyVar * TyVarConstraint) list
     = unifyTyVarAndTy(ctx, tvc, tv, ty, ctrs)
   | unify(ctx, tvc, EqConstr(ty, TyVar(tv)) :: ctrs)
@@ -378,12 +392,17 @@ and constraintsDecl(ctx, env, cts, nil) = (cts, env)
     = (case decl of
            ValDec(tyvarseq, valbinds) => let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                                              val (cts, vars) = constraintsValBinds(ctx, env, cts, Syntax.VIdMap.empty, valbinds)
+                                             val (subst, tyvarconstraint) = unify(ctx, [], cts)
                                              fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
                                                | doVar(ty, true) = let val f_ty = freeTyVarsInTy(TyVarSet.empty, ty)
+                                                                       val f_env = freeTyVarsInEnv(TyVarSet.empty, env)
                                                                    in (TypeScheme([], ty), Syntax.ValueVariable)
                                                                    end
                                              val valMap' = Syntax.VIdMap.map doVar vars
-                                             val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap'), tyMap = tyMap, strMap = strMap }
+                                             val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
+                                                              , tyMap = tyMap
+                                                              , strMap = strMap
+                                                              }
                                          in constraintsDecl(ctx, env', cts, decls)
                                          end
          | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
