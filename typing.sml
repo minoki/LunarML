@@ -46,9 +46,7 @@ fun substToConstraints(subst : Subst) : Constraint list
 type Context = { nextTyVar : int ref
                , constraints : (Constraint list) ref
                , tyVarConstraints : ((USyntax.TyVar * TyVarConstraint) list) ref (* should use (multi-)map? *)
-(*
                , tyVarSubst : Subst ref
-*)
                }
 
 exception TypeError of string
@@ -181,7 +179,7 @@ fun newContext() : Context
     = { nextTyVar = ref 100
       , constraints = ref []
       , tyVarConstraints = ref []
-      (* , tyVarSubst = ref USyntax.TyVarMap.empty *)
+      , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
 fun addConstraint(ctx : Context, ct : Constraint)
@@ -191,6 +189,10 @@ fun addConstraint(ctx : Context, ct : Constraint)
 fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : TyVarConstraint)
     = let val cts = !(#tyVarConstraints ctx)
       in #tyVarConstraints ctx := (tv, ct) :: cts
+      end
+fun addSubst(ctx : Context, tv : USyntax.TyVar, ty : USyntax.Ty)
+    = let val subst = !(#tyVarSubst ctx)
+      in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst, tv, ty)
       end
 
 fun freshTyVar(ctx : Context) : USyntax.TyVar
@@ -269,8 +271,8 @@ fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith
                                              , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2) (* TODO *)
                                              }
 
- (* unify : Context * Constraint list -> Subst *)
-fun unify(ctx : Context, nil : Constraint list) : Subst = USyntax.TyVarMap.empty
+ (* unify : Context * Constraint list -> unit *)
+fun unify(ctx : Context, nil : Constraint list) : unit = ()
   | unify(ctx, ct :: ctrs)
     = (case ct of
            EqConstr(TyVar(tv), ty) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
@@ -316,9 +318,9 @@ fun unify(ctx : Context, nil : Constraint list) : Subst = USyntax.TyVarMap.empty
                raise Fail "IsEqType TyCon: not impl"
          | IsEqType(TyVar(tv)) => (addTyVarConstraint(ctx, tv, TVIsEqType) ; unify(ctx, ctrs))
       )
-and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : Subst
+and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
-          USyntax.TyVarMap.empty (* do nothing *)
+          () (* do nothing *)
       else if occurCheck tv ty then
           raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
       else
@@ -327,8 +329,8 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
               val () = #tyVarConstraints ctx := tvc'
               fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
                 | toConstraint (_, TVIsEqType) = IsEqType ty
-              val ss = unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
-          in USyntax.TyVarMap.insert(ss, tv, ty)
+          in unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
+           ; addSubst(ctx, tv, ty)
           end
 
 (* constraintsExp : Context * Env * USyntax.Exp -> USyntax.Ty *)
@@ -399,7 +401,7 @@ and constraintsDecl(ctx, env, nil) : Env = env
            ValDec(tyvarseq, valbinds) =>
            let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                val vars = constraintsValBinds(ctx, env, Syntax.VIdMap.empty, valbinds)
-               (* val (subst, tyvarconstraint) = unify(ctx, [], cts) *)
+               (* val (subst) = unify(ctx, cts) *)
                fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
                  | doVar(ty, true) = let val f_ty = freeTyVarsInTy(TyVarSet.empty, ty)
                                          val f_env = freeTyVarsInEnv(TyVarSet.empty, env)
@@ -526,7 +528,8 @@ and constraintsFromPatRow(ctx, env, row)
 (* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp(ctx, env, exp) = let val ty = constraintsExp(ctx, env, exp)
                                       val constraints = !(#constraints ctx)
-                                      val subst = unify(ctx, constraints)
+                                      val () = unify(ctx, constraints)
+                                      val subst = !(#tyVarSubst ctx)
                                       val tvc = !(#tyVarConstraints ctx)
                                       val applySubst = applySubstTy subst
                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
