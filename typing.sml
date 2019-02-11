@@ -26,7 +26,7 @@ datatype TyVarConstraint
                      }
   | TVIsEqType
 
-type Subst = (USyntax.TyVar * USyntax.Ty) list
+type Subst = USyntax.Ty USyntax.TyVarMap.map
 
 type Context = { nextTyVar : int ref
                (*
@@ -191,10 +191,15 @@ fun substituteConstraint (tv, replacement) =
 (* applySubstTy : Subst -> Ty -> Ty *)
 fun applySubstTy subst =
     let fun substTy (ty as TyVar tv')
+            = (case USyntax.TyVarMap.find(subst, tv') of
+                   NONE => ty
+                 | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
+              )
+                  (*
             = (case List.find (fn (tv, _) => eqUTyVar(tv, tv')) subst of
                    NONE => ty
                  | SOME (_, replacement) => replacement (* TODO: single replacement is sufficient? *)
-              )
+              )*)
           | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
           | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
           | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
@@ -202,9 +207,10 @@ fun applySubstTy subst =
     end
 
 (* instantiate : Context * TypeScheme -> Ty *)
-fun instantiate(ctx, TypeScheme(vars, ty)) = let val subst = List.map (fn v => (v, TyVar(freshTyVar(ctx)))) vars
-                                             in applySubstTy subst ty
-                                             end
+fun instantiate(ctx, TypeScheme(vars, ty))
+    = let val subst = List.foldl (fn (v, set) => USyntax.TyVarMap.insert(set, v, TyVar(freshTyVar(ctx)))) USyntax.TyVarMap.empty vars
+      in applySubstTy subst ty
+      end
 
 (* mergeEnv : Env * Env -> Env *)
 fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith #2 (#tyMap env1, #tyMap env2)
@@ -253,10 +259,10 @@ fun unify(ctx, tvc, EqConstr(TyVar(tv), ty) :: ctrs) : Subst * (TyVar * TyVarCon
           (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
           raise Fail "IsEqType TyCon: not impl"
   | unify(ctx, tvc, IsEqType(TyVar(tv)) :: ctrs) = unify(ctx, (tv, TVIsEqType) :: tvc, ctrs)
-  | unify(ctx, tvc, nil) = (nil, tvc)
+  | unify(ctx, tvc, nil) = (USyntax.TyVarMap.empty, tvc)
 and unifyTyVarAndTy(ctx : Context, tvc : (TyVar * TyVarConstraint) list, tv : TyVar, ty : Ty, ctrs : Constraint list)
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
-          ([], []) (* do nothing *)
+          (USyntax.TyVarMap.empty, []) (* do nothing *)
       else if occurCheck tv ty then
           raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
       else
@@ -264,7 +270,7 @@ and unifyTyVarAndTy(ctx : Context, tvc : (TyVar * TyVarConstraint) list, tv : Ty
               fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
                 | toConstraint (_, TVIsEqType) = IsEqType ty
               val (ss, tvc'') = unify(ctx, tvc', List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
-          in ((tv, ty) :: ss, tvc'')
+          in (USyntax.TyVarMap.insert(ss, tv, ty), tvc'')
           end
 
 (* constraintsExp : Context * Env * USyntax.Exp -> Constraint list * USyntax.Ty *)

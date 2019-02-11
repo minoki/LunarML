@@ -55,12 +55,14 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
      and ValBind = PatBind of Pat * Exp
 type Program = Dec list
 
-structure TyVarSet = BinarySetFn(struct
-                                  type ord_key = TyVar
-                                  fun compare (UTyVar(Syntax.MkTyVar x, a), UTyVar(Syntax.MkTyVar y, b)) = case String.compare (x,y) of
-                                                                                                               EQUAL => Int.compare(a, b)
-                                                                                                             | x => x
-                                  end)
+structure TyVarKey = struct
+type ord_key = TyVar
+fun compare (UTyVar(Syntax.MkTyVar x, a), UTyVar(Syntax.MkTyVar y, b)) = case String.compare (x,y) of
+                                                                             EQUAL => Int.compare(a, b)
+                                                                           | x => x
+end : ORD_KEY
+structure TyVarSet = BinarySetFn(TyVarKey)
+structure TyVarMap = BinaryMapFn(TyVarKey)
 
 (* pretty printing *)
 structure PrettyPrint = struct

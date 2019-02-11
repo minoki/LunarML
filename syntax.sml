@@ -24,14 +24,12 @@ datatype IdStatus = ValueVariable
                   | ExceptionConstructor
 
 (* BinaryMapFn, BinarySetFn: from smlnj-lib *)
-structure VIdSet = BinarySetFn(struct
-                                type ord_key = VId
-                                fun compare (MkVId x, MkVId y) = String.compare (x,y)
-                                end)
-structure VIdMap = BinaryMapFn(struct
-                                type ord_key = VId
-                                fun compare (MkVId x, MkVId y) = String.compare (x,y)
-                                end)
+structure VIdKey = struct
+type ord_key = VId
+fun compare (MkVId x, MkVId y) = String.compare (x,y)
+end : ORD_KEY
+structure VIdSet = BinarySetFn(VIdKey)
+structure VIdMap = BinaryMapFn(VIdKey)
 structure TyConMap = BinaryMapFn(struct
                                   type ord_key = TyCon
                                   fun compare (MkTyCon x, MkTyCon y) = String.compare (x,y)
@@ -40,22 +38,21 @@ structure StrIdMap = BinaryMapFn(struct
                                   type ord_key = StrId
                                   fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
                                   end)
-structure TyVarMap = BinaryMapFn(struct
-                                  type ord_key = TyVar
-                                  fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
-                                  end)
-structure TyVarSet = BinarySetFn(struct
-                                  type ord_key = TyVar
-                                  fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
-                                  end)
-structure LabelSet = BinarySetFn(struct
-                                  type ord_key = Label
-                                  (* NumericLabel _ < IdentifierLabel _ *)
-                                  fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
-                                    | compare (NumericLabel _, IdentifierLabel _) = LESS
-                                    | compare (IdentifierLabel _, NumericLabel _) = GREATER
-                                    | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
-                                  end)
+structure TyVarKey = struct
+type ord_key = TyVar
+fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
+end : ORD_KEY
+structure TyVarMap = BinaryMapFn(TyVarKey)
+structure TyVarSet = BinarySetFn(TyVarKey)
+structure LabelKey = struct
+type ord_key = Label
+(* NumericLabel _ < IdentifierLabel _ *)
+fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
+  | compare (NumericLabel _, IdentifierLabel _) = LESS
+  | compare (IdentifierLabel _, NumericLabel _) = GREATER
+  | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
+end
+structure LabelSet = BinarySetFn(LabelKey)
 
 datatype Ty = TyVar of TyVar (* type variable *)
             | RecordType of (Label * Ty) list (* record type expression *)
