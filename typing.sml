@@ -28,6 +28,21 @@ datatype TyVarConstraint
 
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 
+fun freeTyVarsInTypeScheme(bound, TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, tyvars), ty)
+fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
+    = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
+          (* TODO: tyMap? *)
+      in Syntax.StrIdMap.foldl (fn (env, set) => USyntax.TyVarSet.union(set, freeTyVarsInEnv(bound, env))) valMapSet strMap
+      end
+fun freeTyVarsInConstraint(bound, EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
+  | freeTyVarsInConstraint(bound, FieldConstr{recordTy = recordTy, fieldTy = fieldTy, ...}) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, recordTy), USyntax.freeTyVarsInTy(bound, fieldTy))
+  | freeTyVarsInConstraint(bound, IsEqType ty) = USyntax.freeTyVarsInTy(bound, ty)
+fun freeTyVarsInTyVarConstraint(bound, TVFieldConstr{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
+  | freeTyVarsInTyVarConstraint(bound, TVIsEqType) = USyntax.TyVarSet.empty
+
+fun substToConstraints(subst : Subst) : Constraint list
+    = USyntax.TyVarMap.foldli (fn (tv, ty, cts) => EqConstr(USyntax.TyVar(tv), ty) :: cts) [] subst
+
 type Context = { nextTyVar : int ref
                (*
                , constraints : (Constraint list) ref
@@ -59,19 +74,29 @@ fun lookupValInEnv(MkEnv env, vid as Syntax.MkVId name)
 
 (* The Definition, 4.7 Non-expansive Expressions *)
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
-fun isNonexpansive(env, USyntax.SConExp _) = true
+fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.VarExp _) = true (* <op> longvid *)
   | isNonexpansive(env, USyntax.RecordExp fields) = List.all (fn (_, e) => isNonexpansive(env, e)) fields
   | isNonexpansive(env, USyntax.TypedExp(e, _)) = isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.AppExp(conexp, e)) = isConexp(env, conexp) andalso isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.FnExp _) = true
   | isNonexpansive(env, _) = false
-and isConexp(env, USyntax.TypedExp(e, _)) = isConexp(env, e)
+and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"), _)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueVariable)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueConstructor)) = true
   | isConexp(env, USyntax.VarExp(_, Syntax.ExceptionConstructor)) = true
   | isConexp(env, _) = false
+
+(* isExhaustive : Env * USyntax.Pat -> bool *)
+fun isExhaustive(env : Env, USyntax.WildcardPat) = true
+  | isExhaustive(env, USyntax.SConPat _) = false
+  | isExhaustive(env, USyntax.VarPat _) = true
+  | isExhaustive(env, USyntax.NulConPat longvid) = false (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.RecordPat(row, _)) = List.all (fn (_, e) => isExhaustive(env, e)) row
+  | isExhaustive(env, USyntax.ConPat(longvid, innerPat)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.TypedPat(innerPat, _)) = isExhaustive(env, innerPat)
+  | isExhaustive(env, USyntax.LayeredPat(_, _, innerPat)) = isExhaustive(env, innerPat)
 
 val primTyCon_int    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0)
 val primTyCon_word   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 1)
@@ -353,7 +378,11 @@ and constraintsDecl(ctx, env, nil, ct) = (ct, env)
     = (case decl of
            ValDec(tyvarseq, valbinds) => let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                                              val (ct', vars) = constraintsValBinds(ctx, env, Syntax.VIdMap.empty, valbinds, ct)
-                                             val valMap' = Syntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars
+                                             fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
+                                               | doVar(ty, true) = let val f_ty = freeTyVarsInTy(TyVarSet.empty, ty)
+                                                                   in (TypeScheme([], ty), Syntax.ValueVariable)
+                                                                   end
+                                             val valMap' = Syntax.VIdMap.map doVar vars
                                          in constraintsDecl(ctx, MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap'), tyMap = tyMap, strMap = strMap }, decls, ct')
                                          end
          | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
@@ -368,12 +397,14 @@ and constraintsDecl(ctx, env, nil, ct) = (ct, env)
                                            end
          | OpenDec(_) => raise Fail "let-in: open: not impl"
       )
-and constraintsValBinds(ctx, outerEnv, vars, [], ct) = (ct, vars)
-  | constraintsValBinds(ctx, outerEnv, vars, PatBind(pat, exp) :: rest, ct)
-    = let val (ct', patTy, vars) = constraintsFromPat(ctx, outerEnv, pat)
-          val (ct'', expTy) = constraintsExp(ctx, outerEnv, exp)
-          val vars' = Syntax.VIdMap.unionWith #2 (vars, vars) (* TODO: generalize *)
-      in constraintsValBinds(ctx, outerEnv, vars', rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
+(* constraintsValBinds : Context * Env * (USyntax.Ty * bool) Syntax.VIdMap.map * ValBind list * Constraints list *)
+and constraintsValBinds(ctx, env, vars, [], ct) = (ct, vars)
+  | constraintsValBinds(ctx, env, vars, PatBind(pat, exp) :: rest, ct)
+    = let val (ct', patTy, newVars) = constraintsFromPat(ctx, env, pat)
+          val (ct'', expTy) = constraintsExp(ctx, env, exp)
+          val generalize = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
+          val vars' = Syntax.VIdMap.unionWith #2 (vars, Syntax.VIdMap.map (fn ty => (ty, generalize)) newVars) (* TODO: generalize *)
+      in constraintsValBinds(ctx, env, vars', rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
       end
 (* constraintsFromRow : Ctx * Env * (Label * Exp) list -> Constraint list * (Label * Syntax.Ty) list *)
 and constraintsFromRow(ctx, env, xs)
