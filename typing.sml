@@ -306,84 +306,85 @@ and unifyTyVarAndTy(ctx : Context, tvc : (TyVar * TyVarConstraint) list, tv : Ty
           in (USyntax.TyVarMap.insert(ss, tv, ty), tvc'')
           end
 
-(* constraintsExp : Context * Env * USyntax.Exp -> Constraint list * USyntax.Ty *)
-fun constraintsExp(ctx : Context, env : Env, SConExp(scon))
+(* constraintsExp : Context * Env * Constraint list * USyntax.Exp -> Constraint list * USyntax.Ty *)
+fun constraintsExp(ctx : Context, env : Env, cts : Constraint list, SConExp(scon))
     = (case scon of (* TODO: overloaded literals *)
-           Syntax.IntegerConstant x   => ([], primTy_int)
-         | Syntax.WordConstant x      => ([], primTy_word)
-         | Syntax.RealConstant x      => ([], primTy_real)
-         | Syntax.StringConstant x    => ([], primTy_string)
-         | Syntax.CharacterConstant x => ([], primTy_char)
+           Syntax.IntegerConstant x   => (cts, primTy_int)
+         | Syntax.WordConstant x      => (cts, primTy_word)
+         | Syntax.RealConstant x      => (cts, primTy_real)
+         | Syntax.StringConstant x    => (cts, primTy_string)
+         | Syntax.CharacterConstant x => (cts, primTy_char)
       )
-  | constraintsExp(ctx, env, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name), idstatus))
+  | constraintsExp(ctx, env, cts, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name), idstatus))
     = (case lookupValInEnv(lookupStr(env, str), vid) of
-          (TypeScheme([], ty), ids) => ([], ty)
-        | (tysc, _) => ([], instantiate(ctx, tysc))
+          (TypeScheme([], ty), ids) => (cts, ty)
+        | (tysc, _) => (cts, instantiate(ctx, tysc))
       )
-  | constraintsExp(ctx, env, RecordExp(row))
-    = let val (ct, row') = constraintsFromRow(ctx, env, row)
-      in (ct, RecordType(row'))
+  | constraintsExp(ctx, env, cts, RecordExp(row))
+    = let val (cts', row') = constraintsFromRow(ctx, env, cts, row)
+      in (cts', RecordType(row'))
       end
-  | constraintsExp(ctx, env, LetInExp(decls, innerExp))
-    = let val (ct1, env') = constraintsDecl(ctx, env, decls, [])
-          val (ct2, innerTy) = constraintsExp(ctx, mergeEnv(env, env'), innerExp)
-      in (ct1 @ ct2, innerTy)
+  | constraintsExp(ctx, env, cts, LetInExp(decls, innerExp))
+    = let val (cts, env') = constraintsDecl(ctx, env, cts, decls)
+          val (cts, innerTy) = constraintsExp(ctx, mergeEnv(env, env'), cts, innerExp)
+      in (cts, innerTy)
       end
-  | constraintsExp(ctx, env, AppExp(f, x))
+  | constraintsExp(ctx, env, cts, AppExp(f, x))
           (* f: s -> t, x: s *)
-    = let val (ct1, funcTy) = constraintsExp(ctx, env, f)
-          val (ct2, argTy) = constraintsExp(ctx, env, x)
+    = let val (cts, funcTy) = constraintsExp(ctx, env, cts, f)
+          val (cts, argTy) = constraintsExp(ctx, env, cts, x)
           val retTy = TyVar(freshTyVar(ctx))
           (* funcTy = (argTy -> retTy) *)
           val ct = EqConstr(funcTy, FnType(argTy, retTy))
-      in (ct :: (ct1 @ ct2), retTy)
+      in (ct :: cts, retTy)
       end
-  | constraintsExp(ctx, env, TypedExp(exp, ty))
-    = let val (ct1, expTy) = constraintsExp(ctx, env, exp)
+  | constraintsExp(ctx, env, cts, TypedExp(exp, ty))
+    = let val (cts, expTy) = constraintsExp(ctx, env, cts, exp)
           val ct = EqConstr(expTy, ty) (* ety = ty *)
-      in (ct :: ct1, ty)
+      in (ct :: cts, ty)
       end
-  | constraintsExp(ctx, env, HandleExp(e, handlers))
+  | constraintsExp(ctx, env, cts, HandleExp(e, handlers))
           (* e: t, handlers: exn -> t *)
     = raise Fail "handle expression not implemented yet"
-  | constraintsExp(ctx, env, RaiseExp(exp))
-    = let val (ct1, expTy) = constraintsExp(ctx, env, exp)
+  | constraintsExp(ctx, env, cts, RaiseExp(exp))
+    = let val (cts, expTy) = constraintsExp(ctx, env, cts, exp)
           (* expTy = exn *)
           val ct = EqConstr(expTy, primTy_exn)
           val retTy = TyVar(freshTyVar(ctx))
-      in (ct :: ct1, retTy)
+      in (ct :: cts, retTy)
       end
-  | constraintsExp(ctx, env, IfThenElseExp(cond, thenPart, elsePart))
-    = let val (ct1, condTy) = constraintsExp(ctx, env, cond)
-          val (ct2, thenTy) = constraintsExp(ctx, env, thenPart)
-          val (ct3, elseTy) = constraintsExp(ctx, env, elsePart)
+  | constraintsExp(ctx, env, cts, IfThenElseExp(cond, thenPart, elsePart))
+    = let val (cts, condTy) = constraintsExp(ctx, env, cts, cond)
+          val (cts, thenTy) = constraintsExp(ctx, env, cts, thenPart)
+          val (cts, elseTy) = constraintsExp(ctx, env, cts, elsePart)
           (* condTy = bool *)
           val ect1 = EqConstr(condTy, primTy_bool)
           (* thenTy = elseTy *)
           val ect2 = EqConstr(thenTy, elseTy)
-      in (ect1 :: ect2 :: (ct1 @ ct2 @ ct3), thenTy)
+      in (ect1 :: ect2 :: cts, thenTy)
       end
-  | constraintsExp(ctx, env, CaseExp(exp, matches))
-    = let val (ct1, expTy) = constraintsExp(ctx, env, exp)
-          val (ct2, patTy, retTy) = constraintsFromMatch(ctx, env, matches)
-      in (EqConstr(expTy, patTy) :: (ct1 @ ct2), retTy)
+  | constraintsExp(ctx, env, cts, CaseExp(exp, matches))
+    = let val (cts, expTy) = constraintsExp(ctx, env, cts, exp)
+          val (cts, patTy, retTy) = constraintsFromMatch(ctx, env, cts, matches)
+      in (EqConstr(expTy, patTy) :: cts, retTy)
       end
-  | constraintsExp(ctx, env, FnExp(matches))
-    = let val (ct, argTy, retTy) = constraintsFromMatch(ctx, env, matches)
-      in (ct, USyntax.FnType(argTy, retTy))
+  | constraintsExp(ctx, env, cts, FnExp(matches))
+    = let val (cts, argTy, retTy) = constraintsFromMatch(ctx, env, cts, matches)
+      in (cts, USyntax.FnType(argTy, retTy))
       end
-(* constraintsDecl : Context * Env * Dec list * Constraints list -> Constraints list * Env *)
-and constraintsDecl(ctx, env, nil, ct) = (ct, env)
-  | constraintsDecl(ctx, env, decl :: decls, ct)
+(* constraintsDecl : Context * Env * Constraints list * Dec list -> Constraints list * Env *)
+and constraintsDecl(ctx, env, cts, nil) = (cts, env)
+  | constraintsDecl(ctx, env, cts, decl :: decls)
     = (case decl of
            ValDec(tyvarseq, valbinds) => let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
-                                             val (ct', vars) = constraintsValBinds(ctx, env, Syntax.VIdMap.empty, valbinds, ct)
+                                             val (cts, vars) = constraintsValBinds(ctx, env, cts, Syntax.VIdMap.empty, valbinds)
                                              fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
                                                | doVar(ty, true) = let val f_ty = freeTyVarsInTy(TyVarSet.empty, ty)
                                                                    in (TypeScheme([], ty), Syntax.ValueVariable)
                                                                    end
                                              val valMap' = Syntax.VIdMap.map doVar vars
-                                         in constraintsDecl(ctx, MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap'), tyMap = tyMap, strMap = strMap }, decls, ct')
+                                             val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap'), tyMap = tyMap, strMap = strMap }
+                                         in constraintsDecl(ctx, env', cts, decls)
                                          end
          | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
          | TypeDec(_) => raise Fail "let-in: type: not impl"
@@ -391,109 +392,112 @@ and constraintsDecl(ctx, env, nil, ct) = (ct, env)
          | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
          | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
          | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
-         | LocalDec(localDecls, decls') => let val (ct', env') = constraintsDecl(ctx, env, localDecls, ct)
-                                               val (ct'', env'') = constraintsDecl(ctx, mergeEnv(env, env'), decls', ct')
-                                           in constraintsDecl(ctx, mergeEnv(env, env''), decls, ct'')
+         | LocalDec(localDecls, decls') => let val (cts, env') = constraintsDecl(ctx, env, cts, localDecls)
+                                               val (cts, env'') = constraintsDecl(ctx, mergeEnv(env, env'), cts, decls')
+                                           in constraintsDecl(ctx, mergeEnv(env, env''), cts, decls)
                                            end
          | OpenDec(_) => raise Fail "let-in: open: not impl"
       )
 (* constraintsValBinds : Context * Env * (USyntax.Ty * bool) Syntax.VIdMap.map * ValBind list * Constraints list *)
-and constraintsValBinds(ctx, env, vars, [], ct) = (ct, vars)
-  | constraintsValBinds(ctx, env, vars, PatBind(pat, exp) :: rest, ct)
-    = let val (ct', patTy, newVars) = constraintsFromPat(ctx, env, pat)
-          val (ct'', expTy) = constraintsExp(ctx, env, exp)
+and constraintsValBinds(ctx, env, cts, vars, []) = (cts, vars)
+  | constraintsValBinds(ctx, env, cts, vars, PatBind(pat, exp) :: rest)
+    = let val (cts, patTy, newVars) = constraintsFromPat(ctx, env, cts, pat)
+          val (cts, expTy) = constraintsExp(ctx, env, cts, exp)
           val generalize = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
           val vars' = Syntax.VIdMap.unionWith #2 (vars, Syntax.VIdMap.map (fn ty => (ty, generalize)) newVars) (* TODO: generalize *)
-      in constraintsValBinds(ctx, env, vars', rest, EqConstr(patTy, expTy) :: ct @ ct' @ ct'')
+      in constraintsValBinds(ctx, env, EqConstr(patTy, expTy) :: cts, vars', rest)
       end
-(* constraintsFromRow : Ctx * Env * (Label * Exp) list -> Constraint list * (Label * Syntax.Ty) list *)
-and constraintsFromRow(ctx, env, xs)
-    = let fun oneField(label, exp) = let val (ct, ty) = constraintsExp(ctx, env, exp)
-                                     in (ct, (label, ty))
-                                     end
-          val (cts, row) = ListPair.unzip (List.map oneField xs)
-      in (List.concat cts, row)
-      end
- (* constraintsFromMatch : Ctx * Env * (Pat * Exp) list -> Constraint list * (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty *)
-and constraintsFromMatch(ctx, env, (pat0, exp0) :: rest)
-    = let val (ct0, patTy, expTy) = constraintsFromMatchBranch(ctx, env, pat0, exp0)
-          fun oneBranch((pat, exp), ct)
-              = let val (ct', patTy', expTy') = constraintsFromMatchBranch(ctx, env, pat, exp)
-                in EqConstr(patTy, patTy') :: EqConstr(expTy, expTy') :: ct' @ ct
+(* constraintsFromRow : Ctx * Env * Constraint list * (Label * Exp) list -> Constraint list * (Label * Syntax.Ty) list *)
+and constraintsFromRow(ctx, env, cts, xs)
+    = let fun oneField((label, exp), (cts, xs))
+              = let val (cts, ty) = constraintsExp(ctx, env, cts, exp)
+                in (cts, (label, ty) :: xs)
                 end
-          val cts = List.foldl oneBranch ct0 rest
+      in List.foldl oneField (cts, []) xs
+      end
+ (* constraintsFromMatch : Ctx * Env * Constraint list * (Pat * Exp) list -> Constraint list * (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty *)
+and constraintsFromMatch(ctx, env, cts, (pat0, exp0) :: rest)
+    = let val (cts, patTy, expTy) = constraintsFromMatchBranch(ctx, env, cts, pat0, exp0)
+          fun oneBranch((pat, exp), cts)
+              = let val (cts, patTy', expTy') = constraintsFromMatchBranch(ctx, env, cts, pat, exp)
+                in EqConstr(patTy, patTy') :: EqConstr(expTy, expTy') :: cts
+                end
+          val cts = List.foldl oneBranch cts rest
       in (cts, patTy, expTy)
       end
-  | constraintsFromMatch(ctx, env, nil) = raise TypeError "invalid syntax tree: match is empty"
-and constraintsFromMatchBranch(ctx : Context, env as MkEnv env' : Env, pat, exp)
-    = let val (ctp, patTy, vars) = constraintsFromPat(ctx, env, pat)
+  | constraintsFromMatch(ctx, env, cts, nil) = raise TypeError "invalid syntax tree: match is empty"
+and constraintsFromMatchBranch(ctx : Context, env as MkEnv env' : Env, cts, pat, exp)
+    = let val (cts, patTy, vars) = constraintsFromPat(ctx, env, cts, pat)
           val env'' = MkEnv { tyMap = #tyMap env'
                             , valMap = Syntax.VIdMap.unionWith #2 (#valMap env', Syntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars)
                             , strMap = #strMap env'
                             }
-          val (cte, expTy) = constraintsExp(ctx, env'', exp)
-      in (ctp @ cte, patTy, expTy)
+          val (cts, expTy) = constraintsExp(ctx, env'', cts, exp)
+      in (cts, patTy, expTy)
       end
- (* constraintsFromPat : Ctx * Env * Pat -> Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map *)
-and constraintsFromPat(ctx, env, WildcardPat) : Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map
+ (* constraintsFromPat : Ctx * Env * Constraint list * Pat -> Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map *)
+and constraintsFromPat(ctx, env, cts, WildcardPat) : Constraint list * USyntax.Ty * USyntax.Ty Syntax.VIdMap.map
     = let val ty = TyVar(freshTyVar(ctx))
-      in ([], ty, Syntax.VIdMap.empty)
+      in (cts, ty, Syntax.VIdMap.empty)
       end
-  | constraintsFromPat(ctx, env, SConPat(Syntax.IntegerConstant(_)))   = ([], primTy_int, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, SConPat(Syntax.WordConstant(_)))      = ([], primTy_word, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, SConPat(Syntax.RealConstant(_)))      = raise Syntax.SyntaxError "No real constant may occur in a pattern"
-  | constraintsFromPat(ctx, env, SConPat(Syntax.StringConstant(_)))    = ([], primTy_string, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, SConPat(Syntax.CharacterConstant(_))) = ([], primTy_char, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, MkEnv env, VarPat(vid, ty))
+  | constraintsFromPat(ctx, env, cts, SConPat scon)
+    = (case scon of
+           Syntax.IntegerConstant(_)   => (cts, primTy_int, Syntax.VIdMap.empty)
+         | Syntax.WordConstant(_)      => (cts, primTy_word, Syntax.VIdMap.empty)
+         | Syntax.RealConstant(_)      => raise Syntax.SyntaxError "No real constant may occur in a pattern"
+         | Syntax.StringConstant(_)    => (cts, primTy_string, Syntax.VIdMap.empty)
+         | Syntax.CharacterConstant(_) => (cts, primTy_char, Syntax.VIdMap.empty)
+      )
+  | constraintsFromPat(ctx, MkEnv env, cts, VarPat(vid, ty))
     = (case Syntax.VIdMap.find(#valMap env, vid) of
            SOME (tysc, Syntax.ValueConstructor) => raise TypeError "VarPat: invalid pattern"
          | SOME (tysc, Syntax.ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (_, Syntax.ValueVariable) => (* shadowing *) ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
-         | NONE => ([], ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) (cts, ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
+         | NONE => (cts, ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
       )
-  | constraintsFromPat(ctx, env, NulConPat(Syntax.MkLongVId(strid, vid)))
+  | constraintsFromPat(ctx, env, cts, NulConPat(Syntax.MkLongVId(strid, vid)))
     = let val MkEnv strEnv = lookupStr(env, strid)
       in case Syntax.VIdMap.find(#valMap strEnv, vid) of
              SOME (tysc, Syntax.ValueConstructor) => raise Fail "NulConPat: not implemented yet"
-           | SOME (tysc, Syntax.ExceptionConstructor) => ([], primTy_exn, Syntax.VIdMap.empty)
+           | SOME (tysc, Syntax.ExceptionConstructor) => (cts, primTy_exn, Syntax.VIdMap.empty)
            | SOME (_, Syntax.ValueVariable) => raise TypeError "invalid pattern"
            | NONE => raise TypeError "invalid pattern"
       end
-  | constraintsFromPat(ctx, env, RecordPat(row, wildcard))
-    = let val (ct, row', vars) = constraintsFromPatRow(ctx, env, row)
+  | constraintsFromPat(ctx, env, cts, RecordPat(row, wildcard))
+    = let val (cts, row', vars) = constraintsFromPatRow(ctx, env, cts, row)
       in if wildcard then
              let val recordTy = TyVar(freshTyVar(ctx))
-                 fun oneField(label, ty) = FieldConstr { label = label, recordTy = recordTy, fieldTy = ty }
-                 val fieldCts = List.map oneField row'
-             in (fieldCts @ ct, recordTy, vars)
+                 fun oneField((label, ty), cts) = FieldConstr { label = label, recordTy = recordTy, fieldTy = ty } :: cts
+                 val cts = List.foldl oneField cts row'
+             in (cts, recordTy, vars)
              end
          else
-             (ct, RecordType(row'), vars)
+             (cts, RecordType(row'), vars)
       end
-  | constraintsFromPat(ctx, env, ConPat(longvid, pat)) = raise TypeError "ConPat"
-  | constraintsFromPat(ctx, env, TypedPat(WildcardPat, ty))
-    = ([], ty, Syntax.VIdMap.empty)
-  | constraintsFromPat(ctx, env, TypedPat(pat, ty))
-    = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
-      in (EqConstr(ty, inferredTy) :: ct, ty, vars)
+  | constraintsFromPat(ctx, env, cts, ConPat(longvid, pat)) = raise TypeError "ConPat"
+  | constraintsFromPat(ctx, env, cts, TypedPat(WildcardPat, ty))
+    = (cts, ty, Syntax.VIdMap.empty)
+  | constraintsFromPat(ctx, env, cts, TypedPat(pat, ty))
+    = let val (cts, inferredTy, vars) = constraintsFromPat(ctx, env, cts, pat)
+      in (EqConstr(ty, inferredTy) :: cts, ty, vars)
       end
-  | constraintsFromPat(ctx, env, LayeredPat(vid, ty, pat))
-    = let val (ct, inferredTy, vars) = constraintsFromPat(ctx, env, pat)
+  | constraintsFromPat(ctx, env, cts, LayeredPat(vid, ty, pat))
+    = let val (cts, inferredTy, vars) = constraintsFromPat(ctx, env, cts, pat)
       in case Syntax.VIdMap.find(vars, vid) of
-             NONE => (EqConstr(ty, inferredTy) :: ct, ty, Syntax.VIdMap.insert(vars, vid, ty))
+             NONE => (EqConstr(ty, inferredTy) :: cts, ty, Syntax.VIdMap.insert(vars, vid, ty))
            | SOME _ => raise TypeError "trying to bind the same identifier twice"
       end
- (* constraintsFromPatRow : Ctx * Env * (Label * Pat) list -> Constraint list * (Label * Syntax.Ty) list * Syntax.Ty Syntax.VIdMap.map *)
-and constraintsFromPatRow(ctx, env, row)
+ (* constraintsFromPatRow : Ctx * Env * Constraint list * (Label * Pat) list -> Constraint list * (Label * Syntax.Ty) list * Syntax.Ty Syntax.VIdMap.map *)
+and constraintsFromPatRow(ctx, env, cts, row)
     = let fun oneField((label, pat), (cts, row, vars))
-              = let val (ct, ty, vars') = constraintsFromPat(ctx, env, pat)
-                in (ct @ cts, (label, ty) :: row, Syntax.VIdMap.unionWith (fn _ => raise TypeError "trying to bind the same identifier twice") (vars, vars'))
+              = let val (cts, ty, vars') = constraintsFromPat(ctx, env, cts, pat)
+                in (cts, (label, ty) :: row, Syntax.VIdMap.unionWith (fn _ => raise TypeError "trying to bind the same identifier twice") (vars, vars'))
                 end
-      in List.foldl oneField ([], [], Syntax.VIdMap.empty) row
+      in List.foldl oneField (cts, [], Syntax.VIdMap.empty) row
       end
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
-fun typeCheckExp(ctx, env, exp) = let val (constraints, ty) = constraintsExp(ctx, env, exp)
+fun typeCheckExp(ctx, env, exp) = let val (constraints, ty) = constraintsExp(ctx, env, [], exp)
                                       val (subst, tvc) = unify(ctx, [], constraints)
                                       val applySubst = applySubstTy subst
                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
