@@ -36,46 +36,49 @@ val ast1 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId (#,#)))
   : Syntax.SyntaxTree.Exp
 - print (Syntax.print_Exp ast1);
 LetInExp([ValDec([],[PatBind(ConOrVarPat(MkVId "x"),LetInExp([ValDec([],[PatBind(TypedPat(ConOrVarPat(MkVId "id"),FnType(TyVar(MkTyVar "'a"),TyVar(MkTyVar "'a"))),FnExp([(ConOrVarPat(MkVId "z"),SimpleVarExp(MkVId "z"))]))])],AppExp(SimpleVarExp(MkVId "id"),SimpleVarExp(MkVId "id"))))])],SimpleVarExp(MkVId "x"))val it = () : unit
-- val ast2 = PostParsing.toUExp(PostParsing.newContext(), PostParsing.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
+- val ctx = Typing.newContext();
+val ctx =
+  {constraints=ref [],nextTyVar=ref 100,tyVarConstraints=ref [],
+   tyVarSubst=ref E} : Typing.Context
+- val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
 val ast2 = LetInExp ([ValDec (#,#)],VarExp (MkLongVId #,ValueVariable))
   : USyntax.Exp
 - print (USyntax.print_Exp ast2);
 LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
-- val ctx = Typing.newContext();
-val ctx = {nextTyVar=ref 100} : Typing.Context
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.emptyEnv, ast2);
-val a = [] : Typing.Subst
+- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+val a =
+  T
+    {cnt=5,key=UTyVar (MkTyVar #,100),
+     left=T {cnt=2,key=UTyVar #,left=T #,right=E,value=TyVar #},
+     right=T {cnt=2,key=UTyVar #,left=E,right=T #,value=FnType #},
+     value=TyVar (UTyVar (#,#))} : Typing.Subst
 val b = [] : (USyntax.TyVar * Typing.TyVarConstraint) list
-val c = TyVar (UTyVar (MkTyVar "_",100)) : USyntax.Ty
+val c = TyVar (UTyVar (MkTyVar "_",107)) : USyntax.Ty
 val d = LetInExp ([ValDec (#,#)],VarExp (MkLongVId #,ValueVariable))
   : USyntax.Exp
-- USyntax.print_Exp d;
-val it =
-  "LetInExp([ValDec([],[PatBind(VarPat(MkVId \"x\",TyVar(UTyVar(MkTyVar \"_\"#"
-  : string
 - print (USyntax.print_Exp d);
-LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",TyVar(UTyVar(MkTyVar "_",100))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "'a",102)),TyVar(UTyVar(MkTyVar "'a",103)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
+LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",TyVar(UTyVar(MkTyVar "_",107))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "_",104)),TyVar(UTyVar(MkTyVar "_",104)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
 ```
 
 ```
-- SimpleParser.parse "let val a = 123 in (fn z => z) a end";
-val it = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #))
-  : Syntax.SyntaxTree.Exp
-- val ast2 = PostParsing.toUExp(PostParsing.newContext(), PostParsing.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, it));
-val ast2 = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : USyntax.Exp
+- val ast1 = SimpleParser.parse "let val a = 123 in (fn z => z) a end";
+val ast1 = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : Syntax.Exp
 - val ctx = Typing.newContext();
-val ctx = {nextTyVar=ref 100} : Typing.Context
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.emptyEnv, ast2);
+val ctx =
+  {constraints=ref [],nextTyVar=ref 100,tyVarConstraints=ref [],
+   tyVarSubst=ref E} : Typing.Context
+- val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
+val ast2 = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : USyntax.Exp
+- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
 val a =
-  [(UTyVar (MkTyVar #,100),TyCon ([],ULongTyCon #)),
-   (UTyVar (MkTyVar #,101),TyCon ([],ULongTyCon #))] : Typing.Subst
+  T
+    {cnt=3,key=UTyVar (MkTyVar #,101),
+     left=T {cnt=1,key=UTyVar #,left=E,right=E,value=TyCon #},
+     right=T {cnt=1,key=UTyVar #,left=E,right=E,value=TyCon #},
+     value=TyCon ([],ULongTyCon #)} : Typing.Subst
 val b = [] : (USyntax.TyVar * Typing.TyVarConstraint) list
 val c = TyCon ([],ULongTyCon (MkLongTyCon #,0)) : USyntax.Ty
 val d = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : USyntax.Exp
-- USyntax.print_Exp(d);
-val it =
-  "LetInExp([ValDec([],[PatBind(VarPat(MkVId \"a\",TyCon([],ULongTyCon(MkLo#"
-  : string
 - print (USyntax.print_Exp(d));
 LetInExp([ValDec([],[PatBind(VarPat(MkVId "a",TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "int"),0))),SConExp(IntegerConstant 123))])],AppExp(FnExp([(VarPat(MkVId "z",TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "int"),0))),SimpleVarExp(MkVId "z",ValueVariable))]),SimpleVarExp(MkVId "a",ValueVariable)))val it = () : unit
 ```
