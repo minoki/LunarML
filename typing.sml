@@ -404,13 +404,15 @@ and constraintsDecl(ctx, env, nil) : Env = env
            let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                val vars = constraintsValBinds(ctx, env, Syntax.VIdMap.empty, valbinds)
                val () = (unify(ctx, !(#constraints ctx)) ; #constraints ctx := [])
-               val subst = !(#tyVarSubst ctx);
+               val tvc = !(#tyVarConstraints ctx)
+               val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
                fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
                  | doVar(ty, true) = let val ty' = applySubstTy subst ty
                                          val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                                         val tyVars = TyVarSet.difference(tyVars_ty, tyVars_env)
+                                         val unconstrainedTyVars = TyVarSet.filter (fn tv => not (List.exists (fn (tv', _) => eqUTyVar(tv, tv')) tvc)) tyVars_ty (* TODO: Allow equality constraint *)
+                                         val tyVars = TyVarSet.difference(unconstrainedTyVars, tyVars_env)
                                      in (TypeScheme(TyVarSet.listItems tyVars, ty'), Syntax.ValueVariable)
                                      end
                val valMap' = Syntax.VIdMap.map doVar vars
