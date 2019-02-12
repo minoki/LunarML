@@ -489,9 +489,14 @@ and constraintsFromPat(ctx, env, WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.V
   | constraintsFromPat(ctx, env, NulConPat(Syntax.MkLongVId(strid, vid)))
     = let val MkEnv strEnv = lookupStr(env, strid)
       in case Syntax.VIdMap.find(#valMap strEnv, vid) of
-             SOME (tysc, Syntax.ValueConstructor) => raise Fail "NulConPat: not implemented yet"
-           | SOME (tysc, Syntax.ExceptionConstructor) => (primTy_exn, Syntax.VIdMap.empty)
-           | SOME (_, Syntax.ValueVariable) => raise TypeError "invalid pattern"
+             SOME (tysc, idstatus) =>
+             (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                  let val ty = instantiate(ctx, tysc)
+                  in (ty, Syntax.VIdMap.empty)
+                  end
+              else (* idstatus = Syntax.ValueVariable *)
+                  raise TypeError "invalid pattern"
+             )
            | NONE => raise TypeError "invalid pattern"
       end
   | constraintsFromPat(ctx, env, RecordPat(row, wildcard))
@@ -505,7 +510,21 @@ and constraintsFromPat(ctx, env, WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.V
          else
              (RecordType(row'), vars)
       end
-  | constraintsFromPat(ctx, env, ConPat(longvid, pat)) = raise TypeError "ConPat"
+  | constraintsFromPat(ctx, env, ConPat(longvid as Syntax.MkLongVId(strid, vid), innerPat))
+    = let val MkEnv strEnv = lookupStr(env, strid)
+      in case Syntax.VIdMap.find(#valMap strEnv, vid) of
+             SOME (tysc, idstatus) =>
+             if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                 case instantiate(ctx, tysc) of
+                     USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars) = constraintsFromPat(ctx, env, innerPat)
+                                                        in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                         ; (resultTy, innerVars)
+                                                        end
+                   | _ => raise TypeError "invalid pattern"
+             else (* idstatus = Syntax.ValueVariable *)
+                 raise TypeError "invalid pattern"
+           | NONE => raise TypeError "invalid pattern"
+      end
   | constraintsFromPat(ctx, env, TypedPat(WildcardPat, ty))
     = (ty, Syntax.VIdMap.empty)
   | constraintsFromPat(ctx, env, TypedPat(pat, ty))
