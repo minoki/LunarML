@@ -51,13 +51,13 @@ val a =
     {cnt=5,key=UTyVar (MkTyVar #,100),
      left=T {cnt=2,key=UTyVar #,left=T #,right=E,value=TyVar #},
      right=T {cnt=2,key=UTyVar #,left=E,right=T #,value=FnType #},
-     value=TyVar (UTyVar (#,#))} : Typing.Subst
+     value=FnType (TyVar #,TyVar #)} : Typing.Subst
 val b = [] : (USyntax.TyVar * Typing.TyVarConstraint) list
-val c = TyVar (UTyVar (MkTyVar "_",107)) : USyntax.Ty
+val c = FnType (TyVar (UTyVar (#,#)),TyVar (UTyVar (#,#))) : USyntax.Ty
 val d = LetInExp ([ValDec (#,#)],VarExp (MkLongVId #,ValueVariable))
   : USyntax.Exp
 - print (USyntax.print_Exp d);
-LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",TyVar(UTyVar(MkTyVar "_",107))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "_",104)),TyVar(UTyVar(MkTyVar "_",104)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
+LetInExp([ValDec([],[PatBind(VarPat(MkVId "x",FnType(TyVar(UTyVar(MkTyVar "_",106)),TyVar(UTyVar(MkTyVar "_",106)))),LetInExp([ValDec([UTyVar(MkTyVar "'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "_",104)),TyVar(UTyVar(MkTyVar "_",104)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])],SimpleVarExp(MkVId "x",ValueVariable))val it = () : unit
 ```
 
 ```
@@ -81,4 +81,57 @@ val c = TyCon ([],ULongTyCon (MkLongTyCon #,0)) : USyntax.Ty
 val d = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : USyntax.Exp
 - print (USyntax.print_Exp(d));
 LetInExp([ValDec([],[PatBind(VarPat(MkVId "a",TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "int"),0))),SConExp(IntegerConstant 123))])],AppExp(FnExp([(VarPat(MkVId "z",TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "int"),0))),SimpleVarExp(MkVId "z",ValueVariable))]),SimpleVarExp(MkVId "a",ValueVariable)))val it = () : unit
+```
+
+Let polymorphism:
+
+```
+- val ast1 = SimpleParser.parse "let val id = fn z => z in (id \"foo\", id 123, id id) end";
+val ast1 = LetInExp ([ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
+  : Syntax.Exp
+- val ctx = Typing.newContext();
+val ctx =
+  {constraints=ref [],nextTyVar=ref 100,tyVarConstraints=ref [],
+   tyVarSubst=ref E} : Typing.Context
+- val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
+val ast2 = LetInExp ([ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
+  : USyntax.Exp
+- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+val a =
+  T
+    {cnt=7,key=UTyVar (MkTyVar #,105),
+     left=T {cnt=4,key=UTyVar #,left=T #,right=T #,value=TyCon #},
+     right=T {cnt=2,key=UTyVar #,left=E,right=T #,value=FnType #},
+     value=TyCon ([],ULongTyCon #)} : Typing.Subst
+val b = [] : (USyntax.TyVar * Typing.TyVarConstraint) list
+val c =
+  RecordType
+    [(NumericLabel 1,TyCon (#,#)),(NumericLabel 2,TyCon (#,#)),
+     (NumericLabel 3,FnType (#,#))] : USyntax.Ty
+val d = LetInExp ([ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)]) : USyntax.Exp
+- print (USyntax.print_Ty c);
+RecordType [(NumericLabel 1,TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "string"),3))),(NumericLabel 2,TyCon([],ULongTyCon(MkLongTyCon([],MkTyCon "int"),0))),(NumericLabel 3,FnType(TyVar(UTyVar(MkTyVar "_",107)),TyVar(UTyVar(MkTyVar "_",107))))]val it = () : unit
+- print (USyntax.print_Exp d);
+LetInExp([ValDec([],[PatBind(VarPat(MkVId "id",FnType(TyVar(UTyVar(MkTyVar "_",101)),TyVar(UTyVar(MkTyVar "_",101)))),FnExp([(VarPat(MkVId "z",TyVar(UTyVar(MkTyVar "_",101))),SimpleVarExp(MkVId "z",ValueVariable))]))])],TupleExp [AppExp(SimpleVarExp(MkVId "id",ValueVariable),SConExp(StringConstant "foo")),AppExp(SimpleVarExp(MkVId "id",ValueVariable),SConExp(IntegerConstant 123)),AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))])val it = () : unit
+```
+
+The type is not generalized when reference cell involves:
+
+```
+- val ast1 = SimpleParser.parse "let val ! = fn ref x => x ; val id = !(ref (fn z => z)) in (id \"foo\", id 123, id id) end";
+val ast1 =
+  LetInExp ([ValDec (#,#),ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
+  : Syntax.Exp
+- val ctx = Typing.newContext();
+val ctx =
+  {constraints=ref [],nextTyVar=ref 100,tyVarConstraints=ref [],
+   tyVarSubst=ref E} : Typing.Context
+- val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
+val ast2 =
+  LetInExp ([ValDec (#,#),ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
+  : USyntax.Exp
+- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+
+uncaught exception TypeError
+  raised at: typing.sml:334.17-334.130
 ```

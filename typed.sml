@@ -59,7 +59,7 @@ structure TyVarKey = struct
 type ord_key = TyVar
 fun compare (UTyVar(Syntax.MkTyVar x, a), UTyVar(Syntax.MkTyVar y, b)) = case String.compare (x,y) of
                                                                              EQUAL => Int.compare(a, b)
-                                                                           | x => x
+                                                                           | ord => ord
 end : ORD_KEY
 structure TyVarSet = BinarySetFn(TyVarKey)
 structure TyVarMap = BinaryMapFn(TyVarKey)

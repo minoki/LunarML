@@ -190,10 +190,6 @@ fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : TyVarConstraint)
     = let val cts = !(#tyVarConstraints ctx)
       in #tyVarConstraints ctx := (tv, ct) :: cts
       end
-fun addSubst(ctx : Context, tv : USyntax.TyVar, ty : USyntax.Ty)
-    = let val subst = !(#tyVarSubst ctx)
-      in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst, tv, ty)
-      end
 
 fun freshTyVar(ctx : Context) : USyntax.TyVar
     = let val nextTyVar = #nextTyVar ctx
@@ -231,6 +227,12 @@ fun substituteConstraint (tv, replacement) =
      | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy } => FieldConstr{label = label, recordTy = substTy recordTy, fieldTy = substTy fieldTy}
      | IsEqType ty => IsEqType(substTy ty)
     end
+
+fun addSubst(ctx : Context, tv : USyntax.TyVar, ty : USyntax.Ty)
+    = let val subst = !(#tyVarSubst ctx)
+          val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
+      in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
+      end
 
 (* applySubstTy : Subst -> Ty -> Ty *)
 fun applySubstTy subst =
@@ -320,7 +322,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
       )
 and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
-          () (* do nothing *)
+          unify(ctx, ctrs) (* do nothing *)
       else if occurCheck tv ty then
           raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
       else
@@ -329,8 +331,8 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
               val () = #tyVarConstraints ctx := tvc'
               fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
                 | toConstraint (_, TVIsEqType) = IsEqType ty
-          in unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
-           ; addSubst(ctx, tv, ty)
+          in addSubst(ctx, tv, ty)
+           ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
           end
 
 (* constraintsExp : Context * Env * USyntax.Exp -> USyntax.Ty *)
