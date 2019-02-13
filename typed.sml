@@ -209,12 +209,11 @@ end (* structure USyntax *)
 structure ToTypedSyntax = struct
 exception NameError of string
 
-type ('a,'b,'c) Context = { nextTyVar : int ref
-                                            (* , nextTyCon : int ref *)
-                          , constraints : 'a
-                          , tyVarConstraints : 'b
-                          , tyVarSubst : 'c
-                          }
+type ('a,'b) Context = { nextTyVar : int ref
+                       (* , nextTyCon : int ref *)
+                       , tyVarConstraints : 'a
+                       , tyVarSubst : 'b
+                       }
 
 (*
 fun newContext() : Context
@@ -251,11 +250,11 @@ val initialEnv = MkEnv { valMap = let open Syntax
 local structure S = Syntax
       structure U = USyntax
 
-      fun genTyVarId(ctx : ('a,'b,'c) Context)
+      fun genTyVarId(ctx : ('a,'b) Context)
           = let val id = !(#nextTyVar ctx)
             in #nextTyVar ctx := id + 1 ; id end
       fun genTyVar(ctx, tv) = USyntax.UTyVar(tv, genTyVarId(ctx))
-      fun freshTyVar(ctx : ('a,'b,'c) Context) = genTyVar(ctx, Syntax.MkTyVar "_")
+      fun freshTyVar(ctx : ('a,'b) Context) = genTyVar(ctx, Syntax.MkTyVar "_")
 
 (*
       fun genTyConId(ctx : Context)
@@ -290,7 +289,7 @@ in
 (* toUExp : Context * Env * Syntax.Exp -> USyntax.Exp *)
 (* toUMatch : Context * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
 (* toUDec : Context * Env * Syntax.Dec -> USyntax.Dec *)
-fun toUTy(ctx : ('a,'b,'c) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
+fun toUTy(ctx : ('a,'b) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
   | toUTy(ctx, env, S.RecordType row) = U.RecordType(toUTyRow(ctx, env, row))
   | toUTy(ctx, env, S.TyCon(args, tycon)) = (case lookupLongTyCon(env, tycon) of
                                                  BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, env, ty)) args, U.ULongTyCon(tycon, id))
@@ -300,7 +299,7 @@ fun toUTy(ctx : ('a,'b,'c) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ct
 and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, env, ty))
                               in List.map oneField row
                               end
-fun toUPat(ctx : ('a,'b,'c) Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
+fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
   | toUPat(ctx, env, S.ConOrVarPat vid)
@@ -330,7 +329,7 @@ fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.ma
 fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implemented yet"
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
-fun toUExp(ctx : ('a,'b,'c) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
+fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, env, S.VarExp(longvid))
     = (case lookupLongVId(env, longvid) of
            SOME idstatus => U.VarExp(longvid, idstatus)

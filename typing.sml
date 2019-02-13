@@ -40,11 +40,7 @@ fun freeTyVarsInConstraint(bound, EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(U
 fun freeTyVarsInTyVarConstraint(bound, TVFieldConstr{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
   | freeTyVarsInTyVarConstraint(bound, TVIsEqType) = USyntax.TyVarSet.empty
 
-fun substToConstraints(subst : Subst) : Constraint list
-    = USyntax.TyVarMap.foldli (fn (tv, ty, cts) => EqConstr(USyntax.TyVar(tv), ty) :: cts) [] subst
-
 type Context = { nextTyVar : int ref
-               , constraints : (Constraint list) ref
                , tyVarConstraints : ((USyntax.TyVar * TyVarConstraint) list) ref (* should use (multi-)map? *)
                , tyVarSubst : Subst ref
                }
@@ -184,15 +180,10 @@ val initialEnv : Env
 
 fun newContext() : Context
     = { nextTyVar = ref 100
-      , constraints = ref []
       , tyVarConstraints = ref []
       , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
-fun addConstraint(ctx : Context, ct : Constraint)
-    = let val cts = !(#constraints ctx)
-      in #constraints ctx := ct :: cts
-      end
 fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : TyVarConstraint)
     = let val cts = !(#tyVarConstraints ctx)
       in #tyVarConstraints ctx := (tv, ct) :: cts
@@ -341,6 +332,7 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
           in addSubst(ctx, tv, ty)
            ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
           end
+fun addConstraint(ctx : Context, ct : Constraint) = unify(ctx, [ct])
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> USyntax.Ty *)
 fun typeCheckExp(ctx : Context, env : Env, SConExp(scon)) : USyntax.Ty
@@ -410,7 +402,6 @@ and typeCheckDecl(ctx, env, nil) : Env = env
            ValDec(tyvarseq, valbinds) =>
            let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                val vars = typeCheckValBinds(ctx, env, Syntax.VIdMap.empty, valbinds)
-               val () = (unify(ctx, !(#constraints ctx)) ; #constraints ctx := [])
                val tvc = !(#tyVarConstraints ctx)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
@@ -561,8 +552,6 @@ and typeCheckPatRow(ctx, env, row)
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
-                                      val constraints = !(#constraints ctx)
-                                      val () = unify(ctx, constraints)
                                       val subst = !(#tyVarSubst ctx)
                                       val tvc = !(#tyVarConstraints ctx)
                                       val applySubst = applySubstTy subst
