@@ -60,18 +60,10 @@ fun lookupTyConInEnv(MkEnv env, tycon as Syntax.MkTyCon name)
            NONE => raise NameError("unknown type constructor " ^ name)
          | SOME x => x
       )
-fun lookupValInEnv(MkEnv env, vid as Syntax.MkVId name)
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
-           NONE => raise NameError("unknown value name " ^ name)
-         | SOME x => x
-      )
-          (*
-fun lookupLongVIdInEnv(MkEnv env, Syntax.MkVLongId(strid, vid))
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
-           NONE => raise NameError("unknown value name " ^ name)
-         | SOME x => x
-      )
-          *)
+fun lookupLongVIdInEnv(env, Syntax.MkLongVId(strid, vid))
+    = let val MkEnv strEnv = lookupStr(env, strid)
+      in Syntax.VIdMap.find(#valMap strEnv, vid)
+      end
 
 (* The Definition, 4.7 Non-expansive Expressions *)
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
@@ -343,10 +335,10 @@ fun typeCheckExp(ctx : Context, env : Env, SConExp(scon)) : USyntax.Ty
          | Syntax.StringConstant x    => primTy_string
          | Syntax.CharacterConstant x => primTy_char
       )
-  | typeCheckExp(ctx, env, VarExp(Syntax.MkLongVId(str, vid as Syntax.MkVId name), idstatus))
-    = (case lookupValInEnv(lookupStr(env, str), vid) of
-          (TypeScheme([], ty), ids) => ty
-        | (tysc, _) => instantiate(ctx, tysc)
+  | typeCheckExp(ctx, env, VarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus))
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (tysc, ids) => instantiate(ctx, tysc)
+         | NONE => raise NameError("unknown value name " ^ name)
       )
   | typeCheckExp(ctx, env, RecordExp(row))
     = let val row' = typeCheckExpRow(ctx, env, row)
@@ -488,19 +480,18 @@ and typeCheckPat(ctx, env, WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.VIdMap.
          | SOME (_, Syntax.ValueVariable) => (* shadowing *) (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
          | NONE => (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty))
       )
-  | typeCheckPat(ctx, env, NulConPat(Syntax.MkLongVId(strid, vid)))
-    = let val MkEnv strEnv = lookupStr(env, strid)
-      in case Syntax.VIdMap.find(#valMap strEnv, vid) of
-             SOME (tysc, idstatus) =>
-             (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-                  let val ty = instantiate(ctx, tysc)
-                  in (ty, Syntax.VIdMap.empty)
-                  end
-              else (* idstatus = Syntax.ValueVariable *)
-                  raise TypeError "invalid pattern"
-             )
-           | NONE => raise TypeError "invalid pattern"
-      end
+  | typeCheckPat(ctx, env, NulConPat(longvid))
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (tysc, idstatus) =>
+           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                let val ty = instantiate(ctx, tysc)
+                in (ty, Syntax.VIdMap.empty)
+                end
+            else (* idstatus = Syntax.ValueVariable *)
+                raise TypeError "invalid pattern"
+           )
+         | NONE => raise TypeError "invalid pattern"
+      )
   | typeCheckPat(ctx, env, RecordPat(row, wildcard))
     = let val (row', vars) = typeCheckPatRow(ctx, env, row)
       in if wildcard then
@@ -512,21 +503,20 @@ and typeCheckPat(ctx, env, WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.VIdMap.
          else
              (RecordType(row'), vars)
       end
-  | typeCheckPat(ctx, env, ConPat(longvid as Syntax.MkLongVId(strid, vid), innerPat))
-    = let val MkEnv strEnv = lookupStr(env, strid)
-      in case Syntax.VIdMap.find(#valMap strEnv, vid) of
-             SOME (tysc, idstatus) =>
-             if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-                 case instantiate(ctx, tysc) of
-                     USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars) = typeCheckPat(ctx, env, innerPat)
-                                                        in addConstraint(ctx, EqConstr(argTy, argTy'))
-                                                         ; (resultTy, innerVars)
-                                                        end
-                   | _ => raise TypeError "invalid pattern"
-             else (* idstatus = Syntax.ValueVariable *)
-                 raise TypeError "invalid pattern"
-           | NONE => raise TypeError "invalid pattern"
-      end
+  | typeCheckPat(ctx, env, ConPat(longvid, innerPat))
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (tysc, idstatus) =>
+           if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+               case instantiate(ctx, tysc) of
+                   USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars) = typeCheckPat(ctx, env, innerPat)
+                                                      in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                       ; (resultTy, innerVars)
+                                                      end
+                 | _ => raise TypeError "invalid pattern"
+           else (* idstatus = Syntax.ValueVariable *)
+               raise TypeError "invalid pattern"
+         | NONE => raise TypeError "invalid pattern"
+      )
   | typeCheckPat(ctx, env, TypedPat(WildcardPat, ty))
     = (ty, Syntax.VIdMap.empty)
   | typeCheckPat(ctx, env, TypedPat(pat, ty))
