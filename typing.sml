@@ -100,7 +100,7 @@ val primTyCon_char   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon 
 val primTyCon_exn    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 5)
 val primTyCon_bool   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 6)
 val primTyCon_ref    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 7)
-val primTyCon_list    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
+val primTyCon_list   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
 val primTy_unit   = USyntax.RecordType []
 val primTy_int    = USyntax.TyCon([], primTyCon_int)
 val primTy_word   = USyntax.TyCon([], primTyCon_word)
@@ -219,12 +219,6 @@ fun substituteConstraint (tv, replacement) =
      | IsEqType ty => IsEqType(substTy ty)
     end
 
-fun addSubst(ctx : Context, tv : USyntax.TyVar, ty : USyntax.Ty)
-    = let val subst = !(#tyVarSubst ctx)
-          val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
-      in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
-      end
-
 (* applySubstTy : Subst -> Ty -> Ty *)
 fun applySubstTy subst =
     let fun substTy (ty as TyVar tv')
@@ -297,8 +291,11 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
               | TyCon(_, _) => raise TypeError("record field for a non-record type")
               | FnType(_, _) => raise TypeError("record field for a function type")
               | TyVar tv =>
-                ( addTyVarConstraint(ctx, tv, TVFieldConstr { label = label, fieldTy = fieldTy })
-                ; unify(ctx, ctrs)
+                (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                     SOME replacement => unify(ctx, FieldConstr{label = label, recordTy = replacement, fieldTy = fieldTy} :: ctrs)
+                   | NONE => ( addTyVarConstraint(ctx, tv, TVFieldConstr { label = label, fieldTy = fieldTy })
+                             ; unify(ctx, ctrs)
+                             )
                 )
            )
          | IsEqType(RecordType fields) => unify(ctx, List.map (fn (label, ty) => IsEqType ty) fields @ ctrs)
@@ -309,21 +306,33 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
            else
                (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
                raise Fail "IsEqType TyCon: not impl"
-         | IsEqType(TyVar(tv)) => (addTyVarConstraint(ctx, tv, TVIsEqType) ; unify(ctx, ctrs))
+         | IsEqType(TyVar tv) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                                      SOME replacement => unify(ctx, IsEqType(replacement) :: ctrs)
+                                    | NONE => (addTyVarConstraint(ctx, tv, TVIsEqType) ; unify(ctx, ctrs))
+                                 )
       )
 and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
           unify(ctx, ctrs) (* do nothing *)
-      else if occurCheck tv ty then
-          raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
       else
-          let val tvc = !(#tyVarConstraints ctx)
-              val (e, tvc') = List.partition (fn (tv', c) => eqUTyVar(tv, tv')) tvc
-              val () = #tyVarConstraints ctx := tvc'
-              fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
-                | toConstraint (_, TVIsEqType) = IsEqType ty
-          in addSubst(ctx, tv, ty)
-           ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
+          let val subst = !(#tyVarSubst ctx)
+          in case USyntax.TyVarMap.find(subst, tv) of
+                 SOME replacement => unify(ctx, EqConstr(replacement, ty) :: ctrs)
+               | NONE =>
+                 let val ty = applySubstTy subst ty
+                 in if occurCheck tv ty then
+                        raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
+                    else
+                        let val tvc = !(#tyVarConstraints ctx)
+                            val (e, tvc') = List.partition (fn (tv', c) => eqUTyVar(tv, tv')) tvc
+                            val () = #tyVarConstraints ctx := tvc'
+                            fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
+                              | toConstraint (_, TVIsEqType) = IsEqType ty
+                            val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
+                        in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
+                         ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
+                        end
+                 end
           end
 fun addConstraint(ctx : Context, ct : Constraint) = unify(ctx, [ct])
 
@@ -547,10 +556,10 @@ and typeCheckPatRow(ctx, env, row)
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
-                                      val subst = !(#tyVarSubst ctx)
-                                      val tvc = !(#tyVarConstraints ctx)
-                                      val applySubst = applySubstTy subst
-                                  in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
-                                  end
+                                       val subst = !(#tyVarSubst ctx)
+                                       val tvc = !(#tyVarConstraints ctx)
+                                       val applySubst = applySubstTy subst
+                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp (fn ty => (print (print_Ty ty) ; applySubst ty)) exp)
+                                   end
 end (* local *)
 end (* structure Typing *)
