@@ -43,6 +43,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of Exp * (Pat * Exp) list
              | FnExp of (Pat * Exp) list
+             | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
      and Dec = ValDec of TyVar list * ValBind list (* non-recursive *)
              | RecValDec of TyVar list * ValBind list (* recursive (val rec) *)
              | TypeDec of TypBind list
@@ -101,6 +102,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp x) = "FnExp(" ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) x ^ ")"
+  | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
 and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
@@ -124,6 +126,7 @@ fun mapTyInExp doTy =
           | doExp(IfThenElseExp(e1, e2, e3)) = IfThenElseExp(doExp e1, doExp e2, doExp e3)
           | doExp(CaseExp(e, matches)) = CaseExp(doExp e, List.map doMatch matches)
           | doExp(FnExp matches) = FnExp(List.map doMatch matches)
+          | doExp(ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = ProjectionExp { label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
         and doDec(ValDec(tyvars, valbind)) = ValDec(tyvars, List.map doValBind valbind)
           | doDec(RecValDec(tyvars, valbind)) = RecValDec(tyvars, List.map doValBind valbind)
           | doDec(TypeDec _) = raise NotImpl "doDec(TypeDec) not implemented yet"
@@ -185,6 +188,7 @@ fun freeTyVarsInExp(bound, exp)
          | IfThenElseExp(exp1, exp2, exp3) => TyVarSet.union(freeTyVarsInExp(bound, exp1), TyVarSet.union(freeTyVarsInExp(bound, exp2), freeTyVarsInExp(bound, exp3)))
          | CaseExp(exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
          | FnExp(matches) => freeTyVarsInMatches(bound, matches, TyVarSet.empty)
+         | ProjectionExp { label = _, recordTy = recordTy, fieldTy = fieldTy } => TyVarSet.union(freeTyVarsInTy(bound, recordTy), freeTyVarsInTy(bound, fieldTy))
       )
 and freeTyVarsInMatches(bound, nil, acc) = acc
   | freeTyVarsInMatches(bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
@@ -361,6 +365,7 @@ fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, env, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, env, exp1), toUExp(ctx, env, exp2), toUExp(ctx, env, exp3))
   | toUExp(ctx, env, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, env, exp), toUMatch(ctx, env, match))
   | toUExp(ctx, env, S.FnExp(match)) = U.FnExp(toUMatch(ctx, env, match))
+  | toUExp(ctx, env, S.ProjectionExp label) = U.ProjectionExp { label = label, recordTy = USyntax.TyVar(freshTyVar(ctx)), fieldTy = USyntax.TyVar(freshTyVar(ctx)) }
 and toUMatch(ctx, env, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, env, pat), toUExp(ctx, env, exp))) matches
 and toUDec(ctx, env, S.ValDec(tyvars, valbind)) = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind)
   | toUDec(ctx, env, S.RecValDec(tyvars, valbind)) = U.RecValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind)

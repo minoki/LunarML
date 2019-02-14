@@ -172,6 +172,7 @@ fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
   | doExp(env, UnfixedSyntax.IfThenElseExp(e1, e2, e3)) = Syntax.IfThenElseExp(doExp(env, e1), doExp(env, e2), doExp(env, e3))
   | doExp(env, UnfixedSyntax.CaseExp(exp, matches)) = Syntax.CaseExp(doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
   | doExp(env, UnfixedSyntax.FnExp matches) = Syntax.FnExp (List.map (fn (pat, exp) => (doPat(env, pat), doExp(env, exp))) matches)
+  | doExp(env, UnfixedSyntax.ProjectionExp lab) = Syntax.ProjectionExp lab
 and doDecs(env, nil) = (Syntax.VIdMap.empty, nil)
   | doDecs(env, dec :: decs) = let val (env', dec') = doDec(env, dec)
                                    val (env'', decs') = doDecs(Syntax.VIdMap.unionWith #2 (env, env'), decs)
@@ -235,6 +236,7 @@ local
       | collectExp(bound, IfThenElseExp(x, y, z)) = union3(collectExp(bound, x), collectExp(bound, y), collectExp(bound, z))
       | collectExp(bound, CaseExp(x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, FnExp match) = collectMatch(bound, match)
+      | collectExp(bound, ProjectionExp lab) = TyVarSet.empty
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
 in
@@ -278,6 +280,7 @@ local
       | doExp(bound, IfThenElseExp(x, y, z)) = IfThenElseExp(doExp(bound, x), doExp(bound, y), doExp(bound, z))
       | doExp(bound, CaseExp(x, match)) = CaseExp(doExp(bound, x), doMatch(bound, match))
       | doExp(bound, FnExp(match)) = FnExp(doMatch(bound, match))
+      | doExp(bound, exp as ProjectionExp _) = exp
     and doMatch(bound, xs) = List.map (fn (pat, exp) => (pat, doExp(bound, exp))) xs
 in
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec

@@ -86,6 +86,7 @@ datatype Exp = SConExp of SCon (* special constant *)
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of Exp * (Pat * Exp) list
              | FnExp of (Pat * Exp) list
+             | ProjectionExp of Label
      and Dec = ValDec of TyVar list * ValBind list (* non-recursive *)
              | RecValDec of TyVar list * ValBind list (* recursive (val rec) *)
              | TypeDec of TypBind list
@@ -177,6 +178,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp x) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
+  | print_Exp (ProjectionExp label) = "ProjectionExp(" ^ print_Label label ^ ")"
 and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
@@ -213,6 +215,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of Exp * (Pat * Exp) list
              | FnExp of (Pat * Exp) list
+             | ProjectionExp of Syntax.Label
      and Dec = ValDec of Syntax.TyVar list * ValBind list
              | RecValDec of Syntax.TyVar list * ValBind list
              | TypeDec of Syntax.TypBind list

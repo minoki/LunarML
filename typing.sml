@@ -73,6 +73,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.TypedExp(e, _)) = isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.AppExp(conexp, e)) = isConexp(env, conexp) andalso isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.FnExp _) = true
+  | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"), _)) = false
@@ -387,6 +388,10 @@ fun typeCheckExp(ctx : Context, env : Env, SConExp(scon)) : USyntax.Ty
     = let val (argTy, retTy) = typeCheckMatch(ctx, env, matches)
       in USyntax.FnType(argTy, retTy)
       end
+  | typeCheckExp(ctx, env, ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy })
+    = ( addConstraint(ctx, FieldConstr { label = label, recordTy = recordTy, fieldTy = fieldTy })
+      ; USyntax.FnType(recordTy, fieldTy)
+      )
 (* typeCheckDecl : Context * Env * Dec list -> Env *)
 and typeCheckDecl(ctx, env, nil) : Env = env
   | typeCheckDecl(ctx, env, decl :: decls)

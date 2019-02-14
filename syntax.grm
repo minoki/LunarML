@@ -250,9 +250,7 @@ AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
 *)
       | LBRACK RBRACK (MkListExp []) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | LBRACK Exp ExpCSeqRest RBRACK (MkListExp (Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
-(*
-      | HASH Lab () (* [derived] projection: fn {Lab=VId,...} => VId *)
-*)
+      | HASH Lab (UnfixedSyntax.ProjectionExp(Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
 
 (* comma-separated list of expressions *)
 ExpCSeqRest : COMMA Exp ExpCSeqRest (Exp :: ExpCSeqRest)
