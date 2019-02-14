@@ -559,7 +559,7 @@ fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                        val subst = !(#tyVarSubst ctx)
                                        val tvc = !(#tyVarConstraints ctx)
                                        val applySubst = applySubstTy subst
-                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp (fn ty => (print (print_Ty ty) ; applySubst ty)) exp)
+                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
                                    end
 end (* local *)
 end (* structure Typing *)
