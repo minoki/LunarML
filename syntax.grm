@@ -143,11 +143,11 @@ Lab : AlnumIdent (Syntax.IdentifierLabel AlnumIdent)
 TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
       | SymbolicIdent (Syntax.MkTyCon SymbolicIdent)
 
-(* long value identifiers *)
+(* long value identifiers, including '=' *)
 LongVId : VId (Syntax.MkLongVId (nil, VId))
         | StrId DOT LongVId (case LongVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
 
-(* long value identifiers *)
+(* long value identifiers, excluding unqualified '=' *)
 LongBoundVId : BoundVId (Syntax.MkLongVId (nil, BoundVId))
              | StrId DOT LongBoundVId (case LongBoundVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
 
@@ -186,13 +186,24 @@ InfPat : AppPat
 AppOrInfPat : AtPat AppOrInfPat (AtPat :: AppOrInfPat)
             | AtPat ([AtPat])
 
+TypedPat : AppOrInfPat (UnfixedSyntax.JuxtapositionPat(AppOrInfPat))
+         | TypedPat COLON Ty (UnfixedSyntax.TypedPat (TypedPat, Ty)) (* typed *)
+
 (* patterns *)
-Pat : AppOrInfPat (UnfixedSyntax.JuxtapositionPat(AppOrInfPat))
-    | Pat COLON Ty (UnfixedSyntax.TypedPat (Pat, Ty)) (* typed *)
-    | OP VId COLON Ty AS Pat (UnfixedSyntax.LayeredPat (VId, SOME Ty, Pat)) (* layered, including 'op =' *)
-    | OP VId AS Pat (UnfixedSyntax.LayeredPat (VId, NONE, Pat)) (* layered, including 'op =' *)
-    | BoundVId COLON Ty AS Pat (UnfixedSyntax.LayeredPat (BoundVId, SOME Ty, Pat)) (* layered *)
-    | BoundVId AS Pat (UnfixedSyntax.LayeredPat (BoundVId, NONE, Pat)) (* layered *)
+Pat : TypedPat (TypedPat)
+(*
+    | OP VId COLON Ty AS Pat (UnfixedSyntax.LayeredPat (OP_VId, SOME Ty, Pat)) (* layered *)
+    | OP VId AS Pat (UnfixedSyntax.LayeredPat (OP_VId, NONE, Pat)) (* layered *)
+    | BoundVId COLON Ty AS Pat (UnfixedSyntax.LayeredPat (OP_VId, SOME Ty, Pat)) (* layered *)
+    | BoundVId AS Pat (UnfixedSyntax.LayeredPat (OP_VId, NONE, Pat)) (* layered *)
+*)
+    | TypedPat AS Pat (case TypedPat of
+                           UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat) (* TODO: Check infix status *)
+                         | UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat)
+                         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat) (* TODO: Check infix status *)
+                         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat)
+                         | _ => raise Fail "conjuctive: not implemented yet"
+                      ) (* conjunctive (R) *)
 
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
