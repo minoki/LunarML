@@ -92,15 +92,15 @@ fun isExhaustive(env : Env, USyntax.WildcardPat) = true
   | isExhaustive(env, USyntax.TypedPat(innerPat, _)) = isExhaustive(env, innerPat)
   | isExhaustive(env, USyntax.LayeredPat(_, _, innerPat)) = isExhaustive(env, innerPat)
 
-val primTyCon_int    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0)
-val primTyCon_word   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 1)
-val primTyCon_real   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "real"), 2)
-val primTyCon_string = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "string"), 3)
-val primTyCon_char   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 4)
-val primTyCon_exn    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 5)
-val primTyCon_bool   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 6)
-val primTyCon_ref    = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 7)
-val primTyCon_list   = USyntax.ULongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
+val primTyCon_int    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0)
+val primTyCon_word   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 1)
+val primTyCon_real   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "real"), 2)
+val primTyCon_string = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "string"), 3)
+val primTyCon_char   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 4)
+val primTyCon_exn    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 5)
+val primTyCon_bool   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 6)
+val primTyCon_ref    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 7)
+val primTyCon_list   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
 val primTy_unit   = USyntax.RecordType []
 val primTy_int    = USyntax.TyCon([], primTyCon_int)
 val primTy_word   = USyntax.TyCon([], primTyCon_word)
@@ -119,7 +119,7 @@ val initialEnv : Env
     = let open Syntax
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
           val mkValMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
-          val tyVarA = USyntax.UTyVar(Syntax.MkTyVar("a"), 0)
+          val tyVarA = USyntax.MkTyVar("a", 0)
       in MkEnv { tyMap = mkTyMap
                              [(MkTyCon "unit", TyStr(TypeFcn([], primTy_unit), emptyValEnv))
                              ,(MkTyCon "bool", TyStr(TypeFcn([], primTy_bool)
@@ -186,7 +186,7 @@ fun freshTyVar(ctx : Context) : USyntax.TyVar
     = let val nextTyVar = #nextTyVar ctx
           val i = !nextTyVar
       in nextTyVar := i + 1
-       ; USyntax.UTyVar(Syntax.MkTyVar "_", i)
+       ; USyntax.MkTyVar("_", i)
       end
 
 local open USyntax

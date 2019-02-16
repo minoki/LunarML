@@ -1,14 +1,10 @@
 structure USyntax = struct
-datatype UTyVar = UTyVar of Syntax.TyVar * int
-datatype UTyCon = UTyCon of Syntax.TyCon * int
-datatype ULongTyCon = ULongTyCon of Syntax.LongTyCon * int
-fun eqUTyVar(UTyVar(_,a),UTyVar(_,b)) = a = b
-fun eqUTyCon(UTyCon(_,a),UTyCon(_,b)) = a = b
-fun eqULongTyCon(ULongTyCon(_,a),ULongTyCon(_,b)) = a = b
-
-type TyVar = UTyVar
-type TyCon = UTyCon
-type LongTyCon = ULongTyCon
+datatype TyVar = MkTyVar of string * int
+datatype TyCon = MkTyCon of string * int
+datatype LongTyCon = MkLongTyCon of Syntax.LongTyCon * int
+fun eqUTyVar(MkTyVar(_,a),MkTyVar(_,b)) = a = b
+fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
+fun eqULongTyCon(MkLongTyCon(_,a),MkLongTyCon(_,b)) = a = b
 
 datatype Ty = TyVar of TyVar (* type variable *)
             | RecordType of (Syntax.Label * Ty) list (* record type expression *)
@@ -58,18 +54,18 @@ type Program = Dec list
 
 structure TyVarKey = struct
 type ord_key = TyVar
-fun compare (UTyVar(Syntax.MkTyVar x, a), UTyVar(Syntax.MkTyVar y, b)) = case String.compare (x,y) of
-                                                                             EQUAL => Int.compare(a, b)
-                                                                           | ord => ord
+fun compare (MkTyVar(x, a), MkTyVar(y, b)) = case String.compare (x,y) of
+                                                 EQUAL => Int.compare(a, b)
+                                               | ord => ord
 end : ORD_KEY
 structure TyVarSet = BinarySetFn(TyVarKey)
 structure TyVarMap = BinaryMapFn(TyVarKey)
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_TyVar(UTyVar(tv, n)) = "UTyVar(" ^ Syntax.print_TyVar tv ^ "," ^ Int.toString n ^ ")"
-fun print_TyCon(UTyCon(tycon, n)) = "UTyCon(" ^ Syntax.print_TyCon tycon ^ "," ^ Int.toString n ^ ")"
-fun print_LongTyCon(ULongTyCon(longtycon, n)) = "ULongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
+fun print_TyVar(MkTyVar(tvname, n)) = "MkTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
+fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
+fun print_LongTyCon(MkLongTyCon(longtycon, n)) = "MkLongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType xs) = "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
   | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
@@ -257,7 +253,7 @@ local structure S = Syntax
       fun genTyVarId(ctx : ('a,'b) Context)
           = let val id = !(#nextTyVar ctx)
             in #nextTyVar ctx := id + 1 ; id end
-      fun genTyVar(ctx, tv) = USyntax.UTyVar(tv, genTyVarId(ctx))
+      fun genTyVar(ctx, Syntax.MkTyVar tvname) = USyntax.MkTyVar(tvname, genTyVarId(ctx))
       fun freshTyVar(ctx : ('a,'b) Context) = genTyVar(ctx, Syntax.MkTyVar "_")
 
 (*
@@ -296,7 +292,7 @@ in
 fun toUTy(ctx : ('a,'b) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
   | toUTy(ctx, env, S.RecordType row) = U.RecordType(toUTyRow(ctx, env, row))
   | toUTy(ctx, env, S.TyCon(args, tycon)) = (case lookupLongTyCon(env, tycon) of
-                                                 BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, env, ty)) args, U.ULongTyCon(tycon, id))
+                                                 BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, env, ty)) args, U.MkLongTyCon(tycon, id))
                                                | BTyAlias _ => raise Fail "type alias not supported yet"
                                             )
   | toUTy(ctx, env, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, env, ty1), toUTy(ctx, env, ty2))
