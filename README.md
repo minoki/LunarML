@@ -69,7 +69,7 @@ val ctx =
    tyVarSubst=ref E} : Typing.Context
 - val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
 val ast2 = LetInExp ([ValDec (#,#)],AppExp (FnExp #,VarExp #)) : USyntax.Exp
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+- val (a, b, c, d) = Typing.typeCheckExp_(ctx, Typing.initialEnv, ast2);
 val a =
   T
     {cnt=3,key=UTyVar (MkTyVar #,101),
@@ -96,7 +96,7 @@ val ctx =
 - val ast2 = ToTypedSyntax.toUExp(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInExp(Syntax.TyVarSet.empty, ast1));
 val ast2 = LetInExp ([ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
   : USyntax.Exp
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+- val (a, b, c, d) = Typing.typeCheckExp_(ctx, Typing.initialEnv, ast2);
 val a =
   T
     {cnt=7,key=UTyVar (MkTyVar #,105),
@@ -130,7 +130,7 @@ val ctx =
 val ast2 =
   LetInExp ([ValDec (#,#),ValDec (#,#)],RecordExp [(#,#),(#,#),(#,#)])
   : USyntax.Exp
-- val (a, b, c, d) = Typing.typeCheckExp(ctx, Typing.initialEnv, ast2);
+- val (a, b, c, d) = Typing.typeCheckExp_(ctx, Typing.initialEnv, ast2);
 
 uncaught exception TypeError
   raised at: typing.sml:334.17-334.130
