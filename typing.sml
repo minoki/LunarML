@@ -4,6 +4,12 @@ datatype UnaryConstraint
                 , fieldTy : USyntax.Ty
                 }
   | IsEqType
+  | IsIntegral (* Int, Word; div, mod; defaults to int *)
+  | IsSignedReal (* Int, Real; abs; defaults to int *)
+  | IsRing (* Int, Word, Real; *, +, -; defaults to int *)
+  | IsField (* Real; /; defaults to real *)
+  | IsSigned (* Int, Real; ~; defaults to int *)
+  | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
 
 datatype Constraint
   = EqConstr of USyntax.Ty * USyntax.Ty (* ty1 = ty2 *)
@@ -31,8 +37,20 @@ fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strM
 fun freeTyVarsInConstraint(bound, EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
   | freeTyVarsInConstraint(bound, UnaryConstraint(recordTy, HasField{fieldTy = fieldTy, ...})) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, recordTy), USyntax.freeTyVarsInTy(bound, fieldTy))
   | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsEqType)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsIntegral)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsSignedReal)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsRing)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsField)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsSigned)) = USyntax.freeTyVarsInTy(bound, ty)
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsOrdered)) = USyntax.freeTyVarsInTy(bound, ty)
 fun freeTyVarsInUnaryConstraint(bound, HasField{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
   | freeTyVarsInUnaryConstraint(bound, IsEqType) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsIntegral) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsSignedReal) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsRing) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsField) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsSigned) = USyntax.TyVarSet.empty
+  | freeTyVarsInUnaryConstraint(bound, IsOrdered) = USyntax.TyVarSet.empty
 
 type Context = { nextTyVar : int ref
                , tyVarConstraints : ((USyntax.TyVar * UnaryConstraint) list) ref (* should use (multi-)map? *)
@@ -143,23 +161,21 @@ val initialEnv : Env
                               ,(MkVId "Match", (TypeScheme ([], primTy_exn), ExceptionConstructor))
                               ,(MkVId "Bind", (TypeScheme ([], primTy_exn), ExceptionConstructor))
                               ,(MkVId "::", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))), ValueConstructor)) (* forall 'a. 'a * 'a list -> 'a list *)
-                              (* ,(MkVId "=", (TypeScheme ([], _), ValueVariable)) *) (* forall ''a. ''a * ''a -> bool *)
+                              ,(MkVId "=", (TypeScheme ([(tyVarA, [IsEqType])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* forall ''a. ''a * ''a -> bool *)
                               ,(MkVId ":=", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.PairType(USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref), USyntax.TyVar(tyVarA)), primTy_unit)), ValueVariable)) (* forall 'a. 'a ref * 'a -> {} *)
                               (* Overloaded identifiers *)
-                               (*
-                              ,(MkVId "abs", (_, ValueVariable)) (* realint -> realint, default: int -> int *)
-                              ,(MkVId "~", (_, ValueVariable)) (* realint -> realint, default: int -> int *)
-                              ,(MkVId "div", (_, ValueVariable)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                              ,(MkVId "mod", (_, ValueVariable)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                              ,(MkVId "*", (_, ValueVariable)) (* num * num -> num, default: int * int -> int *)
-                              ,(MkVId "/", (_, ValueVariable)) (* Real * Real -> Real, default: real * real -> real *)
-                              ,(MkVId "+", (_, ValueVariable)) (* num * num -> num, default: int * int -> int *)
-                              ,(MkVId "-", (_, ValueVariable)) (* num * num -> num, default: int * int -> int *)
-                              ,(MkVId "<", (_, ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                              ,(MkVId ">", (_, ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                              ,(MkVId "<=", (_, ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                              ,(MkVId ">=", (_, ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                               *)
+                              ,(MkVId "abs", (TypeScheme([(tyVarA, [IsSignedReal])], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA))), ValueVariable)) (* realint -> realint, default: int -> int *)
+                              ,(MkVId "~", (TypeScheme([(tyVarA, [IsSigned])], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA))), ValueVariable)) (* realint -> realint, default: int -> int *)
+                              ,(MkVId "div", (TypeScheme([(tyVarA, [IsIntegral])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* wordint * wordint -> wordint, default: int * int -> int *)
+                              ,(MkVId "mod", (TypeScheme([(tyVarA, [IsIntegral])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* wordint * wordint -> wordint, default: int * int -> int *)
+                              ,(MkVId "*", (TypeScheme([(tyVarA, [IsRing])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* num * num -> num, default: int * int -> int *)
+                              ,(MkVId "/", (TypeScheme([(tyVarA, [IsField])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* Real * Real -> Real, default: real * real -> real *)
+                              ,(MkVId "+", (TypeScheme([(tyVarA, [IsRing])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* num * num -> num, default: int * int -> int *)
+                              ,(MkVId "-", (TypeScheme([(tyVarA, [IsRing])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), USyntax.TyVar(tyVarA))), ValueVariable)) (* num * num -> num, default: int * int -> int *)
+                              ,(MkVId "<", (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                              ,(MkVId ">", (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                              ,(MkVId "<=", (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                              ,(MkVId ">=", (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                               ]
                , strMap = Syntax.StrIdMap.empty
                }
@@ -211,6 +227,12 @@ fun substituteConstraint (tv, replacement) =
     in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
      | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) => UnaryConstraint(substTy recordTy, HasField{label = label, fieldTy = substTy fieldTy})
      | UnaryConstraint(ty, IsEqType) => UnaryConstraint(substTy ty, IsEqType)
+     | UnaryConstraint(ty, IsIntegral) => UnaryConstraint(substTy ty, IsIntegral)
+     | UnaryConstraint(ty, IsSignedReal) => UnaryConstraint(substTy ty, IsSignedReal)
+     | UnaryConstraint(ty, IsRing) => UnaryConstraint(substTy ty, IsRing)
+     | UnaryConstraint(ty, IsField) => UnaryConstraint(substTy ty, IsField)
+     | UnaryConstraint(ty, IsSigned) => UnaryConstraint(substTy ty, IsSigned)
+     | UnaryConstraint(ty, IsOrdered) => UnaryConstraint(substTy ty, IsOrdered)
     end
 
 (* applySubstTy : Subst -> Ty -> Ty *)
@@ -296,17 +318,59 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                 )
            )
          | UnaryConstraint(RecordType fields, IsEqType) => unify(ctx, List.map (fn (label, ty) => UnaryConstraint(ty, IsEqType)) fields @ ctrs)
+         | UnaryConstraint(RecordType _, IsIntegral) => raise TypeError("cannot apply arithmetic operator on record type")
+         | UnaryConstraint(RecordType _, IsSignedReal) => raise TypeError("cannot apply arithmetic operator on record type")
+         | UnaryConstraint(RecordType _, IsRing) => raise TypeError("cannot apply arithmetic operator on record type")
+         | UnaryConstraint(RecordType _, IsField) => raise TypeError("cannot apply arithmetic operator on record type")
+         | UnaryConstraint(RecordType _, IsSigned) => raise TypeError("cannot apply arithmetic operator on record type")
+         | UnaryConstraint(RecordType _, IsOrdered) => raise TypeError("cannot compare records")
          | UnaryConstraint(FnType _, IsEqType) => raise TypeError("function type does not admit equality")
+         | UnaryConstraint(FnType _, IsIntegral) => raise TypeError("cannot apply arithmetic operator on function type")
+         | UnaryConstraint(FnType _, IsSignedReal) => raise TypeError("cannot apply arithmetic operator on function type")
+         | UnaryConstraint(FnType _, IsRing) => raise TypeError("cannot apply arithmetic operator on function type")
+         | UnaryConstraint(FnType _, IsField) => raise TypeError("cannot apply arithmetic operator on function type")
+         | UnaryConstraint(FnType _, IsSigned) => raise TypeError("cannot apply arithmetic operator on function type")
+         | UnaryConstraint(FnType _, IsOrdered) => raise TypeError("cannot compare functions")
          | UnaryConstraint(TyCon(tyargs, longtycon), IsEqType) =>
            if eqULongTyCon(longtycon, primTyCon_ref) then
                unify(ctx, ctrs) (* do nothing *)
            else
                (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
                raise Fail "IsEqType TyCon: not impl"
-         | UnaryConstraint(TyVar tv, IsEqType) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                                                       SOME replacement => unify(ctx, UnaryConstraint(replacement, IsEqType) :: ctrs)
-                                                     | NONE => (addTyVarConstraint(ctx, tv, IsEqType) ; unify(ctx, ctrs))
-                                                  )
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsIntegral) =>
+           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("arithmetic operator on unsupported type")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsSignedReal) =>
+           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_real) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("arithmetic operator on unsupported type")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsRing) =>
+           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) orelse eqULongTyCon(longtycon, primTyCon_real) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("arithmetic operator on unsupported type")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsField) =>
+           if eqULongTyCon(longtycon, primTyCon_real) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("arithmetic operator on unsupported type")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsSigned) =>
+           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_real) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("arithmetic operator on unsupported type")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsOrdered) =>
+           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) orelse eqULongTyCon(longtycon, primTyCon_real) orelse eqULongTyCon(longtycon, primTyCon_string) orelse eqULongTyCon(longtycon, primTyCon_char) then
+               unify(ctx, ctrs) (* do nothing *)
+           else
+               raise TypeError("comparison operator on unsupported type")
+         | UnaryConstraint(TyVar tv, pred) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                                                   SOME replacement => unify(ctx, UnaryConstraint(replacement, pred) :: ctrs)
+                                                 | NONE => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, ctrs))
+                                              )
       )
 and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
