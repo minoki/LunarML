@@ -1,4 +1,14 @@
 structure Typing = struct
+datatype UnaryConstraint
+  = HasField of { label : Syntax.Label
+                , fieldTy : USyntax.Ty
+                }
+  | IsEqType
+
+datatype Constraint
+  = EqConstr of USyntax.Ty * USyntax.Ty (* ty1 = ty2 *)
+  | UnaryConstraint of USyntax.Ty * UnaryConstraint
+
 datatype TypeFcn = TypeFcn of USyntax.TyVar list * USyntax.Ty
 datatype TypeScheme = TypeScheme of USyntax.TyVar list * USyntax.Ty
 type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
@@ -10,22 +20,6 @@ datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
 
-datatype Constraint
-  = EqConstr of USyntax.Ty * USyntax.Ty (* ty1 = ty2 *)
-  | FieldConstr of { label : Syntax.Label
-                   , recordTy : USyntax.Ty
-                   , fieldTy : USyntax.Ty
-                   } (* recordTy = {label: fieldTy, ...} *)
-  | IsEqType of USyntax.Ty
-(* | Is(Int|Word|Real|String|Char) of USyntax.Ty *)
-(* IsWordInt|IsRealInt|IsNum|IsNumTxt *)
-
-datatype TyVarConstraint
-  = TVFieldConstr of { label : Syntax.Label
-                     , fieldTy : USyntax.Ty
-                     }
-  | TVIsEqType
-
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 
 fun freeTyVarsInTypeScheme(bound, TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, tyvars), ty)
@@ -35,13 +29,13 @@ fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strM
       in Syntax.StrIdMap.foldl (fn (env, set) => USyntax.TyVarSet.union(set, freeTyVarsInEnv(bound, env))) valMapSet strMap
       end
 fun freeTyVarsInConstraint(bound, EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
-  | freeTyVarsInConstraint(bound, FieldConstr{recordTy = recordTy, fieldTy = fieldTy, ...}) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, recordTy), USyntax.freeTyVarsInTy(bound, fieldTy))
-  | freeTyVarsInConstraint(bound, IsEqType ty) = USyntax.freeTyVarsInTy(bound, ty)
-fun freeTyVarsInTyVarConstraint(bound, TVFieldConstr{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
-  | freeTyVarsInTyVarConstraint(bound, TVIsEqType) = USyntax.TyVarSet.empty
+  | freeTyVarsInConstraint(bound, UnaryConstraint(recordTy, HasField{fieldTy = fieldTy, ...})) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, recordTy), USyntax.freeTyVarsInTy(bound, fieldTy))
+  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsEqType)) = USyntax.freeTyVarsInTy(bound, ty)
+fun freeTyVarsInUnaryConstraint(bound, HasField{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
+  | freeTyVarsInUnaryConstraint(bound, IsEqType) = USyntax.TyVarSet.empty
 
 type Context = { nextTyVar : int ref
-               , tyVarConstraints : ((USyntax.TyVar * TyVarConstraint) list) ref (* should use (multi-)map? *)
+               , tyVarConstraints : ((USyntax.TyVar * UnaryConstraint) list) ref (* should use (multi-)map? *)
                , tyVarSubst : Subst ref
                }
 
@@ -177,7 +171,7 @@ fun newContext() : Context
       , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
-fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : TyVarConstraint)
+fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : UnaryConstraint)
     = let val cts = !(#tyVarConstraints ctx)
       in #tyVarConstraints ctx := (tv, ct) :: cts
       end
@@ -215,8 +209,8 @@ fun substituteTy (tv, replacement) =
 fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
     in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
-     | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy } => FieldConstr{label = label, recordTy = substTy recordTy, fieldTy = substTy fieldTy}
-     | IsEqType ty => IsEqType(substTy ty)
+     | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) => UnaryConstraint(substTy recordTy, HasField{label = label, fieldTy = substTy fieldTy})
+     | UnaryConstraint(ty, IsEqType) => UnaryConstraint(substTy ty, IsEqType)
     end
 
 (* applySubstTy : Subst -> Ty -> Ty *)
@@ -281,7 +275,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
            else
                raise TypeError("unification failed: type constructor mismatch") (* ??? *)
          | EqConstr(_, _) => raise TypeError("unification failed: not match")
-         | FieldConstr{label = label, recordTy = recordTy, fieldTy = fieldTy} =>
+         | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) =>
            (case recordTy of
                 RecordType(fields) =>
                 (case List.find (fn (label', _) => label = label') fields of
@@ -292,24 +286,24 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
               | FnType(_, _) => raise TypeError("record field for a function type")
               | TyVar tv =>
                 (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                     SOME replacement => unify(ctx, FieldConstr{label = label, recordTy = replacement, fieldTy = fieldTy} :: ctrs)
-                   | NONE => ( addTyVarConstraint(ctx, tv, TVFieldConstr { label = label, fieldTy = fieldTy })
+                     SOME replacement => unify(ctx, UnaryConstraint(replacement, HasField{label = label, fieldTy = fieldTy}) :: ctrs)
+                   | NONE => ( addTyVarConstraint(ctx, tv, HasField{ label = label, fieldTy = fieldTy })
                              ; unify(ctx, ctrs)
                              )
                 )
            )
-         | IsEqType(RecordType fields) => unify(ctx, List.map (fn (label, ty) => IsEqType ty) fields @ ctrs)
-         | IsEqType(FnType _) => raise TypeError("function type does not admit equality")
-         | IsEqType(TyCon(tyargs, longtycon)) =>
+         | UnaryConstraint(RecordType fields, IsEqType) => unify(ctx, List.map (fn (label, ty) => UnaryConstraint(ty, IsEqType)) fields @ ctrs)
+         | UnaryConstraint(FnType _, IsEqType) => raise TypeError("function type does not admit equality")
+         | UnaryConstraint(TyCon(tyargs, longtycon), IsEqType) =>
            if eqULongTyCon(longtycon, primTyCon_ref) then
                unify(ctx, ctrs) (* do nothing *)
            else
                (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
                raise Fail "IsEqType TyCon: not impl"
-         | IsEqType(TyVar tv) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                                      SOME replacement => unify(ctx, IsEqType(replacement) :: ctrs)
-                                    | NONE => (addTyVarConstraint(ctx, tv, TVIsEqType) ; unify(ctx, ctrs))
-                                 )
+         | UnaryConstraint(TyVar tv, IsEqType) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                                                       SOME replacement => unify(ctx, UnaryConstraint(replacement, IsEqType) :: ctrs)
+                                                     | NONE => (addTyVarConstraint(ctx, tv, IsEqType) ; unify(ctx, ctrs))
+                                                  )
       )
 and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
@@ -326,8 +320,7 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
                         let val tvc = !(#tyVarConstraints ctx)
                             val (e, tvc') = List.partition (fn (tv', c) => eqUTyVar(tv, tv')) tvc
                             val () = #tyVarConstraints ctx := tvc'
-                            fun toConstraint (_, TVFieldConstr { label = label, fieldTy = fieldTy }) = FieldConstr { label = label, recordTy = ty, fieldTy = fieldTy }
-                              | toConstraint (_, TVIsEqType) = IsEqType ty
+                            fun toConstraint (_, predicate) = UnaryConstraint(ty, predicate)
                             val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
                         in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
                          ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
@@ -398,7 +391,7 @@ fun typeCheckExp(ctx : Context, env : Env, SConExp(scon)) : USyntax.Ty
       in USyntax.FnType(argTy, retTy)
       end
   | typeCheckExp(ctx, env, ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy })
-    = ( addConstraint(ctx, FieldConstr { label = label, recordTy = recordTy, fieldTy = fieldTy })
+    = ( addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = fieldTy }))
       ; USyntax.FnType(recordTy, fieldTy)
       )
 (* typeCheckDecl : Context * Env * Dec list -> Env *)
@@ -510,7 +503,7 @@ and typeCheckPat(ctx, env, WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.VIdMap.
     = let val (row', vars) = typeCheckPatRow(ctx, env, row)
       in if wildcard then
              let val recordTy = TyVar(freshTyVar(ctx))
-                 fun oneField(label, ty) = addConstraint(ctx, FieldConstr { label = label, recordTy = recordTy, fieldTy = ty })
+                 fun oneField(label, ty) = addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = ty }))
              in List.app oneField row'
               ; (recordTy, vars)
              end
@@ -554,7 +547,7 @@ and typeCheckPatRow(ctx, env, row)
       in List.foldl oneField ([], Syntax.VIdMap.empty) row
       end
 
-(* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * TyVarConstraint) list * USyntax.Ty * USyntax.Exp *)
+(* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * UnaryConstraint) list * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                        val subst = !(#tyVarSubst ctx)
                                        val tvc = !(#tyVarConstraints ctx)
@@ -562,7 +555,7 @@ fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                    in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
                                    end
 
-(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (TyVar * TyVarConstraint) list * USyntax.Dec list *)
+(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (TyVar * UnaryConstraint) list * USyntax.Dec list *)
 fun typeCheckProgram(ctx, env, decls) = let val env' = typeCheckDecl(ctx, env, decls)
                                             val subst = !(#tyVarSubst ctx)
                                             val tvc = !(#tyVarConstraints ctx)
