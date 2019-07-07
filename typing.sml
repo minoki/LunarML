@@ -561,5 +561,13 @@ fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                        val applySubst = applySubstTy subst
                                    in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
                                    end
+
+(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (TyVar * TyVarConstraint) list * USyntax.Dec list *)
+fun typeCheckProgram(ctx, env, decls) = let val env' = typeCheckDecl(ctx, env, decls)
+                                            val subst = !(#tyVarSubst ctx)
+                                            val tvc = !(#tyVarConstraints ctx)
+                                            val applySubst = applySubstTy subst
+                                        in (subst, tvc, List.map (USyntax.mapTyInDec applySubst) decls)
+                                        end
 end (* local *)
 end (* structure Typing *)

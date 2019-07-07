@@ -283,6 +283,7 @@ local
       | doExp(bound, exp as ProjectionExp _) = exp
     and doMatch(bound, xs) = List.map (fn (pat, exp) => (pat, doExp(bound, exp))) xs
 in
+val scopeTyVarsInDecs: TyVarSet.set * Dec list -> Dec list = doDecList
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
 end (* local *)

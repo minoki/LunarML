@@ -39,7 +39,7 @@ fun MkListExp nil = nilExp
     | WITHTYPE | WHERE | WHILE
     (* other *)
     | EOF
-%nonterm START of UnfixedSyntax.Exp
+%nonterm START of UnfixedSyntax.Dec list
        | IntConst of int
        | SCon of Syntax.SCon
        | TyVar of Syntax.TyVar
@@ -105,7 +105,7 @@ fun MkListExp nil = nilExp
 
 %%
 
-START : Exp (Exp)
+START : Program (Program)
 
 IntConst : PosInt (PosInt)
          | ZNIntConst (ZNIntConst)
