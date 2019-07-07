@@ -10,7 +10,7 @@ datatype Constraint
   | UnaryConstraint of USyntax.Ty * UnaryConstraint
 
 datatype TypeFcn = TypeFcn of USyntax.TyVar list * USyntax.Ty
-datatype TypeScheme = TypeScheme of USyntax.TyVar list * USyntax.Ty
+datatype TypeScheme = TypeScheme of (USyntax.TyVar * UnaryConstraint list) list * USyntax.Ty
 type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
 val emptyValEnv = Syntax.VIdMap.empty
 datatype TyStr = TyStr of TypeFcn * ValEnv
@@ -22,7 +22,7 @@ datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
 
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 
-fun freeTyVarsInTypeScheme(bound, TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, tyvars), ty)
+fun freeTyVarsInTypeScheme(bound, TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, List.map #1 tyvars), ty)
 fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
     = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
           (* TODO: tyMap? *)
@@ -126,25 +126,25 @@ val initialEnv : Env
                              ,(MkTyCon "string", TyStr(TypeFcn([], primTy_string), emptyValEnv))
                              ,(MkTyCon "char", TyStr(TypeFcn([], primTy_char), emptyValEnv))
                              ,(MkTyCon "list", TyStr(TypeFcn([tyVarA], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))
-                                                    , mkValMap [(MkVId "nil", (TypeScheme ([tyVarA], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), ValueConstructor))
-                                                               ,(MkVId "::", (TypeScheme ([tyVarA], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))), ValueConstructor))
+                                                    , mkValMap [(MkVId "nil", (TypeScheme ([(tyVarA, [])], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), ValueConstructor))
+                                                               ,(MkVId "::", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))), ValueConstructor))
                                                                ]))
                              ,(MkTyCon "ref", TyStr(TypeFcn([tyVarA], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref))
-                                                   , mkValMap [(MkVId "ref", (TypeScheme ([tyVarA], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref))), ValueConstructor))
+                                                   , mkValMap [(MkVId "ref", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref))), ValueConstructor))
                                                               ]))
                              ,(MkTyCon "exn", TyStr(TypeFcn([], primTy_exn), emptyValEnv))
                              ]
                , valMap = mkValMap
                               (* C Appendix: The Initial Static Basis *)
-                              [(MkVId "ref", (TypeScheme ([tyVarA], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref))), ValueConstructor)) (* forall 'a. 'a -> 'a ref *)
-                              ,(MkVId "nil", (TypeScheme ([tyVarA], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), ValueConstructor)) (* forall 'a. 'a list *)
+                              [(MkVId "ref", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref))), ValueConstructor)) (* forall 'a. 'a -> 'a ref *)
+                              ,(MkVId "nil", (TypeScheme ([(tyVarA, [])], USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), ValueConstructor)) (* forall 'a. 'a list *)
                               ,(MkVId "true", (TypeScheme ([], primTy_bool), ValueConstructor))
                               ,(MkVId "false", (TypeScheme ([], primTy_bool), ValueConstructor))
                               ,(MkVId "Match", (TypeScheme ([], primTy_exn), ExceptionConstructor))
                               ,(MkVId "Bind", (TypeScheme ([], primTy_exn), ExceptionConstructor))
-                              ,(MkVId "::", (TypeScheme ([tyVarA], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))), ValueConstructor)) (* forall 'a. 'a * 'a list -> 'a list *)
+                              ,(MkVId "::", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list)), USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_list))), ValueConstructor)) (* forall 'a. 'a * 'a list -> 'a list *)
                               (* ,(MkVId "=", (TypeScheme ([], _), ValueVariable)) *) (* forall ''a. ''a * ''a -> bool *)
-                              ,(MkVId ":=", (TypeScheme ([tyVarA], USyntax.FnType(USyntax.PairType(USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref), USyntax.TyVar(tyVarA)), primTy_unit)), ValueVariable)) (* forall 'a. 'a ref * 'a -> {} *)
+                              ,(MkVId ":=", (TypeScheme ([(tyVarA, [])], USyntax.FnType(USyntax.PairType(USyntax.TyCon([USyntax.TyVar(tyVarA)], primTyCon_ref), USyntax.TyVar(tyVarA)), primTy_unit)), ValueVariable)) (* forall 'a. 'a ref * 'a -> {} *)
                               (* Overloaded identifiers *)
                                (*
                               ,(MkVId "abs", (_, ValueVariable)) (* realint -> realint, default: int -> int *)
@@ -228,7 +228,7 @@ fun applySubstTy subst =
 fun applySubstEnv subst =
     let val substTy = applySubstTy subst
         fun substTypeScheme(TypeScheme(tyvars, ty))
-            = let val subst' = USyntax.TyVarMap.filteri (fn (tv, ty) => not (List.exists (fn tv' => eqUTyVar(tv', tv)) tyvars)) subst
+            = let val subst' = USyntax.TyVarMap.filteri (fn (tv, ty) => not (List.exists (fn (tv', _) => eqUTyVar(tv', tv)) tyvars)) subst
               in TypeScheme(tyvars, applySubstTy subst' ty)
                  (* TODO: unwanted capture? e.g. 'a. 'a list * 'c, 'c := 'b * 'a *)
               end
@@ -242,7 +242,10 @@ fun applySubstEnv subst =
 
 (* instantiate : Context * TypeScheme -> Ty *)
 fun instantiate(ctx, TypeScheme(vars, ty))
-    = let val subst = List.foldl (fn (v, set) => USyntax.TyVarMap.insert(set, v, TyVar(freshTyVar(ctx)))) USyntax.TyVarMap.empty vars
+    = let val subst = List.foldl (fn ((v, preds), set) => let val tv = freshTyVar(ctx)
+                                                          in List.app (fn pred => addTyVarConstraint(ctx, tv, pred)) preds
+                                                           ; USyntax.TyVarMap.insert(set, v, TyVar(tv))
+                                                          end) USyntax.TyVarMap.empty vars
       in applySubstTy subst ty
       end
 
@@ -410,7 +413,7 @@ and typeCheckDecl(ctx, env, nil) : Env = env
                                          val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
                                          val unconstrainedTyVars = TyVarSet.filter (fn tv => not (List.exists (fn (tv', _) => eqUTyVar(tv, tv')) tvc)) tyVars_ty (* TODO: Allow equality constraint *)
                                          val tyVars = TyVarSet.difference(unconstrainedTyVars, tyVars_env)
-                                     in (TypeScheme(TyVarSet.listItems tyVars, ty'), Syntax.ValueVariable)
+                                     in (TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty'), Syntax.ValueVariable)
                                      end
                val valMap' = Syntax.VIdMap.map doVar vars
                val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
