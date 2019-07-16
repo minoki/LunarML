@@ -299,7 +299,6 @@ in
 (* toUExp : Context * Env * Syntax.Exp -> USyntax.Exp *)
 (* toUMatch : Context * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
 (* toUDecs : Context * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
-(* doDecl : Context * Env * Syntax.Dec list * USyntax.Dec list -> Env * USyntax.Dec list *)
 fun toUTy(ctx : ('a,'b) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
   | toUTy(ctx, env, S.RecordType row) = U.RecordType(toUTyRow(ctx, env, row))
   | toUTy(ctx, env, S.TyCon(args, tycon)) = (case lookupLongTyCon(env, tycon) of
@@ -362,47 +361,55 @@ fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
 and toUMatch(ctx, env, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, env, pat), toUExp(ctx, env, exp))) matches
 and toUValBind(ctx, env, S.PatBind(pat, exp)) = U.PatBind(toUPat(ctx, env, pat), toUExp(ctx, env, exp))
 and toUTypBind(ctx, env, _) = raise Fail "not implemented yet"
-and toUDecs(ctx, env, decls) = doDecl(ctx, env, decls, nil)
-and doDecl(ctx, env, nil, acc) = (env, List.rev acc)
-  | doDecl(ctx, env, decl :: decls, acc)
+and toUDecs(ctx, env, nil) = (emptyEnv, nil)
+  | toUDecs(ctx, env, decl :: decls)
     = (case decl of
            S.ValDec(tyvars, valbind) =>
            let val decl' = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind)
-           in doDecl(ctx, env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, env, decls)
+           in (env', decl' :: decls')
            end
          | S.RecValDec(tyvars, valbind) =>
            let val decl' = U.RecValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind)
-           in doDecl(ctx, env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, env, decls)
+           in (env', decl' :: decls')
            end
          | S.TypeDec(typbinds) =>
            let val decl' = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, env, typbind)) typbinds)
-           in doDecl(ctx, (* TODO: add type ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+           in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.DatatypeDec(datbinds) =>
            let val decl' = raise Fail "not implemented yet"
-           in doDecl(ctx, (* TODO: add type ctor, data ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor, data ctor *) env, decls)
+           in ((* TODO: add type ctor, data ctor *) env', decl' :: decls')
            end
          | S.DatatypeRepDec(tycon, longtycon) =>
            let val decl' = raise Fail "not implemented yet"
-           in doDecl(ctx, (* TODO: add type ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+           in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.AbstypeDec(datbinds, dec) =>
            let val decl' = raise Fail "not implemented yet"
-           in doDecl(ctx, (* TODO: add type ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+           in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.ExceptionDec(_) =>
            let val decl' = raise Fail "not implemented yet"
-           in doDecl(ctx, (* TODO: add exception ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add exception ctor *) env, decls)
+           in ((* TODO: add exception ctor *) env', decl' :: decls')
            end
          | S.LocalDec(decls1, decls2) =>
            let val (env1, decls1') = toUDecs(ctx, env, decls1)
                val (env2, decls2') = toUDecs(ctx, mergeEnv(env, env1), decls2)
-           in doDecl(ctx, mergeEnv(env, env2), decls, U.LocalDec(decls1', decls2') :: acc) end
+               val (env', decls') = toUDecs(ctx, mergeEnv(env, env2), decls)
+           in (mergeEnv(env2, env'), U.LocalDec(decls1', decls2') :: decls') end
          | S.OpenDec(_) =>
            let val decl' = raise Fail "not implemented yet"
-           in doDecl(ctx, (* TODO: add type ctor *) env, decls, decl' :: acc)
+               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+           in ((* TODO: add type ctor *) env', decl' :: decls')
            end
-         | S.FixityDec(_) => doDecl(ctx, env, decls, acc) (* ignore *)
+         | S.FixityDec(_) => toUDecs(ctx, env, decls) (* ignore *)
       )
 end (* local *)
 end (* structure ToTypedSyntax *)

@@ -466,7 +466,7 @@ fun typeCheckExp(ctx : Context, env : Env, SConExp(scon)) : USyntax.Ty
       ; USyntax.FnType(recordTy, fieldTy)
       )
 (* typeCheckDecl : Context * Env * Dec list -> Env *)
-and typeCheckDecl(ctx, env, nil) : Env = env
+and typeCheckDecl(ctx, env, nil) : Env = emptyEnv
   | typeCheckDecl(ctx, env, decl :: decls)
     = (case decl of
            ValDec(tyvarseq, valbinds) =>
@@ -488,7 +488,11 @@ and typeCheckDecl(ctx, env, nil) : Env = env
                                 , tyMap = tyMap
                                 , strMap = strMap
                                 }
-           in typeCheckDecl(ctx, env', decls)
+               val MkEnv restEnv = typeCheckDecl(ctx, env', decls)
+           in MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap', #valMap restEnv)
+                    , tyMap = #tyMap restEnv
+                    , strMap = #strMap restEnv
+                    }
            end
          | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
          | TypeDec(_) => raise Fail "let-in: type: not impl"
@@ -498,7 +502,8 @@ and typeCheckDecl(ctx, env, nil) : Env = env
          | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
          | LocalDec(localDecls, decls') => let val env' = typeCheckDecl(ctx, env, localDecls)
                                                val env'' = typeCheckDecl(ctx, mergeEnv(env, env'), decls')
-                                           in typeCheckDecl(ctx, mergeEnv(env, env''), decls)
+                                               val restEnv = typeCheckDecl(ctx, mergeEnv(env, env''), decls)
+                                           in mergeEnv(env'', restEnv)
                                            end
          | OpenDec(_) => raise Fail "let-in: open: not impl"
       )
