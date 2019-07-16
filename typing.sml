@@ -623,20 +623,20 @@ and typeCheckPatRow(ctx, env, row)
       in List.foldl oneField ([], Syntax.VIdMap.empty) row
       end
 
-(* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
+(* typeCheckExp : Context * Env * USyntax.Exp -> (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                        val subst = !(#tyVarSubst ctx)
                                        val tvc = !(#tyVarConstraints ctx)
                                        val applySubst = applySubstTy subst
-                                   in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
+                                   in (tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
                                    end
 
-(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Dec list *)
+(* typeCheckProgram : Context * Env * USyntax.Dec list -> Env * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Dec list *)
 fun typeCheckProgram(ctx, env, decls) = let val env' = typeCheckDecl(ctx, env, decls)
                                             val subst = !(#tyVarSubst ctx)
                                             val tvc = !(#tyVarConstraints ctx)
                                             val applySubst = applySubstTy subst
-                                        in (subst, tvc, List.map (USyntax.mapTyInDec applySubst) decls)
+                                        in (env', tvc, List.map (USyntax.mapTyInDec applySubst) decls)
                                         end
 end (* local *)
 end (* structure Typing *)
