@@ -103,7 +103,9 @@ and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyV
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-end
+val print_Decs = Syntax.print_list print_Dec
+fun print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+end (* structure PrettyPrint *)
 open PrettyPrint
 
 exception NotImpl of string

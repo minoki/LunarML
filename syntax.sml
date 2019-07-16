@@ -183,6 +183,10 @@ and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ print_list print_TyVar boun
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
+val print_Decs = print_list print_Dec
+fun print_VIdMap print_elem x = print_list (print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+fun print_TyConMap print_elem x = print_list (print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+fun print_StrIdMap print_elem x = print_list (print_pair (print_StrId,print_elem)) (StrIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 end
 open PrettyPrint
 

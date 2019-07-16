@@ -638,5 +638,20 @@ fun typeCheckProgram(ctx, env, decls) = let val env' = typeCheckDecl(ctx, env, d
                                             val applySubst = applySubstTy subst
                                         in (env', tvc, List.map (USyntax.mapTyInDec applySubst) decls)
                                         end
+
+(* pretty printing *)
+structure PrettyPrint = struct
+fun print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ USyntax.print_Ty fieldTy ^ "}"
+  | print_UnaryConstraint IsEqType = "IsEqType"
+  | print_UnaryConstraint IsIntegral = "IsIntegral"
+  | print_UnaryConstraint IsSignedReal = "IsSignedReal"
+  | print_UnaryConstraint IsRing = "IsRing"
+  | print_UnaryConstraint IsField = "IsField"
+  | print_UnaryConstraint IsSigned = "IsSigned"
+  | print_UnaryConstraint IsOrdered = "IsOrdered"
+fun print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (USyntax.print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ USyntax.print_Ty ty ^ ")"
+fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ Syntax.print_VIdMap (Syntax.print_pair (print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
+end (* structure PrettyPrint *)
+open PrettyPrint
 end (* local *)
 end (* structure Typing *)
