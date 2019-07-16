@@ -53,7 +53,7 @@ fun freeTyVarsInUnaryConstraint(bound, HasField{fieldTy = fieldTy, ...}) = USynt
   | freeTyVarsInUnaryConstraint(bound, IsOrdered) = USyntax.TyVarSet.empty
 
 type Context = { nextTyVar : int ref
-               , tyVarConstraints : ((USyntax.TyVar * UnaryConstraint) list) ref (* should use (multi-)map? *)
+               , tyVarConstraints : ((UnaryConstraint list) USyntax.TyVarMap.map) ref
                , tyVarSubst : Subst ref
                }
 
@@ -183,13 +183,14 @@ val initialEnv : Env
 
 fun newContext() : Context
     = { nextTyVar = ref 100
-      , tyVarConstraints = ref []
+      , tyVarConstraints = ref USyntax.TyVarMap.empty
       , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
 fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : UnaryConstraint)
     = let val cts = !(#tyVarConstraints ctx)
-      in #tyVarConstraints ctx := (tv, ct) :: cts
+          val xs = Option.getOpt(USyntax.TyVarMap.find(cts, tv), [])
+      in #tyVarConstraints ctx := USyntax.TyVarMap.insert(cts, tv, ct :: xs)
       end
 
 fun freshTyVar(ctx : Context) : USyntax.TyVar
@@ -385,12 +386,15 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
                         raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
                     else
                         let val tvc = !(#tyVarConstraints ctx)
-                            val (e, tvc') = List.partition (fn (tv', c) => eqUTyVar(tv, tv')) tvc
-                            val () = #tyVarConstraints ctx := tvc'
-                            fun toConstraint (_, predicate) = UnaryConstraint(ty, predicate)
+                            val xs = case USyntax.TyVarMap.find(tvc, tv) of
+                                         SOME xs => ( #tyVarConstraints ctx := #1 (USyntax.TyVarMap.remove(tvc, tv))
+                                                    ; xs
+                                                    )
+                                       | NONE => []
+                            fun toConstraint predicate = UnaryConstraint(ty, predicate)
                             val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
                         in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
-                         ; unify(ctx, List.map toConstraint e @ List.map (substituteConstraint (tv, ty)) ctrs)
+                         ; unify(ctx, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
                         end
                  end
           end
@@ -475,7 +479,7 @@ and typeCheckDecl(ctx, env, nil) : Env = env
                fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
                  | doVar(ty, true) = let val ty' = applySubstTy subst ty
                                          val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                                         val unconstrainedTyVars = TyVarSet.filter (fn tv => not (List.exists (fn (tv', _) => eqUTyVar(tv, tv')) tvc)) tyVars_ty (* TODO: Allow equality constraint *)
+                                         val unconstrainedTyVars = TyVarSet.filter (fn tv => not (Option.isSome(USyntax.TyVarMap.find(tvc, tv)))) tyVars_ty (* TODO: Allow equality constraint *)
                                          val tyVars = TyVarSet.difference(unconstrainedTyVars, tyVars_env)
                                      in (TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty'), Syntax.ValueVariable)
                                      end
@@ -614,7 +618,7 @@ and typeCheckPatRow(ctx, env, row)
       in List.foldl oneField ([], Syntax.VIdMap.empty) row
       end
 
-(* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (TyVar * UnaryConstraint) list * USyntax.Ty * USyntax.Exp *)
+(* typeCheckExp : Context * Env * USyntax.Exp -> Subst * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                        val subst = !(#tyVarSubst ctx)
                                        val tvc = !(#tyVarConstraints ctx)
@@ -622,7 +626,7 @@ fun typeCheckExp_(ctx, env, exp) = let val ty = typeCheckExp(ctx, env, exp)
                                    in (subst, tvc, applySubst ty, USyntax.mapTyInExp applySubst exp)
                                    end
 
-(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (TyVar * UnaryConstraint) list * USyntax.Dec list *)
+(* typeCheckProgram : Context * Env * USyntax.Dec list -> Subst * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Dec list *)
 fun typeCheckProgram(ctx, env, decls) = let val env' = typeCheckDecl(ctx, env, decls)
                                             val subst = !(#tyVarSubst ctx)
                                             val tvc = !(#tyVarConstraints ctx)
