@@ -77,6 +77,8 @@ fun MkListExp nil = nilExp
        | Exp of UnfixedSyntax.Exp
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
        | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
+       | SingleDec of UnfixedSyntax.Dec
+       | DecNoSemicolon of UnfixedSyntax.Dec list
        | Dec of UnfixedSyntax.Dec list
        | LongStrIds of Syntax.LongStrId list
        | VIds of Syntax.VId list
@@ -311,26 +313,33 @@ Exp_NoMatch : OrElseExp (OrElseExp)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
              | Pat DARROW Exp ((Pat, Exp) :: nil)
 
+(* single declaration *)
+SingleDec : VAL TyVar ValBind (UnfixedSyntax.ValDec ([TyVar], ValBind)) (* value declaration (non-recursive) *)
+    | VAL ValBind (UnfixedSyntax.ValDec (nil, ValBind)) (* value declaration (non-recursive) *)
+    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.ValDec (TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
+    | VAL REC TyVar ValBind (UnfixedSyntax.RecValDec ([TyVar], ValBind)) (* value declaration (recursive) *)
+    | VAL REC ValBind (UnfixedSyntax.RecValDec (nil, ValBind)) (* value declaration (recursive) *)
+    | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
+    (* | FUN TyVarSeq FValBind () function declaration: not implemented yet *)
+    | TYPE TypBind (UnfixedSyntax.TypeDec TypBind) (* type declaration *)
+    | DATATYPE DatBind (UnfixedSyntax.DatatypeDec DatBind) (* datatype declaration *)
+    (* | DATATYPE TyCon EQUAL DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon)) (* datatype replication *) *)
+    | ABSTYPE DatBind WITH Dec END (UnfixedSyntax.AbstypeDec (DatBind, Dec)) (* abstype declaration *)
+    | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec ExBind) (* exception declaration *)
+    | LOCAL Dec IN Dec END (UnfixedSyntax.LocalDec (Dec1, Dec2)) (* local declaration *)
+    | OPEN LongStrIds (UnfixedSyntax.OpenDec LongStrIds) (* open declaration *)
+    | INFIX IntConst VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc IntConst), VIds)) (* infix (L) directive *)
+    | INFIX VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc 0), VIds)) (* infix (L) directive *)
+    | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc IntConst), VIds)) (* infix (R) directive *)
+    | INFIXR VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
+    | NONFIX VIds (UnfixedSyntax.FixityDec (Syntax.Nonfix, VIds)) (* nonfix directive *)
+
+(* declarations without semicolons *)
+DecNoSemicolon : SingleDec DecNoSemicolon (SingleDec :: DecNoSemicolon)
+               | (nil)
+
 (* declarations *)
-Dec : VAL TyVar ValBind Dec (UnfixedSyntax.ValDec ([TyVar], ValBind) :: Dec) (* value declaration (non-recursive) *)
-    | VAL ValBind Dec (UnfixedSyntax.ValDec (nil, ValBind) :: Dec) (* value declaration (non-recursive) *)
-    | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (UnfixedSyntax.ValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration (non-recursive) *)
-    | VAL REC TyVar ValBind Dec (UnfixedSyntax.RecValDec ([TyVar], ValBind) :: Dec) (* value declaration (recursive) *)
-    | VAL REC ValBind Dec (UnfixedSyntax.RecValDec (nil, ValBind) :: Dec) (* value declaration (recursive) *)
-    | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind Dec (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind) :: Dec) (* value declaration (non-recursive) *)
-    (* | FUN TyVarSeq FValBind Dec () function declaration: not implemented yet *)
-    | TYPE TypBind Dec (UnfixedSyntax.TypeDec TypBind :: Dec) (* type declaration *)
-    | DATATYPE DatBind Dec (UnfixedSyntax.DatatypeDec DatBind :: Dec) (* datatype declaration *)
-    (* | DATATYPE TyCon EQUAL DATATYPE LongTyCon Dec (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon) :: Dec) (* datatype replication *) *)
-    | ABSTYPE DatBind WITH Dec END Dec (UnfixedSyntax.AbstypeDec (DatBind, Dec1) :: Dec2) (* abstype declaration *)
-    | EXCEPTION ExBind Dec (UnfixedSyntax.ExceptionDec ExBind :: Dec) (* exception declaration *)
-    | LOCAL Dec IN Dec END Dec (UnfixedSyntax.LocalDec (Dec1, Dec2) :: Dec3) (* local declaration *)
-    | OPEN LongStrIds Dec (UnfixedSyntax.OpenDec LongStrIds :: Dec) (* open declaration *)
-    | INFIX IntConst VIds Dec (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc IntConst), VIds) :: Dec) (* infix (L) directive *)
-    | INFIX VIds Dec (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc 0), VIds) :: Dec) (* infix (L) directive *)
-    | INFIXR IntConst VIds Dec (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc IntConst), VIds) :: Dec) (* infix (R) directive *)
-    | INFIXR VIds Dec (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc 0), VIds) :: Dec) (* infix (R) directive *)
-    | NONFIX VIds Dec (UnfixedSyntax.FixityDec (Syntax.Nonfix, VIds) :: Dec) (* nonfix directive *)
+Dec : SingleDec Dec (SingleDec :: Dec)
     | SEMICOLON Dec (Dec) (* sequential declaration *)
     | (nil) (* empty declaration *)
 
@@ -370,7 +379,7 @@ ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, SOME Ty
 Opt_AND_ExBind : AND ExBind (ExBind)
                | (nil)
 
-TopDec : Dec (Dec)
+TopDec : DecNoSemicolon (DecNoSemicolon)
 Program : TopDec SEMICOLON Program (TopDec @ Program)
         | Exp SEMICOLON Program (UnfixedSyntax.ValDec(nil, [UnfixedSyntax.PatBind(UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)]) :: Program) (* val it = Exp *)
         | (nil)
