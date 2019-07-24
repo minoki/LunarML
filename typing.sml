@@ -269,13 +269,16 @@ fun applySubstEnv subst =
     in substEnv
     end
 
-(* instantiate : Context * TypeScheme -> Ty *)
+(* instantiate : Context * TypeScheme -> Ty * Ty list *)
 fun instantiate(ctx, TypeScheme(vars, ty))
-    = let val subst = List.foldl (fn ((v, preds), set) => let val tv = freshTyVar(ctx)
-                                                          in List.app (fn pred => addTyVarConstraint(ctx, tv, pred)) preds
-                                                           ; USyntax.TyVarMap.insert(set, v, TyVar(tv))
-                                                          end) USyntax.TyVarMap.empty vars
-      in applySubstTy subst ty
+    = let val (subst, tyargs) = List.foldl (fn ((v, preds), (set, rest)) =>
+                                               let val tv = freshTyVar(ctx)
+                                                   val tyarg = TyVar(tv)
+                                               in List.app (fn pred => addTyVarConstraint(ctx, tv, pred)) preds
+                                                ; (USyntax.TyVarMap.insert(set, v, tyarg), tyarg :: rest)
+                                               end
+                                           ) (USyntax.TyVarMap.empty, []) vars
+      in (applySubstTy subst ty, List.rev tyargs)
       end
 
 (* mergeEnv : Env * Env -> Env *)
@@ -417,11 +420,12 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
       in (ty, exp)
       end
   | typeCheckExp(ctx, env, exp as VarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus))
-    = let val ty = case lookupLongVIdInEnv(env, longvid) of
-                       SOME (tysc, ids) => instantiate(ctx, tysc)
-                     | NONE => raise NameError("unknown value name " ^ name)
-      in (ty, exp)
-      end
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (tysc, ids) => let val (ty, tyargs) = instantiate(ctx, tysc)
+                               in (ty, InstantiatedVarExp(longvid, idstatus, tyargs))
+                               end
+         | NONE => raise NameError("unknown value name " ^ name)
+      )
   | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus, tyargs)) (* should not reach here *)
     = let val ty = case lookupLongVIdInEnv(env, longvid) of
                        SOME (TypeScheme(vars, ty), ids) =>
@@ -600,19 +604,20 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
          else
              (RecordType(rowTy), vars, RecordPat(row', wildcard))
       end
-  | typeCheckPat(ctx, env, pat as ConPat(longvid, opt_innerPat))
+  | typeCheckPat(ctx, env, ConPat(longvid, opt_innerPat))
     = (case lookupLongVIdInEnv(env, longvid) of
            SOME (tysc, idstatus) =>
            (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-                let val ty = instantiate(ctx, tysc)
+                let val (ty, tyargs) = instantiate(ctx, tysc)
                 in case opt_innerPat of
-                       NONE => (ty, Syntax.VIdMap.empty, pat)
+                       NONE => (ty, Syntax.VIdMap.empty, InstantiatedConPat(longvid, NONE, tyargs))
                      | SOME innerPat =>
-                       (case instantiate(ctx, tysc) of
-                            USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
-                                                               in addConstraint(ctx, EqConstr(argTy, argTy'))
-                                                                ; (resultTy, innerVars, ConPat(longvid, SOME innerPat'))
-                                                               end
+                       (case ty of
+                            USyntax.FnType(argTy, resultTy) =>
+                            let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
+                            in addConstraint(ctx, EqConstr(argTy, argTy'))
+                             ; (resultTy, innerVars, InstantiatedConPat(longvid, SOME innerPat', tyargs))
+                            end
                           | _ => raise TypeError "invalid pattern"
                        )
                 end

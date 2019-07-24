@@ -46,7 +46,7 @@ val a =
 val b = E : Typing.UnaryConstraint list USyntax.TyVarMap.map
 val c = [ValDec ([],[PatBind #])] : USyntax.Dec list
 - print (USyntax.print_Decs c);
-[ValDec([],[PatBind(VarPat(MkVId "it",FnType(TyVar(MkTyVar("_",106)),TyVar(MkTyVar("_",106)))),LetInExp([ValDec([MkTyVar("'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(MkTyVar("_",104)),TyVar(MkTyVar("_",104)))),FnExp([(VarPat(MkVId "z",TyVar(MkTyVar("_",104))),SimpleVarExp(MkVId "z",ValueVariable))]))])],AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))))])]val it = () : unit
+[ValDec([],[PatBind(VarPat(MkVId "it",FnType(TyVar(MkTyVar("_",106)),TyVar(MkTyVar("_",106)))),LetInExp([ValDec([MkTyVar("'a",101)],[PatBind(VarPat(MkVId "id",FnType(TyVar(MkTyVar("_",104)),TyVar(MkTyVar("_",104)))),FnExp([(VarPat(MkVId "z",TyVar(MkTyVar("_",104))),InstantiatedVarExp(MkLongVId([],MkVId "z"),ValueVariable,[]))]))])],AppExp(InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[FnType(TyVar(MkTyVar("_",106)),TyVar(MkTyVar("_",106)))]),InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[TyVar(MkTyVar("_",106))]))))])]val it = () : unit
 ```
 
 ```
@@ -87,7 +87,7 @@ val a =
 val b = E : Typing.UnaryConstraint list USyntax.TyVarMap.map
 val c = [ValDec ([],[PatBind #]),ValDec ([],[PatBind #])] : USyntax.Dec list
 - print (USyntax.print_Decs c);
-[ValDec([],[PatBind(VarPat(MkVId "it",RecordType [(NumericLabel 1,TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "string"),3))),(NumericLabel 2,TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "int"),0))),(NumericLabel 3,FnType(TyVar(MkTyVar("_",108)),TyVar(MkTyVar("_",108))))]),LetInExp([ValDec([],[PatBind(VarPat(MkVId "id",FnType(TyVar(MkTyVar("_",102)),TyVar(MkTyVar("_",102)))),FnExp([(VarPat(MkVId "z",TyVar(MkTyVar("_",102))),SimpleVarExp(MkVId "z",ValueVariable))]))])],TupleExp [AppExp(SimpleVarExp(MkVId "id",ValueVariable),SConExp(StringConstant "foo")),AppExp(SimpleVarExp(MkVId "id",ValueVariable),SConExp(IntegerConstant 123)),AppExp(SimpleVarExp(MkVId "id",ValueVariable),SimpleVarExp(MkVId "id",ValueVariable))]))])]val it = () : unit
+[ValDec([],[PatBind(VarPat(MkVId "id",FnType(TyVar(MkTyVar("_",101)),TyVar(MkTyVar("_",101)))),FnExp([(VarPat(MkVId "z",TyVar(MkTyVar("_",101))),InstantiatedVarExp(MkLongVId([],MkVId "z"),ValueVariable,[]))]))]),ValDec([],[PatBind(VarPat(MkVId "it",RecordType [(NumericLabel 1,TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "string"),3))),(NumericLabel 2,TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "int"),0))),(NumericLabel 3,FnType(TyVar(MkTyVar("_",108)),TyVar(MkTyVar("_",108))))]),TupleExp [AppExp(InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "string"),3))]),SConExp(StringConstant "foo")),AppExp(InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[TyCon([],MkLongTyCon(MkLongTyCon([],MkTyCon "int"),0))]),SConExp(IntegerConstant 123)),AppExp(InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[FnType(TyVar(MkTyVar("_",108)),TyVar(MkTyVar("_",108)))]),InstantiatedVarExp(MkLongVId([],MkVId "id"),ValueVariable,[TyVar(MkTyVar("_",108))]))])])]val it = () : unit
 - print (Typing.print_Env a);
 MkEnv{tyMap=[],valMap=[(MkVId "id",(TypeScheme([(MkTyVar("_",101),[])],FnType(TyVar(MkTyVar("_",101)),TyVar(MkTyVar("_",101)))),ValueVariable)),(MkVId "it",(TypeScheme([],TyVar(MkTyVar("_",102))),ValueVariable))],strMap=[]}val it = () : unit
 ```
