@@ -81,6 +81,7 @@ fun lookupLongVIdInEnv(env, Syntax.MkLongVId(strid, vid))
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
 fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.VarExp _) = true (* <op> longvid *)
+  | isNonexpansive(env, USyntax.InstantiatedVarExp _) = true (* <op> longvid *)
   | isNonexpansive(env, USyntax.RecordExp fields) = List.all (fn (_, e) => isNonexpansive(env, e)) fields
   | isNonexpansive(env, USyntax.TypedExp(e, _)) = isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.AppExp(conexp, e)) = isConexp(env, conexp) andalso isNonexpansive(env, e)
@@ -92,6 +93,9 @@ and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueVariable)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueConstructor)) = true
   | isConexp(env, USyntax.VarExp(_, Syntax.ExceptionConstructor)) = true
+  | isConexp(env, USyntax.InstantiatedVarExp(_, Syntax.ValueVariable, _)) = false
+  | isConexp(env, USyntax.InstantiatedVarExp(_, Syntax.ValueConstructor, _)) = true
+  | isConexp(env, USyntax.InstantiatedVarExp(_, Syntax.ExceptionConstructor, _)) = true
   | isConexp(env, _) = false
 
 (* isExhaustive : Env * USyntax.Pat -> bool *)
@@ -99,8 +103,10 @@ fun isExhaustive(env : Env, USyntax.WildcardPat) = true
   | isExhaustive(env, USyntax.SConPat _) = false
   | isExhaustive(env, USyntax.VarPat _) = true
   | isExhaustive(env, USyntax.NulConPat longvid) = false (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.InstantiatedNulConPat(longvid, tyargs)) = false (* TODO: Check if this if the sole constructor of the type *)
   | isExhaustive(env, USyntax.RecordPat(row, _)) = List.all (fn (_, e) => isExhaustive(env, e)) row
   | isExhaustive(env, USyntax.ConPat(longvid, innerPat)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, innerPat, tyargs)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
   | isExhaustive(env, USyntax.TypedPat(innerPat, _)) = isExhaustive(env, innerPat)
   | isExhaustive(env, USyntax.LayeredPat(_, _, innerPat)) = isExhaustive(env, innerPat)
 
@@ -416,6 +422,19 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
                      | NONE => raise NameError("unknown value name " ^ name)
       in (ty, exp)
       end
+  | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus, tyargs)) (* should not reach here *)
+    = let val ty = case lookupLongVIdInEnv(env, longvid) of
+                       SOME (TypeScheme(vars, ty), ids) =>
+                       let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
+                                                            ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
+                                                            ; USyntax.TyVarMap.insert(set, var, tyarg)
+                                                            )
+                                                        ) USyntax.TyVarMap.empty (vars, tyargs)
+                       in applySubstTy subst ty
+                       end
+                     | NONE => raise NameError("unknown value name " ^ name)
+      in (ty, exp)
+      end
   | typeCheckExp(ctx, env, RecordExp(row))
     = let val (rowTy, row') = typeCheckExpRow(ctx, env, row)
       in (RecordType(rowTy), RecordExp(row'))
@@ -582,6 +601,22 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
            )
          | NONE => raise TypeError "invalid pattern"
       )
+  | typeCheckPat(ctx, env, pat as InstantiatedNulConPat(longvid, tyargs)) (* should not reach here *)
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (TypeScheme(vars, ty), idstatus) =>
+           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
+                                                     ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
+                                                     ; USyntax.TyVarMap.insert(set, var, tyarg)
+                                                     )
+                                                 ) USyntax.TyVarMap.empty (vars, tyargs)
+                in (applySubstTy subst ty, Syntax.VIdMap.empty, pat)
+                end
+            else (* idstatus = Syntax.ValueVariable *)
+                raise TypeError "invalid pattern"
+           )
+         | NONE => raise TypeError "invalid pattern"
+      )
   | typeCheckPat(ctx, env, RecordPat(row, wildcard))
     = let val (rowTy, vars, row') = typeCheckPatRow(ctx, env, row)
       in if wildcard then
@@ -605,6 +640,27 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
                  | _ => raise TypeError "invalid pattern"
            else (* idstatus = Syntax.ValueVariable *)
                raise TypeError "invalid pattern"
+         | NONE => raise TypeError "invalid pattern"
+      )
+  | typeCheckPat(ctx, env, InstantiatedConPat(longvid, innerPat, tyargs)) (* should not reach here *)
+    = (case lookupLongVIdInEnv(env, longvid) of
+           SOME (TypeScheme(vars, ty), idstatus) =>
+           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
+                                                     ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
+                                                     ; USyntax.TyVarMap.insert(set, var, tyarg)
+                                                     )
+                                                 ) USyntax.TyVarMap.empty (vars, tyargs)
+                in case applySubstTy subst ty of
+                       USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
+                                                          in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                           ; (resultTy, innerVars, InstantiatedConPat(longvid, innerPat', tyargs))
+                                                          end
+                     | _ => raise TypeError "invalid pattern"
+                end
+            else (* idstatus = Syntax.ValueVariable *)
+                raise TypeError "invalid pattern"
+           )
          | NONE => raise TypeError "invalid pattern"
       )
   | typeCheckPat(ctx, env, pat as TypedPat(WildcardPat, ty))

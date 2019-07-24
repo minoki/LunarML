@@ -17,8 +17,10 @@ datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
              | VarPat of Syntax.VId * Ty (* variable *)
              | NulConPat of Syntax.LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
+             | InstantiatedNulConPat of Syntax.LongVId * Ty list
              | RecordPat of (Syntax.Label * Pat) list * bool
              | ConPat of Syntax.LongVId * Pat (* constructed pattern *)
+             | InstantiatedConPat of Syntax.LongVId * Pat * Ty list
              | TypedPat of Pat * Ty (* typed *)
              | LayeredPat of Syntax.VId * Ty * Pat (* layered *)
 
@@ -30,6 +32,7 @@ datatype ExBind = ExBind1 of Syntax.VId * Ty option (* <op> vid <of ty> *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | VarExp of Syntax.LongVId * Syntax.IdStatus (* value identifier *)
+             | InstantiatedVarExp of Syntax.LongVId * Syntax.IdStatus * Ty list
              | RecordExp of (Syntax.Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | AppExp of Exp * Exp (* function, argument *)
@@ -74,9 +77,11 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
   | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (NulConPat longvid) = "NulConPat(" ^ Syntax.print_LongVId longvid ^ ")"
+  | print_Pat (InstantiatedNulConPat(longvid, tyargs)) = "InstantiatedNulConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -86,6 +91,7 @@ fun print_Pat WildcardPat = "WildcardPat"
 fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (VarExp(Syntax.MkLongVId([], vid), idstatus)) = "SimpleVarExp(" ^ Syntax.print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
   | print_Exp (VarExp(x, idstatus)) = "VarExp(" ^ Syntax.print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
+  | print_Exp (InstantiatedVarExp(x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ Syntax.print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                  | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
@@ -115,6 +121,7 @@ fun mapTy doTy =
     (* assumes that doTy only acts on type variables *)
     let fun doExp(e as SConExp _) = e
           | doExp(e as VarExp _) = e
+          | doExp(InstantiatedVarExp(longvid, idstatus, tyargs)) = InstantiatedVarExp(longvid, idstatus, List.map doTy tyargs)
           | doExp(RecordExp fields) = RecordExp(List.map (fn (label, exp) => (label, doExp exp)) fields)
           | doExp(LetInExp(decls, e)) = LetInExp(List.map doDec decls, doExp e)
           | doExp(AppExp(e1, e2)) = AppExp(doExp e1, doExp e2)
@@ -140,8 +147,10 @@ fun mapTy doTy =
           | doPat(s as SConPat _) = s
           | doPat(VarPat(vid, ty)) = VarPat(vid, doTy ty)
           | doPat(s as NulConPat _) = s
+          | doPat(InstantiatedNulConPat(ct, tyargs)) = InstantiatedNulConPat(ct, List.map doTy tyargs)
           | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
           | doPat(ConPat(ct, pat)) = ConPat(ct, doPat pat)
+          | doPat(InstantiatedConPat(ct, pat, tyargs)) = InstantiatedConPat(ct, doPat pat, List.map doTy tyargs)
           | doPat(TypedPat(pat, ty)) = TypedPat(doPat pat, doTy ty)
           | doPat(LayeredPat(vid, ty, pat)) = LayeredPat(vid, doTy ty, doPat pat)
     in { doExp = doExp, doDec = doDec }
@@ -170,8 +179,10 @@ fun freeTyVarsInPat(bound, pat)
          | SConPat _ => TyVarSet.empty
          | VarPat _ => TyVarSet.empty
          | NulConPat _ => TyVarSet.empty
+         | InstantiatedNulConPat(_, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordPat(xs, _) => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
          | ConPat(_, pat) => freeTyVarsInPat(bound, pat)
+         | InstantiatedConPat(_, pat, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) (freeTyVarsInPat(bound, pat)) tyargs
          | TypedPat(pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
          | LayeredPat(_, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
       )
@@ -181,6 +192,7 @@ fun freeTyVarsInExp(bound, exp)
     = (case exp of
            SConExp _ => TyVarSet.empty
          | VarExp(_, _) => TyVarSet.empty
+         | InstantiatedVarExp(_, _, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordExp(xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
          | LetInExp(decls, exp) => raise Fail "not impl"
          | AppExp(exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
