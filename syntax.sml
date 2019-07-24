@@ -63,9 +63,8 @@ datatype Pat = WildcardPat
              | SConPat of SCon (* special constant *)
              | ConOrVarPat of VId (* constructor or variable *)
              | VarPat of VId (* variable *)
-             | NulConPat of LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
              | RecordPat of (Label * Pat) list * bool
-             | ConPat of LongVId * Pat (* constructed pattern *)
+             | ConPat of LongVId * Pat option (* constructed pattern *)
              | TypedPat of Pat * Ty (* typed *)
              | LayeredPat of VId * Ty option * Pat (* layered *)
 
@@ -106,7 +105,7 @@ fun TupleExp xs = let fun doFields i nil = nil
                   in RecordExp (doFields 1 xs)
                   end
 
-fun MkInfixConPat(pat1, vid, pat2) = ConPat(MkLongVId([], vid), RecordPat([(NumericLabel 1, pat1), (NumericLabel 2, pat2)], false))
+fun MkInfixConPat(pat1, vid, pat2) = ConPat(MkLongVId([], vid), SOME(RecordPat([(NumericLabel 1, pat1), (NumericLabel 2, pat2)], false)))
 fun MkInfixExp(exp1, vid, exp2) = AppExp(VarExp(MkLongVId([], vid)), RecordExp([(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
 
 (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
@@ -153,10 +152,9 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ print_SCon x ^ ")"
   | print_Pat (ConOrVarPat vid) = "ConOrVarPat(" ^ print_VId vid ^ ")"
   | print_Pat (VarPat vid) = "VarPat(" ^ print_VId vid ^ ")"
-  | print_Pat (NulConPat longvid) = "NulConPat(" ^ print_LongVId longvid ^ ")"
   | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_option print_Pat pat ^ ")"
   | print_Pat (RecordPat(x, false)) = (case extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ print_list print_Pat ys

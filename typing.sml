@@ -102,11 +102,11 @@ and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
 fun isExhaustive(env : Env, USyntax.WildcardPat) = true
   | isExhaustive(env, USyntax.SConPat _) = false
   | isExhaustive(env, USyntax.VarPat _) = true
-  | isExhaustive(env, USyntax.NulConPat longvid) = false (* TODO: Check if this if the sole constructor of the type *)
-  | isExhaustive(env, USyntax.InstantiatedNulConPat(longvid, tyargs)) = false (* TODO: Check if this if the sole constructor of the type *)
   | isExhaustive(env, USyntax.RecordPat(row, _)) = List.all (fn (_, e) => isExhaustive(env, e)) row
-  | isExhaustive(env, USyntax.ConPat(longvid, innerPat)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
-  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, innerPat, tyargs)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.ConPat(longvid, NONE)) = false (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.ConPat(longvid, SOME innerPat)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, NONE, tyargs)) = false (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
   | isExhaustive(env, USyntax.TypedPat(innerPat, _)) = isExhaustive(env, innerPat)
   | isExhaustive(env, USyntax.LayeredPat(_, _, innerPat)) = isExhaustive(env, innerPat)
 
@@ -589,34 +589,6 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
          | SOME (_, Syntax.ValueVariable) => (* shadowing *) (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty), pat)
          | NONE => (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty), pat)
       )
-  | typeCheckPat(ctx, env, pat as NulConPat(longvid))
-    = (case lookupLongVIdInEnv(env, longvid) of
-           SOME (tysc, idstatus) =>
-           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-                let val ty = instantiate(ctx, tysc)
-                in (ty, Syntax.VIdMap.empty, pat)
-                end
-            else (* idstatus = Syntax.ValueVariable *)
-                raise TypeError "invalid pattern"
-           )
-         | NONE => raise TypeError "invalid pattern"
-      )
-  | typeCheckPat(ctx, env, pat as InstantiatedNulConPat(longvid, tyargs)) (* should not reach here *)
-    = (case lookupLongVIdInEnv(env, longvid) of
-           SOME (TypeScheme(vars, ty), idstatus) =>
-           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-                let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
-                                                     ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
-                                                     ; USyntax.TyVarMap.insert(set, var, tyarg)
-                                                     )
-                                                 ) USyntax.TyVarMap.empty (vars, tyargs)
-                in (applySubstTy subst ty, Syntax.VIdMap.empty, pat)
-                end
-            else (* idstatus = Syntax.ValueVariable *)
-                raise TypeError "invalid pattern"
-           )
-         | NONE => raise TypeError "invalid pattern"
-      )
   | typeCheckPat(ctx, env, RecordPat(row, wildcard))
     = let val (rowTy, vars, row') = typeCheckPatRow(ctx, env, row)
       in if wildcard then
@@ -628,21 +600,28 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
          else
              (RecordType(rowTy), vars, RecordPat(row', wildcard))
       end
-  | typeCheckPat(ctx, env, ConPat(longvid, innerPat))
+  | typeCheckPat(ctx, env, pat as ConPat(longvid, opt_innerPat))
     = (case lookupLongVIdInEnv(env, longvid) of
            SOME (tysc, idstatus) =>
-           if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
-               case instantiate(ctx, tysc) of
-                   USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
-                                                      in addConstraint(ctx, EqConstr(argTy, argTy'))
-                                                       ; (resultTy, innerVars, ConPat(longvid, innerPat'))
-                                                      end
-                 | _ => raise TypeError "invalid pattern"
-           else (* idstatus = Syntax.ValueVariable *)
-               raise TypeError "invalid pattern"
+           (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
+                let val ty = instantiate(ctx, tysc)
+                in case opt_innerPat of
+                       NONE => (ty, Syntax.VIdMap.empty, pat)
+                     | SOME innerPat =>
+                       (case instantiate(ctx, tysc) of
+                            USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
+                                                               in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                                ; (resultTy, innerVars, ConPat(longvid, SOME innerPat'))
+                                                               end
+                          | _ => raise TypeError "invalid pattern"
+                       )
+                end
+            else (* idstatus = Syntax.ValueVariable *)
+                raise TypeError "invalid pattern"
+           )
          | NONE => raise TypeError "invalid pattern"
       )
-  | typeCheckPat(ctx, env, InstantiatedConPat(longvid, innerPat, tyargs)) (* should not reach here *)
+  | typeCheckPat(ctx, env, pat as InstantiatedConPat(longvid, opt_innerPat, tyargs)) (* should not reach here *)
     = (case lookupLongVIdInEnv(env, longvid) of
            SOME (TypeScheme(vars, ty), idstatus) =>
            (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
@@ -651,12 +630,16 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
                                                      ; USyntax.TyVarMap.insert(set, var, tyarg)
                                                      )
                                                  ) USyntax.TyVarMap.empty (vars, tyargs)
-                in case applySubstTy subst ty of
-                       USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
-                                                          in addConstraint(ctx, EqConstr(argTy, argTy'))
-                                                           ; (resultTy, innerVars, InstantiatedConPat(longvid, innerPat', tyargs))
-                                                          end
-                     | _ => raise TypeError "invalid pattern"
+                    val ty' = applySubstTy subst ty
+                in case opt_innerPat of
+                       NONE => (ty', Syntax.VIdMap.empty, pat)
+                     | SOME innerPat => (case ty' of
+                                             USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
+                                                                                in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                                                 ; (resultTy, innerVars, InstantiatedConPat(longvid, SOME innerPat', tyargs))
+                                                                                end
+                                           | _ => raise TypeError "invalid pattern"
+                                        )
                 end
             else (* idstatus = Syntax.ValueVariable *)
                 raise TypeError "invalid pattern"

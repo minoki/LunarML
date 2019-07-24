@@ -99,31 +99,31 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
                                                       | _ => raise Fail "infix operator used in non-infix position"
                                                    )
   | doPat(env, UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))) = Syntax.ConOrVarPat vid
-  | doPat(env, UnfixedSyntax.NonInfixVIdPat(longvid)) = Syntax.NulConPat longvid
+  | doPat(env, UnfixedSyntax.NonInfixVIdPat(longvid)) = Syntax.ConPat(longvid, NONE)
   | doPat(env, UnfixedSyntax.RecordPat(fields, r)) = Syntax.RecordPat(List.map (fn (label, pat) => (label, doPat(env, pat))) fields, r)
   | doPat(env, UnfixedSyntax.JuxtapositionPat patterns) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(vid) :: UnfixedSyntax.InfixOrVIdPat(vid') :: pats)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => (case getFixityStatus(env, vid') of
-                                           Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), Syntax.ConOrVarPat(vid')), pats)
+                                           Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), SOME(Syntax.ConOrVarPat(vid'))), pats)
                                          | Syntax.Infix assoc => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
                                       )
                    | Syntax.Infix assoc => raise Fail "infix operator used in prefix position"
                 )
             | doPrefix(UnfixedSyntax.InfixOrVIdPat(vid) :: atpat :: pats)
               = (case getFixityStatus(env, vid) of
-                     Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), doPat(env, atpat)), pats)
+                     Syntax.Nonfix => doInfix(Syntax.ConPat(Syntax.MkLongVId([], vid), SOME(doPat(env, atpat))), pats)
                    | Syntax.Infix _ => raise Fail "infix operator used in prefix position"
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(longvid) :: UnfixedSyntax.InfixOrVIdPat(vid') :: pats)
               = (case getFixityStatus(env, vid') of
-                     Syntax.Nonfix => doInfix(Syntax.ConPat(longvid, Syntax.ConOrVarPat(vid')), pats)
+                     Syntax.Nonfix => doInfix(Syntax.ConPat(longvid, SOME(Syntax.ConOrVarPat(vid'))), pats)
                    | Syntax.Infix assoc => case longvid of
                                                Syntax.MkLongVId([], vid) => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
-                                             | _ => Tree(Syntax.NulConPat(longvid), assoc, vid', doPrefix(pats))
+                                             | _ => Tree(Syntax.ConPat(longvid, NONE), assoc, vid', doPrefix(pats))
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(longvid) :: atpat :: pats)
-              = doInfix(Syntax.ConPat(longvid, doPat(env, atpat)), pats)
+              = doInfix(Syntax.ConPat(longvid, SOME(doPat(env, atpat))), pats)
             | doPrefix(atpat :: UnfixedSyntax.InfixOrVIdPat(vid') :: pats)
               = (case getFixityStatus(env, vid') of
                      Syntax.Nonfix => raise Fail "invalid pattern"
@@ -140,7 +140,7 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
             | doInfix(lhs, _) = raise Fail "invalid pattern"
       in resolveFixity Syntax.MkInfixConPat (doPrefix patterns)
       end
-  | doPat(env, UnfixedSyntax.ConPat(longvid, pat)) = Syntax.ConPat(longvid, doPat(env, pat))
+  | doPat(env, UnfixedSyntax.ConPat(longvid, pat)) = Syntax.ConPat(longvid, SOME(doPat(env, pat)))
   | doPat(env, UnfixedSyntax.TypedPat(pat, ty)) = Syntax.TypedPat(doPat(env, pat), ty)
   | doPat(env, UnfixedSyntax.LayeredPat(vid, ty, pat)) = Syntax.LayeredPat(vid, ty, doPat(env, pat))
 fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
@@ -215,9 +215,9 @@ fun freeTyVarsInPat(_, WildcardPat) = TyVarSet.empty
   | freeTyVarsInPat(_, SConPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, ConOrVarPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, VarPat _) = TyVarSet.empty
-  | freeTyVarsInPat(_, NulConPat _) = TyVarSet.empty
   | freeTyVarsInPat(bound, RecordPat(xs, _)) = List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
-  | freeTyVarsInPat(bound, ConPat(_, pat)) = freeTyVarsInPat(bound, pat)
+  | freeTyVarsInPat(_, ConPat(_, NONE)) = TyVarSet.empty
+  | freeTyVarsInPat(bound, ConPat(_, SOME pat)) = freeTyVarsInPat(bound, pat)
   | freeTyVarsInPat(bound, TypedPat(pat, ty)) = TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
   | freeTyVarsInPat(bound, LayeredPat(_, SOME ty, pat)) = TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
   | freeTyVarsInPat(bound, LayeredPat(_, NONE, pat)) = freeTyVarsInPat(bound, pat)
@@ -325,12 +325,12 @@ local
       | doPat(S.SConPat _) = ()
       | doPat(S.ConOrVarPat _) = ()
       | doPat(S.VarPat _) = ()
-      | doPat(S.NulConPat _) = ()
       | doPat(S.RecordPat(row, ellip)) = if checkRow row then
                                              raise S.SyntaxError "No pattern row may bind the same label twice"
                                          else
                                              List.app (fn (_, pat) => doPat pat) row
-      | doPat(S.ConPat(longvid, pat)) = doPat pat
+      | doPat(S.ConPat(_, NONE)) = ()
+      | doPat(S.ConPat(longvid, SOME pat)) = doPat pat
       | doPat(S.TypedPat(pat, ty)) = (doPat pat ; doTy ty)
       | doPat(S.LayeredPat(vid, NONE, pat)) = (doPat pat)
       | doPat(S.LayeredPat(vid, SOME ty, pat)) = (doTy ty ; doPat pat)

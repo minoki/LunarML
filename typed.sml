@@ -16,11 +16,9 @@ fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabe
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
              | VarPat of Syntax.VId * Ty (* variable *)
-             | NulConPat of Syntax.LongVId (* nullary constructor, like 'true', 'false', or 'nil' *)
-             | InstantiatedNulConPat of Syntax.LongVId * Ty list
              | RecordPat of (Syntax.Label * Pat) list * bool
-             | ConPat of Syntax.LongVId * Pat (* constructed pattern *)
-             | InstantiatedConPat of Syntax.LongVId * Pat * Ty list
+             | ConPat of Syntax.LongVId * Pat option (* constructed pattern *)
+             | InstantiatedConPat of Syntax.LongVId * Pat option * Ty list
              | TypedPat of Pat * Ty (* typed *)
              | LayeredPat of Syntax.VId * Ty * Pat (* layered *)
 
@@ -76,12 +74,10 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
   | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ ")"
-  | print_Pat (NulConPat longvid) = "NulConPat(" ^ Syntax.print_LongVId longvid ^ ")"
-  | print_Pat (InstantiatedNulConPat(longvid, tyargs)) = "InstantiatedNulConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ ")"
+  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -146,11 +142,9 @@ fun mapTy doTy =
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
           | doPat(VarPat(vid, ty)) = VarPat(vid, doTy ty)
-          | doPat(s as NulConPat _) = s
-          | doPat(InstantiatedNulConPat(ct, tyargs)) = InstantiatedNulConPat(ct, List.map doTy tyargs)
           | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
-          | doPat(ConPat(ct, pat)) = ConPat(ct, doPat pat)
-          | doPat(InstantiatedConPat(ct, pat, tyargs)) = InstantiatedConPat(ct, doPat pat, List.map doTy tyargs)
+          | doPat(ConPat(ct, pat)) = ConPat(ct, Option.map doPat pat)
+          | doPat(InstantiatedConPat(ct, pat, tyargs)) = InstantiatedConPat(ct, Option.map doPat pat, List.map doTy tyargs)
           | doPat(TypedPat(pat, ty)) = TypedPat(doPat pat, doTy ty)
           | doPat(LayeredPat(vid, ty, pat)) = LayeredPat(vid, doTy ty, doPat pat)
     in { doExp = doExp, doDec = doDec }
@@ -178,11 +172,11 @@ fun freeTyVarsInPat(bound, pat)
            WildcardPat => TyVarSet.empty
          | SConPat _ => TyVarSet.empty
          | VarPat _ => TyVarSet.empty
-         | NulConPat _ => TyVarSet.empty
-         | InstantiatedNulConPat(_, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordPat(xs, _) => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
-         | ConPat(_, pat) => freeTyVarsInPat(bound, pat)
-         | InstantiatedConPat(_, pat, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) (freeTyVarsInPat(bound, pat)) tyargs
+         | ConPat(_, NONE) => TyVarSet.empty
+         | ConPat(_, SOME pat) => freeTyVarsInPat(bound, pat)
+         | InstantiatedConPat(_, NONE, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
+         | InstantiatedConPat(_, SOME pat, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) (freeTyVarsInPat(bound, pat)) tyargs
          | TypedPat(pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
          | LayeredPat(_, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
       )
@@ -328,18 +322,18 @@ fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* T
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
   | toUPat(ctx, env, S.ConOrVarPat vid)
     = (case lookupVId(env, vid) of
-           SOME Syntax.ValueConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
-         | SOME Syntax.ExceptionConstructor => U.NulConPat(Syntax.MkLongVId([], vid))
+           SOME Syntax.ValueConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
+         | SOME Syntax.ExceptionConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
          | _ => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
       )
   | toUPat(ctx, env, S.VarPat vid) = U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
-  | toUPat(ctx, env, S.NulConPat longvid) = U.NulConPat longvid
   | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, env, row), wildcard)
-  | toUPat(ctx, env, S.ConPat(longvid, pat)) = U.ConPat(longvid, toUPat(ctx, env, pat))
+  | toUPat(ctx, env, S.ConPat(longvid, NONE)) = U.ConPat(longvid, NONE)
+  | toUPat(ctx, env, S.ConPat(longvid, SOME pat)) = U.ConPat(longvid, SOME(toUPat(ctx, env, pat)))
   | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
     = (case lookupVId(env, vid) of
-           SOME Syntax.ValueConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
-         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.NulConPat(Syntax.MkLongVId([], vid)), toUTy(ctx, env, ty))
+           SOME Syntax.ValueConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
+         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
          | _ => U.VarPat(vid, toUTy(ctx, env, ty))
       )
   | toUPat(ctx, env, S.TypedPat(S.VarPat vid, ty)) = U.VarPat(vid, toUTy(ctx, env, ty))
