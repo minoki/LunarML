@@ -235,5 +235,9 @@ fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
                   end
+fun TuplePat xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordPat (doFields 1 xs, false)
+                  end
 
 end (* structure UnfixedSyntax *)

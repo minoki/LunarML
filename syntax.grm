@@ -58,6 +58,7 @@ fun MkListExp nil = nilExp
        | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
        | Pat of UnfixedSyntax.Pat
+       | PatSeqRest of UnfixedSyntax.Pat list
        | AtTy of Syntax.Ty
        | ConTy of Syntax.Ty
        | Ty_NoARROW of Syntax.Ty
@@ -174,10 +175,12 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
                      ) (* value identifier *)
       | LBRACE RBRACE (UnfixedSyntax.RecordPat (nil, false)) (* empty record *)
       | LBRACE PatRow RBRACE (UnfixedSyntax.RecordPat PatRow) (* record *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordPat (nil, false)) (* [derived] empty tuple *)
       | LPAREN Pat RPAREN (case Pat of
                                UnfixedSyntax.InfixOrVIdPat _ => UnfixedSyntax.JuxtapositionPat([Pat])
                              | pat => pat
-                          )
+                          ) (* parenthesized pattern *)
+      | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
 
 (*
 AppPat : AtPat
@@ -211,6 +214,9 @@ Pat : TypedPat (TypedPat)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
        | Lab EQUAL Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
        | Lab EQUAL Pat (([(Lab, Pat)], false))
+
+PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
+           | (nil)
 
 AtTy : TyVar (Syntax.TyVar TyVar)
      | LBRACE RBRACE (Syntax.RecordType nil) (* record type expression *)
