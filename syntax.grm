@@ -1,3 +1,4 @@
+val nilPat = UnfixedSyntax.NonInfixVIdPat (Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
 val trueExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
 val falseExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("false")))
 val nilExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
@@ -8,6 +9,10 @@ fun MkPairExp (e1,e2) = UnfixedSyntax.RecordExp [(Syntax.NumericLabel 1, e1), (S
 fun MkConsExp (e1,e2) = UnfixedSyntax.AppExp (consOp, MkPairExp (e1,e2))
 fun MkListExp nil = nilExp
   | MkListExp (x :: xs) = MkConsExp (x, MkListExp xs)
+fun MkPairPat (p1, p2) = UnfixedSyntax.TuplePat [p1, p2]
+fun MkConsPat (p1, p2) = UnfixedSyntax.ConPat(Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(p1, p2))
+fun MkListPat nil = nilPat
+  | MkListPat (x :: xs) = MkConsPat (x, MkListPat xs)
 %%
 
 %eop EOF
@@ -181,6 +186,8 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
                              | pat => pat
                           ) (* parenthesized pattern *)
       | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
+      | LBRACK RBRACK (nilPat) (* [derived] empty list *)
+      | LBRACK Pat PatSeqRest RBRACK (MkListPat(Pat :: PatSeqRest)) (* [derived] list pattern *)
 
 (*
 AppPat : AtPat
