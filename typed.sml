@@ -13,6 +13,27 @@ datatype Ty = TyVar of TyVar (* type variable *)
 
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 
+datatype UnaryConstraint
+  = HasField of { label : Syntax.Label
+                , fieldTy : Ty
+                }
+  | IsEqType
+  | IsIntegral (* Int, Word; div, mod; defaults to int *)
+  | IsSignedReal (* Int, Real; abs; defaults to int *)
+  | IsRing (* Int, Word, Real; *, +, -; defaults to int *)
+  | IsField (* Real; /; defaults to real *)
+  | IsSigned (* Int, Real; ~; defaults to int *)
+  | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
+
+datatype Constraint
+  = EqConstr of Ty * Ty (* ty1 = ty2 *)
+  | UnaryConstraint of Ty * UnaryConstraint
+
+datatype TypeFcn = TypeFcn of TyVar list * Ty
+datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
+type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
+val emptyValEnv = Syntax.VIdMap.empty
+
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
              | VarPat of Syntax.VId * Ty (* variable *)
@@ -107,6 +128,15 @@ and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyV
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
 val print_Decs = Syntax.print_list print_Dec
 fun print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+fun print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_UnaryConstraint IsEqType = "IsEqType"
+  | print_UnaryConstraint IsIntegral = "IsIntegral"
+  | print_UnaryConstraint IsSignedReal = "IsSignedReal"
+  | print_UnaryConstraint IsRing = "IsRing"
+  | print_UnaryConstraint IsField = "IsField"
+  | print_UnaryConstraint IsSigned = "IsSigned"
+  | print_UnaryConstraint IsOrdered = "IsOrdered"
+fun print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 end (* structure PrettyPrint *)
 open PrettyPrint
 

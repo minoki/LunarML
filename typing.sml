@@ -1,59 +1,46 @@
 structure Typing = struct
-datatype UnaryConstraint
-  = HasField of { label : Syntax.Label
-                , fieldTy : USyntax.Ty
-                }
-  | IsEqType
-  | IsIntegral (* Int, Word; div, mod; defaults to int *)
-  | IsSignedReal (* Int, Real; abs; defaults to int *)
-  | IsRing (* Int, Word, Real; *, +, -; defaults to int *)
-  | IsField (* Real; /; defaults to real *)
-  | IsSigned (* Int, Real; ~; defaults to int *)
-  | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
 
-datatype Constraint
-  = EqConstr of USyntax.Ty * USyntax.Ty (* ty1 = ty2 *)
-  | UnaryConstraint of USyntax.Ty * UnaryConstraint
-
-datatype TypeFcn = TypeFcn of USyntax.TyVar list * USyntax.Ty
-datatype TypeScheme = TypeScheme of (USyntax.TyVar * UnaryConstraint list) list * USyntax.Ty
-type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
-val emptyValEnv = Syntax.VIdMap.empty
-datatype TyStr = TyStr of TypeFcn * ValEnv
+datatype TyStr = TyStr of USyntax.TypeFcn * USyntax.ValEnv
 
 datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
-                        , valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
+                        , valMap : (USyntax.TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
 
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 
-fun freeTyVarsInTypeScheme(bound, TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, List.map #1 tyvars), ty)
+fun freeTyVarsInTypeScheme(bound, USyntax.TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, List.map #1 tyvars), ty)
 fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
     = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
           (* TODO: tyMap? *)
       in Syntax.StrIdMap.foldl (fn (env, set) => USyntax.TyVarSet.union(set, freeTyVarsInEnv(bound, env))) valMapSet strMap
       end
-fun freeTyVarsInConstraint(bound, EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
-  | freeTyVarsInConstraint(bound, UnaryConstraint(recordTy, HasField{fieldTy = fieldTy, ...})) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, recordTy), USyntax.freeTyVarsInTy(bound, fieldTy))
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsEqType)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsIntegral)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsSignedReal)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsRing)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsField)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsSigned)) = USyntax.freeTyVarsInTy(bound, ty)
-  | freeTyVarsInConstraint(bound, UnaryConstraint(ty, IsOrdered)) = USyntax.freeTyVarsInTy(bound, ty)
-fun freeTyVarsInUnaryConstraint(bound, HasField{fieldTy = fieldTy, ...}) = USyntax.freeTyVarsInTy(bound, fieldTy)
-  | freeTyVarsInUnaryConstraint(bound, IsEqType) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsIntegral) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsSignedReal) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsRing) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsField) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsSigned) = USyntax.TyVarSet.empty
-  | freeTyVarsInUnaryConstraint(bound, IsOrdered) = USyntax.TyVarSet.empty
+fun freeTyVarsInConstraint(bound, USyntax.EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
+  | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(ty, unaryConstraint))
+    = (case unaryConstraint of
+           USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty), USyntax.freeTyVarsInTy(bound, fieldTy))
+         | USyntax.IsEqType     => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsIntegral   => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsSignedReal => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsRing       => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsField      => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsSigned     => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsOrdered    => USyntax.freeTyVarsInTy(bound, ty)
+      )
+fun freeTyVarsInUnaryConstraint(bound, unaryConstraint)
+    = (case unaryConstraint of
+           USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.freeTyVarsInTy(bound, fieldTy)
+         | USyntax.IsEqType     => USyntax.TyVarSet.empty
+         | USyntax.IsIntegral   => USyntax.TyVarSet.empty
+         | USyntax.IsSignedReal => USyntax.TyVarSet.empty
+         | USyntax.IsRing       => USyntax.TyVarSet.empty
+         | USyntax.IsField      => USyntax.TyVarSet.empty
+         | USyntax.IsSigned     => USyntax.TyVarSet.empty
+         | USyntax.IsOrdered   => USyntax.TyVarSet.empty
+      )
 
 type Context = { nextTyVar : int ref
-               , tyVarConstraints : ((UnaryConstraint list) USyntax.TyVarMap.map) ref
+               , tyVarConstraints : ((USyntax.UnaryConstraint list) USyntax.TyVarMap.map) ref
                , tyVarSubst : Subst ref
                }
 
@@ -138,6 +125,16 @@ val initialEnv : Env
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
           val mkValMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
           val tyVarA = USyntax.MkTyVar("a", 0)
+          val TypeFcn = USyntax.TypeFcn
+          val TypeScheme = USyntax.TypeScheme
+          val IsEqType = USyntax.IsEqType
+          val IsIntegral = USyntax.IsIntegral
+          val IsSignedReal = USyntax.IsSignedReal
+          val IsRing = USyntax.IsRing
+          val IsField = USyntax.IsField
+          val IsSigned = USyntax.IsSigned
+          val IsOrdered = USyntax.IsOrdered
+          val emptyValEnv = USyntax.emptyValEnv
       in MkEnv { tyMap = mkTyMap
                              [(MkTyCon "unit", TyStr(TypeFcn([], primTy_unit), emptyValEnv))
                              ,(MkTyCon "bool", TyStr(TypeFcn([], primTy_bool)
@@ -193,7 +190,7 @@ fun newContext() : Context
       , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
-fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : UnaryConstraint)
+fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : USyntax.UnaryConstraint)
     = let val cts = !(#tyVarConstraints ctx)
           val xs = Option.getOpt(USyntax.TyVarMap.find(cts, tv), [])
       in #tyVarConstraints ctx := USyntax.TyVarMap.insert(cts, tv, ct :: xs)
@@ -693,16 +690,7 @@ fun typeCheckProgram(ctx, env, decls) = let val (env', decls') = typeCheckDecl(c
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ USyntax.print_Ty fieldTy ^ "}"
-  | print_UnaryConstraint IsEqType = "IsEqType"
-  | print_UnaryConstraint IsIntegral = "IsIntegral"
-  | print_UnaryConstraint IsSignedReal = "IsSignedReal"
-  | print_UnaryConstraint IsRing = "IsRing"
-  | print_UnaryConstraint IsField = "IsField"
-  | print_UnaryConstraint IsSigned = "IsSigned"
-  | print_UnaryConstraint IsOrdered = "IsOrdered"
-fun print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (USyntax.print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ USyntax.print_Ty ty ^ ")"
-fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ Syntax.print_VIdMap (Syntax.print_pair (print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
+fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ Syntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
 end (* structure PrettyPrint *)
 open PrettyPrint
 end (* local *)
