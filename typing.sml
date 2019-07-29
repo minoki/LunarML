@@ -492,7 +492,7 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
 and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
   | typeCheckDecl(ctx, env, decl :: decls)
     = (case decl of
-           ValDec(tyvarseq, valbinds) =>
+           ValDec(tyvarseq, valbinds, _) =>
            let val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
                val (vars, valbinds') = typeCheckValBinds(ctx, env, Syntax.VIdMap.empty, valbinds)
                val tvc = !(#tyVarConstraints ctx)
@@ -506,7 +506,7 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                          val tyVars = TyVarSet.difference(unconstrainedTyVars, tyVars_env)
                                      in (TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty'), Syntax.ValueVariable)
                                      end
-               val valMap' = Syntax.VIdMap.map doVar vars
+               val valMap': USyntax.ValEnv = Syntax.VIdMap.map doVar vars
                val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
                                 , tyMap = tyMap
                                 , strMap = strMap
@@ -516,9 +516,9 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                  , tyMap = #tyMap restEnv
                                  , strMap = #strMap restEnv
                                  }
-           in (env'', ValDec(tyvarseq, valbinds') :: decls')
+           in (env'', ValDec(tyvarseq, valbinds', valMap') :: decls')
            end
-         | RecValDec(tyvarseq, valbinds) => raise Fail "let-in: val rec: not impl"
+         | RecValDec(tyvarseq, valbinds, _) => raise Fail "let-in: val rec: not impl"
          | TypeDec(_) => raise Fail "let-in: type: not impl"
          | DatatypeDec(_) => raise Fail "let-in: datatype: not impl"
          | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
@@ -537,7 +537,7 @@ and typeCheckValBinds(ctx, env, vars, []): (USyntax.Ty * bool) Syntax.VIdMap.map
     = let val (patTy, newVars, pat') = typeCheckPat(ctx, env, pat)
           val (expTy, exp') = typeCheckExp(ctx, env, exp)
           val generalize = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
-          val vars' = Syntax.VIdMap.unionWith #2 (vars, Syntax.VIdMap.map (fn ty => (ty, generalize)) newVars) (* TODO: generalize *)
+          val vars' = Syntax.VIdMap.unionWith #2 (vars, Syntax.VIdMap.map (fn ty => (ty, generalize)) newVars)
           val () = addConstraint(ctx, EqConstr(patTy, expTy))
           val (vars'', rest') = typeCheckValBinds(ctx, env, vars', rest)
       in (vars'', PatBind(pat', exp') :: rest')
