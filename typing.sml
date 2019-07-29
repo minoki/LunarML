@@ -696,5 +696,52 @@ structure PrettyPrint = struct
 fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ Syntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
 end (* structure PrettyPrint *)
 open PrettyPrint
+
+(* applyDefaultTypes : (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Dec list -> USyntax.Dec list *)
+fun applyDefaultTypes(tvc, decs) =
+    let fun doInt [] = primTy_int
+          | doInt (USyntax.HasField{...} :: xs) = raise TypeError "invalid record syntax for int"
+          | doInt (USyntax.IsEqType :: xs) = doInt xs
+          | doInt (USyntax.IsIntegral :: xs) = doInt xs
+          | doInt (USyntax.IsSignedReal :: xs) = doInt xs
+          | doInt (USyntax.IsRing :: xs) = doInt xs
+          | doInt (USyntax.IsField :: xs) = raise TypeError "cannot apply / operator for int"
+          | doInt (USyntax.IsSigned :: xs) = doInt xs
+          | doInt (USyntax.IsOrdered :: xs) = doInt xs
+        fun doReal [] = primTy_real
+          | doReal (USyntax.HasField{...} :: xs) = raise TypeError "invalid record syntax for real"
+          | doReal (USyntax.IsEqType :: xs) = raise TypeError "real does not admit equality"
+          | doReal (USyntax.IsIntegral :: xs) = raise TypeError "div, mod is invalid for real"
+          | doReal (USyntax.IsSignedReal :: xs) = doReal xs
+          | doReal (USyntax.IsRing :: xs) = doReal xs
+          | doReal (USyntax.IsField :: xs) = doReal xs
+          | doReal (USyntax.IsSigned :: xs) = doReal xs
+          | doReal (USyntax.IsOrdered :: xs) = doReal xs
+        fun doIntOrReal [] = primTy_int
+          | doIntOrReal (USyntax.HasField{...} :: _) = raise TypeError "unresolved flex record"
+          | doIntOrReal (USyntax.IsEqType :: xs) = doInt xs
+          | doIntOrReal (USyntax.IsIntegral :: xs) = doInt xs
+          | doIntOrReal (USyntax.IsSignedReal :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsRing :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsField :: xs) = doReal xs
+          | doIntOrReal (USyntax.IsSigned :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsOrdered :: xs) = doIntOrReal xs
+        fun defaultTyForConstraints(eq, []) = primTy_unit
+          | defaultTyForConstraints(eq, USyntax.HasField{...} :: _) = raise TypeError "unresolved flex record"
+          | defaultTyForConstraints(eq, USyntax.IsEqType :: xs) = defaultTyForConstraints(true, xs)
+          | defaultTyForConstraints(eq, USyntax.IsIntegral :: xs) = doInt xs
+          | defaultTyForConstraints(eq, USyntax.IsSignedReal :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsRing :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsField :: xs) = if eq then raise TypeError "real does not admit equality" else doReal xs
+          | defaultTyForConstraints(eq, USyntax.IsSigned :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsOrdered :: xs) = if eq then doInt xs else doIntOrReal xs
+        fun doTyVar tv = case TyVarMap.find(tvc, tv) of
+                             NONE => primTy_unit
+                           | SOME constraints => defaultTyForConstraints(false, constraints)
+        val freeTyVars = USyntax.freeTyVarsInDecs(USyntax.TyVarSet.empty, decs)
+        val subst = USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
+    in List.map (USyntax.mapTyInDec (applySubstTy subst)) decs
+    end
+
 end (* local *)
 end (* structure Typing *)
