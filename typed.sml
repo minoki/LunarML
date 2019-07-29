@@ -126,9 +126,8 @@ and print_Dec (ValDec (bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyV
   | print_Dec (RecValDec (bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-val print_Decs = Syntax.print_list print_Dec
-fun print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
-fun print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_UnaryConstraint IsEqType = "IsEqType"
   | print_UnaryConstraint IsIntegral = "IsIntegral"
   | print_UnaryConstraint IsSignedReal = "IsSignedReal"
@@ -136,7 +135,9 @@ fun print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "Has
   | print_UnaryConstraint IsField = "IsField"
   | print_UnaryConstraint IsSigned = "IsSigned"
   | print_UnaryConstraint IsOrdered = "IsOrdered"
-fun print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
+and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
+and print_ValEnv env = Syntax.print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
+val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 open PrettyPrint
 
