@@ -36,7 +36,7 @@ fun freeTyVarsInUnaryConstraint(bound, unaryConstraint)
          | USyntax.IsRing       => USyntax.TyVarSet.empty
          | USyntax.IsField      => USyntax.TyVarSet.empty
          | USyntax.IsSigned     => USyntax.TyVarSet.empty
-         | USyntax.IsOrdered   => USyntax.TyVarSet.empty
+         | USyntax.IsOrdered    => USyntax.TyVarSet.empty
       )
 
 type Context = { nextTyVar : int ref
@@ -499,14 +499,17 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
-               fun doVar(ty, false) = (TypeScheme([], ty), Syntax.ValueVariable)
+               fun doVar(ty, false) = (TyVarSet.empty, (TypeScheme([], ty), Syntax.ValueVariable))
                  | doVar(ty, true) = let val ty' = applySubstTy subst ty
                                          val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
                                          val unconstrainedTyVars = TyVarSet.filter (fn tv => not (Option.isSome(USyntax.TyVarMap.find(tvc, tv)))) tyVars_ty (* TODO: Allow equality constraint *)
                                          val tyVars = TyVarSet.difference(unconstrainedTyVars, tyVars_env)
-                                     in (TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty'), Syntax.ValueVariable)
+                                     in (tyVars, (TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty'), Syntax.ValueVariable))
                                      end
-               val valMap': USyntax.ValEnv = Syntax.VIdMap.map doVar vars
+               val vars' = Syntax.VIdMap.map doVar vars
+               val valMap': USyntax.ValEnv = Syntax.VIdMap.map #2 vars'
+               val boundVars = TyVarSet.foldr (op ::) [] (Syntax.VIdMap.foldl (fn ((tyVars, _), set) => TyVarSet.union(set, tyVars)) TyVarSet.empty vars')
+               (* TODO: Do something with tyvarseq *)
                val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
                                 , tyMap = tyMap
                                 , strMap = strMap
@@ -516,7 +519,7 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                  , tyMap = #tyMap restEnv
                                  , strMap = #strMap restEnv
                                  }
-           in (env'', ValDec(tyvarseq, valbinds', valMap') :: decls')
+           in (env'', ValDec(boundVars, valbinds', valMap') :: decls')
            end
          | RecValDec(tyvarseq, valbinds, _) => raise Fail "let-in: val rec: not impl"
          | TypeDec(_) => raise Fail "let-in: type: not impl"
