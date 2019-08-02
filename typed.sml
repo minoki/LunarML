@@ -137,6 +137,7 @@ and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "Has
   | print_UnaryConstraint IsOrdered = "IsOrdered"
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 and print_ValEnv env = Syntax.print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
+fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 open PrettyPrint
