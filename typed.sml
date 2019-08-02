@@ -202,7 +202,7 @@ fun freeTyVarsInPat(bound, pat)
     = (case pat of
            WildcardPat => TyVarSet.empty
          | SConPat _ => TyVarSet.empty
-         | VarPat _ => TyVarSet.empty
+         | VarPat(_, ty) => freeTyVarsInTy(bound, ty)
          | RecordPat(xs, _) => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
          | ConPat(_, NONE) => TyVarSet.empty
          | ConPat(_, SOME pat) => freeTyVarsInPat(bound, pat)
