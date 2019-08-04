@@ -59,10 +59,30 @@ fun lookupTyConInEnv(MkEnv env, tycon as Syntax.MkTyCon name)
            NONE => raise NameError("unknown type constructor " ^ name)
          | SOME x => x
       )
+(* Env * Syntax.LongVId -> (USyntax.TypeScheme * Syntax.IdStatus) option *)
 fun lookupLongVIdInEnv(env, Syntax.MkLongVId(strid, vid))
     = let val MkEnv strEnv = lookupStr(env, strid)
       in Syntax.VIdMap.find(#valMap strEnv, vid)
       end
+
+(* getConstructedType : USyntax.Ty -> USyntax.LongTyCon *)
+fun getConstructedType(USyntax.TyVar _) = raise TypeError "getConstructedType: got a type variable"
+  | getConstructedType(USyntax.RecordType _) = raise TypeError "getConstructedType: got a record"
+  | getConstructedType(USyntax.TyCon(tyargs, longtycon)) = longtycon
+  | getConstructedType(USyntax.FnType(_, t)) = getConstructedType t
+
+(* isSoleConstructor : Env * Syntax.LongVId -> bool *)
+fun isSoleConstructor(env : Env, longvid: Syntax.LongVId) =
+    (case lookupLongVIdInEnv(env, longvid) of
+         NONE => false (* probably an error *)
+       | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
+         let val USyntax.MkLongTyCon(Syntax.MkLongTyCon(strids, tycon), x) = getConstructedType ty
+             val TyStr (_, valenv) = lookupTyConInEnv(lookupStr(env, strids), tycon)
+         in Syntax.VIdMap.numItems valenv = 1
+         end
+       | SOME (_, Syntax.ValueVariable) => false
+       | SOME (_, Syntax.ExceptionConstructor) => false
+    )
 
 (* The Definition, 4.7 Non-expansive Expressions *)
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
@@ -90,10 +110,10 @@ fun isExhaustive(env : Env, USyntax.WildcardPat) = true
   | isExhaustive(env, USyntax.SConPat _) = false
   | isExhaustive(env, USyntax.VarPat _) = true
   | isExhaustive(env, USyntax.RecordPat(row, _)) = List.all (fn (_, e) => isExhaustive(env, e)) row
-  | isExhaustive(env, USyntax.ConPat(longvid, NONE)) = false (* TODO: Check if this if the sole constructor of the type *)
-  | isExhaustive(env, USyntax.ConPat(longvid, SOME innerPat)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
-  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, NONE, tyargs)) = false (* TODO: Check if this if the sole constructor of the type *)
-  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = false andalso isExhaustive(env, innerPat) (* TODO: Check if this if the sole constructor of the type *)
+  | isExhaustive(env, USyntax.ConPat(longvid, NONE)) = isSoleConstructor(env, longvid)
+  | isExhaustive(env, USyntax.ConPat(longvid, SOME innerPat)) = isSoleConstructor(env, longvid) andalso isExhaustive(env, innerPat)
+  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, NONE, tyargs)) = isSoleConstructor(env, longvid)
+  | isExhaustive(env, USyntax.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = isSoleConstructor(env, longvid) andalso isExhaustive(env, innerPat)
   | isExhaustive(env, USyntax.TypedPat(innerPat, _)) = isExhaustive(env, innerPat)
   | isExhaustive(env, USyntax.LayeredPat(_, _, innerPat)) = isExhaustive(env, innerPat)
 
