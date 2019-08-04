@@ -72,6 +72,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | LocalDec of Dec list * Dec list
              | OpenDec of Syntax.LongStrId list
      and ValBind = PatBind of Pat * Exp
+                 | PolyVarBind of Syntax.VId * TypeScheme * Exp (* polymorphic binding *)
 type Program = Dec list
 
 structure TyVarKey = struct
@@ -126,6 +127,7 @@ and print_Dec (ValDec (bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list pr
   | print_Dec (RecValDec (bound,valbind,valenv)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
+  | print_ValBind (PolyVarBind (name, tysc, exp)) = "PolyVarBind(" ^ Syntax.print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_UnaryConstraint IsEqType = "IsEqType"
@@ -170,6 +172,7 @@ fun mapTy doTy =
           | doDec(LocalDec _) = raise NotImpl "doDec(LocalDec) not implemented yet"
           | doDec(OpenDec _) = raise NotImpl "doDec(OpenDec) not implemented yet"
         and doValBind(PatBind(pat, exp)) = PatBind(doPat pat, doExp exp)
+          | doValBind(PolyVarBind(vid, tysc, exp)) = PolyVarBind(vid, tysc, doExp exp) (* TODO *)
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
@@ -220,7 +223,7 @@ fun freeTyVarsInExp(bound, exp)
          | VarExp(_, _) => TyVarSet.empty
          | InstantiatedVarExp(_, _, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordExp(xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
-         | LetInExp(decls, exp) => raise Fail "not impl"
+         | LetInExp(decls, exp) => TyVarSet.union(freeTyVarsInDecs(bound, decls), freeTyVarsInExp(bound, exp))
          | AppExp(exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
          | TypedExp(exp, ty) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInTy(bound, ty))
          | HandleExp(exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
@@ -247,7 +250,23 @@ and freeTyVarsInDec(bound, dec)
       )
 and freeTyVarsInValBinds(bound, nil, acc) = acc
   | freeTyVarsInValBinds(bound, PatBind(pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
+  | freeTyVarsInValBinds(bound, PolyVarBind(vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
 
+(* filterVarsInPat : (Syntax.VId -> bool) -> Pat -> Pat *)
+fun filterVarsInPat pred =
+    let fun doPat pat = case pat of
+                            WildcardPat => pat
+                          | SConPat _ => pat
+                          | VarPat(vid, ty) => if pred vid then pat else WildcardPat
+                          | RecordPat(row, x) => RecordPat(List.map (fn (label, p) => (label, doPat p)) row, x)
+                          | ConPat(_, NONE) => pat
+                          | ConPat(longvid, SOME innerPat) => ConPat(longvid, SOME (doPat innerPat))
+                          | InstantiatedConPat(_, NONE, _) => pat
+                          | InstantiatedConPat(longvid, SOME innerPat, tyargs) => InstantiatedConPat(longvid, SOME (doPat innerPat), tyargs)
+                          | TypedPat(innerPat, ty) => TypedPat(doPat innerPat, ty)
+                          | LayeredPat(vid, ty, innerPat) => if pred vid then LayeredPat(vid, ty, doPat innerPat) else TypedPat(doPat innerPat, ty)
+    in doPat
+    end
 end (* structure USyntax *)
 
 structure ToTypedSyntax = struct
