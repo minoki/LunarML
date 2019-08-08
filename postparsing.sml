@@ -1,38 +1,6 @@
 structure Fixity = struct
 type FixityStatusMap = Syntax.FixityStatus Syntax.VIdMap.map
-(*
-Top-level environment:
-infix  7  * / div mod
-infix  6  + - ^
-infixr 5  :: @
-infix  4  = <> > >= < <=
-infix  3  := o
-infix  0  before
-*)
-val initialFixity = let open Syntax
-                        fun InfixL p = Syntax.Infix (Syntax.LeftAssoc p)
-                        fun InfixR p = Syntax.Infix (Syntax.RightAssoc p)
-                    in List.foldl VIdMap.insert' VIdMap.empty
-                                  [(MkVId "*",  InfixL 7)
-                                  ,(MkVId "/",  InfixL 7)
-                                  ,(MkVId "div",InfixL 7)
-                                  ,(MkVId "mod",InfixL 7)
-                                  ,(MkVId "+",  InfixL 6)
-                                  ,(MkVId "-",  InfixL 6)
-                                  ,(MkVId "^",  InfixL 6) (* string concatenation *)
-                                  ,(MkVId "::", InfixR 5)
-                                  ,(MkVId "@",  InfixR 5) (* list concatenation *)
-                                  ,(MkVId "=",  InfixL 4)
-                                  ,(MkVId "<>", InfixL 4)
-                                  ,(MkVId ">",  InfixL 4)
-                                  ,(MkVId ">=", InfixL 4)
-                                  ,(MkVId "<",  InfixL 4)
-                                  ,(MkVId "<=", InfixL 4)
-                                  ,(MkVId ":=", InfixL 3)
-                                  ,(MkVId "o",  InfixL 3)
-                                  ,(MkVId "before",InfixL 3)
-                                  ]
-                    end
+
 fun getFixityStatus (map, vid) = case Syntax.VIdMap.find (map, vid) of
                                      SOME a => a
                                    | NONE => Syntax.Nonfix
