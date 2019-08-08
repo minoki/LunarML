@@ -40,6 +40,7 @@ fun freeTyVarsInUnaryConstraint(bound, unaryConstraint)
       )
 
 type Context = { nextTyVar : int ref
+               , nextVId : int ref
                , tyVarConstraints : ((USyntax.UnaryConstraint list) USyntax.TyVarMap.map) ref
                , tyVarSubst : Subst ref
                }
@@ -143,6 +144,7 @@ val emptyEnv : Env
 
 fun newContext() : Context
     = { nextTyVar = ref 100
+      , nextVId = ref 100
       , tyVarConstraints = ref USyntax.TyVarMap.empty
       , tyVarSubst = ref USyntax.TyVarMap.empty
       }

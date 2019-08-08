@@ -1,4 +1,5 @@
 structure USyntax = struct
+datatype VId = MkVId of string * int
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
 datatype TyCon = MkTyCon of string * int
@@ -94,6 +95,7 @@ structure TyVarMap = BinaryMapFn(TyVarKey)
 
 (* pretty printing *)
 structure PrettyPrint = struct
+fun print_VId(MkVId(name, n)) = "MkVId(\"" ^ String.toString name ^ "\"," ^ Int.toString n ^ ")"
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
@@ -282,6 +284,7 @@ structure ToTypedSyntax = struct
 exception NameError of string
 
 type ('a,'b) Context = { nextTyVar : int ref
+                       , nextVId : int ref
                        (* , nextTyCon : int ref *)
                        , tyVarConstraints : 'a
                        , tyVarSubst : 'b
@@ -296,7 +299,7 @@ fun newContext() : Context
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of int
-datatype Env = MkEnv of { valMap : Syntax.IdStatus Syntax.VIdMap.map
+datatype Env = MkEnv of { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
                         , tyConMap : BoundTyCon Syntax.TyConMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
@@ -304,15 +307,16 @@ val emptyEnv = MkEnv { valMap = Syntax.VIdMap.empty
                      , tyConMap = Syntax.TyConMap.empty
                      , strMap = Syntax.StrIdMap.empty
                      }
-val initialEnv = MkEnv { valMap = let open Syntax
+val initialEnv = MkEnv { valMap = let val ValueConstructor = Syntax.ValueConstructor
+                                      val ExceptionConstructor = Syntax.ExceptionConstructor
                                   in List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
-                                                [(MkVId "ref", ValueConstructor)
-                                                ,(MkVId "nil", ValueConstructor)
-                                                ,(MkVId "true", ValueConstructor)
-                                                ,(MkVId "false", ValueConstructor)
-                                                ,(MkVId "Match", ExceptionConstructor)
-                                                ,(MkVId "Bind", ExceptionConstructor)
-                                                ,(MkVId "::", ValueConstructor)
+                                                [(Syntax.MkVId "ref", (USyntax.MkVId("ref", 0), ValueConstructor))
+                                                ,(Syntax.MkVId "nil", (USyntax.MkVId("nil", 1), ValueConstructor))
+                                                ,(Syntax.MkVId "true", (USyntax.MkVId("true", 2), ValueConstructor))
+                                                ,(Syntax.MkVId "false", (USyntax.MkVId("false", 3), ValueConstructor))
+                                                ,(Syntax.MkVId "Match", (USyntax.MkVId("Match", 4), ExceptionConstructor))
+                                                ,(Syntax.MkVId "Bind", (USyntax.MkVId("Bind", 5), ExceptionConstructor))
+                                                ,(Syntax.MkVId "::", (USyntax.MkVId("::", 6), ValueConstructor))
                                                 ]
                                   end
                        , tyConMap = Syntax.TyConMap.empty (* TODO *)
@@ -356,8 +360,10 @@ local structure S = Syntax
               | SOME b => b
       fun lookupLongTyCon(env : Env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
 
-      fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
-      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVId(lookupStr(env, strpath), vid)
+      fun lookupVIdStatus(MkEnv env, vid) = case Syntax.VIdMap.find(#valMap env, vid) of
+                                                NONE => NONE
+                                              | SOME (_, idstatus) => SOME idstatus
+      fun lookupLongVIdStatus(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVIdStatus(lookupStr(env, strpath), vid)
 in
 (* toUTy : Context * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUTyRow : Context * Env * (Label * Syntax.Ty) list -> (Label * USyntax.Ty) list *)
@@ -384,7 +390,7 @@ fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* T
   | toUPat(ctx, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
   | toUPat(ctx, env, S.ConOrVarPat vid)
-    = (case lookupVId(env, vid) of
+    = (case lookupVIdStatus(env, vid) of
            SOME Syntax.ValueConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
          | SOME Syntax.ExceptionConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
          | _ => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
@@ -394,7 +400,7 @@ fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* T
   | toUPat(ctx, env, S.ConPat(longvid, NONE)) = U.ConPat(longvid, NONE)
   | toUPat(ctx, env, S.ConPat(longvid, SOME pat)) = U.ConPat(longvid, SOME(toUPat(ctx, env, pat)))
   | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
-    = (case lookupVId(env, vid) of
+    = (case lookupVIdStatus(env, vid) of
            SOME Syntax.ValueConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
          | SOME Syntax.ExceptionConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
          | _ => U.VarPat(vid, toUTy(ctx, env, ty))
@@ -412,7 +418,7 @@ fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, env, S.VarExp(longvid))
-    = (case lookupLongVId(env, longvid) of
+    = (case lookupLongVIdStatus(env, longvid) of
            SOME idstatus => U.VarExp(longvid, idstatus)
          | NONE => U.VarExp(longvid, Syntax.ValueVariable)
       )
