@@ -38,7 +38,7 @@ val initialEnv : Typing.Env
           open Typing
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
           val mkValMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
-          val tyVarA = USyntax.MkTyVar("a", 0)
+          val tyVarA = USyntax.AnonymousTyVar(0)
           val TypeFcn = USyntax.TypeFcn
           val TypeScheme = USyntax.TypeScheme
           val IsEqType = USyntax.IsEqType

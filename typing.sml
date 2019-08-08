@@ -157,7 +157,7 @@ fun freshTyVar(ctx : Context) : USyntax.TyVar
     = let val nextTyVar = #nextTyVar ctx
           val i = !nextTyVar
       in nextTyVar := i + 1
-       ; USyntax.MkTyVar("_", i)
+       ; USyntax.AnonymousTyVar(i)
       end
 
 local open USyntax

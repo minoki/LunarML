@@ -1,8 +1,11 @@
 structure USyntax = struct
-datatype TyVar = MkTyVar of string * int
+datatype TyVar = NamedTyVar of string * bool * int
+               | AnonymousTyVar of int
 datatype TyCon = MkTyCon of string * int
 datatype LongTyCon = MkLongTyCon of Syntax.LongTyCon * int
-fun eqUTyVar(MkTyVar(_,a),MkTyVar(_,b)) = a = b
+fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andalso eq = eq' andalso a = b
+  | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
+  | eqUTyVar(_, _) = false
 fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
 fun eqULongTyCon(MkLongTyCon(_,a),MkLongTyCon(_,b)) = a = b
 
@@ -77,16 +80,22 @@ type Program = Dec list
 
 structure TyVarKey = struct
 type ord_key = TyVar
-fun compare (MkTyVar(x, a), MkTyVar(y, b)) = case String.compare (x,y) of
-                                                 EQUAL => Int.compare(a, b)
-                                               | ord => ord
+fun compare (NamedTyVar(name, eq, a), NamedTyVar(name', eq', b)) =
+    (case String.compare (name, name') of
+         EQUAL => Int.compare(a, b)
+       | ord => ord
+    )
+  | compare (AnonymousTyVar(a), AnonymousTyVar(b)) = Int.compare(a, b)
+  | compare (NamedTyVar _, AnonymousTyVar _) = LESS
+  | compare (AnonymousTyVar _, NamedTyVar _) = GREATER
 end : ORD_KEY
 structure TyVarSet = BinarySetFn(TyVarKey)
 structure TyVarMap = BinaryMapFn(TyVarKey)
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_TyVar(MkTyVar(tvname, n)) = "MkTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
+fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
+  | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_LongTyCon(MkLongTyCon(longtycon, n)) = "MkLongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
@@ -322,8 +331,11 @@ local structure S = Syntax
       fun genTyVarId(ctx : ('a,'b) Context)
           = let val id = !(#nextTyVar ctx)
             in #nextTyVar ctx := id + 1 ; id end
-      fun genTyVar(ctx, Syntax.MkTyVar tvname) = USyntax.MkTyVar(tvname, genTyVarId(ctx))
-      fun freshTyVar(ctx : ('a,'b) Context) = genTyVar(ctx, Syntax.MkTyVar "_")
+      fun genTyVar(ctx, Syntax.MkTyVar tvname) = if String.isPrefix "''" tvname then
+                                                     USyntax.NamedTyVar(tvname, true, genTyVarId(ctx))
+                                                 else
+                                                     USyntax.NamedTyVar(tvname, false, genTyVarId(ctx))
+      fun freshTyVar(ctx : ('a,'b) Context) = USyntax.AnonymousTyVar(genTyVarId(ctx))
 
 (*
       fun genTyConId(ctx : Context)
