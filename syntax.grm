@@ -13,6 +13,8 @@ fun MkPairPat (p1, p2) = UnfixedSyntax.TuplePat [p1, p2]
 fun MkConsPat (p1, p2) = UnfixedSyntax.ConPat(Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(p1, p2))
 fun MkListPat nil = nilPat
   | MkListPat (x :: xs) = MkConsPat (x, MkListPat xs)
+fun MkSequentialExp e1 [] = e1
+  | MkSequentialExp e1 (e2 :: xs) = UnfixedSyntax.CaseExp(e1,[(UnfixedSyntax.WildcardPat, MkSequentialExp e2 xs)])
 %%
 
 %eop EOF
@@ -270,10 +272,8 @@ AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
                           ) (* parenthesized expression *)
       | LPAREN RPAREN (UnfixedSyntax.RecordExp nil) (* [derived] 0-tuple *)
       | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
-(*
-      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN () (* [derived] sequential execution *)
-      | LET Dec IN Exp SEMICOLON Exp ExpSSeqRest END () (* [derived] local declaration *)
-*)
+      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp Exp1 (Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
+      | LET Dec IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (Dec, MkSequentialExp Exp1 (Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
       | LBRACK RBRACK (MkListExp []) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | LBRACK Exp ExpCSeqRest RBRACK (MkListExp (Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | HASH Lab (UnfixedSyntax.ProjectionExp(Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
