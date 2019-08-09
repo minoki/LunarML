@@ -319,6 +319,15 @@ fun mergeEnv(MkEnv env1 : Env, MkEnv env2 : Env)
             , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
             }
 
+fun envWithValEnv valEnv = MkEnv { valMap = valEnv
+                                 , tyConMap = Syntax.TyConMap.empty
+                                 , strMap = Syntax.StrIdMap.empty
+                                 }
+fun envWithTyConEnv tyConEnv = MkEnv { valMap = Syntax.VIdMap.empty
+                                     , tyConMap = tyConEnv
+                                     , strMap = Syntax.StrIdMap.empty
+                                     }
+
 type TVEnv = USyntax.TyVar Syntax.TyVarMap.map
 
 local structure S = Syntax
@@ -459,8 +468,8 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U
   | toUExp(ctx, tvenv, env, S.ProjectionExp label) = U.ProjectionExp { label = label, recordTy = USyntax.TyVar(freshTyVar(ctx)), fieldTy = USyntax.TyVar(freshTyVar(ctx)) }
 and toUMatch(ctx, tvenv, env, matches : (S.Pat * S.Exp) list)
     = List.map (fn (pat, exp) => let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
-                                     val MkEnv { valMap = valMap, tyConMap = tyConMap, strMap = strMap } = env
-                                     val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap), tyConMap = tyConMap, strMap = strMap }
+                                     val valEnv = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap
+                                     val env' = mergeEnv(env, envWithValEnv valEnv)
                                  in (pat', toUExp(ctx, tvenv, env', exp))
                                  end
                ) matches
@@ -476,10 +485,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                                        ) valbind
                val decl' = U.ValDec(List.map #2 tyvars', List.map #2 valbind', USyntax.VIdMap.empty)
                val vidmap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty (List.map #1 valbind')
-               val venv = MkEnv { valMap = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap
-                                , tyConMap = Syntax.TyConMap.empty
-                                , strMap = Syntax.StrIdMap.empty
-                                }
+               val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, venv), decls)
            in (mergeEnv(venv, env'), decl' :: decls')
            end
@@ -488,10 +494,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
                val valbind' = List.map (fn S.PatBind(pat, exp) => (toUPat(ctx, tvenv', env, pat), exp)) valbind
                val vidmap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty (List.map (fn x => #1 (#1 x)) valbind')
-               val venv = MkEnv { valMap = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap
-                                , tyConMap = Syntax.TyConMap.empty
-                                , strMap = Syntax.StrIdMap.empty
-                                }
+               val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val env' = mergeEnv(env, venv)
                val valbind'' = List.map (fn ((_, pat'), exp) => U.PatBind(pat', toUExp(ctx, tvenv', env', exp))) valbind'
                val decl' = U.RecValDec(List.map #2 tyvars', valbind'', U.VIdMap.empty)
@@ -508,7 +511,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                      in (Syntax.TyConMap.insert(tyConEnv, tycon, BTyAlias(tyvars'', ty')), U.TypBind(tyvars'', tycon', ty') :: typbinds)
                      end
                val (tyConEnv, typbinds') = List.foldr doTypBind (Syntax.TyConMap.empty, []) typbinds
-               val tenv = MkEnv { valMap = Syntax.VIdMap.empty, tyConMap = tyConEnv, strMap = Syntax.StrIdMap.empty }
+               val tenv = envWithTyConEnv tyConEnv
                val decl' = U.TypeDec(typbinds') (* TODO: Move TypeDec to top level *)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, tenv), decls)
            in (mergeEnv(tenv, env'), decl' :: decls')
@@ -521,9 +524,8 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                      in (Syntax.TyConMap.insert(tyConEnv, tycon, tycon'), (List.map #2 tyvars', tvenv, tycon', conbinds) :: datbinds)
                      end
                val (tyConEnv, datbinds') = List.foldr doDatBind1 (Syntax.TyConMap.empty, []) datbinds
-               val env' = case env of
-                              MkEnv { valMap = valMap, tyConMap = tyConMap, strMap = strMap } =>
-                              MkEnv { valMap = valMap, tyConMap = Syntax.TyConMap.unionWith #2 (tyConMap, Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv), strMap = strMap }
+               val tyConEnv' = envWithTyConEnv(Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv)
+               val env' = mergeEnv(env, tyConEnv')
                fun doDatBind2 ((tyvars, tvenv, tycon, conbinds), (valEnv, datbinds))
                    = let fun doConBind (S.ConBind(vid, optPayloadTy), (valEnv, conbinds))
                              = let val vid' = newVId(ctx, vid)
@@ -536,7 +538,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                      in (Syntax.VIdMap.unionWith #2 (valEnv', valEnv), USyntax.DatBind(tyvars, tycon, conbinds') :: datbinds)
                      end
                val (valEnv, datbinds'') = List.foldr doDatBind2 (Syntax.VIdMap.empty, []) datbinds'
-               val datbindEnv = MkEnv { valMap = valEnv, tyConMap = Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv, strMap = Syntax.StrIdMap.empty }
+               val datbindEnv = mergeEnv(tyConEnv', envWithValEnv valEnv)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, datbindEnv), decls)
            in (mergeEnv(datbindEnv, env'), U.DatatypeDec(datbinds'') :: decls') (* TODO: Move to top level *)
            end
