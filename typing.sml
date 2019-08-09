@@ -3,7 +3,7 @@ structure Typing = struct
 datatype TyStr = TyStr of USyntax.TypeFcn * USyntax.ValEnv
 
 datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
-                        , valMap : (USyntax.TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
+                        , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
 
@@ -11,7 +11,7 @@ type Subst = USyntax.Ty USyntax.TyVarMap.map
 
 fun freeTyVarsInTypeScheme(bound, USyntax.TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, List.map #1 tyvars), ty)
 fun freeTyVarsInEnv(bound, MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
-    = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
+    = let val valMapSet = USyntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
           (* TODO: tyMap? *)
       in Syntax.StrIdMap.foldl (fn (env, set) => USyntax.TyVarSet.union(set, freeTyVarsInEnv(bound, env))) valMapSet strMap
       end
@@ -60,10 +60,10 @@ fun lookupTyConInEnv(MkEnv env, tycon as Syntax.MkTyCon name)
            NONE => raise NameError("unknown type constructor " ^ name)
          | SOME x => x
       )
-(* Env * Syntax.LongVId -> (USyntax.TypeScheme * Syntax.IdStatus) option *)
-fun lookupLongVIdInEnv(env, Syntax.MkLongVId(strid, vid))
+(* Env * USyntax.LongVId -> (USyntax.TypeScheme * Syntax.IdStatus) option *)
+fun lookupLongVIdInEnv(env, USyntax.MkLongVId(strid, vid))
     = let val MkEnv strEnv = lookupStr(env, strid)
-      in Syntax.VIdMap.find(#valMap strEnv, vid)
+      in USyntax.VIdMap.find(#valMap strEnv, vid)
       end
 
 (* getConstructedType : USyntax.Ty -> USyntax.LongTyCon *)
@@ -72,14 +72,14 @@ fun getConstructedType(USyntax.TyVar _) = raise TypeError "getConstructedType: g
   | getConstructedType(USyntax.TyCon(tyargs, longtycon)) = longtycon
   | getConstructedType(USyntax.FnType(_, t)) = getConstructedType t
 
-(* isSoleConstructor : Env * Syntax.LongVId -> bool *)
-fun isSoleConstructor(env : Env, longvid: Syntax.LongVId) =
+(* isSoleConstructor : Env * USyntax.LongVId -> bool *)
+fun isSoleConstructor(env : Env, longvid: USyntax.LongVId) =
     (case lookupLongVIdInEnv(env, longvid) of
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
          let val USyntax.MkLongTyCon(Syntax.MkLongTyCon(strids, tycon), x) = getConstructedType ty
              val TyStr (_, valenv) = lookupTyConInEnv(lookupStr(env, strids), tycon)
-         in Syntax.VIdMap.numItems valenv = 1
+         in USyntax.VIdMap.numItems valenv = 1
          end
        | SOME (_, Syntax.ValueVariable) => false
        | SOME (_, Syntax.ExceptionConstructor) => false
@@ -97,7 +97,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
-  | isConexp(env, USyntax.VarExp(Syntax.MkLongVId([], Syntax.MkVId "ref"), _)) = false
+  | isConexp(env, USyntax.VarExp(USyntax.MkLongVId([], USyntax.MkVId("ref", 0)), _)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueVariable)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueConstructor)) = true
   | isConexp(env, USyntax.VarExp(_, Syntax.ExceptionConstructor)) = true
@@ -138,7 +138,7 @@ val primTy_bool   = USyntax.TyCon([], primTyCon_bool)
 
 val emptyEnv : Env
     = MkEnv { tyMap = Syntax.TyConMap.empty
-            , valMap = Syntax.VIdMap.empty
+            , valMap = USyntax.VIdMap.empty
             , strMap = Syntax.StrIdMap.empty
             }
 
@@ -219,7 +219,7 @@ fun applySubstEnv subst =
               end
         fun substEnv (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap })
             = MkEnv { tyMap = tyMap (* ??? *)
-                    , valMap = Syntax.VIdMap.map (fn (tysc, ids) => (substTypeScheme(tysc), ids)) valMap
+                    , valMap = USyntax.VIdMap.map (fn (tysc, ids) => (substTypeScheme(tysc), ids)) valMap
                     , strMap = Syntax.StrIdMap.map substEnv strMap
                     }
     in substEnv
@@ -239,7 +239,7 @@ fun instantiate(ctx, TypeScheme(vars, ty))
 
 (* mergeEnv : Env * Env -> Env *)
 fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith #2 (#tyMap env1, #tyMap env2)
-                                             , valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
+                                             , valMap = USyntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
                                              , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2) (* TODO *)
                                              }
 
@@ -375,14 +375,14 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
                      | Syntax.CharacterConstant x => primTy_char
       in (ty, exp)
       end
-  | typeCheckExp(ctx, env, exp as VarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus))
+  | typeCheckExp(ctx, env, exp as VarExp(longvid as USyntax.MkLongVId(_, USyntax.MkVId(name, _)), idstatus))
     = (case lookupLongVIdInEnv(env, longvid) of
            SOME (tysc, ids) => let val (ty, tyargs) = instantiate(ctx, tysc)
                                in (ty, InstantiatedVarExp(longvid, idstatus, tyargs))
                                end
          | NONE => raise NameError("unknown value name " ^ name)
       )
-  | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as Syntax.MkLongVId(_, Syntax.MkVId name), idstatus, tyargs)) (* should not reach here *)
+  | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as USyntax.MkLongVId(_, USyntax.MkVId(name, _)), idstatus, tyargs)) (* should not reach here *)
     = let val ty = case lookupLongVIdInEnv(env, longvid) of
                        SOME (TypeScheme(vars, ty), ids) =>
                        let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
@@ -458,24 +458,24 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
-               fun generalize((valbind, valEnv, false), (valbinds, valEnvRest)) = (valbind :: valbinds, Syntax.VIdMap.unionWith #2 (Syntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+               fun generalize((valbind, valEnv, false), (valbinds, valEnvRest)) = (valbind :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                  | generalize((PatBind(pat, exp), valEnv, true), (valbinds, valEnvRest)) =
-                   let val valEnv' = Syntax.VIdMap.mapi (fn (vid,ty) =>
-                                                            let val ty' = applySubstTy subst ty
-                                                                val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                                                                fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
-                                                                                                     NONE => true
-                                                                                                   | SOME tvs => false
-                                                                val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
-                                                                val tysc = TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty')
-                                                            in tysc
-                                                            end) valEnv
-                       val valEnv'L = Syntax.VIdMap.listItemsi valEnv'
+                   let val valEnv' = USyntax.VIdMap.mapi (fn (vid,ty) =>
+                                                             let val ty' = applySubstTy subst ty
+                                                                 val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
+                                                                 fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
+                                                                                                      NONE => true
+                                                                                                    | SOME tvs => false
+                                                                 val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
+                                                                 val tysc = TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty')
+                                                             in tysc
+                                                             end) valEnv
+                       val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
                        val allPoly = List.all (fn (_, TypeScheme(tv, _)) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
                        fun polyPart [] = []
                          | polyPart ((vid, TypeScheme([], _)) :: rest) = polyPart rest
-                         | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(Syntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
-                       fun isMonoVar vid = case Syntax.VIdMap.find(valEnv', vid) of
+                         | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
+                       fun isMonoVar vid = case USyntax.VIdMap.find(valEnv', vid) of
                                                NONE => raise TypeError "isMonoVar: internal error"
                                              | SOME (TypeScheme([], _)) => true
                                              | SOME (TypeScheme(_ :: _, _)) => false
@@ -483,17 +483,17 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                           polyPart valEnv'L
                                       else
                                           PatBind(USyntax.filterVarsInPat isMonoVar pat, exp) :: polyPart valEnv'L
-                   in (valbind' @ valbinds, Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
+                   in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                    end
                  | generalize((PolyVarBind(_, _, _), valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected PolyVarBind"
-               val (valbinds'', valEnv'') = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds'
-               val valEnv''' = Syntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
-               val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, valEnv''')
+               val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds'
+               val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
+               val env' = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valMap, valEnv''')
                                 , tyMap = tyMap
                                 , strMap = strMap
                                 }
                val (MkEnv restEnv, decls') = typeCheckDecl(ctx, env', decls)
-               val env'' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valEnv''', #valMap restEnv)
+               val env'' = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valEnv''', #valMap restEnv)
                                  , tyMap = #tyMap restEnv
                                  , strMap = #strMap restEnv
                                  }
@@ -512,7 +512,7 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                            end
          | OpenDec(_) => raise Fail "let-in: open: not impl"
       )
-(* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty Syntax.VIdMap.map * bool *)
+(* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty USyntax.VIdMap.map * bool *)
 and typeCheckValBind(ctx, env, PatBind(pat, exp))
     = let val (patTy, newValEnv, pat') = typeCheckPat(ctx, env, pat)
           val (expTy, exp') = typeCheckExp(ctx, env, exp)
@@ -544,31 +544,31 @@ and typeCheckMatch(ctx, env, (pat0, exp0) :: rest) : USyntax.Ty * USyntax.Ty * (
 and typeCheckMatchBranch(ctx : Context, env as MkEnv env' : Env, pat : Pat, exp : Exp) : USyntax.Ty * USyntax.Ty * Pat * Exp
     = let val (patTy, vars, pat') = typeCheckPat(ctx, env, pat)
           val env'' = MkEnv { tyMap = #tyMap env'
-                            , valMap = Syntax.VIdMap.unionWith #2 (#valMap env', Syntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars)
+                            , valMap = USyntax.VIdMap.unionWith #2 (#valMap env', USyntax.VIdMap.map (fn ty => (TypeScheme([], ty), Syntax.ValueVariable)) vars)
                             , strMap = #strMap env'
                             }
           val (expTy, exp') = typeCheckExp(ctx, env'', exp)
       in (patTy, expTy, pat', exp')
       end
- (* typeCheckPat : Context * Env * Pat -> USyntax.Ty * USyntax.Ty Syntax.VIdMap.map * Pat *)
-and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.VIdMap.map * Pat
+ (* typeCheckPat : Context * Env * Pat -> USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * Pat *)
+and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * Pat
     = let val ty = TyVar(freshTyVar(ctx))
-      in (ty, Syntax.VIdMap.empty, pat)
+      in (ty, USyntax.VIdMap.empty, pat)
       end
   | typeCheckPat(ctx, env, pat as SConPat scon)
     = (case scon of
-           Syntax.IntegerConstant(_)   => (primTy_int, Syntax.VIdMap.empty, pat)
-         | Syntax.WordConstant(_)      => (primTy_word, Syntax.VIdMap.empty, pat)
+           Syntax.IntegerConstant(_)   => (primTy_int, USyntax.VIdMap.empty, pat)
+         | Syntax.WordConstant(_)      => (primTy_word, USyntax.VIdMap.empty, pat)
          | Syntax.RealConstant(_)      => raise Syntax.SyntaxError "No real constant may occur in a pattern"
-         | Syntax.StringConstant(_)    => (primTy_string, Syntax.VIdMap.empty, pat)
-         | Syntax.CharacterConstant(_) => (primTy_char, Syntax.VIdMap.empty, pat)
+         | Syntax.StringConstant(_)    => (primTy_string, USyntax.VIdMap.empty, pat)
+         | Syntax.CharacterConstant(_) => (primTy_char, USyntax.VIdMap.empty, pat)
       )
   | typeCheckPat(ctx, MkEnv env, pat as VarPat(vid, ty))
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
+    = (case USyntax.VIdMap.find(#valMap env, vid) of
            SOME (tysc, Syntax.ValueConstructor) => raise TypeError "VarPat: invalid pattern"
          | SOME (tysc, Syntax.ExceptionConstructor) => raise TypeError "VarPat: invalid pattern"
-         | SOME (_, Syntax.ValueVariable) => (* shadowing *) (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty), pat)
-         | NONE => (ty, Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, ty), pat)
+         | SOME (_, Syntax.ValueVariable) => (* shadowing *) (ty, USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, ty), pat)
+         | NONE => (ty, USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, ty), pat)
       )
   | typeCheckPat(ctx, env, RecordPat(row, wildcard))
     = let val (rowTy, vars, row') = typeCheckPatRow(ctx, env, row)
@@ -587,7 +587,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
            (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
                 let val (ty, tyargs) = instantiate(ctx, tysc)
                 in case opt_innerPat of
-                       NONE => (ty, Syntax.VIdMap.empty, InstantiatedConPat(longvid, NONE, tyargs))
+                       NONE => (ty, USyntax.VIdMap.empty, InstantiatedConPat(longvid, NONE, tyargs))
                      | SOME innerPat =>
                        (case ty of
                             USyntax.FnType(argTy, resultTy) =>
@@ -614,7 +614,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
                                                  ) USyntax.TyVarMap.empty (vars, tyargs)
                     val ty' = applySubstTy subst ty
                 in case opt_innerPat of
-                       NONE => (ty', Syntax.VIdMap.empty, pat)
+                       NONE => (ty', USyntax.VIdMap.empty, pat)
                      | SOME innerPat => (case ty' of
                                              USyntax.FnType(argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
                                                                                 in addConstraint(ctx, EqConstr(argTy, argTy'))
@@ -629,7 +629,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
          | NONE => raise TypeError "invalid pattern"
       )
   | typeCheckPat(ctx, env, pat as TypedPat(WildcardPat, ty))
-    = (ty, Syntax.VIdMap.empty, pat)
+    = (ty, USyntax.VIdMap.empty, pat)
   | typeCheckPat(ctx, env, TypedPat(pat, ty))
     = let val (inferredTy, vars, pat') = typeCheckPat(ctx, env, pat)
       in addConstraint(ctx, EqConstr(ty, inferredTy))
@@ -637,19 +637,19 @@ and typeCheckPat(ctx, env, pat as WildcardPat) : USyntax.Ty * USyntax.Ty Syntax.
       end
   | typeCheckPat(ctx, env, LayeredPat(vid, ty, pat))
     = let val (inferredTy, vars, pat') = typeCheckPat(ctx, env, pat)
-      in case Syntax.VIdMap.find(vars, vid) of
+      in case USyntax.VIdMap.find(vars, vid) of
              NONE => ( addConstraint(ctx, EqConstr(ty, inferredTy))
-                     ; (ty, Syntax.VIdMap.insert(vars, vid, ty), LayeredPat(vid, ty, pat'))
+                     ; (ty, USyntax.VIdMap.insert(vars, vid, ty), LayeredPat(vid, ty, pat'))
                      )
            | SOME _ => raise TypeError "trying to bind the same identifier twice"
       end
- (* typeCheckPatRow : Context * Env * (Label * Pat) list -> (Label * Syntax.Ty) list * Syntax.Ty Syntax.VIdMap.map * (Label * Pat) list *)
+ (* typeCheckPatRow : Context * Env * (Label * Pat) list -> (Label * Syntax.Ty) list * Syntax.Ty USyntax.VIdMap.map * (Label * Pat) list *)
 and typeCheckPatRow(ctx, env, row)
     = let fun oneField((label, pat), (row, vars, rest))
               = let val (ty, vars', pat') = typeCheckPat(ctx, env, pat)
-                in ((label, ty) :: row, Syntax.VIdMap.unionWith (fn _ => raise TypeError "trying to bind the same identifier twice") (vars, vars'), (label, pat') :: rest)
+                in ((label, ty) :: row, USyntax.VIdMap.unionWith (fn _ => raise TypeError "trying to bind the same identifier twice") (vars, vars'), (label, pat') :: rest)
                 end
-      in List.foldl oneField ([], Syntax.VIdMap.empty, []) row (* TODO: Is this right? *)
+      in List.foldl oneField ([], USyntax.VIdMap.empty, []) row (* TODO: Is this right? *)
       end
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
@@ -670,7 +670,7 @@ fun typeCheckProgram(ctx, env, decls) = let val (env', decls') = typeCheckDecl(c
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ Syntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
+fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
 end (* structure PrettyPrint *)
 open PrettyPrint
 

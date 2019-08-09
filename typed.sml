@@ -1,5 +1,6 @@
 structure USyntax = struct
 datatype VId = MkVId of string * int
+datatype LongVId = MkLongVId of Syntax.StrId list * VId
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
 datatype TyCon = MkTyCon of string * int
@@ -16,6 +17,15 @@ datatype Ty = TyVar of TyVar (* type variable *)
             | FnType of Ty * Ty (* function type expression *)
 
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+
+structure VIdKey = struct
+type ord_key = VId
+fun compare(MkVId(x,a), MkVId(y,b)) = case String.compare (x,y) of
+                                          EQUAL => Int.compare(a,b)
+                                        | ord => ord
+end : ORD_KEY
+structure VIdSet = BinarySetFn(VIdKey)
+structure VIdMap = BinaryMapFn(VIdKey)
 
 datatype UnaryConstraint
   = HasField of { label : Syntax.Label
@@ -35,27 +45,27 @@ datatype Constraint
 
 datatype TypeFcn = TypeFcn of TyVar list * Ty
 datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
-type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
-val emptyValEnv = Syntax.VIdMap.empty
+type ValEnv = (TypeScheme * Syntax.IdStatus) VIdMap.map
+val emptyValEnv = VIdMap.empty
 
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon (* special constant *)
-             | VarPat of Syntax.VId * Ty (* variable *)
+             | VarPat of VId * Ty (* variable *)
              | RecordPat of (Syntax.Label * Pat) list * bool
-             | ConPat of Syntax.LongVId * Pat option (* constructed pattern *)
-             | InstantiatedConPat of Syntax.LongVId * Pat option * Ty list
+             | ConPat of LongVId * Pat option (* constructed pattern *)
+             | InstantiatedConPat of LongVId * Pat option * Ty list
              | TypedPat of Pat * Ty (* typed *)
-             | LayeredPat of Syntax.VId * Ty * Pat (* layered *)
+             | LayeredPat of VId * Ty * Pat (* layered *)
 
 datatype TypBind = TypBind of TyVar list * TyCon * Ty
-datatype ConBind = ConBind of Syntax.VId * Ty option
+datatype ConBind = ConBind of VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
-datatype ExBind = ExBind1 of Syntax.VId * Ty option (* <op> vid <of ty> *)
-                | ExBind2 of Syntax.VId * Syntax.LongVId (* <op> vid = <op> longvid *)
+datatype ExBind = ExBind1 of VId * Ty option (* <op> vid <of ty> *)
+                | ExBind2 of VId * LongVId (* <op> vid = <op> longvid *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
-             | VarExp of Syntax.LongVId * Syntax.IdStatus (* value identifier *)
-             | InstantiatedVarExp of Syntax.LongVId * Syntax.IdStatus * Ty list
+             | VarExp of LongVId * Syntax.IdStatus (* value identifier *)
+             | InstantiatedVarExp of LongVId * Syntax.IdStatus * Ty list
              | RecordExp of (Syntax.Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | AppExp of Exp * Exp (* function, argument *)
@@ -76,7 +86,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | LocalDec of Dec list * Dec list
              | OpenDec of Syntax.LongStrId list
      and ValBind = PatBind of Pat * Exp
-                 | PolyVarBind of Syntax.VId * TypeScheme * Exp (* polymorphic binding *)
+                 | PolyVarBind of VId * TypeScheme * Exp (* polymorphic binding *)
 type Program = Dec list
 
 structure TyVarKey = struct
@@ -96,6 +106,7 @@ structure TyVarMap = BinaryMapFn(TyVarKey)
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_VId(MkVId(name, n)) = "MkVId(\"" ^ String.toString name ^ "\"," ^ Int.toString n ^ ")"
+fun print_LongVId(MkLongVId(strids, vid)) = "MkLongVId(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_VId vid ^ ")"
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
@@ -106,11 +117,11 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
-  | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ ")"
+  | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (TypedPat (pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
-  | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ Syntax.print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ ")"
-  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ Syntax.print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (ConPat(longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ ")"
+  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -118,9 +129,9 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
-  | print_Exp (VarExp(Syntax.MkLongVId([], vid), idstatus)) = "SimpleVarExp(" ^ Syntax.print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
-  | print_Exp (VarExp(x, idstatus)) = "VarExp(" ^ Syntax.print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
-  | print_Exp (InstantiatedVarExp(x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ Syntax.print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Exp (VarExp(MkLongVId([], vid), idstatus)) = "SimpleVarExp(" ^ print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
+  | print_Exp (VarExp(x, idstatus)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
+  | print_Exp (InstantiatedVarExp(x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                  | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
@@ -138,8 +149,9 @@ and print_Dec (ValDec (bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list pr
   | print_Dec (RecValDec (bound,valbind,valenv)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-  | print_ValBind (PolyVarBind (name, tysc, exp)) = "PolyVarBind(" ^ Syntax.print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
+  | print_ValBind (PolyVarBind (name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_UnaryConstraint IsEqType = "IsEqType"
   | print_UnaryConstraint IsIntegral = "IsIntegral"
@@ -149,7 +161,7 @@ and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "Has
   | print_UnaryConstraint IsSigned = "IsSigned"
   | print_UnaryConstraint IsOrdered = "IsOrdered"
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
-and print_ValEnv env = Syntax.print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
+and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
@@ -263,7 +275,7 @@ and freeTyVarsInValBinds(bound, nil, acc) = acc
   | freeTyVarsInValBinds(bound, PatBind(pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
   | freeTyVarsInValBinds(bound, PolyVarBind(vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
 
-(* filterVarsInPat : (Syntax.VId -> bool) -> Pat -> Pat *)
+(* filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
 fun filterVarsInPat pred =
     let fun doPat pat = case pat of
                             WildcardPat => pat
@@ -366,10 +378,8 @@ local structure S = Syntax
               | SOME b => b
       fun lookupLongTyCon(env : Env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
 
-      fun lookupVIdStatus(MkEnv env, vid) = case Syntax.VIdMap.find(#valMap env, vid) of
-                                                NONE => NONE
-                                              | SOME (_, idstatus) => SOME idstatus
-      fun lookupLongVIdStatus(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVIdStatus(lookupStr(env, strpath), vid)
+      fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
+      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVId(lookupStr(env, strpath), vid)
 in
 (* toUTy : Context * TVEnv * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUPat : Context * TVEnv * Env * Syntax.Pat -> USyntax.VId Syntax.VIdMap.map * USyntax.Pat *)
@@ -396,15 +406,15 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = (Sy
   | toUPat(ctx, tvenv, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
   | toUPat(ctx, tvenv, env, S.SConPat sc) = (Syntax.VIdMap.empty, U.SConPat sc)
   | toUPat(ctx, tvenv, env, S.ConOrVarPat vid)
-    = (case lookupVIdStatus(env, vid) of
-           SOME Syntax.ValueConstructor => (Syntax.VIdMap.empty, U.ConPat(Syntax.MkLongVId([], vid), NONE))
-         | SOME Syntax.ExceptionConstructor => (Syntax.VIdMap.empty, U.ConPat(Syntax.MkLongVId([], vid), NONE))
+    = (case lookupVId(env, vid) of
+           SOME (vid', Syntax.ValueConstructor) => (Syntax.VIdMap.empty, U.ConPat(USyntax.MkLongVId([], vid'), NONE))
+         | SOME (vid', Syntax.ExceptionConstructor) => (Syntax.VIdMap.empty, U.ConPat(USyntax.MkLongVId([], vid'), NONE))
          | _ => let val vid' = newVId(ctx, vid)
-                in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx))))
+                in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid', USyntax.TyVar(freshTyVar(ctx))))
                 end
       )
   | toUPat(ctx, tvenv, env, S.VarPat vid) = let val vid' = newVId(ctx, vid)
-                                            in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))) (* add extra type annotation *)
+                                            in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid', USyntax.TyVar(freshTyVar(ctx)))) (* add extra type annotation *)
                                             end
   | toUPat(ctx, tvenv, env, S.RecordPat(row, wildcard))
     = let val (vidmap, row') = List.foldr (fn ((label, pat), (vidmap, row')) => let val (vidmap', pat') = toUPat(ctx, tvenv, env, pat)
@@ -414,21 +424,28 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = (Sy
                                           ) (Syntax.VIdMap.empty, []) row
       in (vidmap, U.RecordPat(row', wildcard))
       end
-  | toUPat(ctx, tvenv, env, S.ConPat(longvid, NONE)) = (Syntax.VIdMap.empty, U.ConPat(longvid, NONE))
-  | toUPat(ctx, tvenv, env, S.ConPat(longvid, SOME pat)) = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
-                                                           in (vidmap, U.ConPat(longvid, SOME pat'))
-                                                           end
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid as Syntax.MkLongVId(strids, _), NONE))
+    = (case lookupLongVId(env, longvid) of
+           SOME (vid', _) => (Syntax.VIdMap.empty, U.ConPat(USyntax.MkLongVId(strids, vid'), NONE))
+         | NONE => raise Syntax.SyntaxError "unbound identifier"
+      )
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid as Syntax.MkLongVId(strids, _), SOME pat))
+    = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
+      in case lookupLongVId(env, longvid) of
+             SOME (vid', _) => (vidmap, U.ConPat(USyntax.MkLongVId(strids, vid'), SOME pat'))
+           | NONE => raise Syntax.SyntaxError "unbound identifier"
+      end
   | toUPat(ctx, tvenv, env, S.TypedPat(S.ConOrVarPat vid, ty))
-    = (case lookupVIdStatus(env, vid) of
-           SOME Syntax.ValueConstructor => (Syntax.VIdMap.empty, U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, tvenv, env, ty)))
-         | SOME Syntax.ExceptionConstructor => (Syntax.VIdMap.empty, U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, tvenv, env, ty)))
+    = (case lookupVId(env, vid) of
+           SOME (vid', Syntax.ValueConstructor) => (Syntax.VIdMap.empty, U.TypedPat(U.ConPat(USyntax.MkLongVId([], vid'), NONE), toUTy(ctx, tvenv, env, ty)))
+         | SOME (vid', Syntax.ExceptionConstructor) => (Syntax.VIdMap.empty, U.TypedPat(U.ConPat(USyntax.MkLongVId([], vid'), NONE), toUTy(ctx, tvenv, env, ty)))
          | _ => let val vid' = newVId(ctx, vid)
-                in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid, toUTy(ctx, tvenv, env, ty)))
+                in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid', toUTy(ctx, tvenv, env, ty)))
                 end
       )
   | toUPat(ctx, tvenv, env, S.TypedPat(S.VarPat vid, ty))
     = let val vid' = newVId(ctx, vid)
-      in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid, toUTy(ctx, tvenv, env, ty)))
+      in (Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, vid'), U.VarPat(vid', toUTy(ctx, tvenv, env, ty)))
       end
   | toUPat(ctx, tvenv, env, S.TypedPat(pat, ty))
     = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
@@ -437,12 +454,12 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = (Sy
   | toUPat(ctx, tvenv, env, S.LayeredPat(vid, SOME ty, pat))
     = let val vid' = newVId(ctx, vid)
           val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
-      in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(vid, toUTy(ctx, tvenv, env, ty), pat'))
+      in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(vid', toUTy(ctx, tvenv, env, ty), pat'))
       end
   | toUPat(ctx, tvenv, env, S.LayeredPat(vid, NONE, pat))
     = let val vid' = newVId(ctx, vid)
           val (vidmap, pat' ) = toUPat(ctx, tvenv, env, pat)
-      in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(vid, USyntax.TyVar(freshTyVar(ctx)), pat'))
+      in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(vid', USyntax.TyVar(freshTyVar(ctx)), pat'))
       end
 fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
                                                         val tycon' = 
@@ -451,9 +468,9 @@ fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implem
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U.SConExp(scon)
-  | toUExp(ctx, tvenv, env, S.VarExp(longvid))
-    = (case lookupLongVIdStatus(env, longvid) of
-           SOME idstatus => U.VarExp(longvid, idstatus)
+  | toUExp(ctx, tvenv, env, S.VarExp(longvid as Syntax.MkLongVId(strids, _)))
+    = (case lookupLongVId(env, longvid) of
+           SOME (vid', idstatus) => U.VarExp(USyntax.MkLongVId(strids, vid'), idstatus)
          | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_LongVId longvid)
       )
   | toUExp(ctx, tvenv, env, S.RecordExp(row)) = U.RecordExp(Syntax.mapRecordRow (fn exp => toUExp(ctx, tvenv, env, exp)) row)
@@ -489,14 +506,14 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            S.ValDec(tyvars, valbind) =>
            let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
-               val decl' = U.ValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, Syntax.VIdMap.empty)
+               val decl' = U.ValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, USyntax.VIdMap.empty)
                val (env', decls') = toUDecs(ctx, tvenv, env, decls)
            in (env', decl' :: decls')
            end
          | S.RecValDec(tyvars, valbind) =>
            let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
-               val decl' = U.RecValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, Syntax.VIdMap.empty)
+               val decl' = U.RecValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, USyntax.VIdMap.empty)
                val (env', decls') = toUDecs(ctx, tvenv, env, decls)
            in (env', decl' :: decls')
            end
