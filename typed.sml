@@ -329,6 +329,8 @@ fun mergeEnv(MkEnv env1 : Env, MkEnv env2 : Env)
             , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
             }
 
+type TVEnv = USyntax.TyVar Syntax.TyVarMap.map
+
 local structure S = Syntax
       structure U = USyntax
 
@@ -365,122 +367,133 @@ local structure S = Syntax
                                               | SOME (_, idstatus) => SOME idstatus
       fun lookupLongVIdStatus(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVIdStatus(lookupStr(env, strpath), vid)
 in
-(* toUTy : Context * Env * Syntax.Ty -> USyntax.Ty *)
-(* toUPat : Context * Env * Syntax.Pat -> USyntax.Pat *)
+(* toUTy : Context * TVEnv * Env * Syntax.Ty -> USyntax.Ty *)
+(* toUPat : Context * TVEnv * Env * Syntax.Pat -> USyntax.Pat *)
 (* toUTypBind : Context * Syntax.TypBind -> USyntax.TypBind *)
 (* toUConBind : Context * Syntax.ConBind -> USyntax.ConBind *)
 (* toUDatBind : Context * Syntax.DatBind -> USyntax.DatBind *)
 (* toUExBind : Context * Syntax.ExBind -> USyntax.ExBind *)
-(* toUExp : Context * Env * Syntax.Exp -> USyntax.Exp *)
-(* toUMatch : Context * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
-(* toUDecs : Context * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
-fun toUTy(ctx : ('a,'b) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
-  | toUTy(ctx, env, S.RecordType row) = U.RecordType(Syntax.mapRecordRow (fn ty => toUTy(ctx, env, ty)) row)
-  | toUTy(ctx, env, S.TyCon(args, tycon)) = (case lookupLongTyCon(env, tycon) of
-                                                 BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, env, ty)) args, U.MkLongTyCon(tycon, id))
-                                               | BTyAlias _ => raise Fail "type alias not supported yet"
-                                            )
-  | toUTy(ctx, env, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, env, ty1), toUTy(ctx, env, ty2))
-fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
-  | toUPat(ctx, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
-  | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
-  | toUPat(ctx, env, S.ConOrVarPat vid)
+(* toUExp : Context * TVEnv * Env * Syntax.Exp -> USyntax.Exp *)
+(* toUMatch : Context * TVEnv * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
+(* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
+fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar tv)
+    = (case Syntax.TyVarMap.find(tvenv, tv) of
+           NONE => raise NameError("unknown type variable " ^ Syntax.print_TyVar tv)
+         | SOME tv => U.TyVar(tv)
+      )
+  | toUTy(ctx, tvenv, env, S.RecordType row) = U.RecordType(Syntax.mapRecordRow (fn ty => toUTy(ctx, tvenv, env, ty)) row)
+  | toUTy(ctx, tvenv, env, S.TyCon(args, tycon))
+    = (case lookupLongTyCon(env, tycon) of
+           BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, U.MkLongTyCon(tycon, id))
+         | BTyAlias _ => raise Fail "type alias not supported yet"
+      )
+  | toUTy(ctx, tvenv, env, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, tvenv, env, ty1), toUTy(ctx, tvenv, env, ty2))
+fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
+  | toUPat(ctx, tvenv, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
+  | toUPat(ctx, tvenv, env, S.SConPat sc) = U.SConPat sc
+  | toUPat(ctx, tvenv, env, S.ConOrVarPat vid)
     = (case lookupVIdStatus(env, vid) of
            SOME Syntax.ValueConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
          | SOME Syntax.ExceptionConstructor => U.ConPat(Syntax.MkLongVId([], vid), NONE)
-         | _ => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
+         | SOME Syntax.ValueVariable => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
+         | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_VId vid)
       )
-  | toUPat(ctx, env, S.VarPat vid) = U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
-  | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(Syntax.mapRecordRow (fn pat => toUPat(ctx, env, pat)) row, wildcard)
-  | toUPat(ctx, env, S.ConPat(longvid, NONE)) = U.ConPat(longvid, NONE)
-  | toUPat(ctx, env, S.ConPat(longvid, SOME pat)) = U.ConPat(longvid, SOME(toUPat(ctx, env, pat)))
-  | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
+  | toUPat(ctx, tvenv, env, S.VarPat vid) = U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
+  | toUPat(ctx, tvenv, env, S.RecordPat(row, wildcard)) = U.RecordPat(Syntax.mapRecordRow (fn pat => toUPat(ctx, tvenv, env, pat)) row, wildcard)
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid, NONE)) = U.ConPat(longvid, NONE)
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid, SOME pat)) = U.ConPat(longvid, SOME(toUPat(ctx, tvenv, env, pat)))
+  | toUPat(ctx, tvenv, env, S.TypedPat(S.ConOrVarPat vid, ty))
     = (case lookupVIdStatus(env, vid) of
-           SOME Syntax.ValueConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
-         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, env, ty))
-         | _ => U.VarPat(vid, toUTy(ctx, env, ty))
+           SOME Syntax.ValueConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, tvenv, env, ty))
+         | SOME Syntax.ExceptionConstructor => U.TypedPat(U.ConPat(Syntax.MkLongVId([], vid), NONE), toUTy(ctx, tvenv, env, ty))
+         | SOME Syntax.ValueVariable => U.VarPat(vid, toUTy(ctx, tvenv, env, ty))
+         | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_VId vid)
       )
-  | toUPat(ctx, env, S.TypedPat(S.VarPat vid, ty)) = U.VarPat(vid, toUTy(ctx, env, ty))
-  | toUPat(ctx, env, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, env, pat), toUTy(ctx, env, ty))
-  | toUPat(ctx, env, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, toUTy(ctx, env, ty), toUPat(ctx, env, pat))
-  | toUPat(ctx, env, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, USyntax.TyVar(freshTyVar(ctx)), toUPat(ctx, env, pat))
+  | toUPat(ctx, tvenv, env, S.TypedPat(S.VarPat vid, ty)) = U.VarPat(vid, toUTy(ctx, tvenv, env, ty))
+  | toUPat(ctx, tvenv, env, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, tvenv, env, pat), toUTy(ctx, tvenv, env, ty))
+  | toUPat(ctx, tvenv, env, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, toUTy(ctx, tvenv, env, ty), toUPat(ctx, tvenv, env, pat))
+  | toUPat(ctx, tvenv, env, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, USyntax.TyVar(freshTyVar(ctx)), toUPat(ctx, tvenv, env, pat))
 fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
                                                         val tycon' = 
                                                   in U.TypBind(params', tycon *) raise Fail "toUTypBind: not implemented yet"
 fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implemented yet"
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
-fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
-  | toUExp(ctx, env, S.VarExp(longvid))
+fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U.SConExp(scon)
+  | toUExp(ctx, tvenv, env, S.VarExp(longvid))
     = (case lookupLongVIdStatus(env, longvid) of
            SOME idstatus => U.VarExp(longvid, idstatus)
-         | NONE => U.VarExp(longvid, Syntax.ValueVariable)
+         | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_LongVId longvid)
       )
-  | toUExp(ctx, env, S.RecordExp(row)) = U.RecordExp(Syntax.mapRecordRow (fn exp => toUExp(ctx, env, exp)) row)
-  | toUExp(ctx, env, S.LetInExp(decls, exp))
-    = let val (env', decls') = toUDecs(ctx, env, decls)
-      in U.LetInExp(decls', toUExp(ctx, mergeEnv(env, env'), exp))
+  | toUExp(ctx, tvenv, env, S.RecordExp(row)) = U.RecordExp(Syntax.mapRecordRow (fn exp => toUExp(ctx, tvenv, env, exp)) row)
+  | toUExp(ctx, tvenv, env, S.LetInExp(decls, exp))
+    = let val (env', decls') = toUDecs(ctx, tvenv, env, decls)
+      in U.LetInExp(decls', toUExp(ctx, tvenv, mergeEnv(env, env'), exp))
       end
-  | toUExp(ctx, env, S.AppExp(exp1, exp2)) = U.AppExp(toUExp(ctx, env, exp1), toUExp(ctx, env, exp2))
-  | toUExp(ctx, env, S.TypedExp(exp, ty)) = U.TypedExp(toUExp(ctx, env, exp), toUTy(ctx, env, ty))
-  | toUExp(ctx, env, S.HandleExp(exp, ty)) = raise NameError("not implemented yet")
-  | toUExp(ctx, env, S.RaiseExp(exp)) = U.RaiseExp(toUExp(ctx, env, exp))
-  | toUExp(ctx, env, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, env, exp1), toUExp(ctx, env, exp2), toUExp(ctx, env, exp3))
-  | toUExp(ctx, env, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, env, exp), toUMatch(ctx, env, match))
-  | toUExp(ctx, env, S.FnExp(match)) = U.FnExp(toUMatch(ctx, env, match))
-  | toUExp(ctx, env, S.ProjectionExp label) = U.ProjectionExp { label = label, recordTy = USyntax.TyVar(freshTyVar(ctx)), fieldTy = USyntax.TyVar(freshTyVar(ctx)) }
-and toUMatch(ctx, env, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, env, pat), toUExp(ctx, env, exp))) matches
-and toUValBind(ctx, env, S.PatBind(pat, exp)) = U.PatBind(toUPat(ctx, env, pat), toUExp(ctx, env, exp))
+  | toUExp(ctx, tvenv, env, S.AppExp(exp1, exp2)) = U.AppExp(toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2))
+  | toUExp(ctx, tvenv, env, S.TypedExp(exp, ty)) = U.TypedExp(toUExp(ctx, tvenv, env, exp), toUTy(ctx, tvenv, env, ty))
+  | toUExp(ctx, tvenv, env, S.HandleExp(exp, ty)) = raise NameError("not implemented yet")
+  | toUExp(ctx, tvenv, env, S.RaiseExp(exp)) = U.RaiseExp(toUExp(ctx, tvenv, env, exp))
+  | toUExp(ctx, tvenv, env, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
+  | toUExp(ctx, tvenv, env, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, tvenv, env, exp), toUMatch(ctx, tvenv, env, match))
+  | toUExp(ctx, tvenv, env, S.FnExp(match)) = U.FnExp(toUMatch(ctx, tvenv, env, match))
+  | toUExp(ctx, tvenv, env, S.ProjectionExp label) = U.ProjectionExp { label = label, recordTy = USyntax.TyVar(freshTyVar(ctx)), fieldTy = USyntax.TyVar(freshTyVar(ctx)) }
+and toUMatch(ctx, tvenv, env, matches : (S.Pat * S.Exp) list) = List.map (fn (pat, exp) => (toUPat(ctx, tvenv, env, pat), toUExp(ctx, tvenv, env, exp))) matches
+and toUValBind(ctx, tvenv, env, S.PatBind(pat, exp)) = U.PatBind(toUPat(ctx, tvenv, env, pat), toUExp(ctx, tvenv, env, exp))
 and toUTypBind(ctx, env, _) = raise Fail "not implemented yet"
-and toUDecs(ctx, env, nil) = (emptyEnv, nil)
-  | toUDecs(ctx, env, decl :: decls)
+and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
+  | toUDecs(ctx, tvenv, env, decl :: decls)
     = (case decl of
            S.ValDec(tyvars, valbind) =>
-           let val decl' = U.ValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind, Syntax.VIdMap.empty)
-               val (env', decls') = toUDecs(ctx, env, decls)
+           let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+               val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
+               val decl' = U.ValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, Syntax.VIdMap.empty)
+               val (env', decls') = toUDecs(ctx, tvenv, env, decls)
            in (env', decl' :: decls')
            end
          | S.RecValDec(tyvars, valbind) =>
-           let val decl' = U.RecValDec(List.map (fn tv => genTyVar(ctx, tv)) tyvars, List.map (fn vb => toUValBind(ctx, env, vb)) valbind, Syntax.VIdMap.empty)
-               val (env', decls') = toUDecs(ctx, env, decls)
+           let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+               val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
+               val decl' = U.RecValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, Syntax.VIdMap.empty)
+               val (env', decls') = toUDecs(ctx, tvenv, env, decls)
            in (env', decl' :: decls')
            end
          | S.TypeDec(typbinds) =>
            let val decl' = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, env, typbind)) typbinds)
-               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.DatatypeDec(datbinds) =>
            let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor, data ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor, data ctor *) env, decls)
            in ((* TODO: add type ctor, data ctor *) env', decl' :: decls')
            end
          | S.DatatypeRepDec(tycon, longtycon) =>
            let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.AbstypeDec(datbinds, dec) =>
            let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.ExceptionDec(_) =>
            let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, (* TODO: add exception ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add exception ctor *) env, decls)
            in ((* TODO: add exception ctor *) env', decl' :: decls')
            end
          | S.LocalDec(decls1, decls2) =>
-           let val (env1, decls1') = toUDecs(ctx, env, decls1)
-               val (env2, decls2') = toUDecs(ctx, mergeEnv(env, env1), decls2)
-               val (env', decls') = toUDecs(ctx, mergeEnv(env, env2), decls)
+           let val (env1, decls1') = toUDecs(ctx, tvenv, env, decls1)
+               val (env2, decls2') = toUDecs(ctx, tvenv, mergeEnv(env, env1), decls2)
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, env2), decls)
            in (mergeEnv(env2, env'), U.LocalDec(decls1', decls2') :: decls') end
          | S.OpenDec(_) =>
            let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, (* TODO: add type ctor *) env, decls)
+               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
-         | S.FixityDec(_) => toUDecs(ctx, env, decls) (* ignore *)
+         | S.FixityDec(_) => toUDecs(ctx, tvenv, env, decls) (* ignore *)
       )
 end (* local *)
 end (* structure ToTypedSyntax *)

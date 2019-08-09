@@ -5,7 +5,7 @@ fun parse str = #2 (Fixity.doDecs(InitialEnv.initialFixity, #1 (DamepoMLParser.p
 fun compile source =
     let val ast1 = parse source
         val ctx = Typing.newContext()
-        val (_, ast2) = ToTypedSyntax.toUDecs(ctx, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
+        val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, ToTypedSyntax.emptyEnv, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
         val (env, tvc, decs) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
     in Typing.applyDefaultTypes(tvc, decs)
     end
