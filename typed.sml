@@ -364,7 +364,11 @@ local structure S = Syntax
       fun lookupLongTyCon(env : Env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
 
       fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
-      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVId(lookupStr(env, strpath), vid)
+      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid))
+          = (case lookupVId(lookupStr(env, strpath), vid) of
+                 NONE => NONE
+               | SOME (vid', x) => SOME (USyntax.MkLongVId(strpath, vid'), x)
+            )
 in
 (* toUTy : Context * TVEnv * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUPat : Context * TVEnv * Env * Syntax.Pat -> USyntax.VId Syntax.VIdMap.map * USyntax.Pat *)
@@ -409,15 +413,15 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = (Sy
                                           ) (Syntax.VIdMap.empty, []) row
       in (vidmap, U.RecordPat(row', wildcard))
       end
-  | toUPat(ctx, tvenv, env, S.ConPat(longvid as Syntax.MkLongVId(strids, _), NONE))
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid, NONE))
     = (case lookupLongVId(env, longvid) of
-           SOME (vid', _) => (Syntax.VIdMap.empty, U.ConPat(USyntax.MkLongVId(strids, vid'), NONE))
+           SOME (longvid', _) => (Syntax.VIdMap.empty, U.ConPat(longvid', NONE))
          | NONE => raise Syntax.SyntaxError "unbound identifier"
       )
-  | toUPat(ctx, tvenv, env, S.ConPat(longvid as Syntax.MkLongVId(strids, _), SOME pat))
+  | toUPat(ctx, tvenv, env, S.ConPat(longvid, SOME pat))
     = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
       in case lookupLongVId(env, longvid) of
-             SOME (vid', _) => (vidmap, U.ConPat(USyntax.MkLongVId(strids, vid'), SOME pat'))
+             SOME (longvid', _) => (vidmap, U.ConPat(longvid', SOME pat'))
            | NONE => raise Syntax.SyntaxError "unbound identifier"
       end
   | toUPat(ctx, tvenv, env, S.TypedPat(S.ConOrVarPat vid, ty))
@@ -453,9 +457,9 @@ fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implem
 fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
 fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U.SConExp(scon)
-  | toUExp(ctx, tvenv, env, S.VarExp(longvid as Syntax.MkLongVId(strids, _)))
+  | toUExp(ctx, tvenv, env, S.VarExp(longvid))
     = (case lookupLongVId(env, longvid) of
-           SOME (vid', idstatus) => U.VarExp(USyntax.MkLongVId(strids, vid'), idstatus)
+           SOME (longvid', idstatus) => U.VarExp(longvid', idstatus)
          | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_LongVId longvid)
       )
   | toUExp(ctx, tvenv, env, S.RecordExp(row)) = U.RecordExp(Syntax.mapRecordRow (fn exp => toUExp(ctx, tvenv, env, exp)) row)
@@ -478,12 +482,6 @@ and toUMatch(ctx, tvenv, env, matches : (S.Pat * S.Exp) list)
                                  in (pat', toUExp(ctx, tvenv, env', exp))
                                  end
                ) matches
-and toUValBind(ctx, tvenv, env, S.PatBind(pat, exp))
-    = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
-          val MkEnv { valMap = valMap, tyConMap = tyConMap, strMap = strMap } = env
-          val env' = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (valMap, Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap), tyConMap = tyConMap, strMap = strMap }
-      in U.PatBind(pat', toUExp(ctx, tvenv, env, exp))
-      end
 and toUTypBind(ctx, env, _) = raise Fail "not implemented yet"
 and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
   | toUDecs(ctx, tvenv, env, decl :: decls)
@@ -491,16 +489,33 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            S.ValDec(tyvars, valbind) =>
            let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
-               val decl' = U.ValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, USyntax.VIdMap.empty)
-               val (env', decls') = toUDecs(ctx, tvenv, env, decls)
-           in (env', decl' :: decls')
+               val valbind' = List.map (fn S.PatBind(pat, exp) => let val (vidmap, pat') = toUPat(ctx, tvenv', env, pat)
+                                                                  in (vidmap, U.PatBind(pat', toUExp(ctx, tvenv', env, exp)))
+                                                                  end
+                                       ) valbind
+               val decl' = U.ValDec(List.map #2 tyvars', List.map #2 valbind', USyntax.VIdMap.empty)
+               val vidmap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty (List.map #1 valbind')
+               val venv = MkEnv { valMap = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap
+                                , tyConMap = Syntax.TyConMap.empty
+                                , strMap = Syntax.StrIdMap.empty
+                                }
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, venv), decls)
+           in (mergeEnv(venv, env'), decl' :: decls')
            end
          | S.RecValDec(tyvars, valbind) =>
            let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
-               val decl' = U.RecValDec(List.map #2 tyvars', List.map (fn vb => toUValBind(ctx, tvenv', env, vb)) valbind, USyntax.VIdMap.empty)
-               val (env', decls') = toUDecs(ctx, tvenv, env, decls)
-           in (env', decl' :: decls')
+               val valbind' = List.map (fn S.PatBind(pat, exp) => (toUPat(ctx, tvenv', env, pat), exp)) valbind
+               val vidmap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty (List.map (fn x => #1 (#1 x)) valbind')
+               val venv = MkEnv { valMap = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap
+                                , tyConMap = Syntax.TyConMap.empty
+                                , strMap = Syntax.StrIdMap.empty
+                                }
+               val env' = mergeEnv(env, venv)
+               val valbind'' = List.map (fn ((_, pat'), exp) => U.PatBind(pat', toUExp(ctx, tvenv', env', exp))) valbind'
+               val decl' = U.RecValDec(List.map #2 tyvars', valbind'', U.VIdMap.empty)
+               val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
+           in (mergeEnv(venv, env''), decl' :: decls')
            end
          | S.TypeDec(typbinds) =>
            let val decl' = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, env, typbind)) typbinds)
