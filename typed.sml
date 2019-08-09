@@ -297,17 +297,10 @@ exception NameError of string
 
 type ('a,'b) Context = { nextTyVar : int ref
                        , nextVId : int ref
-                       (* , nextTyCon : int ref *)
+                       , nextTyCon : int ref
                        , tyVarConstraints : 'a
                        , tyVarSubst : 'b
                        }
-
-(*
-fun newContext() : Context
-    = { nextTyVar = ref 100
-      (* , nextTyCon = ref 100 *)
-      }
-*)
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of int
@@ -344,12 +337,11 @@ local structure S = Syntax
                                                              in #nextVId ctx := n + 1
                                                               ; USyntax.MkVId(name, n)
                                                              end
-(*
-      fun genTyConId(ctx : Context)
+
+      fun genTyConId(ctx : ('a,'b) Context)
           = let val id = !(#nextTyCon ctx)
             in #nextTyCon ctx := id + 1 ; id end
-      fun genTyCon(ctx, tycon) = USyntax.UTyCon(tycon, genTyConId(ctx))
-*)
+      fun newTyCon(ctx, Syntax.MkTyCon name) = USyntax.MkTyCon(name, genTyConId(ctx))
 
       fun lookupStr(env, nil) = env
         | lookupStr(MkEnv { strMap = strMap, ... }, (str0 as S.MkStrId name) :: str1)
@@ -372,10 +364,6 @@ local structure S = Syntax
 in
 (* toUTy : Context * TVEnv * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUPat : Context * TVEnv * Env * Syntax.Pat -> USyntax.VId Syntax.VIdMap.map * USyntax.Pat *)
-(* toUTypBind : Context * Syntax.TypBind -> USyntax.TypBind *)
-(* toUConBind : Context * Syntax.ConBind -> USyntax.ConBind *)
-(* toUDatBind : Context * Syntax.DatBind -> USyntax.DatBind *)
-(* toUExBind : Context * Syntax.ExBind -> USyntax.ExBind *)
 (* toUExp : Context * TVEnv * Env * Syntax.Exp -> USyntax.Exp *)
 (* toUMatch : Context * TVEnv * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
 (* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
@@ -450,12 +438,6 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat) = (Sy
           val (vidmap, pat' ) = toUPat(ctx, tvenv, env, pat)
       in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(vid', USyntax.TyVar(freshTyVar(ctx)), pat'))
       end
-fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
-                                                        val tycon' = 
-                                                  in U.TypBind(params', tycon *) raise Fail "toUTypBind: not implemented yet"
-fun toUConBind(ctx, S.ConBind(vid, opt_ty)) = raise Fail "toUConBind: not implemented yet"
-fun toUDatBind(ctx, S.DatBind(params, tycon, conbinds)) = raise Fail "toUDatBind: not implemented yet" (* genTyCon *)
-fun toUExBind(ctx, _ : S.ExBind) = raise Fail "not implemented yet"
 fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U.SConExp(scon)
   | toUExp(ctx, tvenv, env, S.VarExp(longvid))
     = (case lookupLongVId(env, longvid) of
@@ -482,7 +464,6 @@ and toUMatch(ctx, tvenv, env, matches : (S.Pat * S.Exp) list)
                                  in (pat', toUExp(ctx, tvenv, env', exp))
                                  end
                ) matches
-and toUTypBind(ctx, env, _) = raise Fail "not implemented yet"
 and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
   | toUDecs(ctx, tvenv, env, decl :: decls)
     = (case decl of
@@ -518,14 +499,46 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            in (mergeEnv(venv, env''), decl' :: decls')
            end
          | S.TypeDec(typbinds) =>
-           let val decl' = U.TypeDec(List.map (fn typbind => toUTypBind(ctx, env, typbind)) typbinds)
-               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
-           in ((* TODO: add type ctor *) env', decl' :: decls')
+           let fun doTypBind (S.TypBind(tyvars, tycon, ty), (tyConEnv, typbinds))
+                   = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+                         val tvenv = List.foldl Syntax.TyVarMap.insert' Syntax.TyVarMap.empty tyvars'
+                         val tyvars'' = List.map #2 tyvars'
+                         val ty' = toUTy(ctx, tvenv, env, ty)
+                         val tycon' = newTyCon(ctx, tycon)
+                     in (Syntax.TyConMap.insert(tyConEnv, tycon, BTyAlias(tyvars'', ty')), U.TypBind(tyvars'', tycon', ty') :: typbinds)
+                     end
+               val (tyConEnv, typbinds') = List.foldr doTypBind (Syntax.TyConMap.empty, []) typbinds
+               val tenv = MkEnv { valMap = Syntax.VIdMap.empty, tyConMap = tyConEnv, strMap = Syntax.StrIdMap.empty }
+               val decl' = U.TypeDec(typbinds') (* TODO: Move TypeDec to top level *)
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, tenv), decls)
+           in (mergeEnv(tenv, env'), decl' :: decls')
            end
          | S.DatatypeDec(datbinds) =>
-           let val decl' = raise Fail "not implemented yet"
-               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor, data ctor *) env, decls)
-           in ((* TODO: add type ctor, data ctor *) env', decl' :: decls')
+           let fun doDatBind1 (S.DatBind(tyvars, tycon, conbinds), (tyConEnv, datbinds))
+                   = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+                         val tvenv = List.foldl Syntax.TyVarMap.insert' Syntax.TyVarMap.empty tyvars'
+                         val tycon' = newTyCon(ctx, tycon)
+                     in (Syntax.TyConMap.insert(tyConEnv, tycon, tycon'), (List.map #2 tyvars', tvenv, tycon', conbinds) :: datbinds)
+                     end
+               val (tyConEnv, datbinds') = List.foldr doDatBind1 (Syntax.TyConMap.empty, []) datbinds
+               val env' = case env of
+                              MkEnv { valMap = valMap, tyConMap = tyConMap, strMap = strMap } =>
+                              MkEnv { valMap = valMap, tyConMap = Syntax.TyConMap.unionWith #2 (tyConMap, Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv), strMap = strMap }
+               fun doDatBind2 ((tyvars, tvenv, tycon, conbinds), (valEnv, datbinds))
+                   = let fun doConBind (S.ConBind(vid, optPayloadTy), (valEnv, conbinds))
+                             = let val vid' = newVId(ctx, vid)
+                                   val optPayloadTy' = case optPayloadTy of
+                                                           NONE => NONE
+                                                         | SOME payloadTy => SOME (toUTy(ctx, tvenv, env', payloadTy))
+                               in (Syntax.VIdMap.insert(valEnv, vid, (vid', Syntax.ValueConstructor)), U.ConBind(vid', optPayloadTy') :: conbinds)
+                               end
+                         val (valEnv', conbinds') = List.foldr doConBind (Syntax.VIdMap.empty, []) conbinds
+                     in (Syntax.VIdMap.unionWith #2 (valEnv', valEnv), USyntax.DatBind(tyvars, tycon, conbinds') :: datbinds)
+                     end
+               val (valEnv, datbinds'') = List.foldr doDatBind2 (Syntax.VIdMap.empty, []) datbinds'
+               val datbindEnv = MkEnv { valMap = valEnv, tyConMap = Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv, strMap = Syntax.StrIdMap.empty }
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, datbindEnv), decls)
+           in (mergeEnv(datbindEnv, env'), U.DatatypeDec(datbinds'') :: decls') (* TODO: Move to top level *)
            end
          | S.DatatypeRepDec(tycon, longtycon) =>
            let val decl' = raise Fail "not implemented yet"
