@@ -178,7 +178,7 @@ fun substituteTy (tv, replacement) =
                                             replacement
                                         else
                                             ty
-          | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
+          | substTy (RecordType fields) = RecordType (Syntax.mapRecordRow substTy fields)
           | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
           | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
     in substTy
@@ -205,7 +205,7 @@ fun applySubstTy subst =
                    NONE => ty
                  | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
               )
-          | substTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, substTy ty)) fields)
+          | substTy (RecordType fields) = RecordType (Syntax.mapRecordRow substTy fields)
           | substTy (TyCon(tyargs, longtycon)) = TyCon(List.map substTy tyargs, longtycon)
           | substTy (FnType(ty1, ty2)) = FnType(substTy ty1, substTy ty2)
     in substTy

@@ -163,7 +163,7 @@ fun mapTy doTy =
     let fun doExp(e as SConExp _) = e
           | doExp(e as VarExp _) = e
           | doExp(InstantiatedVarExp(longvid, idstatus, tyargs)) = InstantiatedVarExp(longvid, idstatus, List.map doTy tyargs)
-          | doExp(RecordExp fields) = RecordExp(List.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doExp(RecordExp fields) = RecordExp(Syntax.mapRecordRow doExp fields)
           | doExp(LetInExp(decls, e)) = LetInExp(List.map doDec decls, doExp e)
           | doExp(AppExp(e1, e2)) = AppExp(doExp e1, doExp e2)
           | doExp(TypedExp(e, ty)) = TypedExp(doExp e, doTy ty)
@@ -188,7 +188,7 @@ fun mapTy doTy =
         and doPat WildcardPat = WildcardPat
           | doPat(s as SConPat _) = s
           | doPat(VarPat(vid, ty)) = VarPat(vid, doTy ty)
-          | doPat(RecordPat(xs, xt)) = RecordPat(List.map (fn (label, pat) => (label, doPat pat)) xs, xt)
+          | doPat(RecordPat(xs, xt)) = RecordPat(Syntax.mapRecordRow doPat xs, xt)
           | doPat(ConPat(ct, pat)) = ConPat(ct, Option.map doPat pat)
           | doPat(InstantiatedConPat(ct, pat, tyargs)) = InstantiatedConPat(ct, Option.map doPat pat, List.map doTy tyargs)
           | doPat(TypedPat(pat, ty)) = TypedPat(doPat pat, doTy ty)
@@ -269,7 +269,7 @@ fun filterVarsInPat pred =
                             WildcardPat => pat
                           | SConPat _ => pat
                           | VarPat(vid, ty) => if pred vid then pat else WildcardPat
-                          | RecordPat(row, x) => RecordPat(List.map (fn (label, p) => (label, doPat p)) row, x)
+                          | RecordPat(row, x) => RecordPat(Syntax.mapRecordRow doPat row, x)
                           | ConPat(_, NONE) => pat
                           | ConPat(longvid, SOME innerPat) => ConPat(longvid, SOME (doPat innerPat))
                           | InstantiatedConPat(_, NONE, _) => pat
@@ -366,9 +366,7 @@ local structure S = Syntax
       fun lookupLongVIdStatus(env : Env, Syntax.MkLongVId(strpath, vid)) = lookupVIdStatus(lookupStr(env, strpath), vid)
 in
 (* toUTy : Context * Env * Syntax.Ty -> USyntax.Ty *)
-(* toUTyRow : Context * Env * (Label * Syntax.Ty) list -> (Label * USyntax.Ty) list *)
 (* toUPat : Context * Env * Syntax.Pat -> USyntax.Pat *)
-(* toUPatRow : Context * Env * (Label * USyntax.Pat) list -> (Label * USyntax.Pat) list *)
 (* toUTypBind : Context * Syntax.TypBind -> USyntax.TypBind *)
 (* toUConBind : Context * Syntax.ConBind -> USyntax.ConBind *)
 (* toUDatBind : Context * Syntax.DatBind -> USyntax.DatBind *)
@@ -377,15 +375,12 @@ in
 (* toUMatch : Context * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
 (* toUDecs : Context * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
 fun toUTy(ctx : ('a,'b) Context, env : Env, S.TyVar tv) = U.TyVar(genTyVar(ctx, tv))
-  | toUTy(ctx, env, S.RecordType row) = U.RecordType(toUTyRow(ctx, env, row))
+  | toUTy(ctx, env, S.RecordType row) = U.RecordType(Syntax.mapRecordRow (fn ty => toUTy(ctx, env, ty)) row)
   | toUTy(ctx, env, S.TyCon(args, tycon)) = (case lookupLongTyCon(env, tycon) of
                                                  BTyCon id => U.TyCon(List.map (fn ty => toUTy(ctx, env, ty)) args, U.MkLongTyCon(tycon, id))
                                                | BTyAlias _ => raise Fail "type alias not supported yet"
                                             )
   | toUTy(ctx, env, S.FnType(ty1, ty2)) = U.FnType(toUTy(ctx, env, ty1), toUTy(ctx, env, ty2))
-and toUTyRow(ctx, env, row) = let fun oneField(label, ty) = (label, toUTy(ctx, env, ty))
-                              in List.map oneField row
-                              end
 fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* TODO: should generate a type id? *)
   | toUPat(ctx, env, S.SConPat(Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
   | toUPat(ctx, env, S.SConPat sc) = U.SConPat sc
@@ -396,7 +391,7 @@ fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* T
          | _ => U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx)))
       )
   | toUPat(ctx, env, S.VarPat vid) = U.VarPat(vid, USyntax.TyVar(freshTyVar(ctx))) (* add extra type annotation *)
-  | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(toUPatRow(ctx, env, row), wildcard)
+  | toUPat(ctx, env, S.RecordPat(row, wildcard)) = U.RecordPat(Syntax.mapRecordRow (fn pat => toUPat(ctx, env, pat)) row, wildcard)
   | toUPat(ctx, env, S.ConPat(longvid, NONE)) = U.ConPat(longvid, NONE)
   | toUPat(ctx, env, S.ConPat(longvid, SOME pat)) = U.ConPat(longvid, SOME(toUPat(ctx, env, pat)))
   | toUPat(ctx, env, S.TypedPat(S.ConOrVarPat vid, ty))
@@ -409,7 +404,6 @@ fun toUPat(ctx : ('a,'b) Context, env : Env, S.WildcardPat) = U.WildcardPat (* T
   | toUPat(ctx, env, S.TypedPat(pat, ty)) = U.TypedPat(toUPat(ctx, env, pat), toUTy(ctx, env, ty))
   | toUPat(ctx, env, S.LayeredPat(vid, SOME ty, pat)) = U.LayeredPat(vid, toUTy(ctx, env, ty), toUPat(ctx, env, pat))
   | toUPat(ctx, env, S.LayeredPat(vid, NONE, pat)) = U.LayeredPat(vid, USyntax.TyVar(freshTyVar(ctx)), toUPat(ctx, env, pat))
-and toUPatRow(ctx, env, row : (Syntax.Label * Syntax.Pat) list) = List.map (fn (label, pat) => (label, toUPat(ctx, env, pat))) row
 fun toUTypBind(ctx, S.TypBind(params, tycon, ty)) = (* let val params' = List.map (fn ty => genTyVar(ctx, ty)) params
                                                         val tycon' = 
                                                   in U.TypBind(params', tycon *) raise Fail "toUTypBind: not implemented yet"
@@ -422,7 +416,7 @@ fun toUExp(ctx : ('a,'b) Context, env : Env, S.SConExp(scon)) = U.SConExp(scon)
            SOME idstatus => U.VarExp(longvid, idstatus)
          | NONE => U.VarExp(longvid, Syntax.ValueVariable)
       )
-  | toUExp(ctx, env, S.RecordExp(row)) = U.RecordExp(List.map (fn (label, exp) => (label, toUExp(ctx, env, exp))) row)
+  | toUExp(ctx, env, S.RecordExp(row)) = U.RecordExp(Syntax.mapRecordRow (fn exp => toUExp(ctx, env, exp)) row)
   | toUExp(ctx, env, S.LetInExp(decls, exp))
     = let val (env', decls') = toUDecs(ctx, env, decls)
       in U.LetInExp(decls', toUExp(ctx, mergeEnv(env, env'), exp))

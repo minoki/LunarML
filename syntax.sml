@@ -118,6 +118,9 @@ fun extractTuple (i, nil) = SOME nil
                                                      NONE
   | extractTuple _ = NONE
 
+ (* mapRecordRow : ('a -> 'b) -> (Label * 'a) list -> (Label * 'b) list *)
+fun ('a,'b) mapRecordRow (f : 'a -> 'b) (row : (Label * 'a) list) = List.map (fn (label, x) => (label, f x)) row
+
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
