@@ -33,6 +33,45 @@ val initialFixity = let open Syntax
                                   ]
                     end
 
+val VId_ref = USyntax.MkVId("ref", 0)
+val VId_nil = USyntax.MkVId("nil", 1)
+val VId_true = USyntax.MkVId("true", 2)
+val VId_false = USyntax.MkVId("false", 3)
+val VId_Match = USyntax.MkVId("Match", 4)
+val VId_Bind = USyntax.MkVId("Bind", 5)
+val VId_DCOLON = USyntax.MkVId("::", 6)
+val VId_EQUAL = USyntax.MkVId("=", 7)
+val VId_COLONEQUAL = USyntax.MkVId(":=", 8)
+val VId_abs = USyntax.MkVId("abs", 9)
+val VId_TILDE = USyntax.MkVId("~", 10)
+val VId_div = USyntax.MkVId("div", 11)
+val VId_mod = USyntax.MkVId("mod", 12)
+val VId_TIMES = USyntax.MkVId("*", 13)
+val VId_DIVIDE = USyntax.MkVId("/", 14)
+val VId_PLUS = USyntax.MkVId("+", 15)
+val VId_MINUS = USyntax.MkVId("-", 16)
+val VId_LT = USyntax.MkVId("<", 17)
+val VId_GT = USyntax.MkVId(">", 18)
+val VId_LE = USyntax.MkVId("<=", 19)
+val VId_GE = USyntax.MkVId(">=", 20)
+
+val initialEnv_ToTypedSyntax
+    = let val ValueConstructor = Syntax.ValueConstructor
+          val ExceptionConstructor = Syntax.ExceptionConstructor
+      in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
+                                                   [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
+                                                   ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
+                                                   ,(Syntax.MkVId "true", (VId_true, ValueConstructor))
+                                                   ,(Syntax.MkVId "false", (VId_false, ValueConstructor))
+                                                   ,(Syntax.MkVId "Match", (VId_Match, ExceptionConstructor))
+                                                   ,(Syntax.MkVId "Bind", (VId_Bind, ExceptionConstructor))
+                                                   ,(Syntax.MkVId "::", (VId_DCOLON, ValueConstructor))
+                                                   ]
+                             , tyConMap = Syntax.TyConMap.empty (* TODO *)
+                             , strMap = Syntax.StrIdMap.empty
+                             }
+      end
+
 val initialEnv : Typing.Env
     = let open Syntax
           open Typing
@@ -49,27 +88,6 @@ val initialEnv : Typing.Env
           val IsSigned = USyntax.IsSigned
           val IsOrdered = USyntax.IsOrdered
           val emptyValEnv = USyntax.emptyValEnv
-          val VId_ref = USyntax.MkVId("ref", 0)
-          val VId_nil = USyntax.MkVId("nil", 1)
-          val VId_true = USyntax.MkVId("true", 2)
-          val VId_false = USyntax.MkVId("false", 3)
-          val VId_Match = USyntax.MkVId("Match", 4)
-          val VId_Bind = USyntax.MkVId("Bind", 5)
-          val VId_DCOLON = USyntax.MkVId("::", 6)
-          val VId_EQUAL = USyntax.MkVId("=", 7)
-          val VId_COLONEQUAL = USyntax.MkVId(":=", 8)
-          val VId_abs = USyntax.MkVId("abs", 9)
-          val VId_TILDE = USyntax.MkVId("~", 10)
-          val VId_div = USyntax.MkVId("div", 11)
-          val VId_mod = USyntax.MkVId("mod", 12)
-          val VId_TIMES = USyntax.MkVId("*", 13)
-          val VId_DIVIDE = USyntax.MkVId("/", 14)
-          val VId_PLUS = USyntax.MkVId("+", 15)
-          val VId_MINUS = USyntax.MkVId("-", 16)
-          val VId_LT = USyntax.MkVId("<", 17)
-          val VId_GT = USyntax.MkVId(">", 18)
-          val VId_LE = USyntax.MkVId("<=", 19)
-          val VId_GE = USyntax.MkVId(">=", 20)
       in MkEnv { tyMap = mkTyMap
                              [(MkTyCon "unit", TyStr(TypeFcn([], primTy_unit), emptyValEnv))
                              ,(MkTyCon "bool", TyStr(TypeFcn([], primTy_bool)

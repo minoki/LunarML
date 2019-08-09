@@ -319,21 +319,6 @@ val emptyEnv = MkEnv { valMap = Syntax.VIdMap.empty
                      , tyConMap = Syntax.TyConMap.empty
                      , strMap = Syntax.StrIdMap.empty
                      }
-val initialEnv = MkEnv { valMap = let val ValueConstructor = Syntax.ValueConstructor
-                                      val ExceptionConstructor = Syntax.ExceptionConstructor
-                                  in List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
-                                                [(Syntax.MkVId "ref", (USyntax.MkVId("ref", 0), ValueConstructor))
-                                                ,(Syntax.MkVId "nil", (USyntax.MkVId("nil", 1), ValueConstructor))
-                                                ,(Syntax.MkVId "true", (USyntax.MkVId("true", 2), ValueConstructor))
-                                                ,(Syntax.MkVId "false", (USyntax.MkVId("false", 3), ValueConstructor))
-                                                ,(Syntax.MkVId "Match", (USyntax.MkVId("Match", 4), ExceptionConstructor))
-                                                ,(Syntax.MkVId "Bind", (USyntax.MkVId("Bind", 5), ExceptionConstructor))
-                                                ,(Syntax.MkVId "::", (USyntax.MkVId("::", 6), ValueConstructor))
-                                                ]
-                                  end
-                       , tyConMap = Syntax.TyConMap.empty (* TODO *)
-                       , strMap = Syntax.StrIdMap.empty
-                       }
 
 fun mergeEnv(MkEnv env1 : Env, MkEnv env2 : Env)
     = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
