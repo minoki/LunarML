@@ -263,6 +263,7 @@ AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
                           Syntax.MkLongVId([], vid) => UnfixedSyntax.InfixOrVIdExp vid
                         | longvid => UnfixedSyntax.NonInfixVIdExp longvid
                      ) (* value identifier *)
+      | EQUAL (UnfixedSyntax.InfixOrVIdExp(Syntax.MkVId "="))
       | LBRACE RBRACE (UnfixedSyntax.RecordExp nil) (* empty record *)
       | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp ExpRow) (* record *)
       | LET Dec IN Exp END (UnfixedSyntax.LetInExp (Dec, Exp)) (* local declaration *)
