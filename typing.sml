@@ -44,6 +44,7 @@ type Context = { nextTyVar : int ref
                , nextTyCon : int ref
                , tyVarConstraints : ((USyntax.UnaryConstraint list) USyntax.TyVarMap.map) ref
                , tyVarSubst : Subst ref
+               , topDecs : (USyntax.TopDec list) ref
                }
 
 exception TypeError of string
@@ -149,6 +150,7 @@ fun newContext() : Context
       , nextTyCon = ref 100
       , tyVarConstraints = ref USyntax.TyVarMap.empty
       , tyVarSubst = ref USyntax.TyVarMap.empty
+      , topDecs = ref []
       }
 
 fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : USyntax.UnaryConstraint)
@@ -502,17 +504,6 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
            in (env'', ValDec([], valbinds'', valEnv''') :: decls')
            end
          | RecValDec(tyvarseq, valbinds, _) => raise Fail "let-in: val rec: not impl"
-         | TypeDec(_) => raise Fail "let-in: type: not impl"
-         | DatatypeDec(_) => raise Fail "let-in: datatype: not impl"
-         | DatatypeRepDec(_) => raise Fail "let-in: datatype rep: not impl"
-         | AbstypeDec(_) => raise Fail "let-in: abstype: not impl"
-         | ExceptionDec(_) => raise Fail "let-in: exception: not impl"
-         | LocalDec(localDecls, decls') => let val (env', localDecls') = typeCheckDecl(ctx, env, localDecls)
-                                               val (env'', decls'') = typeCheckDecl(ctx, mergeEnv(env, env'), decls')
-                                               val (restEnv, restDecls') = typeCheckDecl(ctx, mergeEnv(env, env''), decls)
-                                           in (mergeEnv(env'', restEnv), LocalDec(localDecls', decls'') :: restDecls')
-                                           end
-         | OpenDec(_) => raise Fail "let-in: open: not impl"
       )
 (* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty USyntax.VIdMap.map * bool *)
 and typeCheckValBind(ctx, env, PatBind(pat, exp))
@@ -667,7 +658,8 @@ fun typeCheckProgram(ctx, env, decls) = let val (env', decls') = typeCheckDecl(c
                                             val subst = !(#tyVarSubst ctx)
                                             val tvc = !(#tyVarConstraints ctx)
                                             val applySubst = applySubstTy subst
-                                        in (env', tvc, List.map (USyntax.mapTyInDec applySubst) decls')
+                                            val topDecs = !(#topDecs ctx)
+                                        in (env', tvc, (topDecs, List.map (USyntax.mapTyInDec applySubst) decls'))
                                         end
 
 (* pretty printing *)

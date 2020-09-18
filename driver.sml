@@ -6,7 +6,7 @@ fun compile source =
     let val ast1 = parse source
         val ctx = Typing.newContext()
         val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
-        val (env, tvc, decs) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
-    in Typing.applyDefaultTypes(tvc, decs)
+        val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
+    in (topdecs, Typing.applyDefaultTypes(tvc, decs))
     end
 end (* structure Driver *)
