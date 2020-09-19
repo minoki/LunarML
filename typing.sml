@@ -347,30 +347,29 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                                               )
       )
 and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
-    = if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
-          unify(ctx, ctrs) (* do nothing *)
-      else
-          let val subst = !(#tyVarSubst ctx)
-          in case USyntax.TyVarMap.find(subst, tv) of
-                 SOME replacement => unify(ctx, EqConstr(replacement, ty) :: ctrs)
-               | NONE =>
-                 let val ty = applySubstTy subst ty
-                 in if occurCheck tv ty then
-                        raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ")")
-                    else
-                        let val tvc = !(#tyVarConstraints ctx)
-                            val xs = case USyntax.TyVarMap.find(tvc, tv) of
-                                         SOME xs => ( #tyVarConstraints ctx := #1 (USyntax.TyVarMap.remove(tvc, tv))
-                                                    ; xs
-                                                    )
-                                       | NONE => []
-                            fun toConstraint predicate = UnaryConstraint(ty, predicate)
-                            val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
-                        in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
-                         ; unify(ctx, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
-                        end
-                 end
-          end
+    = let val subst = !(#tyVarSubst ctx)
+      in case USyntax.TyVarMap.find(subst, tv) of
+             SOME replacement => unify(ctx, EqConstr(replacement, ty) :: ctrs)
+           | NONE =>
+             let val ty = applySubstTy subst ty
+             in if (case ty of TyVar(tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
+                    unify(ctx, ctrs) (* do nothing *)
+                else if occurCheck tv ty then
+                    raise TypeError("unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ((case ty of TyVar(tv') => if eqUTyVar(tv, tv') then "eqtyvar" else ", not eqtyvar" | _ => ", not tyvar")) ^ ")")
+                else
+                    let val tvc = !(#tyVarConstraints ctx)
+                        val xs = case USyntax.TyVarMap.find(tvc, tv) of
+                                     SOME xs => ( #tyVarConstraints ctx := #1 (USyntax.TyVarMap.remove(tvc, tv))
+                                                ; xs
+                                                )
+                                   | NONE => []
+                        fun toConstraint predicate = UnaryConstraint(ty, predicate)
+                        val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
+                    in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
+                     ; unify(ctx, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
+                    end
+             end
+      end
 fun addConstraint(ctx : Context, ct : Constraint) = unify(ctx, [ct])
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> USyntax.Ty * USyntax.Exp *)
@@ -478,9 +477,15 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                                                  val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
                                                                  fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
                                                                                                       NONE => true
-                                                                                                    | SOME tvs => false
+                                                                                                    | SOME tvs => List.all (fn USyntax.IsEqType => true | _ => false) tvs
                                                                  val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
-                                                                 val tysc = TypeScheme(List.map (fn x => (x, [])) (TyVarSet.listItems tyVars), ty')
+                                                                 val tysc = TypeScheme(List.map (fn tv => case USyntax.TyVarMap.find(tvc, tv) of
+                                                                                                              NONE => (tv, [])
+                                                                                                            | SOME tvs => if List.exists (fn USyntax.IsEqType => true | _ => false) tvs then
+                                                                                                                              (tv, [USyntax.IsEqType])
+                                                                                                                          else (* should not reach here *)
+                                                                                                                              (tv, [])
+                                                                                                ) (TyVarSet.listItems tyVars), ty')
                                                              in tysc
                                                              end) valEnv
                        val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
