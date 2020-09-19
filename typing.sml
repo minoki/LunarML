@@ -656,7 +656,7 @@ and typeCheckPatRow(ctx, env, row)
               = let val (ty, vars', pat') = typeCheckPat(ctx, env, pat)
                 in ((label, ty) :: row, USyntax.VIdMap.unionWith (fn _ => raise TypeError "trying to bind the same identifier twice") (vars, vars'), (label, pat') :: rest)
                 end
-      in List.foldl oneField ([], USyntax.VIdMap.empty, []) row (* TODO: Is this right? *)
+      in List.foldr oneField ([], USyntax.VIdMap.empty, []) row (* TODO: Is this right? *)
       end
 
 (* typeCheckExp : Context * Env * USyntax.Exp -> (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
