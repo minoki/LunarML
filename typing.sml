@@ -443,9 +443,14 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
       in addConstraint(ctx, EqConstr(expTy, patTy))
        ; (retTy, CaseExp(exp', matches'))
       end
-  | typeCheckExp(ctx, env, FnExp(matches))
-    = let val (argTy, retTy, matches') = typeCheckMatch(ctx, env, matches)
-      in (USyntax.FnType(argTy, retTy), FnExp(matches'))
+  | typeCheckExp(ctx, env, FnExp(vid, argTy, body))
+    = let val env' = mergeEnv(env, MkEnv { tyMap = Syntax.TyConMap.empty
+                                         , valMap = USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, (TypeScheme([], argTy), Syntax.ValueVariable))
+                                         , strMap = Syntax.StrIdMap.empty
+                                         }
+                             )
+          val (retTy, body') = typeCheckExp(ctx, env', body)
+      in (USyntax.FnType(argTy, retTy), FnExp(vid, argTy, body'))
       end
   | typeCheckExp(ctx, env, exp as ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy })
     = ( addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = fieldTy }))
