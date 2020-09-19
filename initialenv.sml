@@ -59,6 +59,7 @@ val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
           val ValueVariable = Syntax.ValueVariable
+          fun getTyConIndex(USyntax.MkLongTyCon(_, n)) = n
       in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
                                                    [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
                                                    ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
@@ -82,7 +83,16 @@ val initialEnv_ToTypedSyntax
                                                    ,(Syntax.MkVId "<=", (VId_LE, ValueVariable))
                                                    ,(Syntax.MkVId ">=", (VId_GE, ValueVariable))
                                                    ]
-                             , tyConMap = Syntax.TyConMap.empty (* TODO *)
+                             , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
+                                                     [(Syntax.MkTyCon "unit", ToTypedSyntax.BTyAlias ([], Typing.primTy_unit))
+                                                     ,(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
+                                                     ,(Syntax.MkTyCon "word", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_word))
+                                                     ,(Syntax.MkTyCon "real", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_real))
+                                                     ,(Syntax.MkTyCon "string", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_string))
+                                                     ,(Syntax.MkTyCon "char", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_char))
+                                                     ,(Syntax.MkTyCon "exn", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_exn))
+                                                     ,(Syntax.MkTyCon "bool", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_bool))
+                                                     ]
                              , strMap = Syntax.StrIdMap.empty
                              }
       end
