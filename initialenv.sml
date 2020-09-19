@@ -58,6 +58,7 @@ val VId_GE = USyntax.MkVId(">=", 20)
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
+          val ValueVariable = Syntax.ValueVariable
       in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
                                                    [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
                                                    ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
@@ -66,6 +67,20 @@ val initialEnv_ToTypedSyntax
                                                    ,(Syntax.MkVId "Match", (VId_Match, ExceptionConstructor))
                                                    ,(Syntax.MkVId "Bind", (VId_Bind, ExceptionConstructor))
                                                    ,(Syntax.MkVId "::", (VId_DCOLON, ValueConstructor))
+                                                   ,(Syntax.MkVId "=", (VId_EQUAL, ValueVariable))
+                                                   ,(Syntax.MkVId ":=", (VId_COLONEQUAL, ValueVariable))
+                                                   ,(Syntax.MkVId "abs", (VId_abs, ValueVariable))
+                                                   ,(Syntax.MkVId "~", (VId_TILDE, ValueVariable))
+                                                   ,(Syntax.MkVId "div", (VId_div, ValueVariable))
+                                                   ,(Syntax.MkVId "mod", (VId_mod, ValueVariable))
+                                                   ,(Syntax.MkVId "*", (VId_TIMES, ValueVariable))
+                                                   ,(Syntax.MkVId "/", (VId_DIVIDE, ValueVariable))
+                                                   ,(Syntax.MkVId "+", (VId_PLUS, ValueVariable))
+                                                   ,(Syntax.MkVId "-", (VId_MINUS, ValueVariable))
+                                                   ,(Syntax.MkVId "<", (VId_LT, ValueVariable))
+                                                   ,(Syntax.MkVId ">", (VId_GT, ValueVariable))
+                                                   ,(Syntax.MkVId "<=", (VId_LE, ValueVariable))
+                                                   ,(Syntax.MkVId ">=", (VId_GE, ValueVariable))
                                                    ]
                              , tyConMap = Syntax.TyConMap.empty (* TODO *)
                              , strMap = Syntax.StrIdMap.empty
