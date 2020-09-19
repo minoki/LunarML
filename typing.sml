@@ -302,8 +302,12 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
          | UnaryConstraint(FnType _, IsSigned) => raise TypeError("cannot apply arithmetic operator on function type")
          | UnaryConstraint(FnType _, IsOrdered) => raise TypeError("cannot compare functions")
          | UnaryConstraint(TyCon(tyargs, longtycon), IsEqType) =>
-           if eqULongTyCon(longtycon, primTyCon_ref) then
+           if List.exists (fn x => eqULongTyCon(longtycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref] then
+               (* TODO: check tyargs? *)
                unify(ctx, ctrs) (* do nothing *)
+           else if eqULongTyCon(longtycon, primTyCon_list) then
+               (* TODO: enforce the type argument is an equality type *)
+               raise Fail "IsEqType list: not implemented yet"
            else
                (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
                raise Fail "IsEqType TyCon: not impl"
