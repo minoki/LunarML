@@ -15,6 +15,11 @@ fun MkListPat nil = nilPat
   | MkListPat (x :: xs) = MkConsPat (x, MkListPat xs)
 fun MkSequentialExp e1 [] = e1
   | MkSequentialExp e1 (e2 :: xs) = UnfixedSyntax.CaseExp(e1,[(UnfixedSyntax.WildcardPat, MkSequentialExp e2 xs)])
+fun MkTupleTy [x] = x
+  | MkTupleTy xs = let fun doFields i nil = nil
+                         | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
+                   in Syntax.RecordType (doFields 1 xs)
+                   end
 %%
 
 %eop EOF
@@ -68,6 +73,7 @@ fun MkSequentialExp e1 [] = e1
        | PatSeqRest of UnfixedSyntax.Pat list
        | AtTy of Syntax.Ty
        | ConTy of Syntax.Ty
+       | TupTy of Syntax.Ty list
        | Ty_NoARROW of Syntax.Ty
        | Ty of Syntax.Ty
        | TySeqRest of Syntax.Ty list
@@ -237,9 +243,12 @@ ConTy : AtTy (AtTy)
       | LongTyCon (Syntax.TyCon (nil, LongTyCon)) (* type construction *)
       | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
 
+TupTy : ConTy ([ConTy])
+      | ConTy ASTERISK TupTy (ConTy :: TupTy)
+
 (* type expressions *)
-Ty : ConTy (ConTy)
-   | ConTy ARROW Ty (Syntax.FnType (ConTy, Ty)) (* function type expression (R) *)
+Ty : TupTy (MkTupleTy TupTy)
+   | TupTy ARROW Ty (Syntax.FnType (MkTupleTy TupTy, Ty)) (* function type expression (R) *)
    (* tuple type *)
 
 TySeqRest : COMMA Ty TySeqRest (Ty :: TySeqRest) (* *)
