@@ -110,7 +110,10 @@ fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString t
 fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_LongTyCon(MkLongTyCon(longtycon, n)) = "MkLongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
-  | print_Ty (RecordType xs) = "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+  | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
+                                    NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+                                  | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
+                               )
   | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
