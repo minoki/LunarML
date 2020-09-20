@@ -470,39 +470,43 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
-               fun generalize((valbind, valEnv, false), (valbinds, valEnvRest)) = (valbind :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
-                 | generalize((PatBind(pat, exp), valEnv, true), (valbinds, valEnvRest)) =
-                   let val valEnv' = USyntax.VIdMap.mapi (fn (vid,ty) =>
-                                                             let val ty' = applySubstTy subst ty
-                                                                 val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                                                                 fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
-                                                                                                      NONE => true
-                                                                                                    | SOME tvs => List.all (fn USyntax.IsEqType => true | _ => false) tvs
-                                                                 val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
-                                                                 val tysc = TypeScheme(List.map (fn tv => case USyntax.TyVarMap.find(tvc, tv) of
-                                                                                                              NONE => (tv, [])
-                                                                                                            | SOME tvs => if List.exists (fn USyntax.IsEqType => true | _ => false) tvs then
-                                                                                                                              (tv, [USyntax.IsEqType])
-                                                                                                                          else (* should not reach here *)
-                                                                                                                              (tv, [])
-                                                                                                ) (TyVarSet.listItems tyVars), ty')
-                                                             in tysc
-                                                             end) valEnv
-                       val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
-                       val allPoly = List.all (fn (_, TypeScheme(tv, _)) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
-                       fun polyPart [] = []
-                         | polyPart ((vid, TypeScheme([], _)) :: rest) = polyPart rest
-                         | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
-                       fun isMonoVar vid = case USyntax.VIdMap.find(valEnv', vid) of
-                                               NONE => raise TypeError "isMonoVar: internal error"
-                                             | SOME (TypeScheme([], _)) => true
-                                             | SOME (TypeScheme(_ :: _, _)) => false
-                       val valbind' = if allPoly then
-                                          polyPart valEnv'L
-                                      else
-                                          PatBind(USyntax.filterVarsInPat isMonoVar pat, exp) :: polyPart valEnv'L
-                   in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
-                   end
+               fun generalize((valbind, valEnv, (* generalizable *) false), (valbinds, valEnvRest))
+                   = (valbind :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+                 | generalize((PatBind(pat, exp), valEnv, (* generalizable *) true), (valbinds, valEnvRest))
+                   = let fun doVal (vid,ty)
+                             = let val ty' = applySubstTy subst ty
+                                   val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
+                                   fun isEqualityType USyntax.IsEqType = true
+                                     | isEqualityType _ = false
+                                   fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
+                                                                        NONE => true
+                                                                      | SOME tvs => List.all isEqualityType tvs
+                                   val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
+                                   fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
+                                                        NONE => (tv, [])
+                                                      | SOME tvs => if List.exists isEqualityType tvs then
+                                                                        (tv, [USyntax.IsEqType])
+                                                                    else (* should not reach here *)
+                                                                        (tv, [])
+                                   val tysc = TypeScheme(List.map doTyVar (TyVarSet.listItems tyVars), ty')
+                               in tysc
+                               end
+                         val valEnv' = USyntax.VIdMap.mapi doVal valEnv
+                         val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
+                         val allPoly = List.all (fn (_, TypeScheme(tv, _)) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
+                         fun polyPart [] = []
+                           | polyPart ((vid, TypeScheme([], _)) :: rest) = polyPart rest
+                           | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
+                         fun isMonoVar vid = case USyntax.VIdMap.find(valEnv', vid) of
+                                                 NONE => raise TypeError "isMonoVar: internal error"
+                                               | SOME (TypeScheme([], _)) => true
+                                               | SOME (TypeScheme(_ :: _, _)) => false
+                         val valbind' = if allPoly then
+                                            polyPart valEnv'L
+                                        else
+                                            PatBind(USyntax.filterVarsInPat isMonoVar pat, exp) :: polyPart valEnv'L
+                     in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
+                     end
                  | generalize((PolyVarBind(_, _, _), valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected PolyVarBind"
                val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds'
                val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
