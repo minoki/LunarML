@@ -84,8 +84,14 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
                 | AbstypeDec of DatBind list * Dec list
                 | ExceptionDec of ExBind list
      and ValBind = PatBind of Pat * Exp
-                 | PolyVarBind of VId * TypeScheme * Exp (* polymorphic binding *)
+                 | TupleBind of (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
+                 | PolyVarBind of VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 type Program = TopDec list * Dec list
+
+fun TupleExp xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordExp (doFields 1 xs)
+                  end
 
 structure TyVarKey = struct
 type ord_key = TyVar
@@ -150,6 +156,7 @@ and print_Dec (ValDec (bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list pr
   | print_Dec (RecValDec (bound,valbind,valenv)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
   (* | print_Dec _ = "<Dec>"*)
 and print_ValBind (PatBind (pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
+  | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (PolyVarBind (name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
@@ -189,6 +196,7 @@ fun mapTy doTy =
         and doDec(ValDec(tyvars, valbind, valenv)) = ValDec(tyvars, List.map doValBind valbind, valenv)
           | doDec(RecValDec(tyvars, valbind, valenv)) = RecValDec(tyvars, List.map doValBind valbind, valenv)
         and doValBind(PatBind(pat, exp)) = PatBind(doPat pat, doExp exp)
+          | doValBind(TupleBind(xs, exp)) = TupleBind(xs, doExp exp) (* TODO *)
           | doValBind(PolyVarBind(vid, tysc, exp)) = PolyVarBind(vid, tysc, doExp exp) (* TODO *)
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat WildcardPat = WildcardPat
@@ -260,6 +268,7 @@ and freeTyVarsInDec(bound, dec)
       )
 and freeTyVarsInValBinds(bound, nil, acc) = acc
   | freeTyVarsInValBinds(bound, PatBind(pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
+  | freeTyVarsInValBinds(bound, TupleBind(xs, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) (* TODO *)
   | freeTyVarsInValBinds(bound, PolyVarBind(vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
 
 (* filterVarsInPat : (VId -> bool) -> Pat -> Pat *)

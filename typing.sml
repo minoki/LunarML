@@ -504,9 +504,16 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                          val valbind' = if allPoly then
                                             polyPart valEnv'L
                                         else
-                                            PatBind(USyntax.filterVarsInPat isMonoVar pat, exp) :: polyPart valEnv'L
+                                            let val xs = List.mapPartial (fn (vid, tysc) => case tysc of
+                                                                                                TypeScheme([], ty) => SOME (vid, ty)
+                                                                                              | TypeScheme(_ :: _, _) => NONE
+                                                                         ) valEnv'L
+                                                val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
+                                            in TupleBind(xs, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
+                                            end
                      in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                      end
+                 | generalize((TupleBind _, valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected TupleBind"
                  | generalize((PolyVarBind(_, _, _), valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected PolyVarBind"
                val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds'
                val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
@@ -531,6 +538,8 @@ and typeCheckValBind(ctx, env, PatBind(pat, exp))
           val generalizable = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
       in (PatBind(pat', exp'), newValEnv, generalizable)
       end
+  | typeCheckValBind(ctx, env, TupleBind(xs, exp))
+    = raise TypeError "unexpected TupleBind"
   | typeCheckValBind(ctx, env, PolyVarBind(vid, tysc, exp))
     = raise TypeError "unexpected PolyVarBind"
 (* typeCheckExpRow : Context * Env * (Label * Exp) list -> (Label * Syntax.Ty) list * (Label * Exp) list *)
