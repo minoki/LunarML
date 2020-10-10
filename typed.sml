@@ -1,15 +1,18 @@
 structure USyntax = struct
 datatype VId = MkVId of string * int
-datatype LongVId = MkLongVId of Syntax.StrId list * VId
+type LongVId = VId Syntax.Qualified
+fun MkLongVId(strids, vid: VId) = Syntax.MkQualified(strids, vid)
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
 datatype TyCon = MkTyCon of string * int
-datatype LongTyCon = MkLongTyCon of Syntax.LongTyCon * int
+type LongTyCon = TyCon Syntax.Qualified
+fun MkLongTyCon(Syntax.MkQualified(strids, Syntax.MkTyCon(tycon)), n) = Syntax.MkQualified(strids, MkTyCon(tycon, n))
 fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andalso eq = eq' andalso a = b
   | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
   | eqUTyVar(_, _) = false
 fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
-fun eqULongTyCon(MkLongTyCon(_,a),MkLongTyCon(_,b)) = a = b
+fun eqULongTyCon(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = eqUTyCon(a, b)
+fun eqULongVId(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = a = b
 
 datatype Ty = TyVar of TyVar (* type variable *)
             | RecordType of (Syntax.Label * Ty) list (* record type expression *)
@@ -110,11 +113,11 @@ structure TyVarMap = BinaryMapFn(TyVarKey)
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_VId(MkVId(name, n)) = "MkVId(\"" ^ String.toString name ^ "\"," ^ Int.toString n ^ ")"
-fun print_LongVId(MkLongVId(strids, vid)) = "MkLongVId(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_VId vid ^ ")"
+fun print_LongVId(Syntax.MkQualified(strids, vid)) = "MkLongVId(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_VId vid ^ ")"
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
-fun print_LongTyCon(MkLongTyCon(longtycon, n)) = "MkLongTyCon(" ^ Syntax.print_LongTyCon longtycon ^ "," ^ Int.toString n ^ ")"
+fun print_LongTyCon(Syntax.MkQualified(strids, tycon)) = "MkQualified(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_TyCon tycon ^ ")"
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
@@ -136,7 +139,7 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
-  | print_Exp (VarExp(MkLongVId([], vid), idstatus)) = "SimpleVarExp(" ^ print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
+  | print_Exp (VarExp(Syntax.MkQualified([], vid), idstatus)) = "SimpleVarExp(" ^ print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
   | print_Exp (VarExp(x, idstatus)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
   | print_Exp (InstantiatedVarExp(x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of

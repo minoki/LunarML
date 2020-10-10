@@ -63,7 +63,7 @@ fun lookupTyConInEnv(MkEnv env, tycon as Syntax.MkTyCon name)
          | SOME x => x
       )
 (* Env * USyntax.LongVId -> (USyntax.TypeScheme * Syntax.IdStatus) option *)
-fun lookupLongVIdInEnv(env, USyntax.MkLongVId(strid, vid))
+fun lookupLongVIdInEnv(env, Syntax.MkQualified(strid, vid))
     = let val MkEnv strEnv = lookupStr(env, strid)
       in USyntax.VIdMap.find(#valMap strEnv, vid)
       end
@@ -79,8 +79,8 @@ fun isSoleConstructor(env : Env, longvid: USyntax.LongVId) =
     (case lookupLongVIdInEnv(env, longvid) of
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
-         let val USyntax.MkLongTyCon(Syntax.MkQualified(strids, tycon), x) = getConstructedType ty
-             val TyStr (_, valenv) = lookupTyConInEnv(lookupStr(env, strids), tycon)
+         let val Syntax.MkQualified(strids, USyntax.MkTyCon(tycon, x)) = getConstructedType ty
+             val TyStr (_, valenv) = lookupTyConInEnv(lookupStr(env, strids), Syntax.MkTyCon tycon)
          in USyntax.VIdMap.numItems valenv = 1
          end
        | SOME (_, Syntax.ValueVariable) => false
@@ -99,7 +99,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(e, _)) = isConexp(env, e)
-  | isConexp(env, USyntax.VarExp(USyntax.MkLongVId([], USyntax.MkVId("ref", 0)), _)) = false
+  | isConexp(env, USyntax.VarExp(Syntax.MkQualified([], USyntax.MkVId("ref", 0)), _)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueVariable)) = false
   | isConexp(env, USyntax.VarExp(_, Syntax.ValueConstructor)) = true
   | isConexp(env, USyntax.VarExp(_, Syntax.ExceptionConstructor)) = true
@@ -382,14 +382,14 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
                      | Syntax.CharacterConstant x => primTy_char
       in (ty, exp)
       end
-  | typeCheckExp(ctx, env, exp as VarExp(longvid as USyntax.MkLongVId(_, USyntax.MkVId(name, _)), idstatus))
+  | typeCheckExp(ctx, env, exp as VarExp(longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), idstatus))
     = (case lookupLongVIdInEnv(env, longvid) of
            SOME (tysc, ids) => let val (ty, tyargs) = instantiate(ctx, tysc)
                                in (ty, InstantiatedVarExp(longvid, idstatus, tyargs))
                                end
          | NONE => raise NameError("unknown value name " ^ name)
       )
-  | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as USyntax.MkLongVId(_, USyntax.MkVId(name, _)), idstatus, tyargs)) (* should not reach here *)
+  | typeCheckExp(ctx, env, exp as InstantiatedVarExp(longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), idstatus, tyargs)) (* should not reach here *)
     = let val ty = case lookupLongVIdInEnv(env, longvid) of
                        SOME (TypeScheme(vars, ty), ids) =>
                        let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>

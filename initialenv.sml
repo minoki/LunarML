@@ -59,7 +59,7 @@ val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
           val ValueVariable = Syntax.ValueVariable
-          fun getTyConIndex(USyntax.MkLongTyCon(_, n)) = n
+          fun getTyConIndex(Syntax.MkQualified(_, USyntax.MkTyCon(_, n))) = n
       in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
                                                    [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
                                                    ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
