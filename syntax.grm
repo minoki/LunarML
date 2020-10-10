@@ -20,6 +20,7 @@ fun MkTupleTy [x] = x
                          | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
                    in Syntax.RecordType (doFields 1 xs)
                    end
+fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(strid :: strids, x)
 %%
 
 %eop EOF
@@ -161,19 +162,19 @@ TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
 
 (* long value identifiers, including '=' *)
 LongVId : VId (Syntax.MkLongVId (nil, VId))
-        | StrId DOT LongVId (case LongVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
+        | StrId DOT LongVId (prependStrId(StrId, LongVId))
 
 (* long value identifiers, excluding unqualified '=' *)
 LongBoundVId : BoundVId (Syntax.MkLongVId (nil, BoundVId))
-             | StrId DOT LongBoundVId (case LongBoundVId of Syntax.MkLongVId (s,t) => Syntax.MkLongVId (StrId :: s, t))
+             | StrId DOT LongBoundVId (prependStrId(StrId, LongBoundVId))
 
 (* long type constructors *)
 LongTyCon : TyCon (Syntax.MkLongTyCon (nil, TyCon))
-          | StrId DOT LongTyCon (case LongTyCon of Syntax.MkLongTyCon (s,t) => Syntax.MkLongTyCon (StrId :: s, t))
+          | StrId DOT LongTyCon (prependStrId(StrId, LongTyCon))
 
 (* long structure identifiers *)
 LongStrId : StrId (Syntax.MkLongStrId (nil, StrId))
-          | StrId DOT LongStrId (case LongStrId of Syntax.MkLongStrId (s,t) => Syntax.MkLongStrId (StrId :: s, t))
+          | StrId DOT LongStrId (prependStrId(StrId, LongStrId))
 
 Opt_OP : (* empty *) (false)
        | OP (true)
@@ -183,7 +184,7 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
       | SCon (UnfixedSyntax.SConPat SCon) (* special constant *)
       | OP LongVId (UnfixedSyntax.NonInfixVIdPat LongVId) (* value identifier, including 'op =' *)
       | LongBoundVId (case LongBoundVId of
-                          Syntax.MkLongVId([], vid) => UnfixedSyntax.InfixOrVIdPat vid
+                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdPat vid
                         | longvid => UnfixedSyntax.NonInfixVIdPat longvid
                      ) (* value identifier *)
       | LBRACE RBRACE (UnfixedSyntax.RecordPat (nil, false)) (* empty record *)
@@ -219,9 +220,9 @@ Pat : TypedPat (TypedPat)
 *)
     | TypedPat AS Pat (case TypedPat of
                            UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat) (* TODO: Check infix status *)
-                         | UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat)
+                         | UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat)
                          | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat) (* TODO: Check infix status *)
-                         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat)
+                         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat)
                          | _ => raise Fail "conjuctive: not implemented yet"
                       ) (* conjunctive (R) *)
 
@@ -269,7 +270,7 @@ TyRow : Lab COLON Ty COMMA TyRow ((Lab, Ty) :: TyRow) (* type-expression row *)
 AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
       | OP LongVId (UnfixedSyntax.NonInfixVIdExp LongVId) (* value identifier *)
       | LongBoundVId (case LongBoundVId of
-                          Syntax.MkLongVId([], vid) => UnfixedSyntax.InfixOrVIdExp vid
+                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdExp vid
                         | longvid => UnfixedSyntax.NonInfixVIdExp longvid
                      ) (* value identifier *)
       | EQUAL (UnfixedSyntax.InfixOrVIdExp(Syntax.MkVId "="))

@@ -66,7 +66,7 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
                                                         Syntax.Nonfix => Syntax.ConOrVarPat vid
                                                       | _ => raise Fail "infix operator used in non-infix position"
                                                    )
-  | doPat(env, UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], vid))) = Syntax.ConOrVarPat vid
+  | doPat(env, UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))) = Syntax.ConOrVarPat vid
   | doPat(env, UnfixedSyntax.NonInfixVIdPat(longvid)) = Syntax.ConPat(longvid, NONE)
   | doPat(env, UnfixedSyntax.RecordPat(fields, r)) = Syntax.RecordPat(List.map (fn (label, pat) => (label, doPat(env, pat))) fields, r)
   | doPat(env, UnfixedSyntax.JuxtapositionPat patterns) (* constructed pattern or infix constructed pattern *)
@@ -87,7 +87,7 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
               = (case getFixityStatus(env, vid') of
                      Syntax.Nonfix => doInfix(Syntax.ConPat(longvid, SOME(Syntax.ConOrVarPat(vid'))), pats)
                    | Syntax.Infix assoc => case longvid of
-                                               Syntax.MkLongVId([], vid) => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
+                                               Syntax.MkQualified([], vid) => Tree(Syntax.ConOrVarPat(vid), assoc, vid', doPrefix(pats))
                                              | _ => Tree(Syntax.ConPat(longvid, NONE), assoc, vid', doPrefix(pats))
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(longvid) :: atpat :: pats)

@@ -79,7 +79,7 @@ fun isSoleConstructor(env : Env, longvid: USyntax.LongVId) =
     (case lookupLongVIdInEnv(env, longvid) of
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
-         let val USyntax.MkLongTyCon(Syntax.MkLongTyCon(strids, tycon), x) = getConstructedType ty
+         let val USyntax.MkLongTyCon(Syntax.MkQualified(strids, tycon), x) = getConstructedType ty
              val TyStr (_, valenv) = lookupTyConInEnv(lookupStr(env, strids), tycon)
          in USyntax.VIdMap.numItems valenv = 1
          end

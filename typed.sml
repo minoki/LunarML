@@ -359,10 +359,10 @@ local structure S = Syntax
           = case Syntax.TyConMap.find(#tyConMap env, tycon) of
                 NONE => raise NameError("unknown type constructor " ^ name)
               | SOME b => b
-      fun lookupLongTyCon(env : Env, Syntax.MkLongTyCon(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
+      fun lookupLongTyCon(env : Env, Syntax.MkQualified(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
 
       fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
-      fun lookupLongVId(env : Env, Syntax.MkLongVId(strpath, vid))
+      fun lookupLongVId(env : Env, Syntax.MkQualified(strpath, vid))
           = (case lookupVId(lookupStr(env, strpath), vid) of
                  NONE => NONE
                | SOME (vid', x) => SOME (USyntax.MkLongVId(strpath, vid'), x)
