@@ -13,4 +13,5 @@ typing.sml
 initialenv.sml
 fsyntax.sml
 ftransform.sml
+codegen_lua.sml
 driver.sml
