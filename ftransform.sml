@@ -31,9 +31,16 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                          val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
                          fun go [] = F.AppExp(F.VarExp(Syntax.MkQualified([], USyntax.MkVId("_raise", 99))), F.RecordExp []) (* TODO: raise Match or Bind *)
                            | go ((pat, innerExp) :: rest)
-                             = let val matcher = genMatcher env examinedExp pat
-                                   val binders = genBinders env examinedExp pat
-                               in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
+                             = let val binders = genBinders env examinedExp pat
+                               in if isExhaustive env pat then
+                                      if List.null rest then
+                                          List.foldr F.LetExp (doExp env innerExp) binders
+                                      else
+                                          raise Fail "A redundant pattern match found"
+                                  else
+                                      let val matcher = genMatcher env examinedExp pat
+                                      in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
+                                      end
                                end
                      in F.LetExp(F.SimpleBind(examinedVId, F.RecordType [] (* TODO *), doExp env exp), go matches)
                      end
@@ -67,6 +74,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genBinders env exp (F.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = genBinders env (F.DataPayloadExp exp) innerPat
             | genBinders env exp (F.InstantiatedConPat(longvid, NONE, tyargs)) = []
             | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
+          and isExhaustive env F.WildcardPat = true
+            | isExhaustive env (F.SConPat _) = false
+            | isExhaustive env (F.VarPat _) = true
+            | isExhaustive env (F.RecordPat (row, _)) = List.all (fn (_, e) => isExhaustive env e) row
+            | isExhaustive env (F.InstantiatedConPat (longvid, pat, _)) = false (* TODO *)
+            | isExhaustive env (F.LayeredPat (_, _, innerPat)) = isExhaustive env innerPat
           fun doDec env (F.ValDec valbind) = F.ValDec (doValBind env valbind)
             | doDec env (F.RecValDec valbinds) = F.RecValDec (List.map (doValBind env) valbinds)
       in { doExp = doExp
