@@ -7,6 +7,14 @@ fun compile source =
         val ctx = Typing.newContext()
         val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
         val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
-    in (topdecs, Typing.applyDefaultTypes(tvc, decs))
+        val decs' = Typing.applyDefaultTypes(tvc, decs)
+        val fctx = { nextVId = #nextVId ctx }
+        val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
+    in (topdecs, ast1, ast2, decs', fdecs)
+           (* TODO:
+            * - Desugar equality
+            * - Desugar pattern matches
+            * - Some normal form
+            *)
     end
 end (* structure Driver *)

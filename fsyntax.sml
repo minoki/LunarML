@@ -78,6 +78,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
 and print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 fun print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
 
@@ -301,7 +302,9 @@ and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.TypedExp(exp, _)) = toFExp(ctx, env, exp)
   | toFExp(ctx, env, U.IfThenElseExp(e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
   | toFExp(ctx, env, U.CaseExp(e, matches))
-    = let fun doMatch(pat, exp) = raise Fail "not implemented yet" (* TODO *)
+    = let fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
+                                  in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
+                                  end
       in F.CaseExp(toFExp(ctx, env, e), List.map doMatch matches)
       end
   | toFExp(ctx, env, U.FnExp(vid, ty, body))
@@ -339,28 +342,6 @@ and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot
                 )
       in F.TupleBind ([(vid, ty')], doExp(env, tvs))
       end
-          (*
-and decToValBinds(ctx, env, U.ValDec(_tvs, valbinds, _valenv))
-    = let val valbinds' = List.map (doValBind ctx env) valbinds (* TODO: Use foldr *)
-          val env' = env (* TODO: Add new bindings *)
-      in (env'', false, valbinds' @ valbinds'')
-      end
-  | decToValBinds(ctx, env, U.RecValDec(tvs, valbinds, valenv))
-    = let val env' = env (* TODO: Add new bindings *)
-          val valbinds' = List.map (doValBind ctx env') valbinds
-      in (env'', true, valbinds' @ valbinds'')
-      end
-*)
-and toFDecs(ctx, env, []) = (env, [])
-  | toFDecs(ctx, env, U.ValDec(tvs, valbinds, valenv) :: decs)
-    = (* let val env' = env
-          val (env'', decs') = toFDecs(ctx, env', decs)
-      in (env'', F.ValDec decs')
-      end *) raise Fail "toFDecs: not implemented yet"
-  | toFDecs(ctx, env, U.RecValDec(tvs, valbinds, valenv) :: decs)
-    = (* let val env' = env
-      in toFDecs(ctx, env', decs)
-      end *) raise Fail "toFDecs: not implemented yet"
 and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
             | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
@@ -408,5 +389,10 @@ and getEquality(ctx, env, U.TyCon([], longtycon))
                                                   in F.RecordEqualityExp (List.map doField fields)
                                                   end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
-end
-end
+fun toFDecs(ctx, env, []) = []
+  | toFDecs(ctx, env, U.ValDec(tvs, valbinds, valenv) :: decs)
+    = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds @ toFDecs (ctx, env, decs)
+  | toFDecs(ctx, env, U.RecValDec(tvs, valbinds, valenv) :: decs)
+    = F.RecValDec (List.map (doValBind ctx env) valbinds) :: toFDecs (ctx, env, decs)
+end (* local *)
+end (* structure ToFSyntax *)
