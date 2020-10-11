@@ -109,7 +109,10 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
   | doExp ctx env (F.VarExp (Syntax.MkQualified([], vid))) = VIdToLua vid
   | doExp ctx env (F.VarExp (Syntax.MkQualified(_ :: _, _))) = raise Fail "CodeGenLua: qualified identifiers are not implemented yet"
   | doExp ctx env (F.RecordExp []) = "{}"
-  | doExp ctx env (F.RecordExp fields) = "{" ^ String.concatWith ", " (List.map (fn (label, exp) => "[" ^ LabelToLua label ^ "] = " ^ doExp ctx env exp) fields) ^ "}" (* TODO: evaluation order *)
+  | doExp ctx env (F.RecordExp fields) = (case Syntax.extractTuple(1, fields) of
+                                              SOME xs => "{" ^ String.concatWith ", " (List.map (doExp ctx env) xs) ^ "}" (* TODO: evaluation order *)
+                                            | NONE => "{" ^ String.concatWith ", " (List.map (fn (label, exp) => "[" ^ LabelToLua label ^ "] = " ^ doExp ctx env exp) fields) ^ "}" (* TODO: evaluation order *)
+                                         )
   | doExp ctx env (F.LetExp (F.SimpleBind (v, _, exp1), exp2))
     = "(function()\n"
       ^ "local " ^ VIdToLua v ^ " = " ^ doExp ctx env exp1 ^ "\n"
@@ -155,7 +158,10 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
   | doExp ctx env (F.ProjectionExp { label = label, ... }) = "function(x) return x[" ^ LabelToLua(label) ^ "] end"
   | doExp ctx env (F.TyAbsExp (_, exp)) = doExp ctx env exp
   | doExp ctx env (F.TyAppExp (exp, _)) = doExp ctx env exp
-  | doExp ctx env (F.RecordEqualityExp fields) = "_recordEqual({" ^ String.concatWith ", " (List.map (fn (label, exp) => "[" ^ LabelToLua label ^ "] = " ^ doExp ctx env exp) fields) ^ "})"
+  | doExp ctx env (F.RecordEqualityExp fields) = (case Syntax.extractTuple(1, fields) of
+                                                      SOME xs => "_recordEqual({" ^ String.concatWith ", " (List.map (doExp ctx env) xs) ^ "})"
+                                                    | NONE => "_recordEqual({" ^ String.concatWith ", " (List.map (fn (label, exp) => "[" ^ LabelToLua label ^ "] = " ^ doExp ctx env exp) fields) ^ "})"
+                                                 )
   | doExp ctx env (F.DataTagExp exp) = "(" ^ doExp ctx env exp ^ ").tag"
   | doExp ctx env (F.DataPayloadExp exp) = "(" ^ doExp ctx env exp ^ ").payload"
 
