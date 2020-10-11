@@ -470,8 +470,13 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
-               fun generalize((valbind, valEnv, (* generalizable *) false), (valbinds, valEnvRest))
-                   = (valbind :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+               fun generalize((valbind as PatBind(pat, exp), valEnv, (* generalizable *) false), (valbinds, valEnvRest))
+                   = let val valEnv'L = USyntax.VIdMap.listItemsi valEnv
+                         val xs = valEnv'L
+                         val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
+                         val valbind' = TupleBind(valEnv'L, USyntax.CaseExp(exp, [(pat, tup)]))
+                     in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+                     end
                  | generalize((PatBind(pat, exp), valEnv, (* generalizable *) true), (valbinds, valEnvRest))
                    = let fun doVal (vid,ty)
                              = let val ty' = applySubstTy subst ty
