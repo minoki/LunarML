@@ -45,6 +45,13 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                   | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                )
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("int", 0)))) = "primTy_int"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("word", 1)))) = "primTy_word"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("real", 2)))) = "primTy_real"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("string", 3)))) = "primTy_string"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("char", 4)))) = "primTy_char"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("exn", 5)))) = "primTy_exn"
+  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("bool", 6)))) = "primTy_bool"
   | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
