@@ -12,6 +12,7 @@ fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andal
   | eqUTyVar(_, _) = false
 fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
 fun eqULongTyCon(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = eqUTyCon(a, b)
+fun eqVId(a, b : VId) = a = b
 fun eqULongVId(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = a = b
 
 datatype Ty = TyVar of TyVar (* type variable *)
@@ -29,6 +30,27 @@ fun compare(MkVId(x,a), MkVId(y,b)) = case String.compare (x,y) of
 end : ORD_KEY
 structure VIdSet = BinarySetFn(VIdKey)
 structure VIdMap = BinaryMapFn(VIdKey)
+
+structure TyConKey = struct
+type ord_key = TyCon
+fun compare(MkTyCon(x,a), MkTyCon(y,b)) = case String.compare (x,y) of
+                                              EQUAL => Int.compare(a,b)
+                                            | ord => ord
+end : ORD_KEY
+structure TyConSet = BinarySetFn(TyConKey)
+structure TyConMap = BinaryMapFn(TyConKey)
+
+structure TyVarKey = struct
+type ord_key = TyVar
+fun compare(NamedTyVar(x,_,a), NamedTyVar(y,_,b)) = (case String.compare (x,y) of
+                                                         EQUAL => Int.compare(a,b)
+                                                       | ord => ord
+                                                    )
+  | compare(AnonymousTyVar(a), AnonymousTyVar(b)) = Int.compare(a,b)
+  | compare(NamedTyVar _, AnonymousTyVar _) = LESS
+  | compare(AnonymousTyVar _, NamedTyVar _) = GREATER
+end : ORD_KEY
+structure TyVarMap = BinaryMapFn(TyVarKey)
 
 datatype UnaryConstraint
   = HasField of { label : Syntax.Label

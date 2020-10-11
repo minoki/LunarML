@@ -11,4 +11,5 @@ postparsing.sml
 typed.sml
 typing.sml
 initialenv.sml
+fsyntax.sml
 driver.sml
