@@ -30,10 +30,55 @@ datatype Exp = SConExp of Syntax.SCon
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
-     and Dec = ValDec of ValBind
-             | RecValDec of ValBind list
      and ValBind = TupleBind of (USyntax.VId * Ty) list * Exp
+datatype Dec = ValDec of ValBind
+             | RecValDec of ValBind list
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+
+structure PrettyPrint = struct
+val print_TyVar = USyntax.print_TyVar
+val print_VId = USyntax.print_VId
+val print_LongVId = USyntax.print_LongVId
+val print_LongTyCon = USyntax.print_LongTyCon
+fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
+  | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
+                                    NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+                                  | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
+                               )
+  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
+  | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
+  | print_Ty (ForallType(tv,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
+fun print_Pat WildcardPat = "WildcardPat"
+  | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
+  | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
+  | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
+  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
+                                           NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
+                                         | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
+                                      )
+  | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
+fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
+  | print_Exp (VarExp(Syntax.MkQualified([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
+  | print_Exp (VarExp(x)) = "VarExp(" ^ print_LongVId x ^ ")"
+  | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
+                                   NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
+                                 | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
+                              )
+  | print_Exp (LetExp(valbind,x)) = "LetExp(" ^ print_ValBind valbind ^ "," ^ print_Exp x ^ ")"
+  | print_Exp (LetRecExp(valbinds,x)) = "LetRecExp(" ^ Syntax.print_list print_ValBind valbinds ^ "," ^ print_Exp x ^ ")"
+  | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+  | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
+  | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
+  | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
+  | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
+  | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
+and print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
+fun print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
+  | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+end (* structure PrettyPrint *)
 end (* structure FSyntax *)
 
 structure ToFSyntax = struct
