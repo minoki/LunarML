@@ -35,10 +35,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                    val binders = genBinders env examinedExp pat
                                in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
                                end
-                     in F.LetExp(F.TupleBind([(examinedVId, F.RecordType [] (* TODO *))], doExp env exp), go matches)
+                     in F.LetExp(F.SimpleBind(examinedVId, F.RecordType [] (* TODO *), doExp env exp), go matches)
                      end
                 )
-          and doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
+          and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
+            | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           and genMatcher env exp F.WildcardPat = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
             | genMatcher env exp (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_int)), F.TupleExp [exp, F.SConExp scon])
             | genMatcher env exp (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_word)), F.TupleExp [exp, F.SConExp scon])
@@ -61,11 +62,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genMatcher env exp (F.LayeredPat (vid, ty, innerPat)) = genMatcher env exp innerPat
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []
-            | genBinders env exp (F.VarPat (vid, ty)) = [F.TupleBind ([(vid, ty)], exp)]
+            | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
             | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) innerPat) fields)
             | genBinders env exp (F.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = genBinders env (F.DataPayloadExp exp) innerPat
             | genBinders env exp (F.InstantiatedConPat(longvid, NONE, tyargs)) = []
-            | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.TupleBind ([(vid, ty)], exp) :: genBinders env exp pat
+            | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
           fun doDec env (F.ValDec valbind) = F.ValDec (doValBind env valbind)
             | doDec env (F.RecValDec valbinds) = F.RecValDec (List.map (doValBind env) valbinds)
       in { doExp = doExp

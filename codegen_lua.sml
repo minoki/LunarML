@@ -110,20 +110,30 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
   | doExp ctx env (F.VarExp (Syntax.MkQualified(_ :: _, _))) = raise Fail "CodeGenLua: qualified identifiers are not implemented yet"
   | doExp ctx env (F.RecordExp []) = "{}"
   | doExp ctx env (F.RecordExp fields) = "{" ^ String.concatWith ", " (List.map (fn (label, exp) => "[" ^ LabelToLua label ^ "] = " ^ doExp ctx env exp) fields) ^ "}" (* TODO: evaluation order *)
+  | doExp ctx env (F.LetExp (F.SimpleBind (v, _, exp1), exp2))
+    = "(function()\n"
+      ^ "local " ^ VIdToLua v ^ " = " ^ doExp ctx env exp1 ^ "\n"
+      ^ "return " ^ doExp ctx env exp2 (* TODO: update environment? *)
+      ^ "\nend)()"
   | doExp ctx env (F.LetExp (F.TupleBind (vars, exp1), exp2))
     = "(function()\n"
       ^ (case vars of
-             [(v,_)] => "local " ^ VIdToLua v ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
+             [] => "local _ = " ^ doExp ctx env exp1 ^ "\n"
            | _ => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
         )
       ^ "return " ^ doExp ctx env exp2 (* TODO: update environment? *)
       ^ "\nend)()"
   | doExp ctx env (F.LetRecExp (valbinds, exp2))
     = "(function()\n"
-      ^ String.concat (List.map (fn (F.TupleBind (vars, _)) => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ "\n") valbinds)
-      ^ String.concat (List.map (fn (F.TupleBind (vars, exp1)) => case vars of
-                                                                      [(v,_)] => VIdToLua v ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
-                                                                    | _ => String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
+      ^ String.concat (List.map (fn valbind => case valbind of
+                                                   F.SimpleBind (v,_,_) => "local " ^ VIdToLua v ^ "\n"
+                                                 | F.TupleBind ([], _) => ""
+                                                 | F.TupleBind (vars, _) => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ "\n"
+                                ) valbinds)
+      ^ String.concat (List.map (fn valbind => case valbind of
+                                                   F.SimpleBind (v,_,exp1) => VIdToLua v ^ " = " ^ doExp ctx env exp1 ^ "\n"
+                                                 | F.TupleBind ([], exp1) => "local _ = " ^ doExp ctx env exp1 ^ "\n"
+                                                 | F.TupleBind (vars, exp1) => String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
                     ) valbinds)
       ^ "return " ^ doExp ctx env exp2 (* TODO: update environment? *)
       ^ "\nend)()"
@@ -149,15 +159,22 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
   | doExp ctx env (F.DataTagExp exp) = "(" ^ doExp ctx env exp ^ ").tag"
   | doExp ctx env (F.DataPayloadExp exp) = "(" ^ doExp ctx env exp ^ ").payload"
 
-fun doDec ctx env (F.ValDec (F.TupleBind([(v,_)], exp)))
-    = "local " ^ VIdToLua v ^ " = table.unpack(" ^ doExp ctx env exp ^ ")\n"
+fun doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
+    = "local " ^ VIdToLua v ^ " = " ^ doExp ctx env exp ^ "\n"
+  | doDec ctx env (F.ValDec (F.TupleBind([], exp)))
+    = "local _ = " ^ doExp ctx env exp ^ "\n"
   | doDec ctx env (F.ValDec (F.TupleBind(vars, exp)))
     = "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp ^ ")\n"
   | doDec ctx env (F.RecValDec valbinds)
-    = String.concat (List.map (fn (F.TupleBind (vars, _)) => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ "\n") valbinds)
-      ^ String.concat (List.map (fn (F.TupleBind (vars, exp1)) => case vars of
-                                                                      [(v,_)] => VIdToLua v ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
-                                                                    | _ => String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
+    = String.concat (List.map (fn valbind => case valbind of
+                                                 F.SimpleBind (v, _, _) => "local " ^ VIdToLua v
+                                               | F.TupleBind ([], _) => ""
+                                               | F.TupleBind (vars, _) => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ "\n"
+                              ) valbinds)
+      ^ String.concat (List.map (fn valbind => case valbind of
+                                                   F.SimpleBind (v, _, exp1) => VIdToLua v ^ " = " ^ doExp ctx env exp1
+                                                 | F.TupleBind ([], exp1) => "local _ = " ^ doExp ctx env exp1 ^ "\n"
+                                                 | F.TupleBind (vars, exp1) => String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ " = table.unpack(" ^ doExp ctx env exp1 ^ ")\n"
                                 ) valbinds)
 
 fun doDecs ctx env decs = String.concat (List.map (doDec ctx env) decs)

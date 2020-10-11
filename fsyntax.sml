@@ -32,7 +32,8 @@ datatype Exp = SConExp of Syntax.SCon
              | RecordEqualityExp of (Syntax.Label * Exp) list
              | DataTagExp of Exp (* * LongTyCon *)
              | DataPayloadExp of Exp (* * USyntax.LongVId * LongTyCon *)
-     and ValBind = TupleBind of (USyntax.VId * Ty) list * Exp
+     and ValBind = SimpleBind of USyntax.VId * Ty * Exp
+                 | TupleBind of (USyntax.VId * Ty) list * Exp
 datatype Dec = ValDec of ValBind
              | RecValDec of ValBind list
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
@@ -102,7 +103,8 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
   | print_Exp (DataTagExp exp) = "DataTagExp(" ^ print_Exp exp ^ ")"
   | print_Exp (DataPayloadExp exp) = "DataPayloadExp(" ^ print_Exp exp ^ ")"
-and print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
+and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
+  | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 fun print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
 val print_Decs = Syntax.print_list print_Dec
@@ -342,9 +344,6 @@ and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
     = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
   | toFExp(ctx, env, U.HandleExp _) = raise Fail "HandleExp: not implemented yet"
   | toFExp(ctx, env, U.RaiseExp _) = raise Fail "RaiseExp: not implemented yet"
-and addValBindsToEnv ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
-  | addValBindsToEnv ctx env (U.TupleBind (vars, exp)) = env (* do nothing... for now *)
-  | addValBindsToEnv ctx env (U.PolyVarBind (vid, tysc, exp)) = env (* do nothing... for now *)
 and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
   | doValBind ctx env (U.TupleBind (vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
   | doValBind ctx env (U.PolyVarBind (vid, U.TypeScheme(tvs, ty), exp))
