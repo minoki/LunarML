@@ -471,11 +471,15 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
                fun generalize((valbind as PatBind(pat, exp), valEnv, (* generalizable *) false), (valbinds, valEnvRest))
-                   = let val valEnv'L = USyntax.VIdMap.listItemsi valEnv
-                         val xs = valEnv'L
-                         val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
-                         val valbind' = TupleBind(valEnv'L, USyntax.CaseExp(exp, [(pat, tup)]))
-                     in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+                   = let val vars = USyntax.VIdMap.listItemsi valEnv
+                     in case vars of
+                            [(vid, ty)] => let val valbind' = PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, [(pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))]))
+                                           in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+                                           end
+                          | _ => let val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) vars)
+                                     val valbind' = TupleBind(vars, USyntax.CaseExp(exp, [(pat, tup)]))
+                                 in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
+                                 end
                      end
                  | generalize((PatBind(pat, exp), valEnv, (* generalizable *) true), (valbinds, valEnvRest))
                    = let fun doVal (vid,ty)
@@ -513,8 +517,11 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                                                                                 TypeScheme([], ty) => SOME (vid, ty)
                                                                                               | TypeScheme(_ :: _, _) => NONE
                                                                          ) valEnv'L
-                                                val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
-                                            in TupleBind(xs, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
+                                            in case xs of
+                                                   [(vid, ty)] => PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart valEnv'L
+                                                 | _ => let val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
+                                                        in TupleBind(xs, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
+                                                        end
                                             end
                      in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                      end

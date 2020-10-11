@@ -366,7 +366,7 @@ and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot
                                      end
                    | _ => raise Fail "invalid type constraint"
                 )
-      in F.TupleBind ([(vid, ty')], doExp(env, tvs))
+      in F.SimpleBind (vid, ty', doExp(env, tvs))
       end
 and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
