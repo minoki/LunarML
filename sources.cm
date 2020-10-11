@@ -12,4 +12,5 @@ typed.sml
 typing.sml
 initialenv.sml
 fsyntax.sml
+ftransform.sml
 driver.sml

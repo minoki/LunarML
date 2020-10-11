@@ -10,7 +10,8 @@ fun compile source =
         val decs' = Typing.applyDefaultTypes(tvc, decs)
         val fctx = { nextVId = #nextVId ctx }
         val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
-    in (topdecs, ast1, ast2, decs', fdecs)
+        val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.emptyEnv) fdecs
+    in (topdecs, ast1, ast2, decs', fdecs, fdecs')
            (* TODO:
             * - Desugar equality
             * - Desugar pattern matches

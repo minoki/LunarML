@@ -30,10 +30,28 @@ datatype Exp = SConExp of Syntax.SCon
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
+             | DataTagExp of Exp (* * LongTyCon *)
+             | DataPayloadExp of Exp (* * USyntax.LongVId * LongTyCon *)
      and ValBind = TupleBind of (USyntax.VId * Ty) list * Exp
 datatype Dec = ValDec of ValBind
              | RecValDec of ValBind list
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+fun TupleExp xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordExp (doFields 1 xs)
+                  end
+fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(Syntax.MkQualified([], InitialEnv.VId_false)))
+fun SimplifyingAndalsoExp(a as VarExp(Syntax.MkQualified([], vid)), b) = if vid = InitialEnv.VId_true then
+                                                                             b
+                                                                         else if vid = InitialEnv.VId_false then
+                                                                             a
+                                                                         else
+                                                                             AndalsoExp(a, b)
+  | SimplifyingAndalsoExp(a, b as VarExp(Syntax.MkQualified([], vid))) = if vid = InitialEnv.VId_true then
+                                                                             a
+                                                                         else
+                                                                             AndalsoExp(a, b)
+  | SimplifyingAndalsoExp(a, b) = AndalsoExp(a, b)
 
 structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
@@ -82,6 +100,8 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
+  | print_Exp (DataTagExp exp) = "DataTagExp(" ^ print_Exp exp ^ ")"
+  | print_Exp (DataPayloadExp exp) = "DataPayloadExp(" ^ print_Exp exp ^ ")"
 and print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 fun print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
