@@ -144,13 +144,18 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
   | doExp ctx env (F.AppExp (exp1, exp2)) = "(" ^ doExp ctx env exp1 ^ ")(" ^ doExp ctx env exp2 ^ ")" (* TODO: evaluation order *)
                                                                                                        (* TODO: built-in functions *)
   | doExp ctx env (F.IfThenElseExp (exp1, exp2, exp3))
-    = "(function()\n"
-      ^ "if " ^ doExp ctx env exp1 ^ " then\n"
-      ^ "return " ^ doExp ctx env exp2 ^ "\n"
-      ^ "else\n"
-      ^ "return " ^ doExp ctx env exp3 ^ "\n"
-      ^ "end\n"
-      ^ "end)()" (* TODO: Use and / or if we can *) (* TODO: Turn nested if-then-else'es into if-then-elseif-end *)
+    = let fun doElseIf (F.IfThenElseExp(e1, e2, e3)) = "elseif " ^ doExp ctx env e1 ^ " then\n"
+                                                       ^ "return " ^ doExp ctx env e2 ^ "\n"
+                                                       ^ doElseIf e3
+            | doElseIf e = "else\n"
+                           ^ "return " ^ doExp ctx env e ^ "\n"
+      in "(function()\n"
+         ^ "if " ^ doExp ctx env exp1 ^ " then\n"
+         ^ "return " ^ doExp ctx env exp2 ^ "\n"
+         ^ doElseIf exp3
+         ^ "end\n"
+         ^ "end)()" (* TODO: Use and / or if we can *)
+      end
   | doExp ctx env (F.CaseExp _) = raise Fail "CodeGenLua: CaseExp should have been desugared earlier"
   | doExp ctx env (F.FnExp (vid, _, exp)) = "function(" ^ VIdToLua(vid) ^ ")\n"
                                             ^ "return " ^ doExp ctx env exp ^ "\n" (* TODO: update environment? *)
