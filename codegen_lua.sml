@@ -71,7 +71,7 @@ fun VIdToLua(vid as USyntax.MkVId(name, n)) = if vid = InitialEnv.VId_true then
                                                   smlNameToLua name ^ "_" ^ Int.toString n
 
 fun LabelToLua(Syntax.NumericLabel(n)) = Int.toString n
-  | LabelToLua(Syntax.IdentifierLabel(s)) = String.toString s (* TODO: pretty-printing? *)
+  | LabelToLua(Syntax.IdentifierLabel(s)) = "\"" ^ String.toString s ^ "\"" (* TODO: pretty-printing? *)
 
 (* statements: local, assignment, if-then-else-end *)
 (* exp: false, true, Numeral, LiteralString, functiondef, var, functioncall, parens, binop, unop *)
@@ -104,8 +104,8 @@ structure F = FSyntax
 fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ Int.toString (~ x) ^ ")" else Int.toString x
   | doExp ctx env (F.SConExp (Syntax.WordConstant x)) = Word.toString x
   | doExp ctx env (F.SConExp (Syntax.RealConstant x)) = raise Fail "CodeGenLua: real constant not implemented yet"
-  | doExp ctx env (F.SConExp (Syntax.StringConstant x)) = String.toString x (* TODO *)
-  | doExp ctx env (F.SConExp (Syntax.CharacterConstant x)) = String.toString x (* TODO *)
+  | doExp ctx env (F.SConExp (Syntax.StringConstant x)) = "\"" ^ String.toString x ^ "\"" (* TODO *)
+  | doExp ctx env (F.SConExp (Syntax.CharacterConstant x)) = "\"" ^ String.toString x ^ "\"" (* TODO *)
   | doExp ctx env (F.VarExp (Syntax.MkQualified([], vid))) = VIdToLua vid
   | doExp ctx env (F.VarExp (Syntax.MkQualified(_ :: _, _))) = raise Fail "CodeGenLua: qualified identifiers are not implemented yet"
   | doExp ctx env (F.RecordExp []) = "{}"
