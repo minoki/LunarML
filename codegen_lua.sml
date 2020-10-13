@@ -141,8 +141,77 @@ fun doExp ctx env (F.SConExp (Syntax.IntegerConstant x)) = if x < 0 then "(-" ^ 
       ^ "return " ^ doExp ctx env exp2 (* TODO: update environment? *)
       ^ "\nend)()"
   | doExp ctx env (F.AppExp(F.ProjectionExp { label = label, ... }, exp2)) = "(" ^ doExp ctx env exp2 ^ ")[" ^ LabelToLua(label) ^ "]"
+  | doExp ctx env (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), exp2 as F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]))
+    (* built-in operator? *)
+    (* TODO: evaluation order *)
+    (* TODO: check for overflow *)
+    = let open InitialEnv
+      in if USyntax.eqVId(vid, VId_EQUAL_bool)
+            orelse USyntax.eqVId(vid, VId_EQUAL_int)
+            orelse USyntax.eqVId(vid, VId_EQUAL_word)
+            orelse USyntax.eqVId(vid, VId_EQUAL_string)
+            orelse USyntax.eqVId(vid, VId_EQUAL_char) then
+             "(" ^ doExp ctx env e1 ^ ") == (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_PLUS_int)
+                 orelse USyntax.eqVId(vid, VId_PLUS_word)
+                 orelse USyntax.eqVId(vid, VId_PLUS_real) then
+             "(" ^ doExp ctx env e1 ^ ") + (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_MINUS_int)
+                 orelse USyntax.eqVId(vid, VId_MINUS_word)
+                 orelse USyntax.eqVId(vid, VId_MINUS_real) then
+             "(" ^ doExp ctx env e1 ^ ") - (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_TIMES_int)
+                 orelse USyntax.eqVId(vid, VId_TIMES_word)
+                 orelse USyntax.eqVId(vid, VId_TIMES_real) then
+             "(" ^ doExp ctx env e1 ^ ") * (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_DIVIDE_real) then
+             "(" ^ doExp ctx env e1 ^ ") / (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_div_int) then
+             "(" ^ doExp ctx env e1 ^ ") // (" ^ doExp ctx env e2 ^ ")" (* flooring division *)
+         else if USyntax.eqVId(vid, VId_mod_int) then
+             "(" ^ doExp ctx env e1 ^ ") % (" ^ doExp ctx env e2 ^ ")" (* modulo w.r.t. flooring division *)
+         else if USyntax.eqVId(vid, VId_LT_int)
+                 orelse USyntax.eqVId(vid, VId_LT_word) (* TODO: should use math.ult (Lua 5.3) *)
+                 orelse USyntax.eqVId(vid, VId_LT_real)
+                 orelse USyntax.eqVId(vid, VId_LT_string)
+                 orelse USyntax.eqVId(vid, VId_LT_char) then
+             "(" ^ doExp ctx env e1 ^ ") < (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_GT_int)
+                 orelse USyntax.eqVId(vid, VId_GT_word) (* TODO: should use math.ult (Lua 5.3) *)
+                 orelse USyntax.eqVId(vid, VId_GT_real)
+                 orelse USyntax.eqVId(vid, VId_GT_string)
+                 orelse USyntax.eqVId(vid, VId_GT_char) then
+             "(" ^ doExp ctx env e1 ^ ") > (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_LE_int)
+                 orelse USyntax.eqVId(vid, VId_LE_word) (* TODO: should use math.ult (Lua 5.3) *)
+                 orelse USyntax.eqVId(vid, VId_LE_real)
+                 orelse USyntax.eqVId(vid, VId_LE_string)
+                 orelse USyntax.eqVId(vid, VId_LE_char) then
+             "(" ^ doExp ctx env e1 ^ ") <= (" ^ doExp ctx env e2 ^ ")"
+         else if USyntax.eqVId(vid, VId_GE_int)
+                 orelse USyntax.eqVId(vid, VId_GE_word) (* TODO: should use math.ult (Lua 5.3) *)
+                 orelse USyntax.eqVId(vid, VId_GE_real)
+                 orelse USyntax.eqVId(vid, VId_GE_string)
+                 orelse USyntax.eqVId(vid, VId_GE_char) then
+             "(" ^ doExp ctx env e1 ^ ") >= (" ^ doExp ctx env e2 ^ ")"
+         else
+             (* TODO: div, mod -> //, %*)
+             "(" ^ doExp ctx env exp1 ^ ")(" ^ doExp ctx env exp2 ^ ")"
+      end
+  | doExp ctx env (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), exp2))
+    (* built-in operator? *)
+    (* TODO: check for overflow *)
+    = let open InitialEnv
+      in if USyntax.eqVId(vid, VId_abs_int)
+            orelse USyntax.eqVId(vid, VId_abs_real) then
+             "math.abs(" ^ doExp ctx env exp2 ^ ")"
+         else if USyntax.eqVId(vid, VId_TILDE_int)
+                 orelse USyntax.eqVId(vid, VId_TILDE_real) then
+             "- (" ^ doExp ctx env exp2 ^ ")"
+         else
+             "(" ^ doExp ctx env exp1 ^ ")(" ^ doExp ctx env exp2 ^ ")" (* TODO: evaluation order *)
+      end
   | doExp ctx env (F.AppExp (exp1, exp2)) = "(" ^ doExp ctx env exp1 ^ ")(" ^ doExp ctx env exp2 ^ ")" (* TODO: evaluation order *)
-                                                                                                       (* TODO: built-in functions *)
   | doExp ctx env (F.IfThenElseExp (exp1, exp2, exp3))
     = let fun doElseIf (F.IfThenElseExp(e1, e2, e3)) = "elseif " ^ doExp ctx env e1 ^ " then\n"
                                                        ^ "return " ^ doExp ctx env e2 ^ "\n"
