@@ -440,11 +440,12 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(scon)) : USyntax.Ty * 
        ; addConstraint(ctx, EqConstr(thenTy, elseTy)) (* thenTy = elseTy *)
        ; (thenTy, IfThenElseExp(cond', thenPart', elsePart'))
       end
-  | typeCheckExp(ctx, env, CaseExp(exp, matches))
+  | typeCheckExp(ctx, env, CaseExp(exp, ty, matches))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
           val (patTy, retTy, matches') = typeCheckMatch(ctx, env, matches)
-      in addConstraint(ctx, EqConstr(expTy, patTy))
-       ; (retTy, CaseExp(exp', matches'))
+      in addConstraint(ctx, EqConstr(expTy, ty))
+       ; addConstraint(ctx, EqConstr(expTy, patTy))
+       ; (retTy, CaseExp(exp', ty, matches'))
       end
   | typeCheckExp(ctx, env, FnExp(vid, argTy, body))
     = let val env' = mergeEnv(env, MkEnv { tyMap = Syntax.TyConMap.empty
@@ -470,18 +471,18 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                val subst = !(#tyVarSubst ctx)
                val env' = applySubstEnv subst env
                val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
-               fun generalize((valbind as PatBind(pat, exp), valEnv, (* generalizable *) false), (valbinds, valEnvRest))
+               fun generalize((valbind as PatBind(pat, exp), expTy, valEnv, (* generalizable *) false), (valbinds, valEnvRest))
                    = let val vars = USyntax.VIdMap.listItemsi valEnv
                      in case vars of
-                            [(vid, ty)] => let val valbind' = PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, [(pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))]))
+                            [(vid, ty)] => let val valbind' = PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, ty, [(pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))]))
                                            in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                            end
                           | _ => let val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) vars)
-                                     val valbind' = TupleBind(vars, USyntax.CaseExp(exp, [(pat, tup)]))
+                                     val valbind' = TupleBind(vars, USyntax.CaseExp(exp, expTy, [(pat, tup)]))
                                  in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                  end
                      end
-                 | generalize((PatBind(pat, exp), valEnv, (* generalizable *) true), (valbinds, valEnvRest))
+                 | generalize((PatBind(pat, exp), expTy, valEnv, (* generalizable *) true), (valbinds, valEnvRest))
                    = let fun doVal (vid,ty)
                              = let val ty' = applySubstTy subst ty
                                    val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
@@ -505,7 +506,7 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                          val allPoly = List.all (fn (_, TypeScheme(tv, _)) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
                          fun polyPart [] = []
                            | polyPart ((vid, TypeScheme([], _)) :: rest) = polyPart rest
-                           | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
+                           | polyPart ((vid, tysc) :: rest) = PolyVarBind(vid, tysc, USyntax.CaseExp(exp, expTy, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
                          fun isMonoVar vid = case USyntax.VIdMap.find(valEnv', vid) of
                                                  NONE => raise TypeError "isMonoVar: internal error"
                                                | SOME (TypeScheme([], _)) => true
@@ -518,15 +519,15 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                                                                               | TypeScheme(_ :: _, _) => NONE
                                                                          ) valEnv'L
                                             in case xs of
-                                                   [(vid, ty)] => PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart valEnv'L
+                                                   [(vid, ty)] => PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, expTy, [(USyntax.filterVarsInPat isMonoVar pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart valEnv'L
                                                  | _ => let val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
-                                                        in TupleBind(xs, USyntax.CaseExp(exp, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
+                                                        in TupleBind(xs, USyntax.CaseExp(exp, expTy, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
                                                         end
                                             end
                      in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                      end
-                 | generalize((TupleBind _, valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected TupleBind"
-                 | generalize((PolyVarBind(_, _, _), valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected PolyVarBind"
+                 | generalize((TupleBind _, _, valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected TupleBind"
+                 | generalize((PolyVarBind(_, _, _), _, valEnv, _), (valbinds, valEnvRest)) = raise TypeError "unexpected PolyVarBind"
                val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds'
                val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
                val env' = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valMap, valEnv''')
@@ -542,13 +543,13 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
            end
          | RecValDec(tyvarseq, valbinds, _) => raise Fail "let-in: val rec: not impl"
       )
-(* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty USyntax.VIdMap.map * bool *)
+(* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * bool *)
 and typeCheckValBind(ctx, env, PatBind(pat, exp))
     = let val (patTy, newValEnv, pat') = typeCheckPat(ctx, env, pat)
           val (expTy, exp') = typeCheckExp(ctx, env, exp)
           val () = addConstraint(ctx, EqConstr(patTy, expTy))
           val generalizable = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
-      in (PatBind(pat', exp'), newValEnv, generalizable)
+      in (PatBind(pat', exp'), expTy, newValEnv, generalizable)
       end
   | typeCheckValBind(ctx, env, TupleBind(xs, exp))
     = raise TypeError "unexpected TupleBind"

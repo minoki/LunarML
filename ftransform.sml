@@ -26,7 +26,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.RecordEqualityExp fields => F.RecordEqualityExp(List.map (fn (label, e) => (label, doExp env e)) fields)
                    | F.DataTagExp _ => raise Fail "DataTagExp should not occur here"
                    | F.DataPayloadExp _ => raise Fail "DataPayloadExp should not occur here"
-                   | F.CaseExp(exp, matches) =>
+                   | F.CaseExp(exp, ty, matches) =>
                      let val examinedVId = freshVId(ctx, "exp")
                          val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
                          fun go [] = F.AppExp(F.VarExp(Syntax.MkQualified([], USyntax.MkVId("_raise", 99))), F.RecordExp []) (* TODO: raise Match or Bind *)
@@ -42,7 +42,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                       in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
                                       end
                                end
-                     in F.LetExp(F.SimpleBind(examinedVId, F.RecordType [] (* TODO *), doExp env exp), go matches)
+                     in F.LetExp(F.SimpleBind(examinedVId, ty, doExp env exp), go matches)
                      end
                 )
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)

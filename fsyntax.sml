@@ -24,7 +24,7 @@ datatype Exp = SConExp of Syntax.SCon
              (* | HandleExp of Exp * (Pat * Exp) list *)
              (* | RaiseExp of Exp *)
              | IfThenElseExp of Exp * Exp * Exp
-             | CaseExp of Exp * (Pat * Exp) list
+             | CaseExp of Exp * Ty * (Pat * Exp) list
              | FnExp of USyntax.VId * Ty * Exp
              | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | TyAbsExp of TyVar * Exp
@@ -95,7 +95,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (LetRecExp(valbinds,x)) = "LetRecExp(" ^ Syntax.print_list print_ValBind valbinds ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
-  | print_Exp (CaseExp(x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (CaseExp(x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
@@ -330,11 +330,11 @@ and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.AppExp(e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
   | toFExp(ctx, env, U.TypedExp(exp, _)) = toFExp(ctx, env, exp)
   | toFExp(ctx, env, U.IfThenElseExp(e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
-  | toFExp(ctx, env, U.CaseExp(e, matches))
+  | toFExp(ctx, env, U.CaseExp(e, ty, matches))
     = let fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
                                   in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
                                   end
-      in F.CaseExp(toFExp(ctx, env, e), List.map doMatch matches)
+      in F.CaseExp(toFExp(ctx, env, e), toFTy(ctx, env, ty), List.map doMatch matches)
       end
   | toFExp(ctx, env, U.FnExp(vid, ty, body))
     = let val env' = env (* TODO *)
