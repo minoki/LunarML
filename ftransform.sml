@@ -38,7 +38,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                       else
                                           raise Fail "A redundant pattern match found"
                                   else
-                                      let val matcher = genMatcher env examinedExp pat
+                                      let val matcher = genMatcher env examinedExp ty pat
                                       in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
                                       end
                                end
@@ -47,26 +47,31 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                 )
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
-          and genMatcher env exp F.WildcardPat = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
-            | genMatcher env exp (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_int)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_word)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp (F.SConPat(scon as Syntax.StringConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp (F.SConPat(scon as Syntax.CharacterConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_char)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp (F.SConPat(Syntax.RealConstant _)) = raise Fail "genMatcher: cannot match a real constant"
-            | genMatcher env exp (F.VarPat _) = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
-            | genMatcher env exp (F.RecordPat (fields, _))
+          and genMatcher env exp _ F.WildcardPat = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_int)), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_word)), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.StringConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.CharacterConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_char)), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(Syntax.RealConstant _)) = raise Fail "genMatcher: cannot match a real constant"
+            | genMatcher env exp ty (F.VarPat _) = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
+            | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat (fields, _))
               = List.foldr (fn ((label, pat), e) =>
-                               (* TODO: recordTy and fieldTy *)
-                               F.SimplifyingAndalsoExp(genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) pat, e)
+                               case List.find (fn (label', _) => label = label') fieldTypes of
+                                   SOME (_, fieldTy) => F.SimplifyingAndalsoExp(genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }, exp)) fieldTy pat, e)
+                                 | NONE => raise Fail "internal error: record field not found"
                            )
                            (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
                            fields
-            | genMatcher env exp (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), SOME innerPat, tyargs))
-              = F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
-                             genMatcher env (F.DataPayloadExp exp) innerPat)
-            | genMatcher env exp (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), NONE, tyargs))
+            | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
+            (* TODO: true and false *)
+            | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), SOME innerPat, tyargs))
+              = let val payloadTy = F.RecordType [] (* not implemented yet... *)
+                in F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
+                                           genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
+                end
+            | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), NONE, tyargs))
               = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
-            | genMatcher env exp (F.LayeredPat (vid, ty, innerPat)) = genMatcher env exp innerPat
+            | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = genMatcher env exp ty0 innerPat
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
