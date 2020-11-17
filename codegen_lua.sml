@@ -317,14 +317,14 @@ fun doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
       end
   | doDec ctx env (F.RecValDec valbinds)
     = String.concat (List.map (fn valbind => case valbind of
-                                                 F.SimpleBind (v, _, _) => "local " ^ VIdToLua v
+                                                 F.SimpleBind (v, _, _) => "local " ^ VIdToLua v ^ "\n"
                                                | F.TupleBind ([], _) => ""
                                                | F.TupleBind (vars, _) => "local " ^ String.concatWith ", " (List.map (fn (v,_) => VIdToLua v) vars) ^ "\n"
                               ) valbinds)
       ^ String.concat (List.map (fn valbind =>
                                     case valbind of
                                         F.SimpleBind (v, _, exp1) => let val (stmts1, exp1') = doExp ctx env exp1
-                                                                     in String.concat stmts1 ^ VIdToLua v ^ " = " ^ exp1'
+                                                                     in String.concat stmts1 ^ VIdToLua v ^ " = " ^ exp1' ^ "\n"
                                                                      end
                                       | F.TupleBind ([], exp1) => let val (stmts1, exp1') = doExp ctx env exp1
                                                                   in String.concat stmts1 ^ "local _ = " ^ exp1' ^ "\n"
