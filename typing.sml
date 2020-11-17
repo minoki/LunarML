@@ -541,7 +541,67 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                  }
            in (env'', ValDec([], valbinds'', valEnv''') :: decls')
            end
-         | RecValDec(tyvarseq, valbinds, _) => raise Fail "let-in: val rec: not impl"
+         | RecValDec(tyvarseq, valbinds : ValBind list, _) =>
+           let val valbinds' : ((USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * USyntax.Pat) * USyntax.Exp) list
+                   = List.map (fn valbind => case valbind of
+                                                 PatBind (pat, exp) => (typeCheckPat(ctx, env, pat), exp)
+                                               | TupleBind _ => raise TypeError "unexpected TupleBind"
+                                               | PolyVarBind _ => raise TypeError "unexpected PolyVarBind") valbinds
+               val localValEnv = List.foldl (fn (((_, ve, _), _), acc) => USyntax.VIdMap.unionWith #1 (acc, ve)) USyntax.VIdMap.empty valbinds'
+               val localValMap = USyntax.VIdMap.map (fn ty => (USyntax.TypeScheme ([], ty), Syntax.ValueVariable)) localValEnv
+               val MkEnv { valMap = valMap, tyMap = tyMap, strMap = strMap } = env
+               val localEnv = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valMap, localValMap), tyMap = tyMap, strMap = strMap }
+               val valbinds'' = List.map (fn ((patTy, newValEnv, pat), exp) =>
+                                             let val (expTy, exp') = typeCheckExp(ctx, localEnv, exp)
+                                                 val () = addConstraint(ctx, EqConstr(patTy, expTy))
+                                                 val generalizable = isExhaustive(env, pat) andalso isNonexpansive(env, exp)
+                                             in if generalizable then
+                                                    ((pat, exp'), expTy, newValEnv)
+                                                else
+                                                    raise TypeError "'val rec' must be generalizable"
+                                             end
+                                         ) valbinds'
+               val tvc = !(#tyVarConstraints ctx)
+               val subst = !(#tyVarSubst ctx)
+               val env' = applySubstEnv subst localEnv
+               val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
+               fun generalize (((pat, exp), expTy, valEnv), (valbinds, valEnvRest))
+                   = let fun doVal (vid, ty)
+                             = let val ty' = applySubstTy subst ty
+                                   val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
+                                   fun isEqualityType USyntax.IsEqType = true
+                                     | isEqualityType _ = false
+                                   fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
+                                                                        NONE => true
+                                                                      | SOME tvs => List.all isEqualityType tvs
+                                   val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
+                                   fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
+                                                        NONE => (tv, [])
+                                                      | SOME tvs => if List.exists isEqualityType tvs then
+                                                                        (tv, [USyntax.IsEqType])
+                                                                    else (* should not reach here *)
+                                                                        (tv, [])
+                                   val tysc = TypeScheme(List.map doTyVar (TyVarSet.listItems tyVars), ty')
+                               in tysc
+                               end
+                         val valEnv' = USyntax.VIdMap.mapi doVal valEnv
+                         val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
+                         val valbind' = List.map (fn (vid, tysc) => PolyVarBind(vid, tysc, exp)) valEnv'L
+                     in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
+                     end
+               val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds''
+               val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
+               val env' = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valMap, valEnv''')
+                                , tyMap = tyMap
+                                , strMap = strMap
+                                }
+               val (MkEnv restEnv, decls') = typeCheckDecl (ctx, env', decls)
+               val env'' = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (valEnv''', #valMap restEnv)
+                                 , tyMap = #tyMap restEnv
+                                 , strMap = #strMap restEnv
+                                 }
+           in (env'', RecValDec([], valbinds'', valEnv''') :: decls')
+           end
       )
 (* typeCheckValBind : Context * Env * ValBind -> ValBind * USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * bool *)
 and typeCheckValBind(ctx, env, PatBind(pat, exp))
