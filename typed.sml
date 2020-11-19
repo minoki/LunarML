@@ -509,17 +509,32 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U
   | toUExp(ctx, tvenv, env, S.RaiseExp(exp)) = U.RaiseExp(toUExp(ctx, tvenv, env, exp))
   | toUExp(ctx, tvenv, env, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
   | toUExp(ctx, tvenv, env, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, tvenv, env, exp), USyntax.TyVar(freshTyVar(ctx)), toUMatch(ctx, tvenv, env, match))
-  | toUExp(ctx, tvenv, env, S.FnExp([(S.TypedPat(S.VarPat(vid), ty), body)]))
-    = let val vid' = newVId(ctx, vid)
-          val valEnv = Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (vid', Syntax.ValueVariable))
-          val env' = mergeEnv(env, envWithValEnv valEnv)
-      in U.FnExp(vid', toUTy(ctx, tvenv, env, ty), toUExp(ctx, tvenv, env', body))
-      end
-  | toUExp(ctx, tvenv, env, S.FnExp([(S.VarPat(vid), body)]))
-    = let val vid' = newVId(ctx, vid)
-          val valEnv = Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (vid', Syntax.ValueVariable))
-          val env' = mergeEnv(env, envWithValEnv valEnv)
-      in U.FnExp(vid', USyntax.TyVar(freshTyVar(ctx)), toUExp(ctx, tvenv, env', body))
+  | toUExp(ctx, tvenv, env, S.FnExp([(pat, body)]))
+    = let fun determineConOrVar vid
+              = (case lookupVId(env, vid) of
+                     SOME (vid', Syntax.ValueConstructor) => S.ConPat(S.MkLongVId([], vid), NONE)
+                   | SOME (vid', Syntax.ExceptionConstructor) => S.ConPat(S.MkLongVId([], vid), NONE)
+                   | _ => S.VarPat vid
+                )
+          val pat' = case pat of
+                         S.ConOrVarPat vid => determineConOrVar vid
+                       | S.TypedPat(S.ConOrVarPat vid, ty) => S.TypedPat(determineConOrVar vid, ty)
+                       | _ => pat
+      in case pat' of
+             S.VarPat vid => let val vid' = newVId(ctx, vid)
+                                 val valEnv = Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (vid', Syntax.ValueVariable))
+                                 val env' = mergeEnv(env, envWithValEnv valEnv)
+                             in U.FnExp(vid', USyntax.TyVar(freshTyVar(ctx)), toUExp(ctx, tvenv, env', body))
+                             end
+           | S.TypedPat(S.VarPat vid, ty) => let val vid' = newVId(ctx, vid)
+                                                 val valEnv = Syntax.VIdMap.insert(Syntax.VIdMap.empty, vid, (vid', Syntax.ValueVariable))
+                                                 val env' = mergeEnv(env, envWithValEnv valEnv)
+                                             in U.FnExp(vid', toUTy(ctx, tvenv, env, ty), toUExp(ctx, tvenv, env', body))
+                                             end
+           | _ => let val vid' = newVId(ctx, Syntax.MkVId("a"))
+                      val ty = USyntax.TyVar(freshTyVar(ctx))
+                  in U.FnExp(vid', ty, U.CaseExp(U.VarExp(U.MkLongVId([], vid'), Syntax.ValueVariable), ty, toUMatch(ctx, tvenv, env, [(pat', body)])))
+                  end
       end
   | toUExp(ctx, tvenv, env, S.FnExp(match))
     = let val vid' = newVId(ctx, Syntax.MkVId("a"))
