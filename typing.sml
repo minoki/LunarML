@@ -474,7 +474,11 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                fun generalize((valbind as PatBind(pat, exp), expTy, valEnv, (* generalizable *) false), (valbinds, valEnvRest))
                    = let val vars = USyntax.VIdMap.listItemsi valEnv
                      in case vars of
-                            [(vid, ty)] => let val valbind' = PolyVarBind(vid, TypeScheme([], ty), USyntax.CaseExp(exp, ty, [(pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))]))
+                            [(vid, ty)] => let val valbind' = PolyVarBind(vid, TypeScheme([], ty), case pat of
+                                                                                                       USyntax.VarPat _ => exp
+                                                                                                     | USyntax.TypedPat (USyntax.VarPat _, _) => exp
+                                                                                                     | _ => USyntax.CaseExp(exp, ty, [(pat, VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable))])
+                                                                         )
                                            in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                            end
                           | _ => let val tup = USyntax.TupleExp(List.map (fn (vid, _) => VarExp(USyntax.MkLongVId([], vid), Syntax.ValueVariable)) vars)
