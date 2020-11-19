@@ -250,7 +250,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                        in if List.null s1 then
                                                               "elseif " ^ e1' ^ " then\n"
                                                               ^ let val (s2, e2') = doExp ctx env e2
-                                                                in "return " ^ e2' ^ "\n"
+                                                                in String.concat s2 ^ "return " ^ e2' ^ "\n"
                                                                 end
                                                               ^ doElseIf e3
                                                           else
@@ -258,7 +258,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                               ^ String.concat s1
                                                               ^ "if " ^ e1' ^ " then\n"
                                                               ^ let val (s2, e2') = doExp ctx env e2
-                                                                in "return " ^ e2' ^ "\n"
+                                                                in String.concat s2 ^ "return " ^ e2' ^ "\n"
                                                                 end
                                                               ^ doElseIf e3
                                                               ^ "end\n"
