@@ -8,6 +8,12 @@ infix  4  = <> > >= < <=
 infix  3  := o
 infix  0  before
 *)
+(* ! : 'a ref -> 'a (General.!)
+   := : 'a ref * 'a -> unit (General.:=)
+   ^ : string * string -> string (String.^)
+   not : bool -> bool (Bool.not)
+   print : string -> unit (TextIO.print)
+*)
 val initialFixity = let open Syntax
                         fun InfixL p = Syntax.Infix (Syntax.LeftAssoc p)
                         fun InfixR p = Syntax.Infix (Syntax.RightAssoc p)

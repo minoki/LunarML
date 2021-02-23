@@ -6,6 +6,7 @@ datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
                         , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
+(* literals: Is(Int|Word|Real|String|Char) of USyntax.Ty, with min/max  *)
 
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 
@@ -251,6 +252,7 @@ fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith
 fun unify(ctx : Context, nil : Constraint list) : unit = ()
   | unify(ctx, ct :: ctrs)
     = (case ct of
+           (* TODO: Disallow unifying NamedTyVar *)
            EqConstr(TyVar(tv), ty) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
          | EqConstr(ty, TyVar(tv)) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
          | EqConstr(FnType(s0, s1), FnType(t0, t1)) => unify(ctx, EqConstr(s0, t0) :: EqConstr(s1, t1) :: ctrs)
@@ -341,6 +343,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                unify(ctx, ctrs) (* do nothing *)
            else
                raise TypeError("comparison operator on unsupported type")
+         (* TODO: Equality type variables *)
          | UnaryConstraint(TyVar tv, pred) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
                                                    SOME replacement => unify(ctx, UnaryConstraint(replacement, pred) :: ctrs)
                                                  | NONE => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, ctrs))

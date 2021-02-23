@@ -21,6 +21,10 @@ datatype Ty = TyVar of TyVar (* type variable *)
             | FnType of Ty * Ty (* function type expression *)
 
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+fun TupleType xs = let fun doFields i nil = nil
+                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                   in RecordType (doFields 1 xs)
+                   end
 
 structure VIdKey = struct
 type ord_key = VId
@@ -89,8 +93,8 @@ datatype ExBind = ExBind1 of VId * Ty option (* <op> vid <of ty> *)
                 | ExBind2 of VId * LongVId (* <op> vid = <op> longvid *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
-             | VarExp of LongVId * Syntax.IdStatus (* value identifier *)
-             | InstantiatedVarExp of LongVId * Syntax.IdStatus * Ty list
+             | VarExp of LongVId * Syntax.IdStatus (* value identifier; IdStatus is used by isNonexpansive *)
+             | InstantiatedVarExp of LongVId * Syntax.IdStatus * Ty list (* identifiers with type arguments; produced during type-checking *)
              | RecordExp of (Syntax.Label * Exp) list (* record *)
              | LetInExp of Dec list * Exp (* local declaration *)
              | AppExp of Exp * Exp (* function, argument *)
@@ -330,6 +334,26 @@ fun filterVarsInPat pred =
                           | LayeredPat(vid, ty, innerPat) => if pred vid then LayeredPat(vid, ty, doPat innerPat) else TypedPat(doPat innerPat, ty)
     in doPat
     end
+
+(* filterVarsInPatAsList : (VId -> bool) -> Pat -> (VId * Ty) list *)
+(*fun filterVarsInPatAsList pred pat =
+    let fun doPat(xs, pat) = case pat of
+                                 WildcardPat => xs
+                               | SConPat _ => xs
+                               | VarPat(vid, ty) => if pred vid then (vid, ty) :: xs else xs
+                               | RecordPat(row, _) => List.foldl (fn ((label,innerPat),ys) => doPat(ys,innerPat)) xs row
+                               | ConPat(_, NONE) => xs
+                               | ConPat(longvid, SOME innerPat) => doPat(xs, innerPat)
+                               | InstantiatedConPat(_, NONE, _) => xs
+                               | InstantiatedConPat(_longvid, SOME innerPat, _tyargs) => doPat(xs, innerPat)
+                               | TypedPat(innerPat, _ty) => doPat(xs, innerPat)
+                               | LayeredPat(vid, ty, innerPat) => if pred vid then
+                                                                      doPat((vid, ty) :: xs, innerPat)
+                                                                  else
+                                                                      doPat(xs, innerPat)
+    in List.rev (doPat([], pat))
+    end
+*)
 end (* structure USyntax *)
 
 structure ToTypedSyntax = struct
@@ -344,7 +368,8 @@ type ('a,'b) Context = { nextTyVar : int ref
                        }
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
-                    | BTyCon of int
+                    | BTyCon of int (* and data constructors *)
+                    (* BDuplicatedTyCon of USyntax.TyVar list * USyntax.Ty *)
 datatype Env = MkEnv of { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
                         , tyConMap : BoundTyCon Syntax.TyConMap.map
                         , strMap : Env Syntax.StrIdMap.map
@@ -620,9 +645,9 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            in (mergeEnv(datbindEnv, env'), decls')
            end
          | S.DatatypeRepDec(tycon, longtycon) =>
-           let val decl' = raise Fail "not implemented yet"
+           let val _ = lookupLongTyCon(env, longtycon)
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
-           in ((* TODO: add type ctor *) env', decl' :: decls')
+           in raise Fail "datatype replication: not implemented yet" (* ((* TODO: add type ctor *) env', decl' :: decls') *)
            end
          | S.AbstypeDec(datbinds, dec) =>
            let val decl' = raise Fail "not implemented yet"

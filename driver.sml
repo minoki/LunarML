@@ -13,10 +13,5 @@ fun compile source =
         val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.emptyEnv) fdecs
         val lua = CodeGenLua.doDecs { nextLuaId = ref 0 } CodeGenLua.MkEnv fdecs'
     in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
-           (* TODO:
-            * - Desugar equality
-            * - Desugar pattern matches
-            * - Some normal form
-            *)
     end
 end (* structure Driver *)
