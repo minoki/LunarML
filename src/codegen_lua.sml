@@ -130,6 +130,7 @@ val builtins = let open InitialEnv
                     ,(VId_print, "_print")
                     ,(VId_Int_toString, "_Int_toString")
                     ,(VId_HAT, "_string_append")
+                    ,(VId_raise, "_raise")
                     ]
      end                 
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then

@@ -29,7 +29,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.CaseExp(exp, ty, matches) =>
                      let val examinedVId = freshVId(ctx, "exp")
                          val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
-                         fun go [] = F.AppExp(F.VarExp(Syntax.MkQualified([], USyntax.MkVId("_raise", 99))), F.RecordExp []) (* TODO: raise Match or Bind *)
+                         fun go [] = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_raise)), F.RecordExp []) (* TODO: raise Match or Bind *)
                            | go ((pat, innerExp) :: rest)
                              = let val binders = genBinders env examinedExp pat
                                in if isExhaustive env pat then

@@ -110,6 +110,7 @@ val VId_GE_char      = USyntax.MkVId(">=@char", 66)
 val VId_print = USyntax.MkVId("print", 67)
 val VId_Int_toString = USyntax.MkVId("Int_toString", 68) (* TODO: Support modules *)
 val VId_HAT = USyntax.MkVId("^", 69) (* String.^ *)
+val VId_raise = USyntax.MkVId("raise", 70)
 
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
@@ -151,6 +152,8 @@ val initialEnv_ToTypedSyntax
                                                      ,(Syntax.MkTyCon "char", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_char))
                                                      ,(Syntax.MkTyCon "exn", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_exn))
                                                      ,(Syntax.MkTyCon "bool", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_bool))
+                                                     ,(Syntax.MkTyCon "ref", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_ref))
+                                                     ,(Syntax.MkTyCon "list", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_list))
                                                      ]
                              , strMap = Syntax.StrIdMap.empty
                              }

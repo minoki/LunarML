@@ -30,6 +30,10 @@ local _Bind = "Bind"
 local _Overflow = "Overflow"
 local _Div = "Div"
 
+local function _raise(x)
+  error(x, 1)
+end
+
 -- Int
 local function __add_int(x, y)
   assert(math.type(x) == "integer")
