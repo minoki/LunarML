@@ -107,6 +107,8 @@ val VId_GE_word      = USyntax.MkVId(">=@word", 63)
 val VId_GE_real      = USyntax.MkVId(">=@real", 64)
 val VId_GE_string    = USyntax.MkVId(">=@string", 65)
 val VId_GE_char      = USyntax.MkVId(">=@char", 66)
+(* Misc *)
+val VId_print = USyntax.MkVId("print", 67)
 
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
@@ -135,6 +137,7 @@ val initialEnv_ToTypedSyntax
                                                    ,(Syntax.MkVId ">", (VId_GT, ValueVariable))
                                                    ,(Syntax.MkVId "<=", (VId_LE, ValueVariable))
                                                    ,(Syntax.MkVId ">=", (VId_GE, ValueVariable))
+                                                   ,(Syntax.MkVId "print", (VId_print, ValueVariable))
                                                    ]
                              , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
                                                      [(Syntax.MkTyCon "unit", ToTypedSyntax.BTyAlias ([], Typing.primTy_unit))
@@ -210,6 +213,8 @@ val initialEnv : Typing.Env
                               ,(VId_GT, (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                               ,(VId_LE, (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                               ,(VId_GE, (TypeScheme([(tyVarA, [IsOrdered])], USyntax.FnType(USyntax.PairType(USyntax.TyVar(tyVarA), USyntax.TyVar(tyVarA)), primTy_bool)), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                   (* Non-overloaded identifiers *)
+                              ,(VId_print, (TypeScheme ([], USyntax.FnType(primTy_string, primTy_unit)), ValueVariable))
                               ]
                , strMap = Syntax.StrIdMap.empty
                }
