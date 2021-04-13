@@ -63,10 +63,77 @@ fun smlNameToLuaChar #"_" = "__"
   | smlNameToLuaChar #"*" = "_ASTER"
   | smlNameToLuaChar x = if Char.isAlphaNum x then String.str x else raise Fail "smlNameToLua: invalid character"
 fun smlNameToLua(name) = String.translate smlNameToLuaChar name
-fun VIdToLua(vid as USyntax.MkVId(name, n)) = if vid = InitialEnv.VId_true then
-                                                  "true"
-                                              else if vid = InitialEnv.VId_false then
-                                                  "false"
+val builtins = let open InitialEnv
+      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+                    [(* ref *)
+                     (VId_ref, "_ref")
+                    ,(VId_COLONEQUAL, "_set")
+                    (* boolean *)
+                    ,(VId_true, "true") (* boolean literal *)
+                    ,(VId_false, "false") (* boolean literal *)
+                    (* list *)
+                    ,(VId_nil, "_nil")
+                    ,(VId_DCOLON, "_cons")
+                    (* exn *)
+                    ,(VId_Match, "_Match")
+                    ,(VId_Bind, "_Bind")
+	            (* VId_EQUAL *)
+                    (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
+                    ,(VId_EQUAL_bool, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_int, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_word, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_string, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_char, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_list, "_EQUAL_list")
+                    ,(VId_EQUAL_ref, "_EQUAL_prim") (* Lua == *)
+                         (* int *)
+                    ,(VId_PLUS_int, "_add_int") (* may raise Overflow *)
+                    ,(VId_MINUS_int, "_sub_int") (* may raise Overflow *)
+                    ,(VId_TIMES_int, "_mul_int") (* may raise Overflow *)
+                    ,(VId_abs_int, "_abs_int") (* may raise Overflow *)
+                    ,(VId_TILDE_int, "_negate_int") (* may raise Overflow *)
+                    ,(VId_div_int, "_div_int") (* may raise Overflow/Div *)
+                    ,(VId_mod_int, "_mod_int") (* may raise Div *)
+                    (* word *)
+                    ,(VId_PLUS_word, "_add_word") (* Lua +; does not raise Overflow *)
+                    ,(VId_MINUS_word, "_sub_word") (* Lua - (binary); does not raise Overflow *)
+                    ,(VId_TIMES_word, "_mul_word") (* Lua *; does not raise Overflow *)
+                    ,(VId_div_word, "_div_word") (* may raise Div *)
+                    ,(VId_mod_word, "_mod_word") (* may raise Div *)
+                    (* real *)
+                    ,(VId_PLUS_real, "_add_real") (* Lua + *)
+                    ,(VId_MINUS_real, "_sub_real") (* Lua - (binary) *)
+                    ,(VId_TIMES_real, "_mul_real") (* Lua * *)
+                    ,(VId_DIVIDE_real, "_divide_real") (* Lua / *)
+                    ,(VId_abs_real, "_abs_real") (* Lua math.abs *)
+                    ,(VId_TILDE_real, "_negate_real") (* Lua - (unary) *)
+                    ,(VId_LT_int, "_LT_prim")
+                    ,(VId_LT_word, "_LT_word")
+                    ,(VId_LT_real, "_LT_prim")
+                    ,(VId_LT_string, "_LT_prim")
+                    ,(VId_LT_char, "_LT_prim")
+                    ,(VId_GT_int, "_GT_prim")
+                    ,(VId_GT_word, "_GT_word")
+                    ,(VId_GT_real, "_GT_prim")
+                    ,(VId_GT_string, "_GT_prim")
+                    ,(VId_GT_char, "_GT_prim")
+                    ,(VId_LE_int, "_LE_prim")
+                    ,(VId_LE_word, "_LE_word")
+                    ,(VId_LE_real, "_LE_prim")
+                    ,(VId_LE_string, "_LE_prim")
+                    ,(VId_LE_char, "_LE_prim")
+                    ,(VId_GE_int, "_GE_prim")
+                    ,(VId_GE_word, "_GE_word")
+                    ,(VId_GE_real, "_GE_prim")
+                    ,(VId_GE_string, "_GE_prim")
+                    ,(VId_GE_char, "_GE_prim")
+                    ,(VId_print, "_print")
+                    ]
+     end                 
+fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then
+                                                  case USyntax.VIdMap.find (builtins, vid) of
+                                                      NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
+                                                    | SOME luaExpr => luaExpr
                                               else
                                                   smlNameToLua name ^ "_" ^ Int.toString n
 
@@ -162,58 +229,73 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
     (* TODO: evaluation order *)
     (* TODO: check for overflow *)
     = let open InitialEnv
-          fun doBinary ope = let val (stmts1, e1') = doExp ctx env e1
+          fun doBinaryOp ope = let val (stmts1, e1') = doExp ctx env e1
                                  val (stmts2, e2') = doExp ctx env e2
                              in (stmts1 @ stmts2, "(" ^ e1' ^ ") " ^ ope ^ " (" ^ e2' ^ ")") (* TODO: evaluation order *)
                              end
+          fun doBinaryFn name = let val (stmts1, e1') = doExp ctx env e1
+                                    val (stmts2, e2') = doExp ctx env e2
+                                in (stmts1 @ stmts2, name ^ "(" ^ e1' ^ ", " ^ e2' ^ ")") (* TODO: evaluation order *)
+                                end
       in if USyntax.eqVId(vid, VId_EQUAL_bool)
             orelse USyntax.eqVId(vid, VId_EQUAL_int)
             orelse USyntax.eqVId(vid, VId_EQUAL_word)
             orelse USyntax.eqVId(vid, VId_EQUAL_string)
             orelse USyntax.eqVId(vid, VId_EQUAL_char) then
-             doBinary "=="
-         else if USyntax.eqVId(vid, VId_PLUS_int)
-                 orelse USyntax.eqVId(vid, VId_PLUS_word)
+             doBinaryOp "=="
+         else if USyntax.eqVId(vid, VId_PLUS_int) then
+             doBinaryFn "__add_int"
+         else if USyntax.eqVId(vid, VId_PLUS_word)
                  orelse USyntax.eqVId(vid, VId_PLUS_real) then
-             doBinary "+"
-         else if USyntax.eqVId(vid, VId_MINUS_int)
-                 orelse USyntax.eqVId(vid, VId_MINUS_word)
+             doBinaryOp "+"
+         else if USyntax.eqVId(vid, VId_MINUS_int) then
+             doBinaryFn "__sub_int"
+         else if USyntax.eqVId(vid, VId_MINUS_word)
                  orelse USyntax.eqVId(vid, VId_MINUS_real) then
-             doBinary "-"
-         else if USyntax.eqVId(vid, VId_TIMES_int)
-                 orelse USyntax.eqVId(vid, VId_TIMES_word)
+             doBinaryOp "-"
+         else if USyntax.eqVId(vid, VId_TIMES_int) then
+             doBinaryFn "__mul_int"
+         else if USyntax.eqVId(vid, VId_TIMES_word)
                  orelse USyntax.eqVId(vid, VId_TIMES_real) then
-             doBinary "*"
+             doBinaryOp "*"
          else if USyntax.eqVId(vid, VId_DIVIDE_real) then
-             doBinary "/"
+             doBinaryOp "/"
          else if USyntax.eqVId(vid, VId_div_int) then
-             doBinary "//" (* flooring division *)
+             doBinaryFn "__div_int"
+         else if USyntax.eqVId(vid, VId_div_word) then
+             doBinaryFn "__div_word"
          else if USyntax.eqVId(vid, VId_mod_int) then
-             doBinary "%" (* modulo w.r.t. flooring division *)
+             doBinaryFn "__mod_int"
+         else if USyntax.eqVId(vid, VId_mod_word) then
+             doBinaryFn "__mod_word"
          else if USyntax.eqVId(vid, VId_LT_int)
-                 orelse USyntax.eqVId(vid, VId_LT_word) (* TODO: should use math.ult (Lua 5.3) *)
                  orelse USyntax.eqVId(vid, VId_LT_real)
                  orelse USyntax.eqVId(vid, VId_LT_string)
                  orelse USyntax.eqVId(vid, VId_LT_char) then
-             doBinary "<"
+             doBinaryOp "<"
+         else if USyntax.eqVId(vid, VId_LT_word) then
+             doBinaryFn "__LT_word"
          else if USyntax.eqVId(vid, VId_GT_int)
-                 orelse USyntax.eqVId(vid, VId_GT_word) (* TODO: should use math.ult (Lua 5.3) *)
                  orelse USyntax.eqVId(vid, VId_GT_real)
                  orelse USyntax.eqVId(vid, VId_GT_string)
                  orelse USyntax.eqVId(vid, VId_GT_char) then
-             doBinary ">"
+             doBinaryOp ">"
+         else if USyntax.eqVId(vid, VId_GT_word) then
+             doBinaryFn "__GT_word"
          else if USyntax.eqVId(vid, VId_LE_int)
-                 orelse USyntax.eqVId(vid, VId_LE_word) (* TODO: should use math.ult (Lua 5.3) *)
                  orelse USyntax.eqVId(vid, VId_LE_real)
                  orelse USyntax.eqVId(vid, VId_LE_string)
                  orelse USyntax.eqVId(vid, VId_LE_char) then
-             doBinary "<="
+             doBinaryOp "<="
+         else if USyntax.eqVId(vid, VId_LE_word) then
+             doBinaryFn "__LE_word"
          else if USyntax.eqVId(vid, VId_GE_int)
-                 orelse USyntax.eqVId(vid, VId_GE_word) (* TODO: should use math.ult (Lua 5.3) *)
                  orelse USyntax.eqVId(vid, VId_GE_real)
                  orelse USyntax.eqVId(vid, VId_GE_string)
                  orelse USyntax.eqVId(vid, VId_GE_char) then
-             doBinary ">="
+             doBinaryOp ">="
+         else if USyntax.eqVId(vid, VId_GE_word) then
+             doBinaryFn "__GE_word"
          else
              let val (stmts1, exp1') = doExp ctx env exp1
                  val (stmts2, exp2') = doExp ctx env exp2
@@ -224,13 +306,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
     (* built-in operator? *)
     (* TODO: check for overflow *)
     = let open InitialEnv
-      in if USyntax.eqVId(vid, VId_abs_int)
-            orelse USyntax.eqVId(vid, VId_abs_real) then
-             let val (stmts, exp2') = doExp ctx env exp2
-             in (stmts, "math.abs(" ^ exp2' ^ ")")
-             end
-         else if USyntax.eqVId(vid, VId_TILDE_int)
-                 orelse USyntax.eqVId(vid, VId_TILDE_real) then
+      in if USyntax.eqVId(vid, VId_TILDE_real) then
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "- (" ^ exp2' ^ ")")
              end
