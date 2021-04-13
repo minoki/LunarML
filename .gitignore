@@ -1,4 +1,5 @@
 .cm/
-syntax.grm.desc
-syntax.grm.sig
-syntax.grm.sml
+MLB/
+src/syntax.grm.desc
+src/syntax.grm.sig
+src/syntax.grm.sml
