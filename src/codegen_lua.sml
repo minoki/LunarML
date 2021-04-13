@@ -128,6 +128,8 @@ val builtins = let open InitialEnv
                     ,(VId_GE_string, "_GE_prim")
                     ,(VId_GE_char, "_GE_prim")
                     ,(VId_print, "_print")
+                    ,(VId_Int_toString, "_Int_toString")
+                    ,(VId_HAT, "_string_append")
                     ]
      end                 
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then
@@ -296,6 +298,8 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
              doBinaryOp ">="
          else if USyntax.eqVId(vid, VId_GE_word) then
              doBinaryFn "__GE_word"
+	 else if USyntax.eqVId(vid, VId_HAT) then
+	     doBinaryOp ".."
          else
              let val (stmts1, exp1') = doExp ctx env exp1
                  val (stmts2, exp2') = doExp ctx env exp2

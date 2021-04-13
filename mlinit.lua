@@ -52,7 +52,7 @@ local function __sub_int(x, y)
   local z = x - y
   if y < 0 and z < x then
     error(_Overflow)
-  elseif y > 0 and z < x then
+  elseif y > 0 and x < z then
     error(_Overflow)
   else
     return z
@@ -300,4 +300,12 @@ end
 local function _print(x)
   io.write(x)
   return {}
+end
+
+local function _Int_toString(x)
+  return tostring(x) -- TODO: sign
+end
+
+local function _string_append(t)
+  return t[1] .. t[2]
 end
