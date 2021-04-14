@@ -63,14 +63,18 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                            (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
                            fields
             | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
-            (* TODO: true and false *)
             | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), SOME innerPat, tyargs))
               = let val payloadTy = F.RecordType [] (* not implemented yet... *)
                 in F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
                                            genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
                 end
-            | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), NONE, tyargs))
-              = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
+            | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
+              = if USyntax.eqVId(vid, InitialEnv.VId_true) then
+                    exp
+                else if USyntax.eqVId(vid, InitialEnv.VId_false) then
+                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_not)), exp)
+                else
+                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
             | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = genMatcher env exp ty0 innerPat
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []

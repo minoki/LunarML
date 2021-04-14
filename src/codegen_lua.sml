@@ -131,6 +131,7 @@ val builtins = let open InitialEnv
                     ,(VId_Int_toString, "_Int_toString")
                     ,(VId_HAT, "_string_append")
                     ,(VId_raise, "_raise")
+                    ,(VId_not, "_not") (* Lua not *)
                     ]
      end                 
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then
@@ -314,6 +315,10 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
       in if USyntax.eqVId(vid, VId_TILDE_real) then
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "- (" ^ exp2' ^ ")")
+             end
+         else if USyntax.eqVId(vid, VId_not) then
+             let val (stmts, exp2') = doExp ctx env exp2
+             in (stmts, "not (" ^ exp2' ^ ")")
              end
          else
              let val (stmts1, exp1') = doExp ctx env exp1

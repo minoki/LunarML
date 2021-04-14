@@ -111,6 +111,7 @@ val VId_print = USyntax.MkVId("print", 67)
 val VId_Int_toString = USyntax.MkVId("Int_toString", 68) (* TODO: Support modules *)
 val VId_HAT = USyntax.MkVId("^", 69) (* String.^ *)
 val VId_raise = USyntax.MkVId("raise", 70)
+val VId_not = USyntax.MkVId("not", 71)
 
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
@@ -142,6 +143,7 @@ val initialEnv_ToTypedSyntax
                                                    ,(Syntax.MkVId "print", (VId_print, ValueVariable))
                                                    ,(Syntax.MkVId "Int_toString", (VId_Int_toString, ValueVariable))
                                                    ,(Syntax.MkVId "^", (VId_HAT, ValueVariable))
+                                                   ,(Syntax.MkVId "not", (VId_not, ValueVariable))
                                                    ]
                              , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
                                                      [(Syntax.MkTyCon "unit", ToTypedSyntax.BTyAlias ([], Typing.primTy_unit))
@@ -223,6 +225,7 @@ val initialEnv : Typing.Env
                               ,(VId_print, (TypeScheme ([], USyntax.FnType(primTy_string, primTy_unit)), ValueVariable))
                               ,(VId_Int_toString, (TypeScheme ([], USyntax.FnType(primTy_int, primTy_string)), ValueVariable))
                               ,(VId_HAT, (TypeScheme ([], USyntax.FnType(USyntax.PairType(primTy_string, primTy_string), primTy_string)), ValueVariable))
+                              ,(VId_not, (TypeScheme ([], USyntax.FnType(primTy_bool, primTy_bool)), ValueVariable))
                               ]
                , strMap = Syntax.StrIdMap.empty
                }

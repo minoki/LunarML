@@ -313,3 +313,7 @@ end
 local function _string_append(t)
   return t[1] .. t[2]
 end
+
+local function _not(x)
+  return not x
+end
