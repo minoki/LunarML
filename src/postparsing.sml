@@ -119,7 +119,7 @@ fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
   | doExp(env, UnfixedSyntax.NonInfixVIdExp(longvid)) = Syntax.VarExp longvid
   | doExp(env, UnfixedSyntax.RecordExp fields) = Syntax.RecordExp (List.map (fn (label, exp) => (label, doExp(env, exp))) fields)
   | doExp(env, UnfixedSyntax.LetInExp(decls, exp)) = let val (env', decls') = doDecs(env, decls)
-                                                     in Syntax.LetInExp(decls', doExp(env', exp))
+                                                     in Syntax.LetInExp(decls', doExp(Syntax.VIdMap.unionWith #2 (env, env'), exp))
                                                      end
   | doExp(env, UnfixedSyntax.JuxtapositionExp expressions) (* application or infix application *)
     = let fun doPrefix(exp1 :: rest) = doInfix(doExp(env, exp1), rest)
