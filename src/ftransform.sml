@@ -7,8 +7,27 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                              ; USyntax.MkVId(name, n)
                                             end
 datatype Env = MkEnv of { strMap : Env Syntax.StrIdMap.map
+                        , dataConMap : FSyntax.Ty USyntax.VIdMap.map
                         }
-val emptyEnv = MkEnv { strMap = Syntax.StrIdMap.empty }
+val emptyEnv = MkEnv { strMap = Syntax.StrIdMap.empty, dataConMap = USyntax.VIdMap.empty }
+(* true, false, nil, ::, ref *)
+val initialEnv = MkEnv { strMap = Syntax.StrIdMap.empty
+                       , dataConMap = let open InitialEnv
+                                          val tyVarA = USyntax.AnonymousTyVar(0)
+                                          val primTyCon_list = Typing.primTyCon_list
+                                          val primTyCon_ref = Typing.primTyCon_ref
+                                      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+                                                    [(VId_true, FSyntax.TyCon([], Typing.primTyCon_bool))
+                                                    ,(VId_false, FSyntax.TyCon([], Typing.primTyCon_bool))
+                                                    ,(VId_nil, FSyntax.ForallType(tyVarA, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)))
+                                                    ,(VId_DCOLON, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.PairType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list))))
+                                                    ,(VId_ref, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_ref))))
+                                                    ]
+                                      end
+                       }
+fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
+  | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
+  | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
 fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValBind: Env -> F.ValBind -> F.ValBind, doDec : Env -> F.Dec -> F.Dec }
     = let fun doExp (env: Env) exp0
               = (case exp0 of
@@ -58,16 +77,19 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
               = List.foldr (fn ((label, pat), e) =>
                                case List.find (fn (label', _) => label = label') fieldTypes of
                                    SOME (_, fieldTy) => F.SimplifyingAndalsoExp(genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }, exp)) fieldTy pat, e)
-                                 | NONE => raise Fail "internal error: record field not found"
+                                 | NONE => raise Fail ("internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
                            )
                            (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
                            fields
             | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
-            | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), SOME innerPat, tyargs))
-              = let val payloadTy = F.RecordType [] (* not implemented yet... *)
-                in F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
-                                           genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
-                end
+            | genMatcher (env as MkEnv { dataConMap = dataConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
+              = (case USyntax.VIdMap.find(dataConMap, vid) of
+                     SOME dataConTy => let val payloadTy = getPayloadTy(tyargs, dataConTy)
+                                       in F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
+                                                                  genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
+                                       end
+                  | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
+                )
             | genMatcher env exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
               = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                     exp

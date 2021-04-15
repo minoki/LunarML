@@ -54,6 +54,40 @@ fun SimplifyingAndalsoExp(a as VarExp(Syntax.MkQualified([], vid)), b) = if vid 
                                                                              AndalsoExp(a, b)
   | SimplifyingAndalsoExp(a, b) = AndalsoExp(a, b)
 
+(* occurCheck : TyVar -> Ty -> bool *)
+fun occurCheck tv =
+    let fun check (TyVar tv') = USyntax.eqUTyVar(tv, tv')
+          | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
+          | check (TyCon(tyargs, longtycon)) = List.exists check tyargs
+          | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
+          | check (ForallType(tv', ty)) = if USyntax.eqUTyVar(tv, tv') then
+                                              false
+                                          else
+                                              check ty
+    in check
+    end
+
+(* substituteTy : TyVar * Ty -> Ty -> Ty *)
+fun substituteTy (tv, replacement) =
+    let fun go (ty as TyVar tv') = if USyntax.eqUTyVar(tv, tv') then
+                                       replacement
+                                   else
+                                       ty
+          | go (RecordType fields) = RecordType (Syntax.mapRecordRow go fields)
+          | go (TyCon(tyargs, longtycon)) = TyCon(List.map go tyargs, longtycon)
+          | go (FnType(ty1, ty2)) = FnType(go ty1, go ty2)
+          | go (ty as ForallType(tv', ty')) = if USyntax.eqUTyVar(tv, tv') then
+                                                  ty
+                                              else if occurCheck tv' replacement then
+                                                  (* TODO: generate fresh type variable *)
+                                                  let val tv'' = raise Fail "FSyntax.substituteTy: not implemented yet"
+                                                  in ForallType(tv'', go (substituteTy (tv', TyVar tv'') ty'))
+                                                  end
+                                              else
+                                                  ForallType(tv', go ty')
+    in go
+    end
+
 structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
