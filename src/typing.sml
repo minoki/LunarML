@@ -271,7 +271,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                           ) @ ctrs)
            else
                raise TypeError("unification failed: type constructor mismatch") (* ??? *)
-         | EqConstr(_, _) => raise TypeError("unification failed: not match")
+         | EqConstr(ty1, ty2) => raise TypeError("unification failed: not match (" ^ USyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty ty2 ^ ")")
          | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) =>
            (case recordTy of
                 RecordType(fields) =>
