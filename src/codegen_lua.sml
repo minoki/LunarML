@@ -370,7 +370,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                  ^ let val (stmts, exp') = doExp ctx env exp
                                                    in String.concat stmts ^ "return " ^ exp' ^ "\n" (* TODO: update environment? *)
                                                    end
-                                                 ^ "end"
+                                                 ^ "end\n"
                                             )
   | doExp ctx env (F.ProjectionExp { label = label, ... }) = ([], "function(x) return x[" ^ LabelToLua(label) ^ "] end")
   | doExp ctx env (F.TyAbsExp (_, exp)) = doExp ctx env exp
