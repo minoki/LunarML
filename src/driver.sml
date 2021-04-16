@@ -14,7 +14,7 @@ fun compile(name, source) =
         val decs' = Typing.applyDefaultTypes(tvc, decs)
         val fctx = { nextVId = #nextVId ctx }
         val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
-        val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.emptyEnv) fdecs
+        val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.initialEnv) fdecs
         val lua = CodeGenLua.doDecs { nextLuaId = ref 0 } CodeGenLua.MkEnv fdecs'
     in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
     end
