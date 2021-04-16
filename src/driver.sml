@@ -1,9 +1,13 @@
 structure Driver = struct
-fun print_error (s,p1,p2) = print s
-fun parse str = #2 (Fixity.doDecs(InitialEnv.initialFixity, #1 (DamepoMLParser.parse(0, DamepoMLParser.makeLexer(DamepoMLLex.makeInputFromString str), print_error, ()))))
+fun parse(name, str) = let fun print_error (s,p1 as (l1,c1),p2 as (l2,c2)) = if p1 = p2 then
+                                                                                 print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
+                                                                             else
+                                                                                 print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
+                       in #2 (Fixity.doDecs(InitialEnv.initialFixity, #1 (DamepoMLParser.parse((* lookahead *) 0, DamepoMLParser.makeLexer(DamepoMLLex.makeInputFromString str), print_error, ()))))
+                       end
 
-fun compile source =
-    let val ast1 = parse source
+fun compile(name, source) =
+    let val ast1 = parse(name, source)
         val ctx = Typing.newContext()
         val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
         val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)

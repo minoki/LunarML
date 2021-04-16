@@ -24,7 +24,7 @@ fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(stri
 %%
 
 %eop EOF
-%pos int
+%pos int * int
 %pure
 
 %term AlnumIdent of string (* alphanumeric identifier not starting with a prime *)

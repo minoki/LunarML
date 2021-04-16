@@ -21,7 +21,7 @@ case args of
                        val ins = TextIO.openIn fileName (* may raise Io *)
                        val source = TextIO.inputAll ins
                        val () = TextIO.closeIn ins
-                       val (_, _, _, _, _, _, lua) = Driver.compile source
+                       val (_, _, _, _, _, _, lua) = Driver.compile(fileName, source)
                        val outs = TextIO.openOut (base ^ ".lua") (* may raise Io *)
 		       val () = TextIO.output (outs, mlinit)
                        val () = TextIO.output (outs, lua)
