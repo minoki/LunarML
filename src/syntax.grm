@@ -102,6 +102,7 @@ fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(stri
        | FValBind of UnfixedSyntax.FValBind list
        | FMatch of UnfixedSyntax.FMRule list
        | FMRule of UnfixedSyntax.FMRule
+       | FMRule_NoMatch of UnfixedSyntax.FMRule
        | FPat of UnfixedSyntax.FPat
        | TypBind of Syntax.TypBind list
        | DatBind of Syntax.DatBind list
@@ -392,10 +393,13 @@ FValBind : FMatch ([UnfixedSyntax.FValBind FMatch])
          | FMatch AND FValBind (UnfixedSyntax.FValBind FMatch :: FValBind)
 
 FMatch : FMRule ([FMRule])
-       | FMRule BAR FMatch (FMRule :: FMatch)
+       | FMRule_NoMatch BAR FMatch (FMRule_NoMatch :: FMatch)
 
 FMRule : FPat COLON Ty EQUALS Exp (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp))
        | FPat EQUALS Exp (UnfixedSyntax.FMRule (FPat, NONE, Exp))
+
+FMRule_NoMatch : FPat COLON Ty EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp_NoMatch))
+               | FPat EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (FPat, NONE, Exp_NoMatch))
 
 FPat : (* OP VId AtPats | VId AtPats | AtPat VId AtPat *)
        AtPat AtPats (UnfixedSyntax.PrefixOrInfixFPat (AtPat :: AtPats)) (* two or more AtPats *)
