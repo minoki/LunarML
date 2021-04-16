@@ -136,7 +136,7 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
         and recognizeSymbolic (l, c, name) = let val tok = case name of
                                                                ":" => Tokens.COLON
                                                              | "|" => Tokens.BAR
-                                                             | "=" => Tokens.EQUAL
+                                                             | "=" => Tokens.EQUALS
                                                              | "=>" => Tokens.DARROW
                                                              | "->" => Tokens.ARROW
                                                              | "#" => Tokens.HASH

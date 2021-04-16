@@ -41,7 +41,7 @@ fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(stri
     (* ( ) [ ] { } , : *)
     | LPAREN | RPAREN | LBRACK | RBRACK | LBRACE | RBRACE | COMMA | COLON
     (* ; ... _ | = => -> # *)
-    | SEMICOLON | ELLIPSIS | UNDERSCORE | BAR | EQUAL | DARROW | ARROW | HASH
+    | SEMICOLON | ELLIPSIS | UNDERSCORE | BAR | EQUALS | DARROW | ARROW | HASH
     (* :> *)
     | COLONGT
     (* reserved words *)
@@ -145,7 +145,7 @@ TyVar : PrimeIdent (Syntax.MkTyVar PrimeIdent)
 VId : AlnumIdent (Syntax.MkVId AlnumIdent)
     | SymbolicIdent (Syntax.MkVId SymbolicIdent)
     | ASTERISK (Syntax.MkVId "*")
-    | EQUAL (Syntax.MkVId "=") (* ? *)
+    | EQUALS (Syntax.MkVId "=") (* ? *)
 
 (* value identifiers, excluding '=' *)
 BoundVId : AlnumIdent (Syntax.MkVId AlnumIdent)
@@ -236,8 +236,8 @@ Pat : TypedPat (TypedPat)
 
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
-       | Lab EQUAL Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
-       | Lab EQUAL Pat (([(Lab, Pat)], false))
+       | Lab EQUALS Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
+       | Lab EQUALS Pat (([(Lab, Pat)], false))
 
 PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
            | (nil)
@@ -281,7 +281,7 @@ AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
                           Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdExp vid
                         | longvid => UnfixedSyntax.NonInfixVIdExp longvid
                      ) (* value identifier *)
-      | EQUAL (UnfixedSyntax.InfixOrVIdExp(Syntax.MkVId "="))
+      | EQUALS (UnfixedSyntax.InfixOrVIdExp(Syntax.MkVId "="))
       | LBRACE RBRACE (UnfixedSyntax.RecordExp nil) (* empty record *)
       | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp ExpRow) (* record *)
       | LET Dec IN Exp END (UnfixedSyntax.LetInExp (Dec, Exp)) (* local declaration *)
@@ -306,8 +306,8 @@ ExpSSeqRest : SEMICOLON Exp ExpSSeqRest (Exp :: ExpSSeqRest)
             | (nil)
 
 (* expression rows *)
-ExpRow : Lab EQUAL Exp COMMA ExpRow ((Lab, Exp) :: ExpRow)
-       | Lab EQUAL Exp ((Lab, Exp) :: nil)
+ExpRow : Lab EQUALS Exp COMMA ExpRow ((Lab, Exp) :: ExpRow)
+       | Lab EQUALS Exp ((Lab, Exp) :: nil)
 
 (*
 AppExp : AtExp
@@ -355,7 +355,7 @@ SingleDec : VAL TyVar ValBind (UnfixedSyntax.ValDec ([TyVar], ValBind)) (* value
     | FUN TyVarSeq FValBind (UnfixedSyntax.FValDec (TyVarSeq, FValBind)) (* function declaration *)
     | TYPE TypBind (UnfixedSyntax.TypeDec TypBind) (* type declaration *)
     | DATATYPE DatBind (UnfixedSyntax.DatatypeDec DatBind) (* datatype declaration *)
-    (* | DATATYPE TyCon EQUAL DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon)) (* datatype replication *) *)
+    (* | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon)) (* datatype replication *) *)
     | ABSTYPE DatBind WITH Dec END (UnfixedSyntax.AbstypeDec (DatBind, Dec)) (* abstype declaration *)
     | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec ExBind) (* exception declaration *)
     | LOCAL Dec IN Dec END (UnfixedSyntax.LocalDec (Dec1, Dec2)) (* local declaration *)
@@ -384,8 +384,8 @@ VIds : VId VIds (VId :: VIds)
      | VId (VId :: nil)
 
 (* value bindings *)
-ValBind : Pat EQUAL Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp) :: ValBind)
-        | Pat EQUAL Exp (UnfixedSyntax.PatBind (Pat, Exp) :: nil)
+ValBind : Pat EQUALS Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp) :: ValBind)
+        | Pat EQUALS Exp (UnfixedSyntax.PatBind (Pat, Exp) :: nil)
         (* | REC ValBind (UnfixedSyntax.RecValBind ValBind) *)
 
 FValBind : FMatch ([UnfixedSyntax.FValBind FMatch])
@@ -394,8 +394,8 @@ FValBind : FMatch ([UnfixedSyntax.FValBind FMatch])
 FMatch : FMRule ([FMRule])
        | FMRule BAR FMatch (FMRule :: FMatch)
 
-FMRule : FPat COLON Ty EQUAL Exp (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp))
-       | FPat EQUAL Exp (UnfixedSyntax.FMRule (FPat, NONE, Exp))
+FMRule : FPat COLON Ty EQUALS Exp (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp))
+       | FPat EQUALS Exp (UnfixedSyntax.FMRule (FPat, NONE, Exp))
 
 FPat : (* OP VId AtPats | VId AtPats | AtPat VId AtPat *)
        AtPat AtPats (UnfixedSyntax.PrefixOrInfixFPat (AtPat :: AtPats)) (* two or more AtPats *)
@@ -403,12 +403,12 @@ FPat : (* OP VId AtPats | VId AtPats | AtPat VId AtPat *)
      | LPAREN AtPat VId AtPat RPAREN AtPats (UnfixedSyntax.InfixFPat (AtPat1, VId, AtPat2, AtPats))
 
 (* type bindings *)
-TypBind : TyVarSeq TyCon EQUAL Ty AND TypBind (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: TypBind)
-        | TyVarSeq TyCon EQUAL Ty (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: nil)
+TypBind : TyVarSeq TyCon EQUALS Ty AND TypBind (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: TypBind)
+        | TyVarSeq TyCon EQUALS Ty (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: nil)
 
 (* datatype bindings *)
-DatBind : TyVarSeq TyCon EQUAL ConBind AND DatBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: DatBind)
-        | TyVarSeq TyCon EQUAL ConBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: nil)
+DatBind : TyVarSeq TyCon EQUALS ConBind AND DatBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: DatBind)
+        | TyVarSeq TyCon EQUALS ConBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: nil)
 
 (* constructor bindings *)
 ConBind : Opt_OP BoundVId OF Ty Opt_BAR_ConBind (Syntax.ConBind (BoundVId, SOME Ty) :: Opt_BAR_ConBind)
@@ -420,7 +420,7 @@ Opt_BAR_ConBind : BAR ConBind (ConBind)
 (* exception bindings *)
 ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, SOME Ty) :: Opt_AND_ExBind)
        | Opt_OP BoundVId Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, NONE) :: Opt_AND_ExBind)
-       | Opt_OP BoundVId EQUAL Opt_OP LongVId Opt_AND_ExBind (Syntax.ExBind2 (BoundVId, LongVId) :: Opt_AND_ExBind)
+       | Opt_OP BoundVId EQUALS Opt_OP LongVId Opt_AND_ExBind (Syntax.ExBind2 (BoundVId, LongVId) :: Opt_AND_ExBind)
 
 Opt_AND_ExBind : AND ExBind (ExBind)
                | (nil)
