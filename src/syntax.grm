@@ -67,6 +67,7 @@ fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(stri
        | LongStrId of Syntax.LongStrId
        | Opt_OP of bool
        | AtPat of UnfixedSyntax.Pat
+       | AtPats of UnfixedSyntax.Pat list
        | PatRow of (Syntax.Label * UnfixedSyntax.Pat) list * bool
        | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
@@ -98,6 +99,10 @@ fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(stri
        | LongStrIds of Syntax.LongStrId list
        | VIds of Syntax.VId list
        | ValBind of UnfixedSyntax.ValBind list
+       | FValBind of UnfixedSyntax.FValBind list
+       | FMatch of UnfixedSyntax.FMRule list
+       | FMRule of UnfixedSyntax.FMRule
+       | FPat of UnfixedSyntax.FPat
        | TypBind of Syntax.TypBind list
        | DatBind of Syntax.DatBind list
        | ConBind of Syntax.ConBind list
@@ -197,6 +202,9 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
       | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
       | LBRACK RBRACK (nilPat) (* [derived] empty list *)
       | LBRACK Pat PatSeqRest RBRACK (MkListPat(Pat :: PatSeqRest)) (* [derived] list pattern *)
+
+AtPats : AtPat ([AtPat])
+       | AtPat AtPats (AtPat :: AtPats)
 
 (*
 AppPat : AtPat
@@ -344,7 +352,7 @@ SingleDec : VAL TyVar ValBind (UnfixedSyntax.ValDec ([TyVar], ValBind)) (* value
     | VAL REC TyVar ValBind (UnfixedSyntax.RecValDec ([TyVar], ValBind)) (* value declaration (recursive) *)
     | VAL REC ValBind (UnfixedSyntax.RecValDec (nil, ValBind)) (* value declaration (recursive) *)
     | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
-    (* | FUN TyVarSeq FValBind () function declaration: not implemented yet *)
+    | FUN TyVarSeq FValBind (UnfixedSyntax.FValDec (TyVarSeq, FValBind)) (* function declaration *)
     | TYPE TypBind (UnfixedSyntax.TypeDec TypBind) (* type declaration *)
     | DATATYPE DatBind (UnfixedSyntax.DatatypeDec DatBind) (* datatype declaration *)
     (* | DATATYPE TyCon EQUAL DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon)) (* datatype replication *) *)
@@ -379,6 +387,20 @@ VIds : VId VIds (VId :: VIds)
 ValBind : Pat EQUAL Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp) :: ValBind)
         | Pat EQUAL Exp (UnfixedSyntax.PatBind (Pat, Exp) :: nil)
         (* | REC ValBind (UnfixedSyntax.RecValBind ValBind) *)
+
+FValBind : FMatch ([UnfixedSyntax.FValBind FMatch])
+         | FMatch AND FValBind (UnfixedSyntax.FValBind FMatch :: FValBind)
+
+FMatch : FMRule ([FMRule])
+       | FMRule BAR FMatch (FMRule :: FMatch)
+
+FMRule : FPat COLON Ty EQUAL Exp (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp))
+       | FPat EQUAL Exp (UnfixedSyntax.FMRule (FPat, NONE, Exp))
+
+FPat : (* OP VId AtPats | VId AtPats | AtPat VId AtPat *)
+       AtPat AtPats (UnfixedSyntax.PrefixOrInfixFPat (AtPat :: AtPats)) (* two or more AtPats *)
+     | LPAREN AtPat VId AtPat RPAREN (UnfixedSyntax.InfixFPat (AtPat1, VId, AtPat2, []))
+     | LPAREN AtPat VId AtPat RPAREN AtPats (UnfixedSyntax.InfixFPat (AtPat1, VId, AtPat2, AtPats))
 
 (* type bindings *)
 TypBind : TyVarSeq TyCon EQUAL Ty AND TypBind (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: TypBind)

@@ -92,6 +92,7 @@ datatype Exp = SConExp of SCon (* special constant *)
              | ProjectionExp of Label
      and Dec = ValDec of TyVar list * ValBind list (* non-recursive *)
              | RecValDec of TyVar list * ValBind list (* recursive (val rec) *)
+             | FunDec of TyVar list * FValBind list (* fun; desugaring is done in ToTypedSyntax *)
              | TypeDec of TypBind list
              | DatatypeDec of DatBind list
              | DatatypeRepDec of TyCon * LongTyCon
@@ -101,12 +102,20 @@ datatype Exp = SConExp of SCon (* special constant *)
              | OpenDec of LongStrId list
              | FixityDec of FixityStatus * VId list
      and ValBind = PatBind of Pat * Exp
+     and FValBind = FValBind of { vid : VId
+                                , arity : int
+                                , rules : (Pat list * Ty option * Exp) list
+                                }
 type Program = Dec list
 
 fun SimpleVarExp vid = VarExp (MkLongVId ([], vid))
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
+                  end
+fun TuplePat xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordPat (doFields 1 xs, false)
                   end
 
 fun MkInfixConPat(pat1, vid, pat2) = ConPat(MkLongVId([], vid), SOME(RecordPat([(NumericLabel 1, pat1), (NumericLabel 2, pat2)], false)))
@@ -227,6 +236,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | ProjectionExp of Syntax.Label
      and Dec = ValDec of Syntax.TyVar list * ValBind list
              | RecValDec of Syntax.TyVar list * ValBind list
+             | FValDec of Syntax.TyVar list * FValBind list
              | TypeDec of Syntax.TypBind list
              | DatatypeDec of Syntax.DatBind list
              | DatatypeRepDec of Syntax.TyCon * Syntax.LongTyCon
@@ -236,6 +246,10 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | OpenDec of Syntax.LongStrId list
              | FixityDec of Syntax.FixityStatus * Syntax.VId list
      and ValBind = PatBind of Pat * Exp
+     and FValBind = FValBind of FMRule list
+     and FMRule = FMRule of FPat * Syntax.Ty option * Exp
+     and FPat = PrefixOrInfixFPat of Pat list (* two or more atomic patterns *)
+              | InfixFPat of Pat * Syntax.VId * Pat * Pat list
 type Program = Dec list
 
 fun TupleExp xs = let fun doFields i nil = nil

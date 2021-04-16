@@ -117,6 +117,10 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
                  | PolyVarBind of VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 type Program = TopDec list * Dec list
 
+fun TuplePat xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordPat (doFields 1 xs, false)
+                  end
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
@@ -598,6 +602,39 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val env' = mergeEnv(env, venv)
                val valbind'' = List.map (fn ((_, pat'), exp) => U.PatBind(pat', toUExp(ctx, tvenv', env', exp))) valbind'
+               val decl' = U.RecValDec(List.map #2 tyvars', valbind'', U.VIdMap.empty)
+               val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
+           in (mergeEnv(venv, env''), decl' :: decls')
+           end
+         | S.FunDec(tyvars, fvalbind) =>
+           let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+               val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
+               (* TODO: Check id status *)
+               val vidmap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty (List.map (fn S.FValBind { vid = vid, ... } => (vid, newVId(ctx, vid))) fvalbind)
+               val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
+               val env' = mergeEnv(env, venv)
+               fun doFValBind (S.FValBind { vid = vid, arity = arity, rules = rules })
+                   = let fun buildExp(0, revParams) = let val params = List.rev revParams
+                                                          val paramTuple = U.TupleExp (List.map (fn (vid, _) => U.VarExp(Syntax.MkQualified([], vid), Syntax.ValueVariable)) params)
+                                                          val paramTupleTy = U.TupleType (List.map #2 params)
+                                                          fun doRule (pats, optTy, exp) = let val (vidmap', pat) = toUPat(ctx, tvenv', env', S.TuplePat pats)
+                                                                                              val venv' = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap')
+                                                                                          in (pat, toUExp(ctx, tvenv', mergeEnv(env', venv'), case optTy of
+                                                                                                                                                  NONE => exp 
+                                                                                                                                                | SOME expTy => S.TypedExp(exp, expTy)))
+                                                                                         end
+                                                      in U.CaseExp(paramTuple, paramTupleTy, List.map doRule rules)
+                                                      end
+                           | buildExp(n, revParams) = let val paramId = newVId(ctx, Syntax.MkVId "a")
+                                                          val paramTy = USyntax.TyVar(freshTyVar(ctx))
+                                                      in U.FnExp(paramId, paramTy, buildExp(n - 1, (paramId, paramTy) :: revParams))
+                                                      end
+                         val vid' = case Syntax.VIdMap.find(vidmap, vid) of
+                                        SOME v => v
+                                      | NONE => raise Fail "internal error"
+                     in U.PatBind(U.VarPat(vid', USyntax.TyVar(freshTyVar(ctx))), buildExp(arity, []))
+                     end
+               val valbind'' = List.map doFValBind fvalbind
                val decl' = U.RecValDec(List.map #2 tyvars', valbind'', U.VIdMap.empty)
                val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
            in (mergeEnv(venv, env''), decl' :: decls')

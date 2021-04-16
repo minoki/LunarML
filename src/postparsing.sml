@@ -148,6 +148,7 @@ and doDecs(env, nil) = (Syntax.VIdMap.empty, nil)
                                end
 and doDec(env, UnfixedSyntax.ValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
   | doDec(env, UnfixedSyntax.RecValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.RecValDec(tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
+  | doDec(env, UnfixedSyntax.FValDec(tyvars, fvalbind)) = (Syntax.VIdMap.empty, Syntax.FunDec(tyvars, List.map (fn fvb => doFValBind(env, fvb)) fvalbind))
   | doDec(env, UnfixedSyntax.TypeDec(typbinds)) = (Syntax.VIdMap.empty, Syntax.TypeDec(typbinds))
   | doDec(env, UnfixedSyntax.DatatypeDec(datbinds)) = (Syntax.VIdMap.empty, Syntax.DatatypeDec(datbinds))
   | doDec(env, UnfixedSyntax.DatatypeRepDec(tycon, longtycon)) = (Syntax.VIdMap.empty, Syntax.DatatypeRepDec(tycon, longtycon))
@@ -162,6 +163,39 @@ and doDec(env, UnfixedSyntax.ValDec(tyvars, valbind)) = (Syntax.VIdMap.empty, Sy
   | doDec(env, UnfixedSyntax.OpenDec strid) = (Syntax.VIdMap.empty, Syntax.OpenDec strid)
   | doDec(env, UnfixedSyntax.FixityDec(fixity, vids)) = (List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids, Syntax.FixityDec(fixity, vids))
 and doValBind(env, UnfixedSyntax.PatBind(pat, exp)) = Syntax.PatBind(doPat(env, pat), doExp(env, exp))
+and doFValBind(env, UnfixedSyntax.FValBind(rules)) = let val rules' = List.map (fn rule => doFMRule (env, rule)) rules
+                                                         fun getVIdAndArity (((vid, pats), _, _) :: xs) = checkVIdAndArity(vid, length pats, xs)
+                                                           | getVIdAndArity [] = raise Fail "internal error: empty 'fun' rule"
+                                                         and checkVIdAndArity(vid, arity, []) = (vid, arity)
+                                                           | checkVIdAndArity(vid, arity, ((vid', pats), _, _) :: xs) = if vid = vid' then
+                                                                                                                          if arity = length pats then
+                                                                                                                              checkVIdAndArity(vid, arity, xs)
+                                                                                                                          else
+                                                                                                                              raise Syntax.SyntaxError "invalid 'fun' declaration: arity mismatch"
+                                                                                                                      else
+                                                                                                                          raise Syntax.SyntaxError "invalid 'fun' declaration: name mismatch"
+                                                         val (vid, arity) = getVIdAndArity rules'
+                                                     in Syntax.FValBind { vid = vid, arity = arity, rules = List.map (fn ((_, pats), optTy, exp) => (pats, optTy, exp)) rules' }
+                                                     end
+and doFMRule(env, UnfixedSyntax.FMRule(fpat, optTy, exp)) = (doFPat(env, fpat), optTy, doExp(env, exp))
+and doFPat(env, UnfixedSyntax.PrefixOrInfixFPat pats)
+    = let fun doPrefix (UnfixedSyntax.NonInfixVIdPat (Syntax.MkQualified ([], vid)) :: pats) = (vid, List.map (fn p => doPat(env, p)) pats)
+            | doPrefix (UnfixedSyntax.InfixOrVIdPat vid :: pats) = (case getFixityStatus(env, vid) of
+                                                                        Syntax.Nonfix => (vid, List.map (fn p => doPat(env, p)) pats)
+                                                                      | Syntax.Infix _ => raise Syntax.SyntaxError "invalid pattern: the identifier must be prefixed with 'op'"
+                                                                   )
+            | doPrefix _ = raise Syntax.SyntaxError "invalid 'fun' declaration"
+      in case pats of
+             [pat1, UnfixedSyntax.InfixOrVIdPat vid, pat3] => (case getFixityStatus(env, vid) of
+                                                                   Syntax.Nonfix => doPrefix pats
+                                                                 | Syntax.Infix assoc => (vid, [Syntax.TuplePat [doPat(env, pat1), doPat(env, pat3)]])
+                                                              )
+           | _ => doPrefix pats
+      end
+  | doFPat(env, UnfixedSyntax.InfixFPat(lhs, vid, rhs, rest)) = (case getFixityStatus(env, vid) of
+                                                                     Syntax.Nonfix => raise Syntax.SyntaxError ("invalid 'fun' declaration: " ^ Syntax.PrettyPrint.print_VId vid ^ " is not an infix operator")
+                                                                   | Syntax.Infix _ => (vid, Syntax.TuplePat [doPat(env, lhs), doPat(env, rhs)] :: List.map (fn p => doPat(env, p)) rest)
+                                                                )
 end (* structure Fixity *)
 
 structure PostParsing = struct
@@ -207,9 +241,17 @@ local
       | collectExp(bound, ProjectionExp lab) = TyVarSet.empty
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
+    and collectFValBind(bound, FValBind { rules = rules, ... }) = List.foldl (fn (rule, set) => TyVarSet.union(set, collectFRule(bound, rule))) TyVarSet.empty rules
+    and collectFRule(bound, (pats, optTy, exp)) = let val tyVarsInPats = List.foldl TyVarSet.union TyVarSet.empty (List.map (fn pat => freeTyVarsInPat(bound, pat)) pats)
+                                                      val tyVarsInOptTy = case optTy of
+                                                                              NONE => TyVarSet.empty
+                                                                            | SOME expTy => TyVarSet.difference(freeTyVarsInTy(bound, expTy), bound)
+                                                  in union3(tyVarsInPats, tyVarsInOptTy, collectExp(bound, exp))
+                                                  end
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds
+val unguardedTyVarsInFValBind : TyVarSet.set * FValBind list -> TyVarSet.set = fn (bound, fvalbinds) => List.foldl (fn (fvalbind, set) => TyVarSet.union(set, collectFValBind(bound, fvalbind))) TyVarSet.empty fvalbinds
 end (* local *)
 
 (* The Definition 4.6 *)
@@ -227,6 +269,12 @@ local
                                                          val bound'' = TyVarSet.union(bound', unguarded)
                                                      in RecValDec(expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
                                                      end
+      | doDec(bound, FunDec(expbound, fvalbind)) = let val bound' = TyVarSet.addList(bound, expbound)
+                                                       val unguarded = unguardedTyVarsInFValBind(bound', fvalbind)
+                                                       val expbound' = TyVarSet.listItems(unguarded)
+                                                       val bound'' = TyVarSet.union(bound', unguarded)
+                                                   in FunDec(expbound', List.map (fn fvb => doFValBind(bound'', fvb)) fvalbind)
+                                                   end
       | doDec(bound, dec as TypeDec _) = dec
       | doDec(bound, dec as DatatypeDec _) = dec
       | doDec(bound, dec as DatatypeRepDec _) = dec
@@ -237,6 +285,9 @@ local
       | doDec(bound, dec as FixityDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(pat, e)) = PatBind(pat, doExp(bound, e))
+    and doFValBind(bound, FValBind { vid = vid, arity = arity, rules = rules }) = let fun doFRule(pats, optTy, exp) = (pats, optTy, doExp(bound, exp))
+                                                                                  in FValBind { vid = vid, arity = arity, rules = List.map doFRule rules }
+                                                                                  end
     and doExp(bound, exp as SConExp _) = exp
       | doExp(bound, exp as VarExp _) = exp
       | doExp(bound, exp as RecordExp _) = exp
