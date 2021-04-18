@@ -122,10 +122,10 @@ functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
                                                             | "withtype" => Tokens.WITHTYPE
                                                             | "where" => Tokens.WHERE
                                                             | "while" => Tokens.WHILE
-                                                            | _ => if String.sub(name,0) = #"'" then
-                                                                       fn (p1,p2) => Tokens.PrimeIdent (name,p1,p2)
-                                                                   else
-                                                                       fn (p1,p2) => Tokens.AlnumIdent (name,p1,p2)
+                                                            | _ => case String.sub(name,0) of
+                                                                       #"'" => (fn (p1,p2) => Tokens.PrimeIdent (name,p1,p2))
+                                                                     | #"_" => raise Fail "an identifier cannot begin with an underscore"
+                                                                     | _ => (fn (p1,p2) => Tokens.AlnumIdent (name,p1,p2))
                                             in tok ((l,c),(l,c + String.size name - 1))
                                             end
         and readSymbolicIdentifier (l, c, accum, nil) = SOME (recognizeSymbolic (l, c, String.implode (rev accum)), l, c + length accum, nil)
