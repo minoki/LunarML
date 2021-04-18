@@ -138,6 +138,7 @@ fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
   | doExp(env, UnfixedSyntax.HandleExp(exp, matches)) = Syntax.HandleExp(doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
   | doExp(env, UnfixedSyntax.RaiseExp exp) = Syntax.RaiseExp(doExp(env, exp))
   | doExp(env, UnfixedSyntax.IfThenElseExp(e1, e2, e3)) = Syntax.IfThenElseExp(doExp(env, e1), doExp(env, e2), doExp(env, e3))
+  | doExp(env, UnfixedSyntax.WhileDoExp(e1, e2)) = Syntax.WhileDoExp(doExp(env, e1), doExp(env, e2))
   | doExp(env, UnfixedSyntax.CaseExp(exp, matches)) = Syntax.CaseExp(doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
   | doExp(env, UnfixedSyntax.FnExp matches) = Syntax.FnExp (List.map (fn (pat, exp) => (doPat(env, pat), doExp(env, exp))) matches)
   | doExp(env, UnfixedSyntax.ProjectionExp lab) = Syntax.ProjectionExp lab
@@ -236,6 +237,7 @@ local
       | collectExp(bound, HandleExp(x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, RaiseExp x) = collectExp(bound, x)
       | collectExp(bound, IfThenElseExp(x, y, z)) = union3(collectExp(bound, x), collectExp(bound, y), collectExp(bound, z))
+      | collectExp(bound, WhileDoExp(x, y)) = TyVarSet.union(collectExp(bound, x), collectExp(bound, y))
       | collectExp(bound, CaseExp(x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, FnExp match) = collectMatch(bound, match)
       | collectExp(bound, ProjectionExp lab) = TyVarSet.empty
@@ -297,6 +299,7 @@ local
       | doExp(bound, HandleExp(x, match)) = HandleExp(doExp(bound, x), doMatch(bound, match))
       | doExp(bound, RaiseExp(x)) = RaiseExp(doExp(bound, x))
       | doExp(bound, IfThenElseExp(x, y, z)) = IfThenElseExp(doExp(bound, x), doExp(bound, y), doExp(bound, z))
+      | doExp(bound, WhileDoExp(x, y)) = WhileDoExp(doExp(bound, x), doExp(bound, y))
       | doExp(bound, CaseExp(x, match)) = CaseExp(doExp(bound, x), doMatch(bound, match))
       | doExp(bound, FnExp(match)) = FnExp(doMatch(bound, match))
       | doExp(bound, exp as ProjectionExp _) = exp

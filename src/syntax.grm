@@ -332,15 +332,14 @@ Exp : OrElseExp (OrElseExp)
     | OrElseExp HANDLE MatchClauses (UnfixedSyntax.HandleExp (OrElseExp, MatchClauses)) (* handle exception *)
     | RAISE Exp (UnfixedSyntax.RaiseExp Exp) (* raise exception *)
     | IF Exp THEN Exp ELSE Exp (UnfixedSyntax.IfThenElseExp (Exp1, Exp2, Exp3)) (* [derived] conditional *)
-(*
-    | WHILE Exp DO Exp () (* [derived] iteration *)
-*)
+    | WHILE Exp DO Exp (UnfixedSyntax.WhileDoExp (Exp1, Exp2)) (* [derived] iteration *)
     | CASE Exp OF MatchClauses (UnfixedSyntax.CaseExp (Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
     | FN MatchClauses (UnfixedSyntax.FnExp MatchClauses) (* function *)
 
 Exp_NoMatch : OrElseExp (OrElseExp)
             | RAISE Exp_NoMatch (UnfixedSyntax.RaiseExp Exp_NoMatch) (* raise exception *)
             | IF Exp THEN Exp ELSE Exp_NoMatch (UnfixedSyntax.IfThenElseExp (Exp1, Exp2, Exp_NoMatch))
+            | WHILE Exp DO Exp_NoMatch (UnfixedSyntax.WhileDoExp (Exp, Exp_NoMatch)) (* [derived] iteration *)
 
 (* matches *)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)

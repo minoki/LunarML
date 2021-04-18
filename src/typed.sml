@@ -537,6 +537,35 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(scon)) = U
   | toUExp(ctx, tvenv, env, S.HandleExp(exp, ty)) = raise NameError("not implemented yet")
   | toUExp(ctx, tvenv, env, S.RaiseExp(exp)) = U.RaiseExp(toUExp(ctx, tvenv, env, exp))
   | toUExp(ctx, tvenv, env, S.IfThenElseExp(exp1, exp2, exp3)) = U.IfThenElseExp(toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
+  | toUExp(ctx, tvenv, env, S.WhileDoExp(exp1, exp2))
+    = let val fnName = newVId(ctx, S.MkVId "loop")
+          val fnCall = U.AppExp(U.VarExp(Syntax.MkQualified([], fnName), Syntax.ValueVariable), U.RecordExp []) (* loop () *)
+          val unitTy = U.RecordType []
+      in U.LetInExp([U.RecValDec([(* TODO: tyvar *)],
+                                 [U.PatBind(U.VarPat(fnName,
+                                                     U.FnType(unitTy, unitTy)
+                                                    ),
+                                            U.FnExp(newVId(ctx, S.MkVId "a"),
+                                                    unitTy,
+                                                    U.IfThenElseExp(toUExp(ctx, tvenv, env, exp1),
+                                                                    U.LetInExp([U.ValDec([(* TODO: tyvar *)],
+                                                                                         [U.PatBind(U.WildcardPat, toUExp(ctx, tvenv, env, exp2))],
+                                                                                         U.VIdMap.empty
+                                                                                        )
+                                                                               ],
+                                                                               fnCall
+                                                                              ),
+                                                                    U.RecordExp []
+                                                                   )
+                                                   )
+                                           )
+                                 ],
+                                 U.VIdMap.insert (U.VIdMap.empty, fnName, (U.TypeScheme([], U.FnType(unitTy, unitTy)), Syntax.ValueVariable))
+                                )
+                    ],
+                    fnCall
+                   )
+      end
   | toUExp(ctx, tvenv, env, S.CaseExp(exp, match)) = U.CaseExp(toUExp(ctx, tvenv, env, exp), USyntax.TyVar(freshTyVar(ctx)), toUMatch(ctx, tvenv, env, match))
   | toUExp(ctx, tvenv, env, S.FnExp([(pat, body)]))
     = let fun determineConOrVar vid
