@@ -251,8 +251,7 @@ datatype Exp = SConExp of Syntax.SCon (* special constant *)
      and ValBind = PatBind of Pat * Exp
      and FValBind = FValBind of FMRule list
      and FMRule = FMRule of FPat * Syntax.Ty option * Exp
-     and FPat = PrefixOrInfixFPat of Pat list (* two or more atomic patterns *)
-              | InfixFPat of Pat * Syntax.VId * Pat * Pat list
+     and FPat = FPat of Pat list
 type Program = Dec list
 
 fun TupleExp xs = let fun doFields i nil = nil

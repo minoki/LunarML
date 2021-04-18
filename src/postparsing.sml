@@ -179,24 +179,44 @@ and doFValBind(env, UnfixedSyntax.FValBind(rules)) = let val rules' = List.map (
                                                      in Syntax.FValBind { vid = vid, arity = arity, rules = List.map (fn ((_, pats), optTy, exp) => (pats, optTy, exp)) rules' }
                                                      end
 and doFMRule(env, UnfixedSyntax.FMRule(fpat, optTy, exp)) = (doFPat(env, fpat), optTy, doExp(env, exp))
-and doFPat(env, UnfixedSyntax.PrefixOrInfixFPat pats)
-    = let fun doPrefix (UnfixedSyntax.NonInfixVIdPat (Syntax.MkQualified ([], vid)) :: pats) = (vid, List.map (fn p => doPat(env, p)) pats)
-            | doPrefix (UnfixedSyntax.InfixOrVIdPat vid :: pats) = (case getFixityStatus(env, vid) of
-                                                                        Syntax.Nonfix => (vid, List.map (fn p => doPat(env, p)) pats)
-                                                                      | Syntax.Infix _ => raise Syntax.SyntaxError "invalid pattern: the identifier must be prefixed with 'op'"
-                                                                   )
-            | doPrefix _ = raise Syntax.SyntaxError "invalid 'fun' declaration"
-      in case pats of
-             [pat1, UnfixedSyntax.InfixOrVIdPat vid, pat3] => (case getFixityStatus(env, vid) of
-                                                                   Syntax.Nonfix => doPrefix pats
-                                                                 | Syntax.Infix assoc => (vid, [Syntax.TuplePat [doPat(env, pat1), doPat(env, pat3)]])
-                                                              )
-           | _ => doPrefix pats
-      end
-  | doFPat(env, UnfixedSyntax.InfixFPat(lhs, vid, rhs, rest)) = (case getFixityStatus(env, vid) of
-                                                                     Syntax.Nonfix => raise Syntax.SyntaxError ("invalid 'fun' declaration: " ^ Syntax.PrettyPrint.print_VId vid ^ " is not an infix operator")
-                                                                   | Syntax.Infix _ => (vid, Syntax.TuplePat [doPat(env, lhs), doPat(env, rhs)] :: List.map (fn p => doPat(env, p)) rest)
-                                                                )
+and doFPat(env, UnfixedSyntax.FPat [UnfixedSyntax.JuxtapositionPat [pat1, UnfixedSyntax.InfixOrVIdPat vid, pat3]])
+    = (case getFixityStatus(env, vid) of
+           Syntax.Nonfix => raise Syntax.SyntaxError "invalid function declaration"
+         | Syntax.Infix _ => doInfixFPat(env, vid, pat1, pat3, [])
+      )
+  | doFPat(env, UnfixedSyntax.FPat [pat1 as UnfixedSyntax.JuxtapositionPat [pat11, UnfixedSyntax.InfixOrVIdPat vid1, pat13], pat2 as UnfixedSyntax.InfixOrVIdPat vid2, pat3])
+    = (case (getFixityStatus(env, vid1), getFixityStatus(env, vid2)) of
+           (Syntax.Nonfix, Syntax.Nonfix) => raise Syntax.SyntaxError "invalid function declaration"
+         | (Syntax.Infix _, Syntax.Nonfix) => doInfixFPat(env, vid1, pat11, pat13, [pat2, pat3])
+         | (_, Syntax.Infix _) => doInfixFPat(env, vid2, pat1, pat3, [])
+      )
+  | doFPat(env, UnfixedSyntax.FPat (UnfixedSyntax.JuxtapositionPat [pat11, UnfixedSyntax.InfixOrVIdPat vid, pat13] :: pats))
+    = (case getFixityStatus(env, vid) of
+           Syntax.Nonfix => raise Syntax.SyntaxError "invalid function declaration"
+         | Syntax.Infix _ => doInfixFPat(env, vid, pat11, pat13, pats)
+      )
+  | doFPat(env, UnfixedSyntax.FPat [pat1, pat2 as UnfixedSyntax.InfixOrVIdPat vid, pat3])
+    = (case getFixityStatus(env, vid) of
+           Syntax.Nonfix => (case pat1 of
+                                 UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid')) => doPrefixFPat(env, vid', [pat2, pat3])
+                               | UnfixedSyntax.InfixOrVIdPat(vid') => (case getFixityStatus(env, vid') of
+                                                                           Syntax.Nonfix => doPrefixFPat(env, vid', [pat2, pat3])
+                                                                         | Syntax.Infix _ => raise Syntax.SyntaxError "invalid function declaration"
+                                                                      )
+                               | _ => raise Syntax.SyntaxError "invalid function declaration"
+                            )
+         | Syntax.Infix _ => doInfixFPat(env, vid, pat1, pat3, [])
+      )
+  | doFPat(env, UnfixedSyntax.FPat (UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid)) :: pats)) = doPrefixFPat(env, vid, pats)
+  | doFPat(env, UnfixedSyntax.FPat (UnfixedSyntax.InfixOrVIdPat(vid) :: pats))
+    = (case getFixityStatus(env, vid) of
+           Syntax.Nonfix => doPrefixFPat(env, vid, pats)
+         | Syntax.Infix _ => raise Syntax.SyntaxError "invalid function declaration"
+      )
+  | doFPat(env, _)
+    = raise Syntax.SyntaxError "invalid function declaration"
+and doInfixFPat(env, vid, patL, patR, pats) = (vid, Syntax.TuplePat [doPat(env, patL), doPat(env, patR)] :: List.map (fn p => doPat(env, p)) pats)
+and doPrefixFPat(env, vid, pats) = (vid, List.map (fn p => doPat(env, p)) pats)
 end (* structure Fixity *)
 
 structure PostParsing = struct
