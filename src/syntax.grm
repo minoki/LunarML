@@ -143,9 +143,7 @@ SCon : IntConst (Syntax.IntegerConstant IntConst)
 TyVar : PrimeIdent (Syntax.MkTyVar PrimeIdent)
 
 (* value identifiers *)
-VId : AlnumIdent (Syntax.MkVId AlnumIdent)
-    | SymbolicIdent (Syntax.MkVId SymbolicIdent)
-    | ASTERISK (Syntax.MkVId "*")
+VId : BoundVId (BoundVId)
     | EQUALS (Syntax.MkVId "=") (* ? *)
 
 (* value identifiers, excluding '=' *)
@@ -204,19 +202,11 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
       | LBRACK RBRACK (nilPat) (* [derived] empty list *)
       | LBRACK Pat PatSeqRest RBRACK (MkListPat(Pat :: PatSeqRest)) (* [derived] list pattern *)
 
+(* one or more atomic patterns *)
 AtPats : AtPat ([AtPat])
        | AtPat AtPats (AtPat :: AtPats)
 
-(*
-AppPat : AtPat
-       | Opt_OP LongVId AtPat (* constructed *)
-InfPat : AppPat
-       | InfPat VId InfPat (* constructed value (infix) *)
-*)
-AppOrInfPat : AtPat AppOrInfPat (AtPat :: AppOrInfPat)
-            | AtPat ([AtPat])
-
-TypedPat : AppOrInfPat (UnfixedSyntax.JuxtapositionPat(AppOrInfPat))
+TypedPat : AtPats (UnfixedSyntax.JuxtapositionPat(AtPats))
          | TypedPat COLON Ty (UnfixedSyntax.TypedPat (TypedPat, Ty)) (* typed *)
 
 (* patterns *)
