@@ -222,8 +222,7 @@ datatype Pat
   | ConPat of Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
   | RecordPat of (Syntax.Label * Pat) list * bool
   | TypedPat of Pat * Syntax.Ty (* typed *)
-  | LayeredPat of Syntax.VId * Syntax.Ty option * Pat (* layered *)
-  | ConjunctivePat of Pat * Pat (* [Successor ML] conjunctive *)
+  | ConjunctivePat of Pat * Pat (* layered or [Successor ML] conjunctive *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | NonInfixVIdExp of Syntax.LongVId (* value identifier, with or without 'op'  *)

@@ -110,8 +110,20 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
       end
   | doPat(env, UnfixedSyntax.ConPat(longvid, pat)) = Syntax.ConPat(longvid, SOME(doPat(env, pat)))
   | doPat(env, UnfixedSyntax.TypedPat(pat, ty)) = Syntax.TypedPat(doPat(env, pat), ty)
-  | doPat(env, UnfixedSyntax.LayeredPat(vid, ty, pat)) = Syntax.LayeredPat(vid, ty, doPat(env, pat))
-  | doPat(env, UnfixedSyntax.ConjunctivePat(pat1, pat2)) = raise Fail "conjunctive: not implemented yet"
+  | doPat(env, UnfixedSyntax.ConjunctivePat(pat1, pat2))
+    = (case pat1 of
+           UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]), ty) => (case getFixityStatus(env, vid) of
+                                                                                                                   Syntax.Nonfix => Syntax.LayeredPat (vid, SOME ty, doPat(env, pat2))
+                                                                                                                 | Syntax.Infix _ => raise Fail "invalid infix identifier in layered pattern"
+                                                                                                              )
+         | UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]), ty) => Syntax.LayeredPat (vid, SOME ty, doPat(env, pat2))
+         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]) => (case getFixityStatus(env, vid) of
+                                                                                      Syntax.Nonfix => Syntax.LayeredPat (vid, NONE, doPat(env, pat2)) (* TODO: Check infix status *)
+                                                                                    | Syntax.Infix _ => raise Fail "invalid infix identifier in layered pattern"
+                                                                                 )
+         | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]) => Syntax.LayeredPat (vid, NONE, doPat(env, pat2))
+         | _ => raise Fail "conjunctive: not implemented yet" (* Successor ML *)
+      )
 fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
   | doExp(env, UnfixedSyntax.InfixOrVIdExp(vid)) = (case getFixityStatus(env, vid) of
                                                         Syntax.Nonfix => Syntax.VarExp(Syntax.MkLongVId([], vid))
