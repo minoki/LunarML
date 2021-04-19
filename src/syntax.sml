@@ -221,6 +221,7 @@ datatype Pat
   | RecordPat of (Syntax.Label * Pat) list * bool
   | TypedPat of Pat * Syntax.Ty (* typed *)
   | LayeredPat of Syntax.VId * Syntax.Ty option * Pat (* layered *)
+  | ConjunctivePat of Pat * Pat (* [Successor ML] conjunctive *)
 
 datatype Exp = SConExp of Syntax.SCon (* special constant *)
              | NonInfixVIdExp of Syntax.LongVId (* value identifier, with or without 'op'  *)

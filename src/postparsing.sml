@@ -111,6 +111,7 @@ fun doPat(env, UnfixedSyntax.WildcardPat) = Syntax.WildcardPat
   | doPat(env, UnfixedSyntax.ConPat(longvid, pat)) = Syntax.ConPat(longvid, SOME(doPat(env, pat)))
   | doPat(env, UnfixedSyntax.TypedPat(pat, ty)) = Syntax.TypedPat(doPat(env, pat), ty)
   | doPat(env, UnfixedSyntax.LayeredPat(vid, ty, pat)) = Syntax.LayeredPat(vid, ty, doPat(env, pat))
+  | doPat(env, UnfixedSyntax.ConjunctivePat(pat1, pat2)) = raise Fail "conjunctive: not implemented yet"
 fun doExp(env, UnfixedSyntax.SConExp scon) = Syntax.SConExp scon
   | doExp(env, UnfixedSyntax.InfixOrVIdExp(vid)) = (case getFixityStatus(env, vid) of
                                                         Syntax.Nonfix => Syntax.VarExp(Syntax.MkLongVId([], vid))

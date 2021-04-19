@@ -222,7 +222,7 @@ Pat : TypedPat (TypedPat)
                          | UnfixedSyntax.TypedPat (UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]), ty) => UnfixedSyntax.LayeredPat (vid, SOME ty, Pat)
                          | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.InfixOrVIdPat(vid)]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat) (* TODO: Check infix status *)
                          | UnfixedSyntax.JuxtapositionPat([UnfixedSyntax.NonInfixVIdPat(Syntax.MkQualified([], vid))]) => UnfixedSyntax.LayeredPat (vid, NONE, Pat)
-                         | _ => raise Fail "conjuctive: not implemented yet"
+                         | _ => UnfixedSyntax.ConjunctivePat(TypedPat, Pat)
                       ) (* conjunctive (R) *)
 
 (* pattern rows *)
