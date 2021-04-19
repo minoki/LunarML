@@ -282,19 +282,19 @@ end (* local *)
 local
     fun doDec(bound, ValDec(expbound, valbind)) = let val bound' = TyVarSet.addList(bound, expbound)
                                                       val unguarded = unguardedTyVarsInValBind(bound', valbind)
-                                                      val expbound' = TyVarSet.listItems(unguarded)
+                                                      val expbound' = expbound @ TyVarSet.listItems(unguarded)
                                                       val bound'' = TyVarSet.union(bound', unguarded)
                                                   in ValDec(expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
                                                   end
       | doDec(bound, RecValDec(expbound, valbind)) = let val bound' = TyVarSet.addList(bound, expbound)
                                                          val unguarded = unguardedTyVarsInValBind(bound', valbind)
-                                                         val expbound' = TyVarSet.listItems(unguarded)
+                                                         val expbound' = expbound @ TyVarSet.listItems(unguarded)
                                                          val bound'' = TyVarSet.union(bound', unguarded)
                                                      in RecValDec(expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
                                                      end
       | doDec(bound, FunDec(expbound, fvalbind)) = let val bound' = TyVarSet.addList(bound, expbound)
                                                        val unguarded = unguardedTyVarsInFValBind(bound', fvalbind)
-                                                       val expbound' = TyVarSet.listItems(unguarded)
+                                                       val expbound' = expbound @ TyVarSet.listItems(unguarded)
                                                        val bound'' = TyVarSet.union(bound', unguarded)
                                                    in FunDec(expbound', List.map (fn fvb => doFValBind(bound'', fvb)) fvalbind)
                                                    end
