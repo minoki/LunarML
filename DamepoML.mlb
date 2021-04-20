@@ -2,6 +2,7 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 src/syntax.grm.sig
+src/sourcepos.sml
 src/tokenizer.sml
 src/syntax.sml
 src/syntax.grm.sml

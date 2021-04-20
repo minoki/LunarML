@@ -2,6 +2,7 @@ all: DamepoML
 
 sources = \
   src/syntax.grm.sig \
+  src/sourcepos.sml \
   src/tokenizer.sml \
   src/syntax.sml \
   src/syntax.grm.sml \

@@ -1,31 +1,33 @@
-val nilPat = UnfixedSyntax.NonInfixVIdPat (Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
-val trueExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
-val falseExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("false")))
-val nilExp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
-val consOp = UnfixedSyntax.NonInfixVIdExp (Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
-fun MkAndAlsoExp (e1,e2) = UnfixedSyntax.IfThenElseExp (e1, e2, falseExp)
-fun MkOrElseExp (e1,e2) = UnfixedSyntax.IfThenElseExp (e1, trueExp, e2)
-fun MkPairExp (e1,e2) = UnfixedSyntax.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]
-fun MkConsExp (e1,e2) = UnfixedSyntax.AppExp (consOp, MkPairExp (e1,e2))
-fun MkListExp nil = nilExp
-  | MkListExp (x :: xs) = MkConsExp (x, MkListExp xs)
-fun MkPairPat (p1, p2) = UnfixedSyntax.TuplePat [p1, p2]
-fun MkConsPat (p1, p2) = UnfixedSyntax.ConPat(Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(p1, p2))
-fun MkListPat nil = nilPat
-  | MkListPat (x :: xs) = MkConsPat (x, MkListPat xs)
-fun MkSequentialExp e1 [] = e1
-  | MkSequentialExp e1 (e2 :: xs) = UnfixedSyntax.CaseExp(e1,[(UnfixedSyntax.WildcardPat, MkSequentialExp e2 xs)])
-fun MkTupleTy [x] = x
-  | MkTupleTy xs = let fun doFields i nil = nil
-                         | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
-                   in Syntax.RecordType (doFields 1 xs)
-                   end
+fun nilPat span = UnfixedSyntax.NonInfixVIdPat (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
+fun trueExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
+fun falseExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("false")))
+fun nilExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
+fun consOp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
+fun MkAndAlsoExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, e2, falseExp span)
+fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp span, e2)
+fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)])
+fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
+fun MkListExp (span, nil) = nilExp span
+  | MkListExp (span, x :: xs) = MkConsExp (span, x, MkListExp (span, xs))
+fun MkPairPat (span, p1, p2) = UnfixedSyntax.TuplePat(span, [p1, p2])
+fun MkConsPat (span, p1, p2) = UnfixedSyntax.ConPat(span, Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(span, p1, p2))
+fun MkListPat (span, nil) = nilPat span
+  | MkListPat (span, x :: xs) = MkConsPat (span, x, MkListPat (span, xs))
+fun MkSequentialExp (span, e1, []) = e1
+  | MkSequentialExp (span, e1, e2 :: xs) = UnfixedSyntax.CaseExp(span,e1,[(UnfixedSyntax.WildcardPat span, MkSequentialExp(span,e2,xs))])
+fun MkTupleTy(_,[x]) = x
+  | MkTupleTy(span, xs) = let fun doFields i nil = nil
+                                | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
+                          in Syntax.RecordType (span, doFields 1 xs)
+                          end
 fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(strid :: strids, x)
+fun span(p1,p2) = { start = p1, end_ = p2 }
 %%
 
 %eop EOF
-%pos int * int
+%pos SourcePos.pos
 %pure
+%arg (filename) : string
 
 %term AlnumIdent of string (* alphanumeric identifier not starting with a prime *)
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
@@ -184,30 +186,30 @@ Opt_OP : (* empty *) (false)
        | OP (true)
 
 (* atomic patterns *)
-AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat) (* wildcard *)
-      | SCon (UnfixedSyntax.SConPat SCon) (* special constant *)
-      | OP LongVId (UnfixedSyntax.NonInfixVIdPat LongVId) (* value identifier, including 'op =' *)
+AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat(span(UNDERSCOREleft,UNDERSCOREright))) (* wildcard *)
+      | SCon (UnfixedSyntax.SConPat(span(SConleft,SConright),SCon)) (* special constant *)
+      | OP LongVId (UnfixedSyntax.NonInfixVIdPat(span(OPleft,LongVIdright),LongVId)) (* value identifier, including 'op =' *)
       | LongBoundVId (case LongBoundVId of
-                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdPat vid
-                        | longvid => UnfixedSyntax.NonInfixVIdPat longvid
+                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdPat(span(LongBoundVIdleft,LongBoundVIdright),vid)
+                        | longvid => UnfixedSyntax.NonInfixVIdPat(span(LongBoundVIdleft,LongBoundVIdright),longvid)
                      ) (* value identifier *)
-      | LBRACE RBRACE (UnfixedSyntax.RecordPat (nil, false)) (* empty record *)
-      | LBRACE PatRow RBRACE (UnfixedSyntax.RecordPat PatRow) (* record *)
-      | LPAREN RPAREN (UnfixedSyntax.RecordPat (nil, false)) (* [derived] empty tuple *)
+      | LBRACE RBRACE (UnfixedSyntax.RecordPat{sourceSpan=span(LBRACEleft,RBRACEright), fields=nil, wildcard=false}) (* empty record *)
+      | LBRACE PatRow RBRACE (case PatRow of (fields, wildcard) => UnfixedSyntax.RecordPat{sourceSpan=span(LBRACEleft, RBRACEright), fields=fields, wildcard=wildcard}) (* record *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordPat {sourceSpan=span(LPARENleft,RPARENright), fields=nil, wildcard=false}) (* [derived] empty tuple *)
       | LPAREN Pat RPAREN (case Pat of
-                               UnfixedSyntax.InfixOrVIdPat _ => UnfixedSyntax.JuxtapositionPat([Pat])
+                               UnfixedSyntax.InfixOrVIdPat _ => UnfixedSyntax.JuxtapositionPat(span(LPARENleft,RPARENright), [Pat])
                              | pat => pat
                           ) (* parenthesized pattern *)
-      | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
-      | LBRACK RBRACK (nilPat) (* [derived] empty list *)
-      | LBRACK Pat PatSeqRest RBRACK (MkListPat(Pat :: PatSeqRest)) (* [derived] list pattern *)
+      | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(span(LPARENleft,RPARENright), Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
+      | LBRACK RBRACK (nilPat (span(LBRACKleft,RBRACKright))) (* [derived] empty list *)
+      | LBRACK Pat PatSeqRest RBRACK (MkListPat(span(LBRACKleft,RBRACKright), Pat :: PatSeqRest)) (* [derived] list pattern *)
 
 (* one or more atomic patterns *)
 AtPats : AtPat ([AtPat])
        | AtPat AtPats (AtPat :: AtPats)
 
-TypedPat : AtPats (UnfixedSyntax.JuxtapositionPat(AtPats))
-         | TypedPat COLON Ty (UnfixedSyntax.TypedPat (TypedPat, Ty)) (* typed *)
+TypedPat : AtPats (UnfixedSyntax.JuxtapositionPat(span(AtPatsleft, AtPatsright), AtPats))
+         | TypedPat COLON Ty (UnfixedSyntax.TypedPat (span(TypedPatleft, Tyright), TypedPat, Ty)) (* typed *)
 
 (* patterns *)
 Pat : TypedPat (TypedPat)
@@ -217,7 +219,7 @@ Pat : TypedPat (TypedPat)
     | BoundVId COLON Ty AS Pat (UnfixedSyntax.LayeredPat (OP_VId, SOME Ty, Pat)) (* layered *)
     | BoundVId AS Pat (UnfixedSyntax.LayeredPat (OP_VId, NONE, Pat)) (* layered *)
 *)
-    | TypedPat AS Pat (UnfixedSyntax.ConjunctivePat(TypedPat, Pat)) (* layered or [Successor ML] conjunctive (R) *)
+    | TypedPat AS Pat (UnfixedSyntax.ConjunctivePat(span(TypedPatleft,Patright), TypedPat, Pat)) (* layered or [Successor ML] conjunctive (R) *)
 
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
@@ -227,22 +229,22 @@ PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
 PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
            | (nil)
 
-AtTy : TyVar (Syntax.TyVar TyVar)
-     | LBRACE RBRACE (Syntax.RecordType nil) (* record type expression *)
-     | LBRACE TyRow RBRACE (Syntax.RecordType TyRow) (* record type expression *)
+AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
+     | LBRACE RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), nil)) (* record type expression *)
+     | LBRACE TyRow RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), TyRow)) (* record type expression *)
      | LPAREN Ty RPAREN (Ty)
 
 ConTy : AtTy (AtTy)
-      | ConTy LongTyCon (Syntax.TyCon ([ConTy], LongTyCon)) (* type construction *)
-      | LongTyCon (Syntax.TyCon (nil, LongTyCon)) (* type construction *)
-      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
+      | ConTy LongTyCon (Syntax.TyCon (span(ConTyleft, LongTyConright), [ConTy], LongTyCon)) (* type construction *)
+      | LongTyCon (Syntax.TyCon (span(LongTyConleft, LongTyConright), nil, LongTyCon)) (* type construction *)
+      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (span(LPARENleft, LongTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
 
 TupTy : ConTy ([ConTy])
       | ConTy ASTERISK TupTy (ConTy :: TupTy)
 
 (* type expressions *)
-Ty : TupTy (MkTupleTy TupTy)
-   | TupTy ARROW Ty (Syntax.FnType (MkTupleTy TupTy, Ty)) (* function type expression (R) *)
+Ty : TupTy (MkTupleTy(span(TupTyleft, TupTyright), TupTy))
+   | TupTy ARROW Ty (Syntax.FnType (span(TupTyleft, Tyright), MkTupleTy(span(TupTyleft, TupTyright), TupTy), Ty)) (* function type expression (R) *)
    (* tuple type *)
 
 TySeqRest : COMMA Ty TySeqRest (Ty :: TySeqRest) (* *)
@@ -260,27 +262,27 @@ TyRow : Lab COLON Ty COMMA TyRow ((Lab, Ty) :: TyRow) (* type-expression row *)
       | Lab COLON Ty ((Lab, Ty) :: nil) (* type-expression row *)
 
 (* atomic expressions *)
-AtExp : SCon (UnfixedSyntax.SConExp SCon) (* special constant *)
-      | OP LongVId (UnfixedSyntax.NonInfixVIdExp LongVId) (* value identifier *)
+AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special constant *)
+      | OP LongVId (UnfixedSyntax.NonInfixVIdExp(span(OPleft,LongVIdright),LongVId)) (* value identifier *)
       | LongBoundVId (case LongBoundVId of
-                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdExp vid
-                        | longvid => UnfixedSyntax.NonInfixVIdExp longvid
+                          Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdExp(span(LongBoundVIdleft,LongBoundVIdright),vid)
+                        | longvid => UnfixedSyntax.NonInfixVIdExp(span(LongBoundVIdleft,LongBoundVIdright),longvid)
                      ) (* value identifier *)
-      | EQUALS (UnfixedSyntax.InfixOrVIdExp(Syntax.MkVId "="))
-      | LBRACE RBRACE (UnfixedSyntax.RecordExp nil) (* empty record *)
-      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp ExpRow) (* record *)
-      | LET Dec IN Exp END (UnfixedSyntax.LetInExp (Dec, Exp)) (* local declaration *)
+      | EQUALS (UnfixedSyntax.InfixOrVIdExp(span(EQUALSleft,EQUALSright),Syntax.MkVId "="))
+      | LBRACE RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),nil)) (* empty record *)
+      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),ExpRow)) (* record *)
+      | LET Dec IN Exp END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Dec, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (case Exp of
-                               UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp([Exp])
+                               UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp(span(LPARENleft,RPARENright),[Exp])
                              | exp => exp
                           ) (* parenthesized expression *)
-      | LPAREN RPAREN (UnfixedSyntax.RecordExp nil) (* [derived] 0-tuple *)
-      | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
-      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp Exp1 (Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
-      | LET Dec IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (Dec, MkSequentialExp Exp1 (Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
-      | LBRACK RBRACK (MkListExp []) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
-      | LBRACK Exp ExpCSeqRest RBRACK (MkListExp (Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
-      | HASH Lab (UnfixedSyntax.ProjectionExp(Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordExp(span(LPARENleft,RPARENright),nil)) (* [derived] 0-tuple *)
+      | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (span(LPARENleft,RPARENright), Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
+      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp (span(LPARENleft,RPARENright), Exp1, Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
+      | LET Dec IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Dec, MkSequentialExp(span(Exp1left, ExpSSeqRestright), Exp1, Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
+      | LBRACK RBRACK (MkListExp(span(LBRACKleft,RBRACKright),[])) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
+      | LBRACK Exp ExpCSeqRest RBRACK (MkListExp(span(LBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
+      | HASH Lab (UnfixedSyntax.ProjectionExp(span(HASHleft,Labright), Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
 
 (* comma-separated list of expressions *)
 ExpCSeqRest : COMMA Exp ExpCSeqRest (Exp :: ExpCSeqRest)
@@ -304,55 +306,55 @@ InfExp : AppExp
 AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
             | AtExp ([AtExp])
 
-TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(AppOrInfExp))
-         | TypedExp COLON Ty (UnfixedSyntax.TypedExp (TypedExp, Ty)) (* typed (L) *)
+TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExpleft,AppOrInfExpright), AppOrInfExp))
+         | TypedExp COLON Ty (UnfixedSyntax.TypedExp (span(TypedExpleft,Tyright), TypedExp, Ty)) (* typed (L) *)
 
 OrElseExp : TypedExp (TypedExp)
-          | OrElseExp ANDALSO OrElseExp (MkAndAlsoExp (OrElseExp1, OrElseExp2)) (* [derived] conjunction *)
-          | OrElseExp ORELSE OrElseExp (MkOrElseExp (OrElseExp1, OrElseExp2)) (* [derived] disjunction *)
+          | OrElseExp ANDALSO OrElseExp (MkAndAlsoExp (span(OrElseExp1left, OrElseExp2right), OrElseExp1, OrElseExp2)) (* [derived] conjunction *)
+          | OrElseExp ORELSE OrElseExp (MkOrElseExp (span(OrElseExp1left, OrElseExp2right), OrElseExp1, OrElseExp2)) (* [derived] disjunction *)
 
 (* expressions *)
 Exp : OrElseExp (OrElseExp)
-    | OrElseExp HANDLE MatchClauses (UnfixedSyntax.HandleExp (OrElseExp, MatchClauses)) (* handle exception *)
-    | RAISE Exp (UnfixedSyntax.RaiseExp Exp) (* raise exception *)
-    | IF Exp THEN Exp ELSE Exp (UnfixedSyntax.IfThenElseExp (Exp1, Exp2, Exp3)) (* [derived] conditional *)
-    | WHILE Exp DO Exp (UnfixedSyntax.WhileDoExp (Exp1, Exp2)) (* [derived] iteration *)
-    | CASE Exp OF MatchClauses (UnfixedSyntax.CaseExp (Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
-    | FN MatchClauses (UnfixedSyntax.FnExp MatchClauses) (* function *)
+    | OrElseExp HANDLE MatchClauses (UnfixedSyntax.HandleExp (span(OrElseExpleft, MatchClausesright), OrElseExp, MatchClauses)) (* handle exception *)
+    | RAISE Exp (UnfixedSyntax.RaiseExp(span(RAISEleft, Expright), Exp)) (* raise exception *)
+    | IF Exp THEN Exp ELSE Exp (UnfixedSyntax.IfThenElseExp (span(IFleft, Expright), Exp1, Exp2, Exp3)) (* [derived] conditional *)
+    | WHILE Exp DO Exp (UnfixedSyntax.WhileDoExp (span(WHILEleft, Expright), Exp1, Exp2)) (* [derived] iteration *)
+    | CASE Exp OF MatchClauses (UnfixedSyntax.CaseExp (span(CASEleft, MatchClausesright), Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
+    | FN MatchClauses (UnfixedSyntax.FnExp(span(FNleft, MatchClausesright), MatchClauses)) (* function *)
 
 Exp_NoMatch : OrElseExp (OrElseExp)
-            | RAISE Exp_NoMatch (UnfixedSyntax.RaiseExp Exp_NoMatch) (* raise exception *)
-            | IF Exp THEN Exp ELSE Exp_NoMatch (UnfixedSyntax.IfThenElseExp (Exp1, Exp2, Exp_NoMatch))
-            | WHILE Exp DO Exp_NoMatch (UnfixedSyntax.WhileDoExp (Exp, Exp_NoMatch)) (* [derived] iteration *)
+            | RAISE Exp_NoMatch (UnfixedSyntax.RaiseExp(span(RAISEleft, Exp_NoMatchright), Exp_NoMatch)) (* raise exception *)
+            | IF Exp THEN Exp ELSE Exp_NoMatch (UnfixedSyntax.IfThenElseExp (span(IFleft, Exp_NoMatchright), Exp1, Exp2, Exp_NoMatch))
+            | WHILE Exp DO Exp_NoMatch (UnfixedSyntax.WhileDoExp (span(WHILEleft, Exp_NoMatchright), Exp, Exp_NoMatch)) (* [derived] iteration *)
 
 (* matches *)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
              | Pat DARROW Exp ((Pat, Exp) :: nil)
 
 (* single declaration *)
-SingleDec : VAL ValBind (UnfixedSyntax.ValDec (nil, ValBind)) (* value declaration (non-recursive) *)
-          | VAL TyVar ValBind (UnfixedSyntax.ValDec ([TyVar], ValBind)) (* value declaration (non-recursive) *)
-          | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.ValDec (TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
-          | VAL REC ValBind (UnfixedSyntax.RecValDec (nil, ValBind)) (* value declaration (recursive) *)
-          | VAL REC TyVar ValBind (UnfixedSyntax.RecValDec ([TyVar], ValBind)) (* [Successor ML-style] value declaration (recursive) *)
-          | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind)) (* [Successor ML-style] value declaration (recursive) *)
-          | VAL TyVar REC ValBind (UnfixedSyntax.RecValDec ([TyVar], ValBind)) (* [SML97-style] value declaration (recursive) *)
-          | VAL LPAREN TyVar TyVarSeqRest RPAREN REC ValBind (UnfixedSyntax.RecValDec (TyVar :: TyVarSeqRest, ValBind)) (* [SML97-style] value declaration (recursive) *)
-          | FUN FValBind (UnfixedSyntax.FValDec ([], FValBind)) (* [derived] function declaration *)
-          | FUN TyVar FValBind (UnfixedSyntax.FValDec ([TyVar], FValBind)) (* [derived] function declaration *)
-          | FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (TyVar :: TyVarSeqRest, FValBind)) (* [derived] function declaration *)
-          | TYPE TypBind (UnfixedSyntax.TypeDec TypBind) (* type declaration *)
-          | DATATYPE DatBind (UnfixedSyntax.DatatypeDec DatBind) (* datatype declaration *)
-       (* | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (TyCon, LongTyCon)) (* datatype replication *) *)
-          | ABSTYPE DatBind WITH Dec END (UnfixedSyntax.AbstypeDec (DatBind, Dec)) (* abstype declaration *)
-          | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec ExBind) (* exception declaration *)
-          | LOCAL Dec IN Dec END (UnfixedSyntax.LocalDec (Dec1, Dec2)) (* local declaration *)
-          | OPEN LongStrIds (UnfixedSyntax.OpenDec LongStrIds) (* open declaration *)
-          | INFIX IntConst VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc IntConst), VIds)) (* infix (L) directive *)
-          | INFIX VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.LeftAssoc 0), VIds)) (* infix (L) directive *)
-          | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc IntConst), VIds)) (* infix (R) directive *)
-          | INFIXR VIds (UnfixedSyntax.FixityDec (Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
-          | NONFIX VIds (UnfixedSyntax.FixityDec (Syntax.Nonfix, VIds)) (* nonfix directive *)
+SingleDec : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), nil, ValBind)) (* value declaration (non-recursive) *)
+          | VAL TyVar ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* value declaration (non-recursive) *)
+          | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
+          | VAL REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), nil, ValBind)) (* value declaration (recursive) *)
+          | VAL REC TyVar ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* [Successor ML-style] value declaration (recursive) *)
+          | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* [Successor ML-style] value declaration (recursive) *)
+          | VAL TyVar REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* [SML97-style] value declaration (recursive) *)
+          | VAL LPAREN TyVar TyVarSeqRest RPAREN REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* [SML97-style] value declaration (recursive) *)
+          | FUN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), [], FValBind)) (* [derived] function declaration *)
+          | FUN TyVar FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), [TyVar], FValBind)) (* [derived] function declaration *)
+          | FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), TyVar :: TyVarSeqRest, FValBind)) (* [derived] function declaration *)
+          | TYPE TypBind (UnfixedSyntax.TypeDec(span(TYPEleft, TypBindright), TypBind)) (* type declaration *)
+          | DATATYPE DatBind (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindright), DatBind)) (* datatype declaration *)
+       (* | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)) (* datatype replication *) *)
+          | ABSTYPE DatBind WITH Dec END (UnfixedSyntax.AbstypeDec (span(ABSTYPEleft, ENDright), DatBind, Dec)) (* abstype declaration *)
+          | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec(span(EXCEPTIONleft, ExBindright), ExBind)) (* exception declaration *)
+          | LOCAL Dec IN Dec END (UnfixedSyntax.LocalDec (span(LOCALleft, ENDright), Dec1, Dec2)) (* local declaration *)
+          | OPEN LongStrIds (UnfixedSyntax.OpenDec(span(OPENleft, LongStrIdsright), LongStrIds)) (* open declaration *)
+          | INFIX IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXleft, VIdsright), Syntax.Infix (Syntax.LeftAssoc IntConst), VIds)) (* infix (L) directive *)
+          | INFIX VIds (UnfixedSyntax.FixityDec (span(INFIXleft, VIdsright), Syntax.Infix (Syntax.LeftAssoc 0), VIds)) (* infix (L) directive *)
+          | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc IntConst), VIds)) (* infix (R) directive *)
+          | INFIXR VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
+          | NONFIX VIds (UnfixedSyntax.FixityDec (span(NONFIXleft, VIdsright), Syntax.Nonfix, VIds)) (* nonfix directive *)
 
 (* declarations without semicolons *)
 DecNoSemicolon : SingleDec DecNoSemicolon (SingleDec :: DecNoSemicolon)
@@ -372,23 +374,23 @@ VIds : VId VIds (VId :: VIds)
      | VId (VId :: nil)
 
 (* value bindings *)
-ValBind : Pat EQUALS Exp AND ValBind (UnfixedSyntax.PatBind (Pat, Exp) :: ValBind)
-        | Pat EQUALS Exp (UnfixedSyntax.PatBind (Pat, Exp) :: nil)
-        (* | REC ValBind (UnfixedSyntax.RecValBind ValBind) *)
+ValBind : Pat EQUALS Exp AND ValBind (UnfixedSyntax.PatBind (span(Patleft, ValBindright), Pat, Exp) :: ValBind)
+        | Pat EQUALS Exp (UnfixedSyntax.PatBind (span(Patleft, Expright), Pat, Exp) :: nil)
+        (* | REC ValBind (UnfixedSyntax.RecValBind (span(RECleft, ValBindright), ValBind)) *)
 
-FValBind : FMatch ([UnfixedSyntax.FValBind FMatch])
-         | FMatch AND FValBind (UnfixedSyntax.FValBind FMatch :: FValBind)
+FValBind : FMatch ([UnfixedSyntax.FValBind(span(FMatchleft, FMatchright), FMatch)])
+         | FMatch AND FValBind (UnfixedSyntax.FValBind(span(FMatchleft, FMatchright), FMatch) :: FValBind)
 
 FMatch : FMRule ([FMRule])
        | FMRule_NoMatch BAR FMatch (FMRule_NoMatch :: FMatch)
 
-FMRule : FPat COLON Ty EQUALS Exp (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp))
-       | FPat EQUALS Exp (UnfixedSyntax.FMRule (FPat, NONE, Exp))
+FMRule : FPat COLON Ty EQUALS Exp (UnfixedSyntax.FMRule (span(FPatleft, Expright), FPat, SOME Ty, Exp))
+       | FPat EQUALS Exp (UnfixedSyntax.FMRule (span(FPatleft, Expright), FPat, NONE, Exp))
 
-FMRule_NoMatch : FPat COLON Ty EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (FPat, SOME Ty, Exp_NoMatch))
-               | FPat EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (FPat, NONE, Exp_NoMatch))
+FMRule_NoMatch : FPat COLON Ty EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (span(FPatleft, Exp_NoMatchright), FPat, SOME Ty, Exp_NoMatch))
+               | FPat EQUALS Exp_NoMatch (UnfixedSyntax.FMRule (span(FPatleft, Exp_NoMatchright), FPat, NONE, Exp_NoMatch))
 
-FPat : AtPats (UnfixedSyntax.FPat(AtPats))
+FPat : AtPats (UnfixedSyntax.FPat(span(AtPatsleft, AtPatsright), AtPats))
 (*
        OP BoundVId AtPats
      | BoundVId AtPats
@@ -398,29 +400,29 @@ FPat : AtPats (UnfixedSyntax.FPat(AtPats))
 *)
 
 (* type bindings *)
-TypBind : TyVarSeq TyCon EQUALS Ty AND TypBind (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: TypBind)
-        | TyVarSeq TyCon EQUALS Ty (Syntax.TypBind (TyVarSeq, TyCon, Ty) :: nil)
+TypBind : TyVarSeq TyCon EQUALS Ty AND TypBind (Syntax.TypBind (span(TyVarSeqleft, Tyright), TyVarSeq, TyCon, Ty) :: TypBind)
+        | TyVarSeq TyCon EQUALS Ty (Syntax.TypBind (span(TyVarSeqleft, Tyright), TyVarSeq, TyCon, Ty) :: nil)
 
 (* datatype bindings *)
-DatBind : TyVarSeq TyCon EQUALS ConBind AND DatBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: DatBind)
-        | TyVarSeq TyCon EQUALS ConBind (Syntax.DatBind (TyVarSeq, TyCon, ConBind) :: nil)
+DatBind : TyVarSeq TyCon EQUALS ConBind AND DatBind (Syntax.DatBind (span(TyVarSeqleft, ConBindright), TyVarSeq, TyCon, ConBind) :: DatBind)
+        | TyVarSeq TyCon EQUALS ConBind (Syntax.DatBind (span(TyVarSeqleft, ConBindright), TyVarSeq, TyCon, ConBind) :: nil)
 
 (* constructor bindings *)
-ConBind : Opt_OP BoundVId OF Ty Opt_BAR_ConBind (Syntax.ConBind (BoundVId, SOME Ty) :: Opt_BAR_ConBind)
-        | Opt_OP BoundVId Opt_BAR_ConBind (Syntax.ConBind (BoundVId, NONE) :: Opt_BAR_ConBind)
+ConBind : Opt_OP BoundVId OF Ty Opt_BAR_ConBind (Syntax.ConBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: Opt_BAR_ConBind)
+        | Opt_OP BoundVId Opt_BAR_ConBind (Syntax.ConBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: Opt_BAR_ConBind)
 
 Opt_BAR_ConBind : BAR ConBind (ConBind)
                 | (nil)
 
 (* exception bindings *)
-ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, SOME Ty) :: Opt_AND_ExBind)
-       | Opt_OP BoundVId Opt_AND_ExBind (Syntax.ExBind1 (BoundVId, NONE) :: Opt_AND_ExBind)
-       | Opt_OP BoundVId EQUALS Opt_OP LongVId Opt_AND_ExBind (Syntax.ExBind2 (BoundVId, LongVId) :: Opt_AND_ExBind)
+ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: Opt_AND_ExBind)
+       | Opt_OP BoundVId Opt_AND_ExBind (Syntax.ExBind1 (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: Opt_AND_ExBind)
+       | Opt_OP BoundVId EQUALS Opt_OP LongVId Opt_AND_ExBind (Syntax.ExBind2 (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: Opt_AND_ExBind)
 
 Opt_AND_ExBind : AND ExBind (ExBind)
                | (nil)
 
 TopDec : DecNoSemicolon (DecNoSemicolon)
 Program : TopDec SEMICOLON Program (TopDec @ Program)
-        | Exp SEMICOLON Program (UnfixedSyntax.ValDec(nil, [UnfixedSyntax.PatBind(UnfixedSyntax.NonInfixVIdPat(Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)]) :: Program) (* val it = Exp *)
+        | Exp SEMICOLON Program (UnfixedSyntax.ValDec(span(Expleft, Expright), nil, [UnfixedSyntax.PatBind(span(Expleft, Expright), UnfixedSyntax.NonInfixVIdPat(span(Expleft, Expleft), Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)]) :: Program) (* val it = Exp *)
         | (nil)
