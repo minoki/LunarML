@@ -1,14 +1,63 @@
 structure Driver = struct
-fun parse(name, str) = let fun print_error (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
-                               if p1 = p2 then
-                                   print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
-                               else
-                                   print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
-                       in #2 (Fixity.doDecs(InitialEnv.initialFixity, #1 (DamepoMLParser.parse((* lookahead *) 0, DamepoMLParser.makeLexer (DamepoMLLex.makeInputFromString str) name, print_error, name))))
+fun rep(c, n) = CharVector.tabulate(n, fn _ => c)
+fun printSpan(name, lines, {start=p1, end_=p2}) =
+    if #file p1 = name andalso #file p2 = name then
+        if #line p1 = #line p2 then
+            let val l = #line p1 - 1
+                val c1 = #column p1 - 1
+                val c2 = #column p2 - 1
+            in if l < Vector.length lines then
+                   let val text = Vector.sub (lines, l)
+                       val start = Int.max (0, c1 - 30)
+                       val e = Int.min (String.size text, c2 + 30)
+                   in print (String.substring (text, start, e - start) ^ "\n")
+                    ; print (rep(#" ", c1 - start) ^ "^" ^ rep(#"~", c2 - c1) ^ "\n")
+                   end
+               else
+                   () (* not available *)
+            end
+        else
+            ( let val l1 = #line p1 - 1
+                  val c1 = #column p1 - 1
+              in if l1 < Vector.length lines then
+                     let val text = Vector.sub (lines, l1)
+                         val start = Int.max (0, c1 - 30)
+                         val e = Int.min(String.size text, c1 + 30)
+                     in print (String.substring (text, start, e - start) ^ "\n")
+                      ; print (rep(#" ", c1 - start) ^ "^" ^ rep(#"~", e - c1 - 1) ^ "\n")
+                     end
+                 else
+                     () (* not available *)
+              end
+            ; let val l2 = #line p2 - 1
+                  val c2 = #column p2 - 1
+              in if l2 < Vector.length lines then
+                     let val text = Vector.sub (lines, l2)
+                         val start = Int.max (0, c2 - 30)
+                         val e = Int.min(String.size text, c2 + 30)
+                     in print (String.substring (text, start, e - start) ^ "\n")
+                      ; print (rep(#"~", c2 - start + 1) ^ "\n")
+                     end
+                 else
+                     () (* not available *)
+              end
+            )
+    else
+        () (* what to do? *)
+
+fun parse(name, str) = let val lines = Vector.fromList (String.fields (fn x => x = #"\n") str)
+                           fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
+                               ( if p1 = p2 then
+                                     print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
+                                 else
+                                     print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
+                               ; printSpan(name, lines, {start=p1, end_=p2})
+                               )
+                       in (lines, #2 (Fixity.doDecs(InitialEnv.initialFixity, #1 (DamepoMLParser.parse((* lookahead *) 0, DamepoMLParser.makeLexer (DamepoMLLex.makeInputFromString str) name, printError, name)))))
                        end
 
 fun compile(name, source) =
-    let val ast1 = parse(name, source)
+    let val (lines, ast1) = parse(name, source)
         val ctx = Typing.newContext()
         val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1))
         val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
