@@ -189,39 +189,39 @@ local structure U = USyntax
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
       (* toFDecs : Context * Env * USyntax.Dec list -> Env * FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
-      fun isSimpleTy(U.TyCon([], longtycon1), longtycon2) = U.eqULongTyCon(longtycon1, longtycon2)
+      fun isSimpleTy(U.TyCon(_, [], longtycon1), longtycon2) = U.eqULongTyCon(longtycon1, longtycon2)
         | isSimpleTy _ = false
 in
-fun toFTy(ctx : Context, env : Env, U.TyVar tv) = F.TyVar tv
-  | toFTy(ctx, env, U.RecordType fields) = let fun doField(label, ty) = (label, toFTy(ctx, env, ty))
-                                           in F.RecordType (List.map doField fields)
-                                           end
-  | toFTy(ctx, env, U.TyCon(tyargs, longtycon)) = let fun doTy ty = toFTy(ctx, env, ty)
-                                                  in F.TyCon(List.map doTy tyargs, longtycon)
+fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
+  | toFTy(ctx, env, U.RecordType(span, fields)) = let fun doField(label, ty) = (label, toFTy(ctx, env, ty))
+                                                  in F.RecordType (List.map doField fields)
                                                   end
-  | toFTy(ctx, env, U.FnType(paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
-                                                   in F.FnType(doTy paramTy, doTy resultTy)
-                                                   end
-and toFPat(ctx, env, U.WildcardPat) = (USyntax.VIdMap.empty, F.WildcardPat)
-  | toFPat(ctx, env, U.SConPat(scon)) = (USyntax.VIdMap.empty, F.SConPat(scon))
-  | toFPat(ctx, env, U.VarPat(vid, ty)) = (USyntax.VIdMap.empty, F.VarPat(vid, toFTy(ctx, env, ty))) (* TODO *)
-  | toFPat(ctx, env, U.RecordPat(fields, ellipsis)) = let fun doField(label, pat) = let val (_, pat') = toFPat(ctx, env, pat)
-                                                                                    in (label, pat')
-                                                                                    end
-                                                      in (USyntax.VIdMap.empty, F.RecordPat(List.map doField fields, ellipsis)) (* TODO *)
-                                                      end
-  | toFPat(ctx, env, U.ConPat(longvid, optpat)) = toFPat(ctx, env, U.InstantiatedConPat(longvid, optpat, [])) (* should not reach here *)
-  | toFPat(ctx, env, U.InstantiatedConPat(longvid, NONE, tyargs)) = (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
-  | toFPat(ctx, env, U.InstantiatedConPat(longvid, SOME payloadPat, tyargs)) = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
-                                                                               in (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
-                                                                               end
-  | toFPat(ctx, env, U.TypedPat(pat, _)) = toFPat(ctx, env, pat)
-  | toFPat(ctx, env, U.LayeredPat(vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
-                                                        in (USyntax.VIdMap.empty, F.LayeredPat(vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
+  | toFTy(ctx, env, U.TyCon(span, tyargs, longtycon)) = let fun doTy ty = toFTy(ctx, env, ty)
+                                                        in F.TyCon(List.map doTy tyargs, longtycon)
                                                         end
-and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
-  | toFExp(ctx, env, U.VarExp(longvid, _)) = F.VarExp(longvid)
-  | toFExp(ctx, env, U.InstantiatedVarExp(longvid as Syntax.MkQualified([], vid), _, [tyarg]))
+  | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
+                                                         in F.FnType(doTy paramTy, doTy resultTy)
+                                                         end
+and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
+  | toFPat(ctx, env, U.SConPat(span, scon)) = (USyntax.VIdMap.empty, F.SConPat(scon))
+  | toFPat(ctx, env, U.VarPat(span, vid, ty)) = (USyntax.VIdMap.empty, F.VarPat(vid, toFTy(ctx, env, ty))) (* TODO *)
+  | toFPat(ctx, env, U.RecordPat{sourceSpan=span, fields, wildcard}) = let fun doField(label, pat) = let val (_, pat') = toFPat(ctx, env, pat)
+                                                                                                     in (label, pat')
+                                                                                                     end
+                                                                       in (USyntax.VIdMap.empty, F.RecordPat(List.map doField fields, wildcard)) (* TODO *)
+                                                                       end
+  | toFPat(ctx, env, U.ConPat(span, longvid, optpat)) = toFPat(ctx, env, U.InstantiatedConPat(span, longvid, optpat, [])) (* should not reach here *)
+  | toFPat(ctx, env, U.InstantiatedConPat(span, longvid, NONE, tyargs)) = (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+  | toFPat(ctx, env, U.InstantiatedConPat(span, longvid, SOME payloadPat, tyargs)) = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
+                                                                                     in (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+                                                                                     end
+  | toFPat(ctx, env, U.TypedPat(_, pat, _)) = toFPat(ctx, env, pat)
+  | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
+                                                              in (USyntax.VIdMap.empty, F.LayeredPat(vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
+                                                              end
+and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
+  | toFExp(ctx, env, U.VarExp(span, longvid, _)) = F.VarExp(longvid)
+  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as Syntax.MkQualified([], vid), _, [tyarg]))
     = let open InitialEnv
       in if U.eqVId(vid, VId_EQUAL) then
              getEquality(ctx, env, tyarg)
@@ -340,14 +340,14 @@ and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
          else
              F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
       end
-  | toFExp(ctx, env, U.InstantiatedVarExp(longvid, _, tyargs))
+  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid, _, tyargs))
     = List.foldl (fn (ty, e) => F.TyAppExp(e, toFTy(ctx, env, ty))) (F.VarExp(longvid)) tyargs
-  | toFExp(ctx, env, U.RecordExp fields) = let fun doField (label, e) = (label, toFExp(ctx, env, e))
-                                           in F.RecordExp (List.map doField fields)
-                                           end
-  | toFExp(ctx, env, U.LetInExp(decs, e))
+  | toFExp(ctx, env, U.RecordExp(span, fields)) = let fun doField (label, e) = (label, toFExp(ctx, env, e))
+                                                  in F.RecordExp (List.map doField fields)
+                                                  end
+  | toFExp(ctx, env, U.LetInExp(span, decs, e))
     = let fun go env' [] = toFExp(ctx, env', e)
-            | go env' (U.ValDec(_, valbinds, _) :: decs)
+            | go env' (U.ValDec(span', _, valbinds, _) :: decs)
               = let fun go' env'' [] = go env'' decs
                       | go' env'' (valbind :: valbinds')
                         = let val valbind' = doValBind ctx env'' valbind
@@ -355,32 +355,32 @@ and toFExp(ctx, env, U.SConExp(scon)) = F.SConExp(scon)
                           end
                 in go' env' valbinds
                 end
-            | go env' (U.RecValDec(_, valbinds, _) :: decs)
+            | go env' (U.RecValDec(span', _, valbinds, _) :: decs)
               = let val valbinds' = List.map (doValBind ctx env') valbinds
                 in F.LetRecExp(valbinds', go env' decs)
                 end
       in go env decs
       end
-  | toFExp(ctx, env, U.AppExp(e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
-  | toFExp(ctx, env, U.TypedExp(exp, _)) = toFExp(ctx, env, exp)
-  | toFExp(ctx, env, U.IfThenElseExp(e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
-  | toFExp(ctx, env, U.CaseExp(e, ty, matches))
+  | toFExp(ctx, env, U.AppExp(span, e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
+  | toFExp(ctx, env, U.TypedExp(span, exp, _)) = toFExp(ctx, env, exp)
+  | toFExp(ctx, env, U.IfThenElseExp(span, e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
+  | toFExp(ctx, env, U.CaseExp(span, e, ty, matches))
     = let fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
                                   in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
                                   end
       in F.CaseExp(toFExp(ctx, env, e), toFTy(ctx, env, ty), List.map doMatch matches)
       end
-  | toFExp(ctx, env, U.FnExp(vid, ty, body))
+  | toFExp(ctx, env, U.FnExp(span, vid, ty, body))
     = let val env' = env (* TODO *)
       in F.FnExp(vid, toFTy(ctx, env, ty), toFExp(ctx, env', body))
       end
-  | toFExp(ctx, env, U.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy })
+  | toFExp(ctx, env, U.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
     = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
   | toFExp(ctx, env, U.HandleExp _) = raise Fail "HandleExp: not implemented yet"
   | toFExp(ctx, env, U.RaiseExp _) = raise Fail "RaiseExp: not implemented yet"
 and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
-  | doValBind ctx env (U.TupleBind (vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
-  | doValBind ctx env (U.PolyVarBind (vid, U.TypeScheme(tvs, ty), exp))
+  | doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
+  | doValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))
     = let val ty0 = toFTy (ctx, env, ty)
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
@@ -414,7 +414,7 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
-and getEquality(ctx, env, U.TyCon([], longtycon))
+and getEquality(ctx, env, U.TyCon(span, [], longtycon))
     = let open InitialEnv
       in if U.eqULongTyCon(longtycon, Typing.primTyCon_int) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_int))
@@ -433,26 +433,26 @@ and getEquality(ctx, env, U.TyCon([], longtycon))
          else
              raise Fail "equality for used-defined data types are not implemented yet"
       end
-  | getEquality(ctx, env, U.TyCon([tyarg], longtycon))
+  | getEquality(ctx, env, U.TyCon(span, [tyarg], longtycon))
     = if U.eqULongTyCon(longtycon, Typing.primTyCon_ref) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_ref)), toFTy(ctx, env, tyarg))
       else if U.eqULongTyCon(longtycon, Typing.primTyCon_list) then
           F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_list)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
       else
           raise Fail "equality for used-defined data types are not implemented yet"
-  | getEquality (ctx, env, U.TyCon(tyargs, longtycon)) = raise Fail "equality for used-defined data types are not implemented yet"
-  | getEquality (ctx, env as MkEnv r, U.TyVar tv) = (case USyntax.TyVarMap.find(#equalityForTyVarMap r, tv) of
-                                                         NONE => raise Fail "equality for the type variable not found"
-                                                      | SOME vid => F.VarExp(Syntax.MkQualified([], vid))
-                                                    )
-  | getEquality (ctx, env, U.RecordType fields) = let fun doField (label, ty) = (label, getEquality(ctx, env, ty))
-                                                  in F.RecordEqualityExp (List.map doField fields)
-                                                  end
+  | getEquality (ctx, env, U.TyCon(span, tyargs, longtycon)) = raise Fail "equality for used-defined data types are not implemented yet"
+  | getEquality (ctx, env as MkEnv r, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap r, tv) of
+                                                                NONE => raise Fail "equality for the type variable not found"
+                                                              | SOME vid => F.VarExp(Syntax.MkQualified([], vid))
+                                                           )
+  | getEquality (ctx, env, U.RecordType(span, fields)) = let fun doField (label, ty) = (label, getEquality(ctx, env, ty))
+                                                         in F.RecordEqualityExp (List.map doField fields)
+                                                         end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 fun toFDecs(ctx, env, []) = []
-  | toFDecs(ctx, env, U.ValDec(tvs, valbinds, valenv) :: decs)
+  | toFDecs(ctx, env, U.ValDec(span, tvs, valbinds, valenv) :: decs)
     = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds @ toFDecs (ctx, env, decs)
-  | toFDecs(ctx, env, U.RecValDec(tvs, valbinds, valenv) :: decs)
+  | toFDecs(ctx, env, U.RecValDec(span, tvs, valbinds, valenv) :: decs)
     = F.RecValDec (List.map (doValBind ctx env) valbinds) :: toFDecs (ctx, env, decs)
 end (* local *)
 end (* structure ToFSyntax *)
