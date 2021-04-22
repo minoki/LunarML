@@ -93,17 +93,33 @@ fun compile(name, source) =
            val ast1' = PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1)
            val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, ast1')
            val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
-           val decs' = Typing.applyDefaultTypes(tvc, decs)
+           val decs' = Typing.applyDefaultTypes(ctx, tvc, decs)
            val fctx = { nextVId = #nextVId ctx }
            val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
            val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.initialEnv) fdecs
            val lua = CodeGenLua.doDecs { nextLuaId = ref 0 } CodeGenLua.MkEnv fdecs'
        in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
-       end handle Syntax.SyntaxError ([], message) =>
+       end handle DamepoMLParser.ParseError => raise Abort
+                | Syntax.SyntaxError ([], message) =>
                   ( print ("error: " ^ message ^ "\n")
                   ; raise Abort
                   )
                 | Syntax.SyntaxError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
+                  ( if f1 = f2 then
+                        if p1 = p2 then
+                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
+                        else
+                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                    else
+                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                  ; List.app (fn s => printSpan(name, lines, s)) spans
+                  ; raise Abort
+                  )
+                | Typing.TypeError ([], message) =>
+                  ( print ("type error: " ^ message ^ "\n")
+                  ; raise Abort
+                  )
+                | Typing.TypeError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
                   ( if f1 = f2 then
                         if p1 = p2 then
                             print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")

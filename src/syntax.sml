@@ -18,6 +18,8 @@ fun MkLongVId(strids, vid: VId) = MkQualified(strids, vid)
 fun MkLongTyCon(strids, tycon: TyCon) = MkQualified(strids, tycon)
 fun MkLongStrId(strids, strid: StrId) = MkQualified(strids, strid)
 
+fun getVIdName(MkVId name) = name
+
 datatype InfixAssociativity = LeftAssoc of int
                             | RightAssoc of int
 datatype FixityStatus = Nonfix

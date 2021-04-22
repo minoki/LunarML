@@ -27,11 +27,6 @@ case args of
                        val () = TextIO.output (outs, lua)
                        val () = TextIO.closeOut outs
                    in ()
-                   end handle USyntax.NotImpl msg => TextIO.output (TextIO.stdErr, "NotImpl: " ^ msg ^ "\n")
-                            | ToTypedSyntax.NameError msg => TextIO.output (TextIO.stdErr, "NameError: " ^ msg ^ "\n")
-                            | Typing.NameError msg => TextIO.output (TextIO.stdErr, "Typing.NameError: " ^ msg ^ "\n")
-                            | Typing.TypeError msg => TextIO.output (TextIO.stdErr, "TypeError: " ^ msg ^ "\n")
-                            | DamepoMLParser.ParseError => ()
-                            | Driver.Abort => ()
+                   end handle Driver.Abort => ()
 		  )
   | _ => (print "Too many arguments\n"; OS.Process.exit OS.Process.failure);

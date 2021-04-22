@@ -125,6 +125,11 @@ fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, 
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 end
 
+fun getSourceSpanOfTy(TyVar(span, _)) = span
+  | getSourceSpanOfTy(RecordType(span, _)) = span
+  | getSourceSpanOfTy(TyCon(span, _, _)) = span
+  | getSourceSpanOfTy(FnType(span, _, _)) = span
+
 fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(VarExp(span, _, _)) = span
   | getSourceSpanOfExp(InstantiatedVarExp(span, _, _, _)) = span
@@ -239,8 +244,6 @@ fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) 
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 open PrettyPrint
-
-exception NotImpl of string
 
 (* mapTy : (Ty -> Ty) -> { doExp : Exp -> Exp, doDec : Dec -> Dec } *)
 fun mapTy doTy =
@@ -374,7 +377,6 @@ fun filterVarsInPat pred =
 end (* structure USyntax *)
 
 structure ToTypedSyntax = struct
-exception NameError of string
 
 type ('a,'b) Context = { nextTyVar : int ref
                        , nextVId : int ref
@@ -383,6 +385,8 @@ type ('a,'b) Context = { nextTyVar : int ref
                        , tyVarSubst : 'b
                        , topDecs : (USyntax.TopDec list) ref
                        }
+
+fun emitError(ctx : ('a,'b) Context, spans, message) = raise Syntax.SyntaxError (spans, message)
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of int (* and data constructors *)
@@ -435,21 +439,21 @@ local structure S = Syntax
             in #nextTyCon ctx := id + 1 ; id end
       fun newTyCon(ctx, Syntax.MkTyCon name) = USyntax.MkTyCon(name, genTyConId(ctx))
 
-      fun lookupStr(env, nil) = env
-        | lookupStr(MkEnv { strMap = strMap, ... }, (str0 as S.MkStrId name) :: str1)
+      fun lookupStr(ctx, env, span, nil) = env
+        | lookupStr(ctx, MkEnv { strMap = strMap, ... }, span, (str0 as S.MkStrId name) :: str1)
           = case Syntax.StrIdMap.find(strMap, str0) of
-                NONE => raise NameError("unknown structure name " ^ name)
-              | SOME innerEnv => lookupStr(innerEnv, str1)
+                NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'")
+              | SOME innerEnv => lookupStr(ctx, innerEnv, span, str1)
 
-      fun lookupTyCon(MkEnv env, tycon as Syntax.MkTyCon name)
+      fun lookupTyCon(ctx, MkEnv env, span, tycon as Syntax.MkTyCon name)
           = case Syntax.TyConMap.find(#tyConMap env, tycon) of
-                NONE => raise NameError("unknown type constructor " ^ name)
+                NONE => emitError(ctx, [span], "unknown type constructor '" ^ name ^ "'")
               | SOME b => b
-      fun lookupLongTyCon(env : Env, Syntax.MkQualified(strpath, tycon)) = lookupTyCon(lookupStr(env, strpath), tycon)
+      fun lookupLongTyCon(ctx, env : Env, span, Syntax.MkQualified(strpath, tycon)) = lookupTyCon(ctx, lookupStr(ctx, env, span, strpath), span, tycon)
 
       fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
-      fun lookupLongVId(env : Env, Syntax.MkQualified(strpath, vid))
-          = (case lookupVId(lookupStr(env, strpath), vid) of
+      fun lookupLongVId(ctx, env : Env, span, Syntax.MkQualified(strpath, vid))
+          = (case lookupVId(lookupStr(ctx, env, span, strpath), vid) of
                  NONE => NONE
                | SOME (vid', x) => SOME (USyntax.MkLongVId(strpath, vid'), x)
             )
@@ -465,18 +469,18 @@ in
 (* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
 fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
     = (case Syntax.TyVarMap.find(tvenv, tv) of
-           NONE => raise NameError("unknown type variable " ^ Syntax.print_TyVar tv)
+           NONE => emitError(ctx, [span], "unknown type variable `" ^ Syntax.print_TyVar tv ^ "`")
          | SOME tv => U.TyVar(span, tv)
       )
   | toUTy(ctx, tvenv, env, S.RecordType(span, row)) = U.RecordType(span, Syntax.mapRecordRow (fn ty => toUTy(ctx, tvenv, env, ty)) row)
   | toUTy(ctx, tvenv, env, S.TyCon(span, args, tycon))
-    = (case lookupLongTyCon(env, tycon) of
+    = (case lookupLongTyCon(ctx, env, span, tycon) of
            BTyCon id => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, U.MkLongTyCon(tycon, id))
-         | BTyAlias _ => raise Fail "type alias not supported yet"
+         | BTyAlias _ => emitError(ctx, [span], "type alias not supported yet")
       )
   | toUTy(ctx, tvenv, env, S.FnType(span, ty1, ty2)) = U.FnType(span, toUTy(ctx, tvenv, env, ty1), toUTy(ctx, tvenv, env, ty2))
 fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) = (Syntax.VIdMap.empty, U.WildcardPat span) (* TODO: should generate a type id? *)
-  | toUPat(ctx, tvenv, env, S.SConPat(span, Syntax.RealConstant _)) = raise Syntax.SyntaxError ([], "No real constant may occur in a pattern")
+  | toUPat(ctx, tvenv, env, S.SConPat(span, Syntax.RealConstant _)) = emitError(ctx, [span], "no real constant may occur in a pattern")
   | toUPat(ctx, tvenv, env, S.SConPat(span, sc)) = (Syntax.VIdMap.empty, U.SConPat(span, sc))
   | toUPat(ctx, tvenv, env, S.ConOrVarPat(span, vid))
     = (case lookupVId(env, vid) of
@@ -498,15 +502,15 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) 
       in (vidmap, U.RecordPat{sourceSpan=sourceSpan, fields=row', wildcard=wildcard})
       end
   | toUPat(ctx, tvenv, env, S.ConPat(span, longvid, NONE))
-    = (case lookupLongVId(env, longvid) of
+    = (case lookupLongVId(ctx, env, span, longvid) of
            SOME (longvid', _) => (Syntax.VIdMap.empty, U.ConPat(span, longvid', NONE))
-         | NONE => raise Syntax.SyntaxError ([], "unbound identifier")
+         | NONE => emitError(ctx, [span], "unbound identifier")
       )
   | toUPat(ctx, tvenv, env, S.ConPat(span, longvid, SOME pat))
     = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
-      in case lookupLongVId(env, longvid) of
+      in case lookupLongVId(ctx, env, span, longvid) of
              SOME (longvid', _) => (vidmap, U.ConPat(span, longvid', SOME pat'))
-           | NONE => raise Syntax.SyntaxError ([], "unbound identifier")
+           | NONE => emitError(ctx, [span], "unbound identifier")
       end
   | toUPat(ctx, tvenv, env, S.TypedPat(span1, S.ConOrVarPat(span2, vid), ty))
     = (case lookupVId(env, vid) of
@@ -536,9 +540,9 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) 
       end
 fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon)) = U.SConExp(span, scon)
   | toUExp(ctx, tvenv, env, S.VarExp(span, longvid))
-    = (case lookupLongVId(env, longvid) of
+    = (case lookupLongVId(ctx, env, span, longvid) of
            SOME (longvid', idstatus) => U.VarExp(span, longvid', idstatus)
-         | NONE => raise Syntax.SyntaxError ([], "unbound identifier: " ^ Syntax.print_LongVId longvid)
+         | NONE => emitError(ctx, [span], "unbound identifier: " ^ Syntax.print_LongVId longvid)
       )
   | toUExp(ctx, tvenv, env, S.RecordExp(span, row)) = U.RecordExp(span, Syntax.mapRecordRow (fn exp => toUExp(ctx, tvenv, env, exp)) row)
   | toUExp(ctx, tvenv, env, S.LetInExp(span, decls, exp))
@@ -547,7 +551,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
       end
   | toUExp(ctx, tvenv, env, S.AppExp(span, exp1, exp2)) = U.AppExp(span, toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2))
   | toUExp(ctx, tvenv, env, S.TypedExp(span, exp, ty)) = U.TypedExp(span, toUExp(ctx, tvenv, env, exp), toUTy(ctx, tvenv, env, ty))
-  | toUExp(ctx, tvenv, env, S.HandleExp(span, exp, ty)) = raise NameError("not implemented yet")
+  | toUExp(ctx, tvenv, env, S.HandleExp(span, exp, ty)) = emitError(ctx, [span], "handle: not implemented yet")
   | toUExp(ctx, tvenv, env, S.RaiseExp(span, exp)) = U.RaiseExp(span, toUExp(ctx, tvenv, env, exp))
   | toUExp(ctx, tvenv, env, S.IfThenElseExp(span, exp1, exp2, exp3)) = U.IfThenElseExp(span, toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
   | toUExp(ctx, tvenv, env, S.WhileDoExp(span, exp1, exp2))
@@ -681,7 +685,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                                                       end
                          val vid' = case Syntax.VIdMap.find(vidmap, vid) of
                                         SOME v => v
-                                      | NONE => raise Fail "internal error"
+                                      | NONE => emitError(ctx, [sourceSpan], "internal error")
                      in U.PatBind(sourceSpan, U.VarPat(sourceSpan, vid', USyntax.TyVar(sourceSpan, freshTyVar(ctx))), buildExp(arity, []))
                      end
                val valbind'' = List.map doFValBind fvalbind
@@ -732,17 +736,17 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            in (mergeEnv(datbindEnv, env'), decls')
            end
          | S.DatatypeRepDec(span, tycon, longtycon) =>
-           let val _ = lookupLongTyCon(env, longtycon)
+           let val _ = lookupLongTyCon(ctx, env, span (* TODO *), longtycon)
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
-           in raise Fail "datatype replication: not implemented yet" (* ((* TODO: add type ctor *) env', decl' :: decls') *)
+           in emitError(ctx, [span], "datatype replication: not implemented yet") (* ((* TODO: add type ctor *) env', decl' :: decls') *)
            end
          | S.AbstypeDec(span, datbinds, dec) =>
-           let val decl' = raise Fail "not implemented yet"
+           let val decl' = emitError(ctx, [span], "abstype: not implemented yet")
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
          | S.ExceptionDec(span, _) =>
-           let val decl' = raise Fail "not implemented yet"
+           let val decl' = emitError(ctx, [span], "exception declaration: not implemented yet")
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add exception ctor *) env, decls)
            in ((* TODO: add exception ctor *) env', decl' :: decls')
            end
@@ -751,8 +755,8 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val (env2, decls2') = toUDecs(ctx, tvenv, mergeEnv(env, env1), decls2)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, env2), decls)
            in (mergeEnv(env2, env'), decls1' @ decls2' @ decls') end
-         | S.OpenDec(_) =>
-           let val decl' = raise Fail "not implemented yet"
+         | S.OpenDec(span, _) =>
+           let val decl' = emitError(ctx, [span], "open: not implemented yet")
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
