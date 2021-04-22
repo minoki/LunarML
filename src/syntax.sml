@@ -145,12 +145,12 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(FnExp(span, _)) = span
   | getSourceSpanOfExp(ProjectionExp(span, _)) = span
 
-fun MkInfixConPat(pat1, vid, pat2) = let val span = SourcePos.mergeSpan(getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
-                                     in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], wildcard = false }))
-                                     end
-fun MkInfixExp(exp1, vid, exp2) = let val span = SourcePos.mergeSpan(getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
-                                  in AppExp(span, VarExp((* TODO: span of vid *) span, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
-                                  end
+fun MkInfixConPat(pat1, _, vid, pat2) = let val span = SourcePos.mergeSpan(getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
+                                        in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], wildcard = false }))
+                                        end
+fun MkInfixExp(exp1, vspan, vid, exp2) = let val span = SourcePos.mergeSpan(getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
+                                        in AppExp(span, VarExp(vspan, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
+                                        end
 
 (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
 fun extractTuple (i, nil) = SOME nil
@@ -238,7 +238,7 @@ fun print_StrIdMap print_elem x = print_list (print_pair (print_StrId,print_elem
 end
 open PrettyPrint
 
-exception SyntaxError of string
+exception SyntaxError of SourcePos.span list * string
 
 end (* structure Syntax *)
 

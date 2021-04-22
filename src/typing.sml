@@ -663,7 +663,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
     = (case scon of
            Syntax.IntegerConstant(_)   => (primTy_int, USyntax.VIdMap.empty, pat)
          | Syntax.WordConstant(_)      => (primTy_word, USyntax.VIdMap.empty, pat)
-         | Syntax.RealConstant(_)      => raise Syntax.SyntaxError "No real constant may occur in a pattern"
+         | Syntax.RealConstant(_)      => raise Syntax.SyntaxError ([], "No real constant may occur in a pattern")
          | Syntax.StringConstant(_)    => (primTy_string, USyntax.VIdMap.empty, pat)
          | Syntax.CharacterConstant(_) => (primTy_char, USyntax.VIdMap.empty, pat)
       )

@@ -1,4 +1,9 @@
 structure Fixity = struct
+
+type Context = {}
+
+fun emitError(ctx : Context, spans, message) = raise Syntax.SyntaxError (spans, message)
+
 type FixityStatusMap = Syntax.FixityStatus Syntax.VIdMap.map
 
 fun getFixityStatus (map, vid) = case Syntax.VIdMap.find (map, vid) of
@@ -6,232 +11,232 @@ fun getFixityStatus (map, vid) = case Syntax.VIdMap.find (map, vid) of
                                    | NONE => Syntax.Nonfix
 
 datatype ('op, 'a) InfixList = Leaf of 'a
-                             | Tree of 'a * Syntax.InfixAssociativity * 'op * ('op, 'a) InfixList
+                             | Tree of 'a * Syntax.InfixAssociativity * SourcePos.span * 'op * ('op, 'a) InfixList
 fun maxPrec(p, Leaf _) = p
-  | maxPrec(p, Tree(_, Syntax.LeftAssoc q, _, rest)) = maxPrec(Int.max(p, q), rest)
-  | maxPrec(p, Tree(_, Syntax.RightAssoc q, _, rest)) = maxPrec(Int.max(p, q), rest)
-(* resolveFixity : ('a * 'op * 'a -> 'a) -> ('op, 'a) InfixList -> 'a *)
-fun resolveFixity f
+  | maxPrec(p, Tree(_, Syntax.LeftAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
+  | maxPrec(p, Tree(_, Syntax.RightAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
+(* resolveFixity : Context * ('a * SourceSpan.span * 'op * 'a -> 'a) -> ('op, 'a) InfixList -> 'a *)
+fun resolveFixity (ctx, f)
     = let fun go(Leaf x) = x
-            | go(t as Tree(_, assoc, _, rest)) = let val p0 = case assoc of
-                                                                  Syntax.LeftAssoc p0 => p0
-                                                                | Syntax.RightAssoc p0 => p0
-                                                     val prec = maxPrec(p0, rest)
-                                                 in go(goPrec(prec, t)) end
+            | go(t as Tree(_, assoc, span, _, rest)) = let val p0 = case assoc of
+                                                                        Syntax.LeftAssoc p0 => p0
+                                                                      | Syntax.RightAssoc p0 => p0
+                                                           val prec = maxPrec(p0, rest)
+                                                       in go(goPrec(prec, t)) end
           and goPrec(p, Leaf x) = Leaf x
-            | goPrec(p, Tree(x, assoc as Syntax.LeftAssoc q, op_, rest))
+            | goPrec(p, Tree(x, assoc as Syntax.LeftAssoc q, span, op_, rest))
               = if p = q then
-                    goLeftAssoc(p, x, op_, rest)
+                    goLeftAssoc(p, x, span, op_, rest)
                 else (* p > q *)
-                    Tree(x, assoc, op_, goPrec(p, rest))
-            | goPrec(p, Tree(x, assoc as Syntax.RightAssoc q, op_, rest))
+                    Tree(x, assoc, span, op_, goPrec(p, rest))
+            | goPrec(p, Tree(x, assoc as Syntax.RightAssoc q, span, op_, rest))
               = if p = q then
-                    goRightAssoc(p, fn y => f(x, op_, y), rest)
+                    goRightAssoc(p, span, fn y => f(x, span, op_, y), rest)
                 else (* p > q *)
-                    Tree(x, assoc, op_, goPrec(p, rest))
-          and goLeftAssoc(p, x, op_, Leaf y) = Leaf(f(x, op_, y))
-            | goLeftAssoc(p, x, op_, Tree(y, assoc as Syntax.LeftAssoc q, op', rest))
+                    Tree(x, assoc, span, op_, goPrec(p, rest))
+          and goLeftAssoc(p, x, span, op_, Leaf y) = Leaf(f(x, span, op_, y))
+            | goLeftAssoc(p, x, span1, op_, Tree(y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
-                    goLeftAssoc(p, f(x, op_, y), op', rest)
+                    goLeftAssoc(p, f(x, span1, op_, y), span2, op', rest)
                 else (* p > q *)
-                    Tree(f(x, op_, y), assoc, op', goPrec(p, rest))
-            | goLeftAssoc(p, x, op_, Tree(y, assoc as Syntax.RightAssoc q, op', rest))
+                    Tree(f(x, span1, op_, y), assoc, span2, op', goPrec(p, rest))
+            | goLeftAssoc(p, x, span1, op_, Tree(y, assoc as Syntax.RightAssoc q, span2, op', rest))
               = if p = q then
-                    raise Fail "You cannot mix left-associative operators and right-associative operators of same precedence"
+                    emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
                 else (* p > q *)
-                    Tree(f(x, op_, y), assoc, op', goPrec(p, rest))
-          and goRightAssoc(p, g, Leaf y) = Leaf(g y)
-            | goRightAssoc(p, g, Tree(y, assoc as Syntax.LeftAssoc q, op', rest))
+                    Tree(f(x, span1, op_, y), assoc, span2, op', goPrec(p, rest))
+          and goRightAssoc(p, _, g, Leaf y) = Leaf(g y)
+            | goRightAssoc(p, span1, g, Tree(y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
-                    raise Fail "You cannot mix left-associative operators and right-associative operators of same precedence"
+                    emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
                 else (* p > q *)
-                    Tree(g y, assoc, op', goPrec(p, rest))
-            | goRightAssoc(p, g, Tree(y, assoc as Syntax.RightAssoc q, op', rest))
+                    Tree(g y, assoc, span2, op', goPrec(p, rest))
+            | goRightAssoc(p, _, g, Tree(y, assoc as Syntax.RightAssoc q, span, op', rest))
               = if p = q then
-                    goRightAssoc(p, fn z => g(f(y, op', z)), rest)
+                    goRightAssoc(p, span, fn z => g(f(y, span, op', z)), rest)
                 else (* p > q *)
-                    Tree(g y, assoc, op', goPrec(p, rest))
+                    Tree(g y, assoc, span, op', goPrec(p, rest))
       in go
       end
 (* let open Fixity in resolveFixity (fn (a,f,b) => f(a,b)) (Tree(3,Syntax.LeftAssoc 5,op +,Tree(2,Syntax.LeftAssoc 6,op *,Leaf 7))) end; should yield 17 *)
 
-(* doPat : FixityStatusMap * UnfixedSyntax.Pat -> Syntax.Pat *)
-(* doExp : FixityStatusMap * UnfixedSyntax.Exp -> Syntax.Exp *)
-(* doDec : FixityStatusMap * UnfixedSyntax.Dec -> FixityStatusMap * Syntax.Dec *)
-(* doDecs : FixityStatusMap * UnfixedSyntax.Dec list -> FixityStatusMap * Syntax.Dec list *)
-(* doValBind : FixityStatusMap * UnfixedSyntax.ValBind -> Syntax.ValBind *)
-fun doPat(env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
-  | doPat(env, UnfixedSyntax.SConPat(span, scon)) = Syntax.SConPat(span, scon)
-  | doPat(env, UnfixedSyntax.InfixOrVIdPat(span, vid)) = (case getFixityStatus(env, vid) of
-                                                              Syntax.Nonfix => Syntax.ConOrVarPat(span, vid)
-                                                           | _ => raise Fail "infix operator used in non-infix position"
-                                                         )
-  | doPat(env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = Syntax.ConOrVarPat(span, vid)
-  | doPat(env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE)
-  | doPat(env, UnfixedSyntax.RecordPat{sourceSpan, fields, wildcard}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(env, pat))) fields, wildcard = wildcard }
-  | doPat(env, UnfixedSyntax.JuxtapositionPat(_, patterns)) (* constructed pattern or infix constructed pattern *)
+(* doPat : Context * FixityStatusMap * UnfixedSyntax.Pat -> Syntax.Pat *)
+(* doExp : Context * FixityStatusMap * UnfixedSyntax.Exp -> Syntax.Exp *)
+(* doDec : Context * FixityStatusMap * UnfixedSyntax.Dec -> FixityStatusMap * Syntax.Dec *)
+(* doDecs : Context * FixityStatusMap * UnfixedSyntax.Dec list -> FixityStatusMap * Syntax.Dec list *)
+(* doValBind : Context * FixityStatusMap * UnfixedSyntax.ValBind -> Syntax.ValBind *)
+fun doPat(ctx, env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
+  | doPat(ctx, env, UnfixedSyntax.SConPat(span, scon)) = Syntax.SConPat(span, scon)
+  | doPat(ctx, env, UnfixedSyntax.InfixOrVIdPat(span, vid)) = (case getFixityStatus(env, vid) of
+                                                                   Syntax.Nonfix => Syntax.ConOrVarPat(span, vid)
+                                                                 | _ => raise Fail "infix operator used in non-infix position"
+                                                              )
+  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = Syntax.ConOrVarPat(span, vid)
+  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE)
+  | doPat(ctx, env, UnfixedSyntax.RecordPat{sourceSpan, fields, wildcard}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(ctx, env, pat))) fields, wildcard = wildcard }
+  | doPat(ctx, env, UnfixedSyntax.JuxtapositionPat(_, patterns)) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => (case getFixityStatus(env, vid') of
                                            Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), Syntax.MkLongVId([], vid), SOME(Syntax.ConOrVarPat(span2, vid'))), pats)
-                                         | Syntax.Infix assoc => Tree(Syntax.ConOrVarPat(span1, vid), assoc, vid', doPrefix(pats))
+                                         | Syntax.Infix assoc => Tree(Syntax.ConOrVarPat(span1, vid), assoc, span2, vid', doPrefix(pats))
                                       )
                    | Syntax.Infix assoc => raise Fail "infix operator used in prefix position"
                 )
             | doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: atpat :: pats)
               = (case getFixityStatus(env, vid) of
-                     Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, UnfixedSyntax.getSourceSpanOfPat atpat), Syntax.MkLongVId([], vid), SOME(doPat(env, atpat))), pats)
+                     Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, UnfixedSyntax.getSourceSpanOfPat atpat), Syntax.MkLongVId([], vid), SOME(doPat(ctx, env, atpat))), pats)
                    | Syntax.Infix _ => raise Fail "infix operator used in prefix position"
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(span1, longvid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid') of
                      Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, SOME(Syntax.ConOrVarPat(span2, vid'))), pats)
                    | Syntax.Infix assoc => case longvid of
-                                               Syntax.MkQualified([], vid) => Tree(Syntax.ConOrVarPat(span1, vid), assoc, vid', doPrefix(pats))
-                                             | _ => Tree(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, NONE), assoc, vid', doPrefix(pats))
+                                               Syntax.MkQualified([], vid) => Tree(Syntax.ConOrVarPat(span1, vid), assoc, span2, vid', doPrefix(pats))
+                                             | _ => Tree(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, NONE), assoc, span2, vid', doPrefix(pats))
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(span1, longvid) :: atpat :: pats)
-              = doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, UnfixedSyntax.getSourceSpanOfPat atpat), longvid, SOME(doPat(env, atpat))), pats)
+              = doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, UnfixedSyntax.getSourceSpanOfPat atpat), longvid, SOME(doPat(ctx, env, atpat))), pats)
             | doPrefix(atpat :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid') of
                      Syntax.Nonfix => raise Fail "invalid pattern"
-                   | Syntax.Infix assoc => Tree(doPat(env, atpat), assoc, vid', doPrefix(pats))
+                   | Syntax.Infix assoc => Tree(doPat(ctx, env, atpat), assoc, span2, vid', doPrefix(pats))
                 )
-            | doPrefix(pat :: nil) = Leaf(doPat(env, pat))
+            | doPrefix(pat :: nil) = Leaf(doPat(ctx, env, pat))
             | doPrefix _ = raise Fail "invalid pattern"
           and doInfix(lhs : Syntax.Pat, UnfixedSyntax.InfixOrVIdPat(span2, vid) :: pats)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => raise Fail "invalid pattern"
-                   | Syntax.Infix assoc => Tree(lhs, assoc, vid, doPrefix(pats))
+                   | Syntax.Infix assoc => Tree(lhs, assoc, span2, vid, doPrefix(pats))
                 )
             | doInfix(lhs, nil) = Leaf lhs
             | doInfix(lhs, _) = raise Fail "invalid pattern"
-      in resolveFixity Syntax.MkInfixConPat (doPrefix patterns)
+      in resolveFixity (ctx, Syntax.MkInfixConPat) (doPrefix patterns)
       end
-  | doPat(env, UnfixedSyntax.ConPat(span, longvid, pat)) = Syntax.ConPat(span, longvid, SOME(doPat(env, pat)))
-  | doPat(env, UnfixedSyntax.TypedPat(span, pat, ty)) = Syntax.TypedPat(span, doPat(env, pat), ty)
-  | doPat(env, UnfixedSyntax.ConjunctivePat(span, pat1, pat2))
+  | doPat(ctx, env, UnfixedSyntax.ConPat(span, longvid, pat)) = Syntax.ConPat(span, longvid, SOME(doPat(ctx, env, pat)))
+  | doPat(ctx, env, UnfixedSyntax.TypedPat(span, pat, ty)) = Syntax.TypedPat(span, doPat(ctx, env, pat), ty)
+  | doPat(ctx, env, UnfixedSyntax.ConjunctivePat(span, pat1, pat2))
     = (case pat1 of
            UnfixedSyntax.TypedPat (_, UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.InfixOrVIdPat(_, vid)]), ty) => (case getFixityStatus(env, vid) of
-                                                                                                                            Syntax.Nonfix => Syntax.LayeredPat (span, vid, SOME ty, doPat(env, pat2))
+                                                                                                                            Syntax.Nonfix => Syntax.LayeredPat (span, vid, SOME ty, doPat(ctx, env, pat2))
                                                                                                                           | Syntax.Infix _ => raise Fail "invalid infix identifier in layered pattern"
                                                                                                                        )
-         | UnfixedSyntax.TypedPat (_, UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid))]), ty) => Syntax.LayeredPat (span, vid, SOME ty, doPat(env, pat2))
+         | UnfixedSyntax.TypedPat (_, UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid))]), ty) => Syntax.LayeredPat (span, vid, SOME ty, doPat(ctx, env, pat2))
          | UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.InfixOrVIdPat(_, vid)]) => (case getFixityStatus(env, vid) of
-                                                                                            Syntax.Nonfix => Syntax.LayeredPat (span, vid, NONE, doPat(env, pat2)) (* TODO: Check infix status *)
+                                                                                            Syntax.Nonfix => Syntax.LayeredPat (span, vid, NONE, doPat(ctx, env, pat2)) (* TODO: Check infix status *)
                                                                                           | Syntax.Infix _ => raise Fail "invalid infix identifier in layered pattern"
                                                                                        )
-         | UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid))]) => Syntax.LayeredPat (span, vid, NONE, doPat(env, pat2))
+         | UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid))]) => Syntax.LayeredPat (span, vid, NONE, doPat(ctx, env, pat2))
          | _ => raise Fail "conjunctive: not implemented yet" (* Successor ML *)
       )
-fun doExp(env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, scon)
-  | doExp(env, UnfixedSyntax.InfixOrVIdExp(span, vid)) = (case getFixityStatus(env, vid) of
-                                                              Syntax.Nonfix => Syntax.VarExp(span, Syntax.MkLongVId([], vid))
-                                                            | _ => raise Fail "infix operaor used in non-infix position"
-                                                         )
-  | doExp(env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
-  | doExp(env, UnfixedSyntax.RecordExp(span, fields)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(env, exp))) fields)
-  | doExp(env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(env, decls)
-                                                           in Syntax.LetInExp(span, decls', doExp(Syntax.VIdMap.unionWith #2 (env, env'), exp))
+fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, scon)
+  | doExp(ctx, env, UnfixedSyntax.InfixOrVIdExp(span, vid)) = (case getFixityStatus(env, vid) of
+                                                                   Syntax.Nonfix => Syntax.VarExp(span, Syntax.MkLongVId([], vid))
+                                                                 | _ => raise Fail "infix operaor used in non-infix position"
+                                                              )
+  | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
+  | doExp(ctx, env, UnfixedSyntax.RecordExp(span, fields)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(ctx, env, exp))) fields)
+  | doExp(ctx, env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(ctx, env, decls)
+                                                           in Syntax.LetInExp(span, decls', doExp(ctx, Syntax.VIdMap.unionWith #2 (env, env'), exp))
                                                            end
-  | doExp(env, UnfixedSyntax.JuxtapositionExp(_, expressions)) (* application or infix application *)
-    = let fun doPrefix(exp1 :: rest) = doInfix(doExp(env, exp1), rest)
+  | doExp(ctx, env, UnfixedSyntax.JuxtapositionExp(_, expressions)) (* application or infix application *)
+    = let fun doPrefix(exp1 :: rest) = doInfix(doExp(ctx, env, exp1), rest)
             | doPrefix _ = raise Fail "invalid pattern"
           and doInfix(lhs : Syntax.Exp, UnfixedSyntax.InfixOrVIdExp(span2, vid) :: rest)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => doInfix(Syntax.AppExp(SourcePos.mergeSpan(Syntax.getSourceSpanOfExp lhs, span2), lhs, Syntax.VarExp(span2, Syntax.MkLongVId([], vid))), rest)
-                   | Syntax.Infix assoc => Tree(lhs, assoc, vid, doPrefix(rest))
+                   | Syntax.Infix assoc => Tree(lhs, assoc, span2, vid, doPrefix(rest))
                 )
-            | doInfix(lhs, x :: rest) = let val x' = doExp(env, x)
+            | doInfix(lhs, x :: rest) = let val x' = doExp(ctx, env, x)
                                         in doInfix(Syntax.AppExp(SourcePos.mergeSpan(Syntax.getSourceSpanOfExp lhs, Syntax.getSourceSpanOfExp x'), lhs, x'), rest)
                                         end
             | doInfix(lhs, nil) = Leaf lhs
-      in resolveFixity Syntax.MkInfixExp (doPrefix expressions)
+      in resolveFixity (ctx, Syntax.MkInfixExp) (doPrefix expressions)
       end
-  | doExp(env, UnfixedSyntax.AppExp(span, exp1, exp2)) = Syntax.AppExp(span, doExp(env, exp1), doExp(env, exp2))
-  | doExp(env, UnfixedSyntax.TypedExp(span, exp, ty)) = Syntax.TypedExp(span, doExp(env, exp), ty)
-  | doExp(env, UnfixedSyntax.HandleExp(span, exp, matches)) = Syntax.HandleExp(span, doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
-  | doExp(env, UnfixedSyntax.RaiseExp(span, exp)) = Syntax.RaiseExp(span, doExp(env, exp))
-  | doExp(env, UnfixedSyntax.IfThenElseExp(span, e1, e2, e3)) = Syntax.IfThenElseExp(span, doExp(env, e1), doExp(env, e2), doExp(env, e3))
-  | doExp(env, UnfixedSyntax.WhileDoExp(span, e1, e2)) = Syntax.WhileDoExp(span, doExp(env, e1), doExp(env, e2))
-  | doExp(env, UnfixedSyntax.CaseExp(span, exp, matches)) = Syntax.CaseExp(span, doExp(env, exp), List.map (fn (pat, exp') => (doPat(env, pat), doExp(env, exp'))) matches)
-  | doExp(env, UnfixedSyntax.FnExp(span, matches)) = Syntax.FnExp(span, List.map (fn (pat, exp) => (doPat(env, pat), doExp(env, exp))) matches)
-  | doExp(env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
-and doDecs(env, nil) = (Syntax.VIdMap.empty, nil)
-  | doDecs(env, dec :: decs) = let val (env', dec') = doDec(env, dec)
-                                   val (env'', decs') = doDecs(Syntax.VIdMap.unionWith #2 (env, env'), decs)
-                               in (Syntax.VIdMap.unionWith #2 (env', env''), dec' :: decs')
-                               end
-and doDec(env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(span, tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
-  | doDec(env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(env, vb)) valbind))
-  | doDec(env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (Syntax.VIdMap.empty, Syntax.FunDec(span, tyvars, List.map (fn fvb => doFValBind(env, fvb)) fvalbind))
-  | doDec(env, UnfixedSyntax.TypeDec(span, typbinds)) = (Syntax.VIdMap.empty, Syntax.TypeDec(span, typbinds))
-  | doDec(env, UnfixedSyntax.DatatypeDec(span, datbinds)) = (Syntax.VIdMap.empty, Syntax.DatatypeDec(span, datbinds))
-  | doDec(env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = (Syntax.VIdMap.empty, Syntax.DatatypeRepDec(span, tycon, longtycon))
-  | doDec(env, UnfixedSyntax.AbstypeDec(span, datbinds, decs)) = let val (_, decs') = doDecs(env, decs)
-                                                                 in (Syntax.VIdMap.empty, Syntax.AbstypeDec(span, datbinds, decs'))
-                                                                 end
-  | doDec(env, UnfixedSyntax.ExceptionDec(span, exbinds)) = (Syntax.VIdMap.empty, Syntax.ExceptionDec(span, exbinds))
-  | doDec(env, UnfixedSyntax.LocalDec(span, decs1, decs2)) = let val (env', decs1') = doDecs(env, decs1)
-                                                                 val (env'', decs2') = doDecs(Syntax.VIdMap.unionWith #2 (env, env'), decs2)
-                                                             in (env'', Syntax.LocalDec(span, decs1', decs2'))
-                                                             end
-  | doDec(env, UnfixedSyntax.OpenDec(span, strid)) = (Syntax.VIdMap.empty, Syntax.OpenDec(span, strid))
-  | doDec(env, UnfixedSyntax.FixityDec(span, fixity, vids)) = (List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids, Syntax.FixityDec(span, fixity, vids))
-and doValBind(env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(env, pat), doExp(env, exp))
-and doFValBind(env, UnfixedSyntax.FValBind(span, rules)) = let val rules' = List.map (fn rule => doFMRule (env, rule)) rules
-                                                               fun getVIdAndArity (((vid, pats), _, _) :: xs) = checkVIdAndArity(vid, length pats, xs)
-                                                                 | getVIdAndArity [] = raise Fail "internal error: empty 'fun' rule"
-                                                               and checkVIdAndArity(vid, arity, []) = (vid, arity)
-                                                                 | checkVIdAndArity(vid, arity, ((vid', pats), _, _) :: xs) = if vid = vid' then
-                                                                                                                                  if arity = length pats then
-                                                                                                                                      checkVIdAndArity(vid, arity, xs)
-                                                                                                                                  else
-                                                                                                                                      raise Syntax.SyntaxError "invalid 'fun' declaration: arity mismatch"
-                                                                                                                              else
-                                                                                                                                  raise Syntax.SyntaxError "invalid 'fun' declaration: name mismatch"
-                                                               val (vid, arity) = getVIdAndArity rules'
-                                                           in Syntax.FValBind { sourceSpan = span, vid = vid, arity = arity, rules = List.map (fn ((_, pats), optTy, exp) => (pats, optTy, exp)) rules' }
-                                                           end
-and doFMRule(env, UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(env, fpat), optTy, doExp(env, exp))
-and doFPat(env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(span2, [pat1, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat3])]))
+  | doExp(ctx, env, UnfixedSyntax.AppExp(span, exp1, exp2)) = Syntax.AppExp(span, doExp(ctx, env, exp1), doExp(ctx, env, exp2))
+  | doExp(ctx, env, UnfixedSyntax.TypedExp(span, exp, ty)) = Syntax.TypedExp(span, doExp(ctx, env, exp), ty)
+  | doExp(ctx, env, UnfixedSyntax.HandleExp(span, exp, matches)) = Syntax.HandleExp(span, doExp(ctx, env, exp), List.map (fn (pat, exp') => (doPat(ctx, env, pat), doExp(ctx, env, exp'))) matches)
+  | doExp(ctx, env, UnfixedSyntax.RaiseExp(span, exp)) = Syntax.RaiseExp(span, doExp(ctx, env, exp))
+  | doExp(ctx, env, UnfixedSyntax.IfThenElseExp(span, e1, e2, e3)) = Syntax.IfThenElseExp(span, doExp(ctx, env, e1), doExp(ctx, env, e2), doExp(ctx, env, e3))
+  | doExp(ctx, env, UnfixedSyntax.WhileDoExp(span, e1, e2)) = Syntax.WhileDoExp(span, doExp(ctx, env, e1), doExp(ctx, env, e2))
+  | doExp(ctx, env, UnfixedSyntax.CaseExp(span, exp, matches)) = Syntax.CaseExp(span, doExp(ctx, env, exp), List.map (fn (pat, exp') => (doPat(ctx, env, pat), doExp(ctx, env, exp'))) matches)
+  | doExp(ctx, env, UnfixedSyntax.FnExp(span, matches)) = Syntax.FnExp(span, List.map (fn (pat, exp) => (doPat(ctx, env, pat), doExp(ctx, env, exp))) matches)
+  | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
+and doDecs(ctx, env, nil) = (Syntax.VIdMap.empty, nil)
+  | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
+                                        val (env'', decs') = doDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
+                                    in (Syntax.VIdMap.unionWith #2 (env', env''), dec' :: decs')
+                                    end
+and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind))
+  | doDec(ctx, env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind))
+  | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (Syntax.VIdMap.empty, Syntax.FunDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind))
+  | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (Syntax.VIdMap.empty, Syntax.TypeDec(span, typbinds))
+  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds)) = (Syntax.VIdMap.empty, Syntax.DatatypeDec(span, datbinds))
+  | doDec(ctx, env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = (Syntax.VIdMap.empty, Syntax.DatatypeRepDec(span, tycon, longtycon))
+  | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, decs)) = let val (_, decs') = doDecs(ctx, env, decs)
+                                                                      in (Syntax.VIdMap.empty, Syntax.AbstypeDec(span, datbinds, decs'))
+                                                                      end
+  | doDec(ctx, env, UnfixedSyntax.ExceptionDec(span, exbinds)) = (Syntax.VIdMap.empty, Syntax.ExceptionDec(span, exbinds))
+  | doDec(ctx, env, UnfixedSyntax.LocalDec(span, decs1, decs2)) = let val (env', decs1') = doDecs(ctx, env, decs1)
+                                                                      val (env'', decs2') = doDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs2)
+                                                                  in (env'', Syntax.LocalDec(span, decs1', decs2'))
+                                                                  end
+  | doDec(ctx, env, UnfixedSyntax.OpenDec(span, strid)) = (Syntax.VIdMap.empty, Syntax.OpenDec(span, strid))
+  | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = (List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids, Syntax.FixityDec(span, fixity, vids))
+and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
+and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
+                                                                    val rules' = List.map doFMRule rules
+                                                                    fun getVIdAndArity (((vid, pats), _, _) :: xs) = checkVIdAndArity(vid, length pats, xs)
+                                                                      | getVIdAndArity [] = raise Fail "internal error: empty 'fun' rule"
+                                                                    and checkVIdAndArity(vid, arity, []) = (vid, arity)
+                                                                      | checkVIdAndArity(vid, arity, ((vid', pats), _, _) :: xs) = if vid = vid' then
+                                                                                                                                       if arity = length pats then
+                                                                                                                                           checkVIdAndArity(vid, arity, xs)
+                                                                                                                                       else
+                                                                                                                                           raise Syntax.SyntaxError ([], "invalid 'fun' declaration: arity mismatch")
+                                                                                                                                   else
+                                                                                                                                       raise Syntax.SyntaxError ([], "invalid 'fun' declaration: name mismatch")
+                                                                    val (vid, arity) = getVIdAndArity rules'
+                                                                in Syntax.FValBind { sourceSpan = span, vid = vid, arity = arity, rules = List.map (fn ((_, pats), optTy, exp) => (pats, optTy, exp)) rules' }
+                                                                end
+and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(span2, [pat1, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat3])]))
     = (case getFixityStatus(env, vid) of
-           Syntax.Nonfix => raise Syntax.SyntaxError "invalid function declaration"
-         | Syntax.Infix _ => doInfixFPat(env, span1, vid, pat1, pat3, [])
+           Syntax.Nonfix => raise Syntax.SyntaxError ([], "invalid function declaration")
+         | Syntax.Infix _ => doInfixFPat(ctx, env, span1, vid, pat1, pat3, [])
       )
-  | doFPat(env, UnfixedSyntax.FPat(span1, [pat1 as UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(span3, vid1), pat13]), pat2 as UnfixedSyntax.InfixOrVIdPat(span4, vid2), pat3]))
+  | doFPat(ctx, env, UnfixedSyntax.FPat(span1, [pat1 as UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(span3, vid1), pat13]), pat2 as UnfixedSyntax.InfixOrVIdPat(span4, vid2), pat3]))
     = (case (getFixityStatus(env, vid1), getFixityStatus(env, vid2)) of
-           (Syntax.Nonfix, Syntax.Nonfix) => raise Syntax.SyntaxError "invalid function declaration"
-         | (Syntax.Infix _, Syntax.Nonfix) => doInfixFPat(env, span2, vid1, pat11, pat13, [pat2, pat3])
-         | (_, Syntax.Infix _) => doInfixFPat(env, span1, vid2, pat1, pat3, [])
+           (Syntax.Nonfix, Syntax.Nonfix) => raise Syntax.SyntaxError ([], "invalid function declaration")
+         | (Syntax.Infix _, Syntax.Nonfix) => doInfixFPat(ctx, env, span2, vid1, pat11, pat13, [pat2, pat3])
+         | (_, Syntax.Infix _) => doInfixFPat(ctx, env, span1, vid2, pat1, pat3, [])
       )
-  | doFPat(env, UnfixedSyntax.FPat(span1, UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(_, vid), pat13]) :: pats))
+  | doFPat(ctx, env, UnfixedSyntax.FPat(span1, UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(_, vid), pat13]) :: pats))
     = (case getFixityStatus(env, vid) of
-           Syntax.Nonfix => raise Syntax.SyntaxError "invalid function declaration"
-         | Syntax.Infix _ => doInfixFPat(env, span1, vid, pat11, pat13, pats)
+           Syntax.Nonfix => raise Syntax.SyntaxError ([], "invalid function declaration")
+         | Syntax.Infix _ => doInfixFPat(ctx, env, span1, vid, pat11, pat13, pats)
       )
-  | doFPat(env, UnfixedSyntax.FPat(span, [pat1, pat2 as UnfixedSyntax.InfixOrVIdPat(_, vid), pat3]))
+  | doFPat(ctx, env, UnfixedSyntax.FPat(span, [pat1, pat2 as UnfixedSyntax.InfixOrVIdPat(_, vid), pat3]))
     = (case getFixityStatus(env, vid) of
            Syntax.Nonfix => (case pat1 of
-                                 UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid')) => doPrefixFPat(env, vid', [pat2, pat3])
+                                 UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid')) => doPrefixFPat(ctx, env, vid', [pat2, pat3])
                                | UnfixedSyntax.InfixOrVIdPat(_, vid') => (case getFixityStatus(env, vid') of
-                                                                              Syntax.Nonfix => doPrefixFPat(env, vid', [pat2, pat3])
-                                                                            | Syntax.Infix _ => raise Syntax.SyntaxError "invalid function declaration"
+                                                                              Syntax.Nonfix => doPrefixFPat(ctx, env, vid', [pat2, pat3])
+                                                                            | Syntax.Infix _ => raise Syntax.SyntaxError ([], "invalid function declaration")
                                                                          )
-                               | _ => raise Syntax.SyntaxError "invalid function declaration"
+                               | _ => raise Syntax.SyntaxError ([], "invalid function declaration")
                             )
-         | Syntax.Infix _ => doInfixFPat(env, span, vid, pat1, pat3, [])
+         | Syntax.Infix _ => doInfixFPat(ctx, env, span, vid, pat1, pat3, [])
       )
-  | doFPat(env, UnfixedSyntax.FPat (_, UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid)) :: pats)) = doPrefixFPat(env, vid, pats)
-  | doFPat(env, UnfixedSyntax.FPat (_, UnfixedSyntax.InfixOrVIdPat(_, vid) :: pats))
+  | doFPat(ctx, env, UnfixedSyntax.FPat (_, UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid)) :: pats)) = doPrefixFPat(ctx, env, vid, pats)
+  | doFPat(ctx, env, UnfixedSyntax.FPat (_, UnfixedSyntax.InfixOrVIdPat(_, vid) :: pats))
     = (case getFixityStatus(env, vid) of
-           Syntax.Nonfix => doPrefixFPat(env, vid, pats)
-         | Syntax.Infix _ => raise Syntax.SyntaxError "invalid function declaration"
+           Syntax.Nonfix => doPrefixFPat(ctx, env, vid, pats)
+         | Syntax.Infix _ => raise Syntax.SyntaxError ([], "invalid function declaration")
       )
-  | doFPat(env, _)
-    = raise Syntax.SyntaxError "invalid function declaration"
-and doInfixFPat(env, span, vid, patL, patR, pats) = (vid, Syntax.TuplePat(span, [doPat(env, patL), doPat(env, patR)]) :: List.map (fn p => doPat(env, p)) pats)
-and doPrefixFPat(env, vid, pats) = (vid, List.map (fn p => doPat(env, p)) pats)
+  | doFPat(ctx, env, _)
+    = raise Syntax.SyntaxError ([], "invalid function declaration")
+and doInfixFPat(ctx, env, span, vid, patL, patR, pats) = (vid, Syntax.TuplePat(span, [doPat(ctx, env, patL), doPat(ctx, env, patR)]) :: List.map (fn p => doPat(ctx, env, p)) pats)
+and doPrefixFPat(ctx, env, vid, pats) = (vid, List.map (fn p => doPat(ctx, env, p)) pats)
 end (* structure Fixity *)
 
 structure PostParsing = struct
@@ -370,7 +375,7 @@ local
     (* doTy : S.Ty -> unit *)
     fun doTy(S.TyVar _) = ()
       | doTy(S.RecordType(_, row)) = if checkRow row then
-                                         raise S.SyntaxError "No type-expression row may bind the same label twice"
+                                         raise S.SyntaxError ([], "No type-expression row may bind the same label twice")
                                      else
                                          ()
       | doTy(S.TyCon(_, arg, longtycon)) = ()
@@ -378,12 +383,12 @@ local
 
     (* doPat : S.Pat -> unit *)
     fun doPat(S.WildcardPat _) = ()
-      | doPat(S.SConPat(_, S.RealConstant _)) = raise S.SyntaxError "No real constant may occur in a pattern"
+      | doPat(S.SConPat(_, S.RealConstant _)) = raise S.SyntaxError ([], "No real constant may occur in a pattern")
       | doPat(S.SConPat _) = ()
       | doPat(S.ConOrVarPat _) = ()
       | doPat(S.VarPat _) = ()
       | doPat(S.RecordPat{fields = row, wildcard = ellip, ...}) = if checkRow row then
-                                                                      raise S.SyntaxError "No pattern row may bind the same label twice"
+                                                                      raise S.SyntaxError ([], "No pattern row may bind the same label twice")
                                                                   else
                                                                       List.app (fn (_, pat) => doPat pat) row
       | doPat(S.ConPat(_, _, NONE)) = ()
@@ -394,7 +399,7 @@ local
 
     fun doTypBind(S.TypBind(_, tyvarseq, tycon, ty))
         = if checkTyVarSeq tyvarseq then
-              raise S.SyntaxError "No tyvarseq may contain the same tyvar twice"
+              raise S.SyntaxError ([], "No tyvarseq may contain the same tyvar twice")
           else
               doTy ty
 
@@ -403,15 +408,15 @@ local
     (* doExBind : S.DatBind -> unit *)
     fun doDatBind(S.DatBind(_, tyvarseq, tycon, conbinds))
         = if checkTyVarSeq tyvarseq then
-              raise S.SyntaxError "No tyvarseq may contain the same tyvar twice"
+              raise S.SyntaxError ([], "No tyvarseq may contain the same tyvar twice")
           else
               doConBinds(S.VIdSet.empty, conbinds)
     and doConBinds(seen, []) = ()
       | doConBinds(seen, S.ConBind(_, vid, tyopt) :: conbinds) = if S.VIdSet.member(seen, vid) then
-                                                                     raise S.SyntaxError "No datbind may bind the same identifier twice"
+                                                                     raise S.SyntaxError ([], "No datbind may bind the same identifier twice")
                                                                  else
                                                                      if vid = S.MkVId "it" orelse S.VIdSet.member(invalidBoundNames, vid) then
-                                                                         raise S.SyntaxError "Invalid bound name"
+                                                                         raise S.SyntaxError ([], "Invalid bound name")
                                                                      else
                                                                          doConBinds(S.VIdSet.add(seen, vid), conbinds)
 
@@ -424,7 +429,7 @@ local
     fun doExp(tyvarenv : S.TyVarSet.set, S.SConExp _) = ()
       | doExp(tyvarenv, S.VarExp _) = ()
       | doExp(tyvarenv, S.RecordExp(_, row)) = if checkRow row then
-                                               raise S.SyntaxError "No expression row may bind the same label twice"
+                                               raise S.SyntaxError ([], "No expression row may bind the same label twice")
                                                else
                                                    ()
       | doExp(tyvarenv, S.LetInExp(_, decls, exp)) = (List.app (fn dec => doDec(tyvarenv, dec)) decls ; doExp(tyvarenv, exp))

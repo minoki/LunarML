@@ -476,7 +476,7 @@ fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
       )
   | toUTy(ctx, tvenv, env, S.FnType(span, ty1, ty2)) = U.FnType(span, toUTy(ctx, tvenv, env, ty1), toUTy(ctx, tvenv, env, ty2))
 fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) = (Syntax.VIdMap.empty, U.WildcardPat span) (* TODO: should generate a type id? *)
-  | toUPat(ctx, tvenv, env, S.SConPat(span, Syntax.RealConstant _)) = raise Syntax.SyntaxError "No real constant may occur in a pattern"
+  | toUPat(ctx, tvenv, env, S.SConPat(span, Syntax.RealConstant _)) = raise Syntax.SyntaxError ([], "No real constant may occur in a pattern")
   | toUPat(ctx, tvenv, env, S.SConPat(span, sc)) = (Syntax.VIdMap.empty, U.SConPat(span, sc))
   | toUPat(ctx, tvenv, env, S.ConOrVarPat(span, vid))
     = (case lookupVId(env, vid) of
@@ -500,13 +500,13 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) 
   | toUPat(ctx, tvenv, env, S.ConPat(span, longvid, NONE))
     = (case lookupLongVId(env, longvid) of
            SOME (longvid', _) => (Syntax.VIdMap.empty, U.ConPat(span, longvid', NONE))
-         | NONE => raise Syntax.SyntaxError "unbound identifier"
+         | NONE => raise Syntax.SyntaxError ([], "unbound identifier")
       )
   | toUPat(ctx, tvenv, env, S.ConPat(span, longvid, SOME pat))
     = let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
       in case lookupLongVId(env, longvid) of
              SOME (longvid', _) => (vidmap, U.ConPat(span, longvid', SOME pat'))
-           | NONE => raise Syntax.SyntaxError "unbound identifier"
+           | NONE => raise Syntax.SyntaxError ([], "unbound identifier")
       end
   | toUPat(ctx, tvenv, env, S.TypedPat(span1, S.ConOrVarPat(span2, vid), ty))
     = (case lookupVId(env, vid) of
@@ -538,7 +538,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
   | toUExp(ctx, tvenv, env, S.VarExp(span, longvid))
     = (case lookupLongVId(env, longvid) of
            SOME (longvid', idstatus) => U.VarExp(span, longvid', idstatus)
-         | NONE => raise Syntax.SyntaxError ("unbound identifier: " ^ Syntax.print_LongVId longvid)
+         | NONE => raise Syntax.SyntaxError ([], "unbound identifier: " ^ Syntax.print_LongVId longvid)
       )
   | toUExp(ctx, tvenv, env, S.RecordExp(span, row)) = U.RecordExp(span, Syntax.mapRecordRow (fn exp => toUExp(ctx, tvenv, env, exp)) row)
   | toUExp(ctx, tvenv, env, S.LetInExp(span, decls, exp))
