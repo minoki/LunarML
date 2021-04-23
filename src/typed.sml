@@ -412,7 +412,7 @@ type ('a,'b) Context = { nextTyVar : int ref
 fun emitError(ctx : ('a,'b) Context, spans, message) = raise Syntax.SyntaxError (spans, message)
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
-                    | BTyCon of int (* and data constructors *)
+                    | BTyCon of USyntax.LongTyCon (* and data constructors *)
                     (* BDuplicatedTyCon of USyntax.TyVar list * USyntax.Ty *)
 datatype Env = MkEnv of { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
                         , tyConMap : BoundTyCon Syntax.TyConMap.map
@@ -498,7 +498,7 @@ fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
   | toUTy(ctx, tvenv, env, S.RecordType(span, row)) = U.RecordType(span, Syntax.mapRecordRow (fn ty => toUTy(ctx, tvenv, env, ty)) row)
   | toUTy(ctx, tvenv, env, S.TyCon(span, args, tycon))
     = (case lookupLongTyCon(ctx, env, span, tycon) of
-           BTyCon id => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, U.MkLongTyCon(tycon, id))
+           BTyCon ulongtycon => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, ulongtycon)
          | BTyAlias (tyvars, ty) => let val subst = ListPair.foldlEq (fn (tv, arg, m) => USyntax.TyVarMap.insert (m, tv, toUTy(ctx, tvenv, env, arg))) USyntax.TyVarMap.empty (tyvars, args)
                                     in USyntax.applySubstTy subst ty
                                     end
@@ -741,7 +741,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                      in (Syntax.TyConMap.insert(tyConEnv, tycon, tycon'), (span, List.map #2 tyvars', tvenv, tycon', conbinds) :: datbinds)
                      end
                val (tyConEnv, datbinds') = List.foldr doDatBind1 (Syntax.TyConMap.empty, []) datbinds
-               val tyConEnv' = envWithTyConEnv(Syntax.TyConMap.map (fn USyntax.MkTyCon(_,n) => BTyCon n) tyConEnv)
+               val tyConEnv' = envWithTyConEnv(Syntax.TyConMap.map (fn utycon => BTyCon (Syntax.MkQualified([ (* TODO *) ],utycon))) tyConEnv)
                val env' = mergeEnv(env, tyConEnv')
                fun doDatBind2 ((span, tyvars, tvenv, tycon, conbinds), (valEnv, datbinds))
                    = let fun doConBind (S.ConBind(span, vid, optPayloadTy), (valEnv, conbinds))

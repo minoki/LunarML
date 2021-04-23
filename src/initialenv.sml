@@ -162,7 +162,6 @@ val initialEnv_ToTypedSyntax
           val ValueVariable = Syntax.ValueVariable
           val mkTyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty 
           val mkValMap = List.foldl (fn ((name, vid), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (vid, ValueVariable))) Syntax.VIdMap.empty
-          fun getTyConIndex(Syntax.MkQualified(_, USyntax.MkTyCon(_, n))) = n
           val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, str)) Syntax.StrIdMap.empty
           val module_Int = ToTypedSyntax.MkEnv { valMap = mkValMap
                                                               [(* toLarge, fromLarge, toInt, fromInt, precision, minInt, maxInt *)
@@ -183,7 +182,7 @@ val initialEnv_ToTypedSyntax
                                                                (* scan, fromString *)
                                                               ]
                                                , tyConMap = mkTyConMap
-                                                                [(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
+                                                                [(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon Typing.primTyCon_int)
                                                                 ]
                                                , strMap = Syntax.StrIdMap.empty
                                                }
@@ -198,8 +197,8 @@ val initialEnv_ToTypedSyntax
                                                                  (* vector, copy, copyVec, appi, app, modifyi, modify, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
                                                                  ]
                                                   , tyConMap = mkTyConMap
-                                                                   [(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_array))
-                                                                   ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
+                                                                   [(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon Typing.primTyCon_array)
+                                                                   ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon Typing.primTyCon_vector)
                                                                    ]
                                                   , strMap = Syntax.StrIdMap.empty
                                                   }
@@ -212,7 +211,7 @@ val initialEnv_ToTypedSyntax
                                                                   (* update, concat, appi, app, mapi, map, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
                                                                  ]
                                                   , tyConMap = mkTyConMap
-                                                                   [(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
+                                                                   [(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon Typing.primTyCon_vector)
                                                                    ]
                                                   , strMap = Syntax.StrIdMap.empty
                                                   }
@@ -247,22 +246,22 @@ val initialEnv_ToTypedSyntax
                                                                 )
                              , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
                                                      [(Syntax.MkTyCon "unit", ToTypedSyntax.BTyAlias ([], Typing.primTy_unit))
-                                                     ,(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
-                                                     ,(Syntax.MkTyCon "word", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_word))
-                                                     ,(Syntax.MkTyCon "real", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_real))
-                                                     ,(Syntax.MkTyCon "string", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_string))
-                                                     ,(Syntax.MkTyCon "char", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_char))
-                                                     ,(Syntax.MkTyCon "exn", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_exn))
-                                                     ,(Syntax.MkTyCon "bool", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_bool))
-                                                     ,(Syntax.MkTyCon "ref", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_ref))
-                                                     ,(Syntax.MkTyCon "list", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_list))
-                                                     ,(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_array))
-                                                     ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
+                                                     ,(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon Typing.primTyCon_int)
+                                                     ,(Syntax.MkTyCon "word", ToTypedSyntax.BTyCon Typing.primTyCon_word)
+                                                     ,(Syntax.MkTyCon "real", ToTypedSyntax.BTyCon Typing.primTyCon_real)
+                                                     ,(Syntax.MkTyCon "string", ToTypedSyntax.BTyCon Typing.primTyCon_string)
+                                                     ,(Syntax.MkTyCon "char", ToTypedSyntax.BTyCon Typing.primTyCon_char)
+                                                     ,(Syntax.MkTyCon "exn", ToTypedSyntax.BTyCon Typing.primTyCon_exn)
+                                                     ,(Syntax.MkTyCon "bool", ToTypedSyntax.BTyCon Typing.primTyCon_bool)
+                                                     ,(Syntax.MkTyCon "ref", ToTypedSyntax.BTyCon Typing.primTyCon_ref)
+                                                     ,(Syntax.MkTyCon "list", ToTypedSyntax.BTyCon Typing.primTyCon_list)
+                                                     ,(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon Typing.primTyCon_array)
+                                                     ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon Typing.primTyCon_vector)
                                                      ]
                              , strMap = mkStrMap
-                                            [(Syntax.MkStrId "Int", module_Int)
-                                            ,(Syntax.MkStrId "Array", module_Array)
-                                            ,(Syntax.MkStrId "Vector", module_Vector)
+                                            [("Int", module_Int)
+                                            ,("Array", module_Array)
+                                            ,("Vector", module_Vector)
                                             ]
                              }
       end
