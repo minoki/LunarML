@@ -414,29 +414,33 @@ fun emitError(ctx : ('a,'b) Context, spans, message) = raise Syntax.SyntaxError 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of USyntax.LongTyCon (* and data constructors *)
                     (* BDuplicatedTyCon of USyntax.TyVar list * USyntax.Ty *)
-datatype Env = MkEnv of { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
-                        , tyConMap : BoundTyCon Syntax.TyConMap.map
-                        , strMap : Env Syntax.StrIdMap.map
-                        }
-val emptyEnv = MkEnv { valMap = Syntax.VIdMap.empty
-                     , tyConMap = Syntax.TyConMap.empty
-                     , strMap = Syntax.StrIdMap.empty
-                     }
 
-fun mergeEnv(MkEnv env1 : Env, MkEnv env2 : Env)
-    = MkEnv { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
-            , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
-            , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
-            }
+type 'env Env_ = { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
+                 , tyConMap : BoundTyCon Syntax.TyConMap.map
+                 , strMap : 'env Syntax.StrIdMap.map
+                 }
+datatype Env' = MkEnv of Env' Env_
+type Env = Env' Env_
 
-fun envWithValEnv valEnv = MkEnv { valMap = valEnv
-                                 , tyConMap = Syntax.TyConMap.empty
-                                 , strMap = Syntax.StrIdMap.empty
-                                 }
-fun envWithTyConEnv tyConEnv = MkEnv { valMap = Syntax.VIdMap.empty
-                                     , tyConMap = tyConEnv
-                                     , strMap = Syntax.StrIdMap.empty
-                                     }
+val emptyEnv = { valMap = Syntax.VIdMap.empty
+               , tyConMap = Syntax.TyConMap.empty
+               , strMap = Syntax.StrIdMap.empty
+               }
+
+fun mergeEnv(env1 : Env, env2 : Env)
+    = { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
+      , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
+      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
+      }
+
+fun envWithValEnv valEnv = { valMap = valEnv
+                           , tyConMap = Syntax.TyConMap.empty
+                           , strMap = Syntax.StrIdMap.empty
+                           }
+fun envWithTyConEnv tyConEnv = { valMap = Syntax.VIdMap.empty
+                               , tyConMap = tyConEnv
+                               , strMap = Syntax.StrIdMap.empty
+                               }
 
 type TVEnv = USyntax.TyVar Syntax.TyVarMap.map
 
@@ -463,18 +467,18 @@ local structure S = Syntax
       fun newTyCon(ctx, Syntax.MkTyCon name) = USyntax.MkTyCon(name, genTyConId(ctx))
 
       fun lookupStr(ctx, env, span, nil) = env
-        | lookupStr(ctx, MkEnv { strMap = strMap, ... }, span, (str0 as S.MkStrId name) :: str1)
-          = case Syntax.StrIdMap.find(strMap, str0) of
+        | lookupStr(ctx, env, span, (str0 as S.MkStrId name) :: str1)
+          = case Syntax.StrIdMap.find(#strMap env, str0) of
                 NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'")
-              | SOME innerEnv => lookupStr(ctx, innerEnv, span, str1)
+              | SOME (MkEnv innerEnv) => lookupStr(ctx, innerEnv, span, str1)
 
-      fun lookupTyCon(ctx, MkEnv env, span, tycon as Syntax.MkTyCon name)
+      fun lookupTyCon(ctx, env, span, tycon as Syntax.MkTyCon name)
           = case Syntax.TyConMap.find(#tyConMap env, tycon) of
                 NONE => emitError(ctx, [span], "unknown type constructor '" ^ name ^ "'")
               | SOME b => b
       fun lookupLongTyCon(ctx, env : Env, span, Syntax.MkQualified(strpath, tycon)) = lookupTyCon(ctx, lookupStr(ctx, env, span, strpath), span, tycon)
 
-      fun lookupVId(MkEnv env, vid) = Syntax.VIdMap.find(#valMap env, vid)
+      fun lookupVId(env, vid) = Syntax.VIdMap.find(#valMap env, vid)
       fun lookupLongVId(ctx, env : Env, span, Syntax.MkQualified(strpath, vid))
           = (case lookupVId(lookupStr(ctx, env, span, strpath), vid) of
                  NONE => NONE
