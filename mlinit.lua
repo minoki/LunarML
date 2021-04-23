@@ -25,10 +25,14 @@ local function _GE_prim(t)
   return t[1] >= t[2]
 end
 
+local _unit = {}
+
 local _Match = "Match"
 local _Bind = "Bind"
 local _Overflow = "Overflow"
 local _Div = "Div"
+local _Size = "Size"
+local _Subscript = "Subscript"
 
 local function _raise(x)
   error(x, 1)
@@ -303,7 +307,7 @@ end
 
 local function _print(x)
   io.write(x)
-  return {}
+  return _unit
 end
 
 local function _Int_toString(x)
@@ -317,3 +321,76 @@ end
 local function _not(x)
   return not x
 end
+
+-- Array
+local function _Array_array(t)
+  local n, init = t[1], t[2]
+  if n < 0 then -- or maxLen < n
+    error(_Size)
+  end
+  local t = {}
+  for i = 1, n do
+    t[i] = init
+  end
+  return t
+end
+local function _Array_fromList(xs)
+  local t = {}
+  while xs.tag == "::" do
+    table.insert(t, xs.payload[1])
+    xs = xs.payload[2]
+  end
+  return t
+end
+local function _Array_tabulate(t)
+  local n, f = t[1], t[2]
+  if n < 0 then -- or maxLen < n
+    error(_Size)
+  end
+  local t = {}
+  for i = 1, n do
+    t[i] = f(i - 1)
+  end
+  return t
+end
+local function _Array_length(t)
+  return #t
+end
+local function _Array_sub(t)
+  local a, i = t[1], t[2]
+  if i < 0 or #a <= i then
+    error(_Subscript)
+  end
+  return a[i+1]
+end
+local function _Array_update(t)
+  local a, i, x = t[1], t[2], t[3]
+  if i < 0 or #a <= i then
+    error(_Subscript)
+  end
+  a[i+1] = x
+  return _unit
+end
+
+-- Vector
+local function _EQUAL_vector(eq)
+  local function go(a, b)
+    local n = #a
+    if n ~= #b then
+      return false
+    end
+    for i = 1, n do
+      if not eq({a[i], b[i]}) then
+        return false
+      end
+    end
+    return true
+  end
+  return function(t)
+    return go(t[1], t[2])
+  end
+end
+local _Vector_fromList = _Array_fromList
+local _Vector_tabulate = _Array_tabulate
+local _Vector_length = _Array_length
+local _Vector_sub = _Array_sub

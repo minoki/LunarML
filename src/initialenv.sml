@@ -112,35 +112,79 @@ val VId_Int_toString = USyntax.MkVId("Int.toString", 68)
 val VId_HAT = USyntax.MkVId("^", 69) (* String.^ *)
 val VId_raise = USyntax.MkVId("raise", 70)
 val VId_not = USyntax.MkVId("not", 71)
+val VId_EQUAL_array = USyntax.MkVId("=@array", 72)
+val VId_EQUAL_vector = USyntax.MkVId("=@vector", 73)
+val VId_Array_array = USyntax.MkVId("Array.array", 74)
+val VId_Array_fromList = USyntax.MkVId("Array.fromList", 75)
+val VId_Array_tabulate = USyntax.MkVId("Array.tabulate", 76)
+val VId_Array_length = USyntax.MkVId("Array.length", 77)
+val VId_Array_sub = USyntax.MkVId("Array.sub", 78)
+val VId_Array_update = USyntax.MkVId("Array.update", 79)
+val VId_Vector_fromList = USyntax.MkVId("Vector.fromList", 80)
+val VId_Vector_tabulate = USyntax.MkVId("Vector.tabulate", 81)
+val VId_Vector_length = USyntax.MkVId("Vector.length", 82)
+val VId_Vector_sub = USyntax.MkVId("Vector.sub", 83)
 
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
           val ValueVariable = Syntax.ValueVariable
+          val mkTyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
+          val mkValMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
+          val mkStrMap = List.foldl Syntax.StrIdMap.insert' Syntax.StrIdMap.empty
           fun getTyConIndex(Syntax.MkQualified(_, USyntax.MkTyCon(_, n))) = n
-          val module_Int = ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
-                                                                     [(* toLarge, fromLarge, toInt, fromInt, precision, minInt, maxInt *)
-                                                                      (Syntax.MkVId "+", (VId_PLUS_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "-", (VId_MINUS_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "*", (VId_TIMES_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "div", (VId_div_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "mod", (VId_mod_int, ValueVariable))
-                                                                      (* quot, rem, compare *)
-                                                                     ,(Syntax.MkVId "<", (VId_LT_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "<=", (VId_LE_int, ValueVariable))
-                                                                     ,(Syntax.MkVId ">", (VId_GT_int, ValueVariable))
-                                                                     ,(Syntax.MkVId ">=", (VId_GE_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "~", (VId_TILDE_int, ValueVariable))
-                                                                     ,(Syntax.MkVId "abs", (VId_abs_int, ValueVariable))
-                                                                      (* min, max, sign, sameSign, fmt *)
-                                                                     ,(Syntax.MkVId "toString", (VId_Int_toString, ValueVariable))
-                                                                      (* scan, fromString *)
-                                                                     ]
-                                               , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
-                                                                       [(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
-                                                                       ]
+          val module_Int = ToTypedSyntax.MkEnv { valMap = mkValMap
+                                                              [(* toLarge, fromLarge, toInt, fromInt, precision, minInt, maxInt *)
+                                                               (Syntax.MkVId "+", (VId_PLUS_int, ValueVariable))
+                                                              ,(Syntax.MkVId "-", (VId_MINUS_int, ValueVariable))
+                                                              ,(Syntax.MkVId "*", (VId_TIMES_int, ValueVariable))
+                                                              ,(Syntax.MkVId "div", (VId_div_int, ValueVariable))
+                                                              ,(Syntax.MkVId "mod", (VId_mod_int, ValueVariable))
+                                                               (* quot, rem, compare *)
+                                                              ,(Syntax.MkVId "<", (VId_LT_int, ValueVariable))
+                                                              ,(Syntax.MkVId "<=", (VId_LE_int, ValueVariable))
+                                                              ,(Syntax.MkVId ">", (VId_GT_int, ValueVariable))
+                                                              ,(Syntax.MkVId ">=", (VId_GE_int, ValueVariable))
+                                                              ,(Syntax.MkVId "~", (VId_TILDE_int, ValueVariable))
+                                                              ,(Syntax.MkVId "abs", (VId_abs_int, ValueVariable))
+                                                               (* min, max, sign, sameSign, fmt *)
+                                                              ,(Syntax.MkVId "toString", (VId_Int_toString, ValueVariable))
+                                                               (* scan, fromString *)
+                                                              ]
+                                               , tyConMap = mkTyConMap
+                                                                [(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
+                                                                ]
                                                , strMap = Syntax.StrIdMap.empty
                                                }
+          val module_Array = ToTypedSyntax.MkEnv { valMap = mkValMap
+                                                                [(* maxLen *)
+                                                                 (Syntax.MkVId "array", (VId_Array_array, ValueVariable))
+                                                                ,(Syntax.MkVId "fromList", (VId_Array_fromList, ValueVariable))
+                                                                ,(Syntax.MkVId "tabulate", (VId_Array_tabulate, ValueVariable))
+                                                                ,(Syntax.MkVId "length", (VId_Array_length, ValueVariable))
+                                                                ,(Syntax.MkVId "sub", (VId_Array_sub, ValueVariable))
+                                                                ,(Syntax.MkVId "update", (VId_Array_update, ValueVariable))
+                                                                 (* vector, copy, copyVec, appi, app, modifyi, modify, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
+                                                                 ]
+                                                  , tyConMap = mkTyConMap
+                                                                   [(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_array))
+                                                                   ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
+                                                                   ]
+                                                  , strMap = Syntax.StrIdMap.empty
+                                                  }
+          val module_Vector = ToTypedSyntax.MkEnv { valMap = mkValMap
+                                                                 [(* maxLen *)
+                                                                  (Syntax.MkVId "fromList", (VId_Vector_fromList, ValueVariable))
+                                                                 ,(Syntax.MkVId "tabulate", (VId_Vector_tabulate, ValueVariable))
+                                                                 ,(Syntax.MkVId "length", (VId_Vector_length, ValueVariable))
+                                                                 ,(Syntax.MkVId "sub", (VId_Vector_sub, ValueVariable))
+                                                                  (* update, concat, appi, app, mapi, map, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
+                                                                 ]
+                                                  , tyConMap = mkTyConMap
+                                                                   [(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
+                                                                   ]
+                                                  , strMap = Syntax.StrIdMap.empty
+                                                  }
       in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
                                                    [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
                                                    ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
@@ -178,9 +222,13 @@ val initialEnv_ToTypedSyntax
                                                      ,(Syntax.MkTyCon "bool", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_bool))
                                                      ,(Syntax.MkTyCon "ref", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_ref))
                                                      ,(Syntax.MkTyCon "list", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_list))
+                                                     ,(Syntax.MkTyCon "array", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_array))
+                                                     ,(Syntax.MkTyCon "vector", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_vector))
                                                      ]
                              , strMap = List.foldl Syntax.StrIdMap.insert' Syntax.StrIdMap.empty
                                                    [(Syntax.MkStrId "Int", module_Int)
+                                                   ,(Syntax.MkStrId "Array", module_Array)
+                                                   ,(Syntax.MkStrId "Vector", module_Vector)
                                                    ]
                              }
       end
@@ -203,11 +251,15 @@ val initialEnv : Typing.Env
           val IsOrdered = USyntax.IsOrdered
           val emptyValEnv = USyntax.emptyValEnv
           fun mkTyVar tv = USyntax.TyVar(SourcePos.nullSpan, tv)
+          val tyA = mkTyVar tyVarA
           infixr -->
           fun mkFnType(a, b) = USyntax.FnType(SourcePos.nullSpan, a, b)
           val op --> = mkFnType
           fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
           fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
+          fun listOf(t) = mkTyCon([t], primTyCon_list)
+          fun arrayOf(t) = mkTyCon([t], primTyCon_array)
+          fun vectorOf(t) = mkTyCon([t], primTyCon_vector)
           val module_Int = MkEnv { tyMap = mkTyMap
                                                [(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv)) (* ??? *)
                                                ]
@@ -227,6 +279,31 @@ val initialEnv : Typing.Env
                                                 ]
                                  , strMap = mkStrMap []
                                  }
+          val module_Array = MkEnv { tyMap = mkTyMap
+                                                 [(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], arrayOf tyA), emptyValEnv))
+                                                 ,(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
+                                                 ]
+                                   , valMap = mkValMap
+                                                  [(VId_Array_array, (TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA), ValueVariable))
+                                                  ,(VId_Array_fromList, (TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA), ValueVariable))
+                                                  ,(VId_Array_tabulate, (TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> arrayOf tyA), ValueVariable))
+                                                  ,(VId_Array_length, (TypeScheme ([(tyVarA, [])], arrayOf tyA --> primTy_int), ValueVariable))
+                                                  ,(VId_Array_sub, (TypeScheme ([(tyVarA, [])], mkPairType(arrayOf tyA, primTy_int) --> tyA), ValueVariable))
+                                                  ,(VId_Array_update, (TypeScheme ([(tyVarA, [])], USyntax.TupleType(SourcePos.nullSpan, [arrayOf tyA, primTy_int, tyA]) --> primTy_unit), ValueVariable))
+                                                  ]
+                                   , strMap = mkStrMap []
+                                   }
+          val module_Vector = MkEnv { tyMap = mkTyMap
+                                                 [(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
+                                                 ]
+                                   , valMap = mkValMap
+                                                  [(VId_Vector_fromList, (TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA), ValueVariable))
+                                                  ,(VId_Vector_tabulate, (TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA), ValueVariable))
+                                                  ,(VId_Vector_length, (TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int), ValueVariable))
+                                                  ,(VId_Vector_sub, (TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA), ValueVariable))
+                                                  ]
+                                   , strMap = mkStrMap []
+                                   }
       in MkEnv { tyMap = mkTyMap
                              [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
                              ,(USyntax.MkTyCon("bool", 6), TyStr(TypeFcn([], primTy_bool)
@@ -246,6 +323,8 @@ val initialEnv : Typing.Env
                                                            , mkValMap [(VId_ref, (TypeScheme ([(tyVarA, [])], mkTyVar(tyVarA) --> mkTyCon([mkTyVar(tyVarA)], primTyCon_ref)), ValueConstructor))
                               ]))
                              ,(USyntax.MkTyCon("exn", 5), TyStr(TypeFcn([], primTy_exn), emptyValEnv))
+                             ,(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_array)), emptyValEnv))
+                             ,(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_vector)), emptyValEnv))
                              ]
                , valMap = mkValMap
                               (* C Appendix: The Initial Static Basis *)
@@ -278,6 +357,8 @@ val initialEnv : Typing.Env
                               ]
                , strMap = mkStrMap
                               [(Syntax.MkStrId "Int", module_Int)
+                              ,(Syntax.MkStrId "Array", module_Array)
+                              ,(Syntax.MkStrId "Vector", module_Vector)
                               ]
                }
       end

@@ -86,6 +86,8 @@ val builtins = let open InitialEnv
                     ,(VId_EQUAL_char, "_EQUAL_prim") (* Lua == *)
                     ,(VId_EQUAL_list, "_EQUAL_list")
                     ,(VId_EQUAL_ref, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_array, "_EQUAL_prim") (* Lua == *)
+                    ,(VId_EQUAL_vector, "_EQUAL_vector")
                          (* int *)
                     ,(VId_PLUS_int, "_add_int") (* may raise Overflow *)
                     ,(VId_MINUS_int, "_sub_int") (* may raise Overflow *)
@@ -132,6 +134,16 @@ val builtins = let open InitialEnv
                     ,(VId_HAT, "_string_append")
                     ,(VId_raise, "_raise")
                     ,(VId_not, "_not") (* Lua not *)
+                    ,(VId_Array_array, "_Array_array")
+                    ,(VId_Array_fromList, "_Array_fromList")
+                    ,(VId_Array_tabulate, "_Array_tabulate")
+                    ,(VId_Array_length, "_Array_length")
+                    ,(VId_Array_sub, "_Array_sub")
+                    ,(VId_Array_update, "_Array_update")
+                    ,(VId_Vector_fromList, "_Vector_fromList")
+                    ,(VId_Vector_tabulate, "_Vector_tabulate")
+                    ,(VId_Vector_length, "_Vector_length")
+                    ,(VId_Vector_sub, "_Vector_sub")
                     ]
      end                 
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then

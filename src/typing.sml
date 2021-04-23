@@ -131,6 +131,8 @@ val primTyCon_exn    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon
 val primTyCon_bool   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 6)
 val primTyCon_ref    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 7)
 val primTyCon_list   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
+val primTyCon_array  = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "array"), 9)
+val primTyCon_vector = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "vector"), 10)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, [])
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_word)
@@ -294,7 +296,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
          | UnaryConstraint(FnType(span, _, _), IsSigned) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
          | UnaryConstraint(FnType(span, _, _), IsOrdered) => emitError(ctx, [span], "cannot compare functions")
          | UnaryConstraint(TyCon(span, tyargs, longtycon), IsEqType) =>
-           if List.exists (fn x => eqULongTyCon(longtycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref] then
+           if List.exists (fn x => eqULongTyCon(longtycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref, primTyCon_array] then
                (* TODO: check tyargs? *)
                unify(ctx, ctrs) (* do nothing *)
            else if eqULongTyCon(longtycon, primTyCon_list) then

@@ -431,15 +431,19 @@ and getEquality(ctx, env, U.TyCon(span, [], longtycon))
          else if U.eqULongTyCon(longtycon, Typing.primTyCon_exn) then
              raise Fail "'exn' does not admit equality; this should have been a type error"
          else
-             raise Fail "equality for used-defined data types are not implemented yet"
+             raise Fail "equality for user-defined data types are not implemented yet"
       end
   | getEquality(ctx, env, U.TyCon(span, [tyarg], longtycon))
     = if U.eqULongTyCon(longtycon, Typing.primTyCon_ref) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_ref)), toFTy(ctx, env, tyarg))
       else if U.eqULongTyCon(longtycon, Typing.primTyCon_list) then
           F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_list)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
+      else if U.eqULongTyCon(longtycon, Typing.primTyCon_array) then
+          F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_array)), toFTy(ctx, env, tyarg))
+      else if U.eqULongTyCon(longtycon, Typing.primTyCon_vector) then
+          F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_vector)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
       else
-          raise Fail "equality for used-defined data types are not implemented yet"
+          raise Fail "equality for user-defined data types are not implemented yet"
   | getEquality (ctx, env, U.TyCon(span, tyargs, longtycon)) = raise Fail "equality for used-defined data types are not implemented yet"
   | getEquality (ctx, env as MkEnv r, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap r, tv) of
                                                                 NONE => raise Fail "equality for the type variable not found"
