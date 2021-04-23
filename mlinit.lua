@@ -69,7 +69,7 @@ local function __mul_int(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   local z = x * y
-  if z // x ~= y or z // y ~= x then
+  if (x ~= 0 and z // x ~= y) or (y ~= 0 and z // y ~= x) then
     error(_Overflow)
   else
     return z
