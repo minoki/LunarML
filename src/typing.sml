@@ -204,18 +204,7 @@ fun substituteConstraint (tv, replacement) =
      | UnaryConstraint(ty, IsOrdered) => UnaryConstraint(substTy ty, IsOrdered)
     end
 
-(* applySubstTy : Subst -> Ty -> Ty *)
-fun applySubstTy subst =
-    let fun substTy (ty as TyVar(_, tv'))
-            = (case USyntax.TyVarMap.find(subst, tv') of
-                   NONE => ty
-                 | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
-              )
-          | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
-          | substTy (TyCon(span, tyargs, longtycon)) = TyCon(span, List.map substTy tyargs, longtycon)
-          | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
-    in substTy
-    end
+val applySubstTy = USyntax.applySubstTy
 fun applySubstEnv subst =
     let val substTy = applySubstTy subst
         fun substTypeScheme(TypeScheme(tyvars, ty))

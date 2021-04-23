@@ -255,6 +255,19 @@ val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 open PrettyPrint
 
+(* applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
+fun applySubstTy subst =
+    let fun substTy (ty as TyVar(_, tv'))
+            = (case TyVarMap.find(subst, tv') of
+                   NONE => ty
+                 | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
+              )
+          | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
+          | substTy (TyCon(span, tyargs, longtycon)) = TyCon(span, List.map substTy tyargs, longtycon)
+          | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
+    in substTy
+    end
+
 (* mapTy : (Ty -> Ty) -> { doExp : Exp -> Exp, doDec : Dec -> Dec } *)
 fun mapTy doTy =
     (* assumes that doTy only acts on type variables *)
@@ -486,7 +499,9 @@ fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
   | toUTy(ctx, tvenv, env, S.TyCon(span, args, tycon))
     = (case lookupLongTyCon(ctx, env, span, tycon) of
            BTyCon id => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, U.MkLongTyCon(tycon, id))
-         | BTyAlias _ => emitError(ctx, [span], "type alias not supported yet")
+         | BTyAlias (tyvars, ty) => let val subst = ListPair.foldlEq (fn (tv, arg, m) => USyntax.TyVarMap.insert (m, tv, toUTy(ctx, tvenv, env, arg))) USyntax.TyVarMap.empty (tyvars, args)
+                                    in USyntax.applySubstTy subst ty
+                                    end
       )
   | toUTy(ctx, tvenv, env, S.FnType(span, ty1, ty2)) = U.FnType(span, toUTy(ctx, tvenv, env, ty1), toUTy(ctx, tvenv, env, ty2))
 fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) = (Syntax.VIdMap.empty, U.WildcardPat span) (* TODO: should generate a type id? *)
