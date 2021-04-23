@@ -39,91 +39,122 @@ val initialFixity = let open Syntax
                                   ]
                     end
 
-val VId_ref = USyntax.MkVId("ref", 0)
-val VId_nil = USyntax.MkVId("nil", 1)
-val VId_true = USyntax.MkVId("true", 2)
-val VId_false = USyntax.MkVId("false", 3)
-val VId_Match = USyntax.MkVId("Match", 4)
-val VId_Bind = USyntax.MkVId("Bind", 5)
-val VId_DCOLON = USyntax.MkVId("::", 6)
-val VId_EQUAL = USyntax.MkVId("=", 7)
-val VId_COLONEQUAL = USyntax.MkVId(":=", 8)
-val VId_abs = USyntax.MkVId("abs", 9)
-val VId_TILDE = USyntax.MkVId("~", 10)
-val VId_div = USyntax.MkVId("div", 11)
-val VId_mod = USyntax.MkVId("mod", 12)
-val VId_TIMES = USyntax.MkVId("*", 13)
-val VId_DIVIDE = USyntax.MkVId("/", 14)
-val VId_PLUS = USyntax.MkVId("+", 15)
-val VId_MINUS = USyntax.MkVId("-", 16)
-val VId_LT = USyntax.MkVId("<", 17)
-val VId_GT = USyntax.MkVId(">", 18)
-val VId_LE = USyntax.MkVId("<=", 19)
-val VId_GE = USyntax.MkVId(">=", 20)
-(* Monomorphic operators: *)
-val VId_EQUAL_bool   = USyntax.MkVId("=@bool", 22)
-val VId_EQUAL_int    = USyntax.MkVId("=@int", 23)
-val VId_EQUAL_word   = USyntax.MkVId("=@word", 24)
-val VId_EQUAL_string = USyntax.MkVId("=@string", 25)
-val VId_EQUAL_char   = USyntax.MkVId("=@char", 26)
-val VId_EQUAL_list   = USyntax.MkVId("=@list", 27) (* parametrized by element type *)
-val VId_EQUAL_ref    = USyntax.MkVId("=@ref", 28)
-val VId_abs_int      = USyntax.MkVId("abs@int", 29)
-val VId_abs_real     = USyntax.MkVId("abs@real", 30)
-val VId_TILDE_int    = USyntax.MkVId("~@int", 31)
-val VId_TILDE_real   = USyntax.MkVId("~@real", 32)
-val VId_div_int      = USyntax.MkVId("div@int", 33)
-val VId_div_word     = USyntax.MkVId("div@word", 34)
-val VId_mod_int      = USyntax.MkVId("mod@int", 35)
-val VId_mod_word     = USyntax.MkVId("mod@word", 36)
-val VId_TIMES_int    = USyntax.MkVId("*@int", 37)
-val VId_TIMES_word   = USyntax.MkVId("*@word", 38)
-val VId_TIMES_real   = USyntax.MkVId("*@real", 39)
-val VId_DIVIDE_real  = USyntax.MkVId("/@real", 40)
-val VId_PLUS_int     = USyntax.MkVId("+@int", 41)
-val VId_PLUS_word    = USyntax.MkVId("+@word", 42)
-val VId_PLUS_real    = USyntax.MkVId("+@real", 43)
-val VId_MINUS_int    = USyntax.MkVId("-@int", 44)
-val VId_MINUS_word   = USyntax.MkVId("-@word", 45)
-val VId_MINUS_real   = USyntax.MkVId("-@real", 46)
-val VId_LT_int       = USyntax.MkVId("<@int", 47)
-val VId_LT_word      = USyntax.MkVId("<@word", 48)
-val VId_LT_real      = USyntax.MkVId("<@real", 49)
-val VId_LT_string    = USyntax.MkVId("<@string", 50)
-val VId_LT_char      = USyntax.MkVId("<@char", 51)
-val VId_GT_int       = USyntax.MkVId(">@int", 52)
-val VId_GT_word      = USyntax.MkVId(">@word", 53)
-val VId_GT_real      = USyntax.MkVId(">@real", 54)
-val VId_GT_string    = USyntax.MkVId(">@string", 55)
-val VId_GT_char      = USyntax.MkVId(">@char", 56)
-val VId_LE_int       = USyntax.MkVId("<=@int", 57)
-val VId_LE_word      = USyntax.MkVId("<=@word", 58)
-val VId_LE_real      = USyntax.MkVId("<=@real", 59)
-val VId_LE_string    = USyntax.MkVId("<=@string", 60)
-val VId_LE_char      = USyntax.MkVId("<=@char", 61)
-val VId_GE_int       = USyntax.MkVId(">=@int", 62)
-val VId_GE_word      = USyntax.MkVId(">=@word", 63)
-val VId_GE_real      = USyntax.MkVId(">=@real", 64)
-val VId_GE_string    = USyntax.MkVId(">=@string", 65)
-val VId_GE_char      = USyntax.MkVId(">=@char", 66)
-(* Misc *)
-val VId_print = USyntax.MkVId("print", 67)
-val VId_Int_toString = USyntax.MkVId("Int.toString", 68)
-val VId_HAT = USyntax.MkVId("^", 69) (* String.^ *)
-val VId_raise = USyntax.MkVId("raise", 70)
-val VId_not = USyntax.MkVId("not", 71)
-val VId_EQUAL_array = USyntax.MkVId("=@array", 72)
-val VId_EQUAL_vector = USyntax.MkVId("=@vector", 73)
-val VId_Array_array = USyntax.MkVId("Array.array", 74)
-val VId_Array_fromList = USyntax.MkVId("Array.fromList", 75)
-val VId_Array_tabulate = USyntax.MkVId("Array.tabulate", 76)
-val VId_Array_length = USyntax.MkVId("Array.length", 77)
-val VId_Array_sub = USyntax.MkVId("Array.sub", 78)
-val VId_Array_update = USyntax.MkVId("Array.update", 79)
-val VId_Vector_fromList = USyntax.MkVId("Vector.fromList", 80)
-val VId_Vector_tabulate = USyntax.MkVId("Vector.tabulate", 81)
-val VId_Vector_length = USyntax.MkVId("Vector.length", 82)
-val VId_Vector_sub = USyntax.MkVId("Vector.sub", 83)
+val vidCounter = ref ~1
+fun newVId name = let val n = !vidCounter
+                  in vidCounter := n - 1
+                   ; USyntax.MkVId(name, n)
+                  end
+
+(* Ref *)
+val VId_ref        = newVId "ref"
+val VId_COLONEQUAL = newVId "General.:="
+
+(* Bool *)
+val VId_true  = newVId "true"
+val VId_false = newVId "false"
+val VId_not   = newVId "Bool.not"
+
+(* List *)
+val VId_nil    = newVId "nil"
+val VId_DCOLON = newVId "::"
+
+(* Exception *)
+val VId_Match = newVId "Match"
+val VId_Bind  = newVId "Bind"
+val VId_raise = newVId "raise"
+
+(* Overloaded *)
+val VId_abs    = newVId "abs"
+val VId_TILDE  = newVId "~"
+val VId_div    = newVId "div"
+val VId_mod    = newVId "mod"
+val VId_TIMES  = newVId "*"
+val VId_DIVIDE = newVId "/"
+val VId_PLUS   = newVId "+"
+val VId_MINUS  = newVId "-"
+val VId_LT     = newVId "<"
+val VId_GT     = newVId ">"
+val VId_LE     = newVId "<="
+val VId_GE     = newVId ">="
+
+(* Equality *)
+val VId_EQUAL        = newVId "="
+val VId_EQUAL_bool   = newVId "=@bool"
+val VId_EQUAL_int    = newVId "=@int"
+val VId_EQUAL_word   = newVId "=@word"
+val VId_EQUAL_string = newVId "=@string"
+val VId_EQUAL_char   = newVId "=@char"
+val VId_EQUAL_list   = newVId "=@list"
+val VId_EQUAL_ref    = newVId "=@ref"
+val VId_EQUAL_array  = newVId "=@array"
+val VId_EQUAL_vector = newVId "=@vector"
+
+(* Int *)
+val VId_PLUS_int     = newVId "Int.+"
+val VId_MINUS_int    = newVId "Int.-"
+val VId_TIMES_int    = newVId "Int.*"
+val VId_div_int      = newVId "Int.div"
+val VId_mod_int      = newVId "Int.mod"
+val VId_LT_int       = newVId "Int.<"
+val VId_LE_int       = newVId "Int.<="
+val VId_GT_int       = newVId "Int.>"
+val VId_GE_int       = newVId "Int.>="
+val VId_TILDE_int    = newVId "Int.~"
+val VId_abs_int      = newVId "Int.abs"
+val VId_Int_toString = newVId "Int.toString"
+
+(* Word *)
+val VId_PLUS_word  = newVId "Word.+"
+val VId_MINUS_word = newVId "Word.-"
+val VId_TIMES_word = newVId "Word.*"
+val VId_div_word   = newVId "Word.div"
+val VId_mod_word   = newVId "Word.mod"
+val VId_LT_word    = newVId "Word.<"
+val VId_LE_word    = newVId "Word.<="
+val VId_GT_word    = newVId "Word.>"
+val VId_GE_word    = newVId "Word.>="
+
+(* Real *)
+val VId_PLUS_real   = newVId "Real.+"
+val VId_MINUS_real  = newVId "Real.-"
+val VId_TIMES_real  = newVId "Real.*"
+val VId_DIVIDE_real = newVId "Real./"
+val VId_TILDE_real  = newVId "Real.~"
+val VId_abs_real    = newVId "Real.abs"
+val VId_LT_real     = newVId "Real.<"
+val VId_LE_real     = newVId "Real.<="
+val VId_GT_real     = newVId "Real.>"
+val VId_GE_real     = newVId "Real.>="
+
+(* String *)
+val VId_HAT       = newVId "String.^"
+val VId_LT_string = newVId "String.<"
+val VId_LE_string = newVId "String.<="
+val VId_GT_string = newVId "String.>"
+val VId_GE_string = newVId "String.>="
+
+(* Char *)
+val VId_LT_char = newVId "Char.<"
+val VId_GT_char = newVId "Char.>"
+val VId_LE_char = newVId "Char.<="
+val VId_GE_char = newVId "Char.>="
+
+(* Vector *)
+val VId_Vector_fromList = newVId "Vector.fromList"
+val VId_Vector_tabulate = newVId "Vector.tabulate"
+val VId_Vector_length   = newVId "Vector.length"
+val VId_Vector_sub      = newVId "Vector.sub"
+
+(* Array *)
+val VId_Array_array    = newVId "Array.array"
+val VId_Array_fromList = newVId "Array.fromList"
+val VId_Array_tabulate = newVId "Array.tabulate"
+val VId_Array_length   = newVId "Array.length"
+val VId_Array_sub      = newVId "Array.sub"
+val VId_Array_update   = newVId "Array.update"
+
+(* TextIO *)
+val VId_print = newVId "TextIO.print"
 
 val initialEnv_ToTypedSyntax
     = let val ValueConstructor = Syntax.ValueConstructor

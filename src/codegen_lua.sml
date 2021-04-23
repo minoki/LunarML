@@ -146,7 +146,7 @@ val builtins = let open InitialEnv
                     ,(VId_Vector_sub, "_Vector_sub")
                     ]
      end                 
-fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 100 then
+fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
                                                   case USyntax.VIdMap.find (builtins, vid) of
                                                       NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
                                                     | SOME luaExpr => luaExpr
