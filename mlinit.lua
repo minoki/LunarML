@@ -307,7 +307,7 @@ local function _print(x)
 end
 
 local function _Int_toString(x)
-  return tostring(x) -- TODO: sign
+  return string.gsub(tostring(x), "-", "~")
 end
 
 local function _string_append(t)

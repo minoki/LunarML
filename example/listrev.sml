@@ -13,7 +13,7 @@ print (strlist_toString [] ^ "\n");
 print (strlist_toString ["foo"] ^ "\n");
 print (strlist_toString ["foo","bar"] ^ "\n");
 print (strlist_toString ["foo","bar","baz"] ^ "\n");
-val intlist_toString = list_toString Int_toString;
+val intlist_toString = list_toString Int.toString;
 print (intlist_toString [] ^ "\n");
 print (intlist_toString [0] ^ "\n");
 print (intlist_toString [1,2] ^ "\n");

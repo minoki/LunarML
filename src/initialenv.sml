@@ -108,7 +108,7 @@ val VId_GE_string    = USyntax.MkVId(">=@string", 65)
 val VId_GE_char      = USyntax.MkVId(">=@char", 66)
 (* Misc *)
 val VId_print = USyntax.MkVId("print", 67)
-val VId_Int_toString = USyntax.MkVId("Int_toString", 68) (* TODO: Support modules *)
+val VId_Int_toString = USyntax.MkVId("Int.toString", 68)
 val VId_HAT = USyntax.MkVId("^", 69) (* String.^ *)
 val VId_raise = USyntax.MkVId("raise", 70)
 val VId_not = USyntax.MkVId("not", 71)
@@ -118,6 +118,29 @@ val initialEnv_ToTypedSyntax
           val ExceptionConstructor = Syntax.ExceptionConstructor
           val ValueVariable = Syntax.ValueVariable
           fun getTyConIndex(Syntax.MkQualified(_, USyntax.MkTyCon(_, n))) = n
+          val module_Int = ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
+                                                                     [(* toLarge, fromLarge, toInt, fromInt, precision, minInt, maxInt *)
+                                                                      (Syntax.MkVId "+", (VId_PLUS_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "-", (VId_MINUS_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "*", (VId_TIMES_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "div", (VId_div_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "mod", (VId_mod_int, ValueVariable))
+                                                                      (* quot, rem, compare *)
+                                                                     ,(Syntax.MkVId "<", (VId_LT_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "<=", (VId_LE_int, ValueVariable))
+                                                                     ,(Syntax.MkVId ">", (VId_GT_int, ValueVariable))
+                                                                     ,(Syntax.MkVId ">=", (VId_GE_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "~", (VId_TILDE_int, ValueVariable))
+                                                                     ,(Syntax.MkVId "abs", (VId_abs_int, ValueVariable))
+                                                                      (* min, max, sign, sameSign, fmt *)
+                                                                     ,(Syntax.MkVId "toString", (VId_Int_toString, ValueVariable))
+                                                                      (* scan, fromString *)
+                                                                     ]
+                                               , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
+                                                                       [(Syntax.MkTyCon "int", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_int))
+                                                                       ]
+                                               , strMap = Syntax.StrIdMap.empty
+                                               }
       in ToTypedSyntax.MkEnv { valMap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty
                                                    [(Syntax.MkVId "ref", (VId_ref, ValueConstructor))
                                                    ,(Syntax.MkVId "nil", (VId_nil, ValueConstructor))
@@ -141,7 +164,6 @@ val initialEnv_ToTypedSyntax
                                                    ,(Syntax.MkVId "<=", (VId_LE, ValueVariable))
                                                    ,(Syntax.MkVId ">=", (VId_GE, ValueVariable))
                                                    ,(Syntax.MkVId "print", (VId_print, ValueVariable))
-                                                   ,(Syntax.MkVId "Int_toString", (VId_Int_toString, ValueVariable))
                                                    ,(Syntax.MkVId "^", (VId_HAT, ValueVariable))
                                                    ,(Syntax.MkVId "not", (VId_not, ValueVariable))
                                                    ]
@@ -157,7 +179,9 @@ val initialEnv_ToTypedSyntax
                                                      ,(Syntax.MkTyCon "ref", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_ref))
                                                      ,(Syntax.MkTyCon "list", ToTypedSyntax.BTyCon (getTyConIndex Typing.primTyCon_list))
                                                      ]
-                             , strMap = Syntax.StrIdMap.empty
+                             , strMap = List.foldl Syntax.StrIdMap.insert' Syntax.StrIdMap.empty
+                                                   [(Syntax.MkStrId "Int", module_Int)
+                                                   ]
                              }
       end
 
@@ -166,6 +190,7 @@ val initialEnv : Typing.Env
           open Typing
           val mkTyMap = List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty
           val mkValMap = List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+          val mkStrMap = List.foldl Syntax.StrIdMap.insert' Syntax.StrIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
           val TypeFcn = USyntax.TypeFcn
           val TypeScheme = USyntax.TypeScheme
@@ -183,6 +208,25 @@ val initialEnv : Typing.Env
           val op --> = mkFnType
           fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
           fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
+          val module_Int = MkEnv { tyMap = mkTyMap
+                                               [(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv)) (* ??? *)
+                                               ]
+                                 , valMap = mkValMap
+                                                [(VId_PLUS_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int), ValueVariable))
+                                                ,(VId_MINUS_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int), ValueVariable))
+                                                ,(VId_TIMES_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int), ValueVariable))
+                                                ,(VId_div_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int), ValueVariable))
+                                                ,(VId_mod_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int), ValueVariable))
+                                                ,(VId_LT_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool), ValueVariable))
+                                                ,(VId_LE_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool), ValueVariable))
+                                                ,(VId_GT_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool), ValueVariable))
+                                                ,(VId_GE_int, (TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool), ValueVariable))
+                                                ,(VId_TILDE_int, (TypeScheme ([], primTy_int --> primTy_bool), ValueVariable))
+                                                ,(VId_abs_int, (TypeScheme ([], primTy_int --> primTy_bool), ValueVariable))
+                                                ,(VId_Int_toString, (TypeScheme ([], primTy_int --> primTy_string), ValueVariable))
+                                                ]
+                                 , strMap = mkStrMap []
+                                 }
       in MkEnv { tyMap = mkTyMap
                              [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
                              ,(USyntax.MkTyCon("bool", 6), TyStr(TypeFcn([], primTy_bool)
@@ -229,11 +273,12 @@ val initialEnv : Typing.Env
                               ,(VId_GE, (TypeScheme([(tyVarA, [IsOrdered])], mkPairType(mkTyVar(tyVarA), mkTyVar(tyVarA)) --> primTy_bool), ValueVariable)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                    (* Non-overloaded identifiers *)
                               ,(VId_print, (TypeScheme ([], primTy_string --> primTy_unit), ValueVariable))
-                              ,(VId_Int_toString, (TypeScheme ([], primTy_int --> primTy_string), ValueVariable))
                               ,(VId_HAT, (TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string), ValueVariable))
                               ,(VId_not, (TypeScheme ([], primTy_bool --> primTy_bool), ValueVariable))
                               ]
-               , strMap = Syntax.StrIdMap.empty
+               , strMap = mkStrMap
+                              [(Syntax.MkStrId "Int", module_Int)
+                              ]
                }
       end
 end

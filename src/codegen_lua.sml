@@ -179,8 +179,7 @@ fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then "(-" ^ Int.toString (~ 
   | doLiteral (Syntax.CharacterConstant x) = "\"" ^ String.toString x ^ "\"" (* TODO *)
 
 fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
-  | doExp ctx env (F.VarExp (Syntax.MkQualified([], vid))) = ([], VIdToLua vid)
-  | doExp ctx env (F.VarExp (Syntax.MkQualified(_ :: _, _))) = raise Fail "CodeGenLua: qualified identifiers are not implemented yet"
+  | doExp ctx env (F.VarExp (Syntax.MkQualified(_, vid))) = ([], VIdToLua vid) (* TODO: qualified identifier? *)
   | doExp ctx env (F.RecordExp []) = ([], "{}")
   | doExp ctx env (F.RecordExp fields) = (case Syntax.extractTuple(1, fields) of
                                               SOME xs => let val (stmts, ys) = ListPair.unzip (List.map (doExp ctx env) xs)
