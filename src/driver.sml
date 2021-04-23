@@ -92,12 +92,17 @@ fun compile(name, source) =
            val ctx = Typing.newContext()
            val ast1' = PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1)
            val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, ast1')
-           val (env, tvc, (topdecs, decs)) = Typing.typeCheckProgram(ctx, InitialEnv.initialEnv, ast2)
+           val topdecs = !(#topDecs ctx)
+           val typingEnv = Typing.addTopDecs(ctx, InitialEnv.initialEnv, topdecs)
+           val (env, tvc, decs) = Typing.typeCheckProgram(ctx, typingEnv, ast2)
            val decs' = Typing.applyDefaultTypes(ctx, tvc, decs)
            val fctx = { nextVId = #nextVId ctx }
            val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
-           val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) FTransform.initialEnv) fdecs
-           val lua = CodeGenLua.doDecs { nextLuaId = ref 0 } CodeGenLua.MkEnv fdecs'
+           val ftenv = FTransform.addTopDecs fctx FTransform.initialEnv topdecs
+           val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) ftenv) fdecs
+           val luactx = { nextLuaId = ref 0 }
+           val luaenv = CodeGenLua.MkEnv
+           val lua = CodeGenLua.doTopDecs luactx luaenv topdecs ^ CodeGenLua.doDecs luactx luaenv fdecs'
        in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
        end handle DamepoMLParser.ParseError => raise Abort
                 | Syntax.SyntaxError ([], message) =>

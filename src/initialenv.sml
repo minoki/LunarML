@@ -164,7 +164,7 @@ val initialEnv_ToTypedSyntax
 val initialEnv : Typing.Env
     = let open Syntax
           open Typing
-          val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
+          val mkTyMap = List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty
           val mkValMap = List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
           val TypeFcn = USyntax.TypeFcn
@@ -184,24 +184,24 @@ val initialEnv : Typing.Env
           fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
           fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
       in MkEnv { tyMap = mkTyMap
-                             [(MkTyCon "unit", TyStr(TypeFcn([], primTy_unit), emptyValEnv))
-                             ,(MkTyCon "bool", TyStr(TypeFcn([], primTy_bool)
-                                                    , mkValMap [(VId_true, (TypeScheme ([], primTy_bool), ValueConstructor))
-                                                               ,(VId_false, (TypeScheme ([], primTy_bool), ValueConstructor))
-                                                               ]))
-                             ,(MkTyCon "int", TyStr(TypeFcn([], primTy_int), emptyValEnv))
-                             ,(MkTyCon "word", TyStr(TypeFcn([], primTy_word), emptyValEnv))
-                             ,(MkTyCon "real", TyStr(TypeFcn([], primTy_real), emptyValEnv))
-                             ,(MkTyCon "string", TyStr(TypeFcn([], primTy_string), emptyValEnv))
-                             ,(MkTyCon "char", TyStr(TypeFcn([], primTy_char), emptyValEnv))
-                             ,(MkTyCon "list", TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
-                                                    , mkValMap [(VId_nil, (TypeScheme ([(tyVarA, [])], mkTyCon([mkTyVar(tyVarA)], primTyCon_list)), ValueConstructor))
-                                                               ,(VId_DCOLON, (TypeScheme ([(tyVarA, [])], mkPairType(mkTyVar(tyVarA), mkTyCon([mkTyVar(tyVarA)], primTyCon_list)) --> mkTyCon([mkTyVar(tyVarA)], primTyCon_list)), ValueConstructor))
+                             [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
+                             ,(USyntax.MkTyCon("bool", 6), TyStr(TypeFcn([], primTy_bool)
+                                                                , mkValMap [(VId_true, (TypeScheme ([], primTy_bool), ValueConstructor))
+                                                                           ,(VId_false, (TypeScheme ([], primTy_bool), ValueConstructor))
                               ]))
-                             ,(MkTyCon "ref", TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
-                                                   , mkValMap [(VId_ref, (TypeScheme ([(tyVarA, [])], mkTyVar(tyVarA) --> mkTyCon([mkTyVar(tyVarA)], primTyCon_ref)), ValueConstructor))
+                             ,(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv))
+                             ,(USyntax.MkTyCon("word", 1), TyStr(TypeFcn([], primTy_word), emptyValEnv))
+                             ,(USyntax.MkTyCon("real", 2), TyStr(TypeFcn([], primTy_real), emptyValEnv))
+                             ,(USyntax.MkTyCon("string", 3), TyStr(TypeFcn([], primTy_string), emptyValEnv))
+                             ,(USyntax.MkTyCon("char", 4), TyStr(TypeFcn([], primTy_char), emptyValEnv))
+                             ,(USyntax.MkTyCon("list", 5), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
+                                                                , mkValMap [(VId_nil, (TypeScheme ([(tyVarA, [])], mkTyCon([mkTyVar(tyVarA)], primTyCon_list)), ValueConstructor))
+                                                                           ,(VId_DCOLON, (TypeScheme ([(tyVarA, [])], mkPairType(mkTyVar(tyVarA), mkTyCon([mkTyVar(tyVarA)], primTyCon_list)) --> mkTyCon([mkTyVar(tyVarA)], primTyCon_list)), ValueConstructor))
                               ]))
-                             ,(MkTyCon "exn", TyStr(TypeFcn([], primTy_exn), emptyValEnv))
+                             ,(USyntax.MkTyCon("ref", 7), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
+                                                           , mkValMap [(VId_ref, (TypeScheme ([(tyVarA, [])], mkTyVar(tyVarA) --> mkTyCon([mkTyVar(tyVarA)], primTyCon_ref)), ValueConstructor))
+                              ]))
+                             ,(USyntax.MkTyCon("exn", 5), TyStr(TypeFcn([], primTy_exn), emptyValEnv))
                              ]
                , valMap = mkValMap
                               (* C Appendix: The Initial Static Basis *)

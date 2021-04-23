@@ -422,4 +422,14 @@ fun doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
 
 fun doDecs ctx env decs = String.concat (List.map (doDec ctx env) decs)
 
+fun doTopDecs ctx env decs = String.concat (List.map (doTopDec ctx env) decs)
+and doTopDec ctx env (USyntax.TypeDec (span, _)) = ""
+  | doTopDec ctx env (USyntax.DatatypeDec (span, datbinds)) = String.concat (List.map (doDatBind ctx env) datbinds)
+  | doTopDec ctx env (USyntax.DatatypeRepDec (span, _, _)) = ""
+  | doTopDec ctx env (USyntax.AbstypeDec (span, _, _)) = ""
+  | doTopDec ctx env (USyntax.ExceptionDec (span, _)) = ""
+and doDatBind ctx env (USyntax.DatBind (span, tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
+and doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = \"" ^ String.toString name ^ "\" }\n" (* TODO *)
+  | doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = \"" ^ String.toString name ^ "\", payload = x }\nend\n" (* TODO *)
+
 end (* structure CodeGenLua *)

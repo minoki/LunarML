@@ -2,7 +2,7 @@ structure Typing = struct
 
 datatype TyStr = TyStr of USyntax.TypeFcn * USyntax.ValEnv
 
-datatype Env = MkEnv of { tyMap : TyStr Syntax.TyConMap.map
+datatype Env = MkEnv of { tyMap : TyStr USyntax.TyConMap.map
                         , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
                         , strMap : Env Syntax.StrIdMap.map
                         }
@@ -59,8 +59,8 @@ fun lookupStr(ctx, env, span, nil) = env
            NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'")
          | SOME innerEnv => lookupStr(ctx, innerEnv, span, str1)
       )
-fun lookupTyConInEnv(ctx, MkEnv env, span, tycon as Syntax.MkTyCon name)
-    = (case Syntax.TyConMap.find(#tyMap env, tycon) of
+fun lookupTyConInEnv(ctx, MkEnv env, span, tycon as USyntax.MkTyCon(name, _))
+    = (case USyntax.TyConMap.find(#tyMap env, tycon) of
            NONE => emitError(ctx, [span], "unknown type constructor '" ^ name ^ "'")
          | SOME x => x
       )
@@ -81,8 +81,8 @@ fun isSoleConstructor(ctx : Context, env : Env, span : SourcePos.span, longvid: 
     (case lookupLongVIdInEnv(ctx, env, span, longvid) of
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
-         let val Syntax.MkQualified(strids, USyntax.MkTyCon(tycon, x)) = getConstructedType(ctx, span, ty)
-             val TyStr (_, valenv) = lookupTyConInEnv(ctx, lookupStr(ctx, env, span, strids), span, Syntax.MkTyCon tycon)
+         let val Syntax.MkQualified(strids, tycon) = getConstructedType(ctx, span, ty)
+             val TyStr (_, valenv) = lookupTyConInEnv(ctx, lookupStr(ctx, env, span, strids), span, tycon)
          in USyntax.VIdMap.numItems valenv = 1
          end
        | SOME (_, Syntax.ValueVariable) => false
@@ -141,7 +141,7 @@ val primTy_exn    = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_exn)
 val primTy_bool   = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_bool)
 
 val emptyEnv : Env
-    = MkEnv { tyMap = Syntax.TyConMap.empty
+    = MkEnv { tyMap = USyntax.TyConMap.empty
             , valMap = USyntax.VIdMap.empty
             , strMap = Syntax.StrIdMap.empty
             }
@@ -244,7 +244,7 @@ fun instantiate(ctx, span, TypeScheme(vars, ty))
       end
 
 (* mergeEnv : Env * Env -> Env *)
-fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = Syntax.TyConMap.unionWith #2 (#tyMap env1, #tyMap env2)
+fun mergeEnv(MkEnv env1, MkEnv env2) = MkEnv { tyMap = USyntax.TyConMap.unionWith #2 (#tyMap env1, #tyMap env2)
                                              , valMap = USyntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
                                              , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2) (* TODO *)
                                              }
@@ -376,6 +376,30 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
       end
 fun addConstraint(ctx : Context, ct : Constraint) = unify(ctx, [ct])
 
+fun addTopDecs(ctx : Context, env : Env, topdecs : USyntax.TopDec list) : Env = List.foldl (fn (topdec, env) => addTopDec(ctx, env, topdec)) env topdecs
+and addTopDec(ctx, env, USyntax.TypeDec(span, typbinds)) = env
+  | addTopDec(ctx, env, USyntax.DatatypeDec(span, datbinds)) = List.foldl (fn (datbind, env) => addDatBind(ctx, env, datbind)) env datbinds
+  | addTopDec(ctx, env, USyntax.DatatypeRepDec(span, _, _)) = emitError(ctx, [span], "datatype replication: not implemented yet")
+  | addTopDec(ctx, env, USyntax.AbstypeDec(span, _, _)) = emitError(ctx, [span], "abstype declaration: not implemented yet")
+  | addTopDec(ctx, env, USyntax.ExceptionDec(span, _)) = emitError(ctx, [span], "exception declaration: not implemented yet")
+and addDatBind(ctx, MkEnv { tyMap, valMap, strMap }, USyntax.DatBind(span, tyvars, tycon, conbinds))
+    = let val ty = USyntax.TyCon(span, List.map (fn tv => USyntax.TyVar(span, tv)) tyvars, Syntax.MkQualified([], tycon))
+          fun doConBind(USyntax.ConBind(span, vid, NONE), valMap)
+              = let val typeScheme = USyntax.TypeScheme(List.map (fn tv => (tv, [])) tyvars, ty)
+                in USyntax.VIdMap.insert(valMap, vid, (typeScheme, Syntax.ValueConstructor))
+                end
+            | doConBind(USyntax.ConBind(span, vid, SOME payloadTy), valMap)
+              = let val typeScheme = USyntax.TypeScheme(List.map (fn tv => (tv, [])) tyvars, USyntax.FnType(span, payloadTy, ty))
+                in USyntax.VIdMap.insert(valMap, vid, (typeScheme, Syntax.ValueConstructor))
+                end
+          val valEnv = List.foldl doConBind USyntax.VIdMap.empty conbinds
+          val tyStr = TyStr (USyntax.TypeFcn(tyvars, ty), valEnv)
+      in MkEnv { tyMap = USyntax.TyConMap.insert(tyMap, tycon, tyStr)
+               , valMap = USyntax.VIdMap.unionWith (fn _ => emitError(ctx, [span], "internal error: duplicate identifier")) (valMap, valEnv)
+               , strMap = strMap
+               }
+      end
+
 (* typeCheckExp : Context * Env * USyntax.Exp -> USyntax.Ty * USyntax.Exp *)
 fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax.Ty * USyntax.Exp
     = let val ty = case scon of (* TODO: overloaded literals *)
@@ -452,7 +476,7 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
        ; (retTy, CaseExp(span, exp', ty, matches'))
       end
   | typeCheckExp(ctx, env, FnExp(span, vid, argTy, body))
-    = let val env' = mergeEnv(env, MkEnv { tyMap = Syntax.TyConMap.empty
+    = let val env' = mergeEnv(env, MkEnv { tyMap = USyntax.TyConMap.empty
                                          , valMap = USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, (TypeScheme([], argTy), Syntax.ValueVariable))
                                          , strMap = Syntax.StrIdMap.empty
                                          }
@@ -770,13 +794,12 @@ fun typeCheckProgram(ctx, env, decls) = let val (env', decls') = typeCheckDecl(c
                                             val subst = !(#tyVarSubst ctx)
                                             val tvc = !(#tyVarConstraints ctx)
                                             val applySubst = applySubstTy subst
-                                            val topDecs = !(#topDecs ctx)
-                                        in (env', tvc, (topDecs, List.map (USyntax.mapTyInDec applySubst) decls'))
+                                        in (env', tvc, List.map (USyntax.mapTyInDec applySubst) decls')
                                         end
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ Syntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
+fun print_Env (MkEnv { tyMap = tyMap, valMap = valMap, strMap = strMap }) = "MkEnv{tyMap=" ^ USyntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap print_Env strMap ^ "}"
 end (* structure PrettyPrint *)
 open PrettyPrint
 

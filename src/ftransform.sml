@@ -25,6 +25,27 @@ val initialEnv = MkEnv { strMap = Syntax.StrIdMap.empty
                                                     ]
                                       end
                        }
+fun addTopDecs (ctx : Context) : Env -> USyntax.TopDec list -> Env = List.foldl (addTopDec ctx)
+and addTopDec (ctx : Context) (USyntax.TypeDec _, env) = env
+  | addTopDec ctx (USyntax.DatatypeDec(span, datbinds), env) = List.foldl (addDatBind ctx) env datbinds (* TODO: equality *)
+  | addTopDec ctx (USyntax.DatatypeRepDec(span, _, _), env) = env
+  | addTopDec ctx (USyntax.AbstypeDec(span, _, _), env) = env
+  | addTopDec ctx (USyntax.ExceptionDec(span, _), env) = env (* not implemented yet *)
+and addDatBind ctx (USyntax.DatBind(span, tyvars, tycon, conbinds), MkEnv { strMap, dataConMap })
+    = let fun quantify [] ty = ty
+            | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
+          fun doConBind(USyntax.ConBind(span, vid, NONE), dataConMap)
+              = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon)))
+                in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                end
+            | doConBind(USyntax.ConBind(span, vid, SOME payloadTy), dataConMap)
+              = let val typeScheme = quantify tyvars (F.FnType(ToFSyntax.toFTy(ctx, ToFSyntax.emptyEnv, payloadTy), F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon))))
+                in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                end
+      in MkEnv { strMap = strMap
+               , dataConMap = List.foldl doConBind dataConMap conbinds
+               }
+      end
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
