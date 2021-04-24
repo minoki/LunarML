@@ -132,7 +132,6 @@ val builtins = let open InitialEnv
                     ,(VId_print, "_print")
                     ,(VId_Int_toString, "_Int_toString")
                     ,(VId_HAT, "_string_append")
-                    ,(VId_raise, "_raise")
                     ,(VId_not, "_not") (* Lua not *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_Array_fromList")
@@ -341,6 +340,11 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
     = let val (stmts1, exp1') = doExp ctx env exp1
           val (stmts2, exp2') = doExp ctx env exp2
       in (stmts1 @ stmts2, "(" ^ exp1' ^ ")(" ^ exp2' ^ ")") (* TODO: evaluation order *)
+      end
+  | doExp ctx env (F.RaiseExp (span, exp))
+    = let val (stmts, exp') = doExp ctx env exp
+          val { start = { file, line, column }, ...} = span
+      in (stmts, "_raise(" ^ exp' ^ ", \"" ^ String.toString file ^ "\", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")")
       end
   | doExp ctx env (exp as F.IfThenElseExp (exp1, exp2, exp3))
     = let fun doElseIf (F.IfThenElseExp(e1, e2, e3)) = let val (s1, e1') = doExp ctx env e1

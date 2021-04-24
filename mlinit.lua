@@ -27,15 +27,30 @@ end
 
 local _unit = {}
 
-local _Match = "Match"
-local _Bind = "Bind"
-local _Overflow = "Overflow"
-local _Div = "Div"
-local _Size = "Size"
-local _Subscript = "Subscript"
+local _exn_meta = {}
+function _exn_meta:__tostring()
+  return string.format("%s:%d:%d: %s", self.file, self.line, self.column, self.tag[1])
+end
+local _Match_tag = { "Match" }
+local _Match = { tag = _Match_tag }
+local _Bind_tag = { "Bind" }
+local _Bind = { tag = _Bind_tag }
+local _Overflow_tag = { "Overflow" }
+local _Overflow = { tag = _Overflow_tag }
+local _Div_tag = { "Div" }
+local _Div = { tag = _Div_tag }
+local _Size_tag = { "Size" }
+local _Size = { tag = _Size_tag }
+local _Subscript_tag = { "Subscript" }
+local _Subscript = { tag = _Subscript_tag }
+local _Fail_tag = { "Fail" }
+local function _Fail(message)
+  return { tag = _Fail_tag, payload = message }
+end
 
-local function _raise(x)
-  error(x, 1)
+local function _raise(x, file, line, column)
+  local e = setmetatable({ tag = x.tag, payload = x.payload, file = file, line = line, column = column }, _exn_meta)
+  error(e, 1)
 end
 
 -- Int

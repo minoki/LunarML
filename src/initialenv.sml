@@ -39,7 +39,7 @@ val initialFixity = let open Syntax
                                   ]
                     end
 
-val vidCounter = ref ~1
+val vidCounter = ref ~2
 fun newVId name = let val n = !vidCounter
                   in vidCounter := n - 1
                    ; USyntax.MkVId(name, n)
@@ -59,9 +59,13 @@ val VId_nil    = newVId "nil"
 val VId_DCOLON = newVId "::"
 
 (* Exception *)
-val VId_Match = newVId "Match"
-val VId_Bind  = newVId "Bind"
-val VId_raise = newVId "raise"
+val VId_Match     = newVId "Match"
+val VId_Bind      = Typing.VId_Bind (* USyntax.MkVId("Bind", ~1) *)
+val VId_Div       = newVId "Div"
+val VId_Overflow  = newVId "Overflow"
+val VId_Size      = newVId "Size"
+val VId_Subscript = newVId "Subscript"
+val VId_Fail      = newVId "Fail"
 
 (* Overloaded *)
 val VId_abs    = newVId "abs"
@@ -226,6 +230,11 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                        ]
                           ,mkExConMap [("Match", VId_Match)
                                       ,("Bind", VId_Bind)
+                                      ,("Div", VId_Div)
+                                      ,("Overflow", VId_Overflow)
+                                      ,("Size", VId_Size)
+                                      ,("Subscript", VId_Subscript)
+                                      ,("Fail", VId_Fail)
                                       ]
                           ,mkValMap [("=", VId_EQUAL)
                                     ,(":=", VId_COLONEQUAL)
@@ -378,6 +387,11 @@ val initialEnv : Typing.Env
                                        ]
                           ,mkExConMap [(VId_Match, TypeScheme ([], primTy_exn))
                                       ,(VId_Bind, TypeScheme ([], primTy_exn))
+                                      ,(VId_Div, TypeScheme ([], primTy_exn))
+                                      ,(VId_Overflow, TypeScheme ([], primTy_exn))
+                                      ,(VId_Size, TypeScheme ([], primTy_exn))
+                                      ,(VId_Subscript, TypeScheme ([], primTy_exn))
+                                      ,(VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
                                       ]
                           ,mkValMap [(VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
                                     ,(VId_COLONEQUAL, TypeScheme ([(tyVarA, [])], mkPairType(refOf tyA, tyA) --> primTy_unit)) (* forall 'a. 'a ref * 'a -> {} *)

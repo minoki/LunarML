@@ -142,6 +142,7 @@ val primTy_string = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_string)
 val primTy_char   = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_char)
 val primTy_exn    = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_exn)
 val primTy_bool   = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_bool)
+val VId_Bind = USyntax.MkVId("Bind", ~1)
 
 val emptyEnv : Env
     = { tyMap = USyntax.TyConMap.empty
@@ -498,14 +499,28 @@ and typeCheckDecl(ctx, env, nil) : Env * Dec list = (emptyEnv, nil)
                                                                                                              USyntax.VarPat _ => exp
                                                                                                            | USyntax.TypedPat (_, USyntax.VarPat _, _) => exp
                                                                                                            | _ => let val espan = USyntax.getSourceSpanOfExp exp
-                                                                                                                  in USyntax.CaseExp(espan, exp, ty, [(pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))])
+                                                                                                                  in 
+                                                                                                                      USyntax.CaseExp(espan, exp, ty, if isExhaustive(ctx, env, pat) then
+                                                                                                                                                          [(pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))]
+                                                                                                                                                      else
+                                                                                                                                                          [(pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))
+                                                                                                                                                          ,(USyntax.WildcardPat span, USyntax.RaiseExp(span, VarExp(span, USyntax.MkLongVId([], VId_Bind), Syntax.ExceptionConstructor)))
+                                                                                                                                                          ]
+                                                                                                                                     )
                                                                                                                   end
                                                                          )
                                            in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                            end
                           | _ => let val espan = USyntax.getSourceSpanOfExp exp
                                      val tup = USyntax.TupleExp(espan, List.map (fn (vid, _) => VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable)) vars)
-                                     val valbind' = TupleBind(span, vars, USyntax.CaseExp(espan, exp, expTy, [(pat, tup)]))
+                                     val valbind' = TupleBind(span, vars, USyntax.CaseExp(espan, exp, expTy, if isExhaustive(ctx, env, pat) then
+                                                                                                                 [(pat, tup)]
+                                                                                                             else
+                                                                                                                 [(pat, tup)
+                                                                                                                 ,(USyntax.WildcardPat span, USyntax.RaiseExp(span, VarExp(span, USyntax.MkLongVId([], VId_Bind), Syntax.ExceptionConstructor)))
+                                                                                                                 ]
+                                                                                         )
+                                                             )
                                  in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                  end
                      end
