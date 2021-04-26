@@ -196,11 +196,32 @@ fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
 
 structure F = FSyntax
 
+fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
+                                                          | #"\a" => "\\a"
+                                                          | #"\b" => "\\b"
+                                                          | #"\f" => "\\f"
+                                                          | #"\n" => "\\n"
+                                                          | #"\r" => "\\r"
+                                                          | #"\t" => "\\t"
+                                                          | #"\v" => "\\v"
+                                                          | #"\"" => "\\\""
+                                                          | c => if Char.isAscii c andalso Char.isPrint c then
+                                                                     String.str c
+                                                                 else
+                                                                     let val x = Char.ord c
+                                                                     in
+                                                                         if x > 255 then
+                                                                             raise Fail ("this string cannot be expressed in Lua: " ^ String.toString s)
+                                                                         else
+                                                                             "\\x" ^ Int.fmt StringCvt.HEX x
+                                                                     end
+                                                          ) s ^ "\""
+
 fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then "(-" ^ Int.toString (~ x) ^ ")" else Int.toString x
   | doLiteral (Syntax.WordConstant x) = Word.toString x
   | doLiteral (Syntax.RealConstant x) = raise Fail "CodeGenLua: real constant not implemented yet"
-  | doLiteral (Syntax.StringConstant x) = "\"" ^ String.toString x ^ "\"" (* TODO *)
-  | doLiteral (Syntax.CharacterConstant x) = "\"" ^ String.toString x ^ "\"" (* TODO *)
+  | doLiteral (Syntax.StringConstant x) = toLuaStringLit x
+  | doLiteral (Syntax.CharacterConstant x) = toLuaStringLit x
 
 fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
   | doExp ctx env (F.VarExp (Syntax.MkQualified(_, vid))) = ([], VIdToLua vid) (* TODO: qualified identifier? *)
@@ -371,7 +392,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
   | doExp ctx env (F.RaiseExp (span, exp))
     = let val (stmts, exp') = doExp ctx env exp
           val { start = { file, line, column }, ...} = span
-      in (stmts, "_raise(" ^ exp' ^ ", \"" ^ String.toString file ^ "\", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")")
+      in (stmts, "_raise(" ^ exp' ^ ", " ^ toLuaStringLit file ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")")
       end
   | doExp ctx env (exp as F.IfThenElseExp (exp1, exp2, exp3))
     = let fun doElseIf (F.IfThenElseExp(e1, e2, e3)) = let val (s1, e1') = doExp ctx env e1
@@ -471,7 +492,7 @@ and doTopDec ctx env (USyntax.TypeDec (span, _)) = ""
   | doTopDec ctx env (USyntax.AbstypeDec (span, _, _)) = ""
   | doTopDec ctx env (USyntax.ExceptionDec (span, _)) = ""
 and doDatBind ctx env (USyntax.DatBind (span, tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
-and doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = \"" ^ String.toString name ^ "\" }\n" (* TODO *)
-  | doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = \"" ^ String.toString name ^ "\", payload = x }\nend\n" (* TODO *)
+and doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }\n"
+  | doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = " ^ toLuaStringLit name ^ ", payload = x }\nend\n"
 
 end (* structure CodeGenLua *)
