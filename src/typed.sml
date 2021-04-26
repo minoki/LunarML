@@ -94,7 +94,7 @@ datatype ExBind = ExBind1 of SourcePos.span * VId * Ty option (* <op> vid <of ty
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.IdStatus (* value identifier; IdStatus is used by isNonexpansive *)
-             | InstantiatedVarExp of SourcePos.span * LongVId * Syntax.IdStatus * Ty list (* identifiers with type arguments; produced during type-checking *)
+             | InstantiatedVarExp of SourcePos.span * LongVId * Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments; produced during type-checking *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
              | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
@@ -208,7 +208,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
 fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (VarExp(_, Syntax.MkQualified([], vid), idstatus)) = "SimpleVarExp(" ^ print_VId vid ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
   | print_Exp (VarExp(_, x, idstatus)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ ")"
-  | print_Exp (InstantiatedVarExp(_, x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Exp (InstantiatedVarExp(_, x, idstatus, tyargs)) = "InstantiatedVarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Ty, Syntax.print_list print_UnaryConstraint)) tyargs ^ ")"
   | print_Exp (RecordExp(_, x)) = (case Syntax.extractTuple (1, x) of
                                        NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                      | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
@@ -273,7 +273,7 @@ fun mapTy doTy =
     (* assumes that doTy only acts on type variables *)
     let fun doExp(e as SConExp _) = e
           | doExp(e as VarExp _) = e
-          | doExp(InstantiatedVarExp(span, longvid, idstatus, tyargs)) = InstantiatedVarExp(span, longvid, idstatus, List.map doTy tyargs)
+          | doExp(InstantiatedVarExp(span, longvid, idstatus, tyargs)) = InstantiatedVarExp(span, longvid, idstatus, List.map (fn (ty, cts) => (doTy ty, List.map doUnaryConstraint cts)) tyargs)
           | doExp(RecordExp(span, fields)) = RecordExp(span, Syntax.mapRecordRow doExp fields)
           | doExp(LetInExp(span, decls, e)) = LetInExp(span, List.map doDec decls, doExp e)
           | doExp(AppExp(span, e1, e2)) = AppExp(span, doExp e1, doExp e2)
@@ -298,6 +298,8 @@ fun mapTy doTy =
           | doPat(InstantiatedConPat(span, ct, pat, tyargs)) = InstantiatedConPat(span, ct, Option.map doPat pat, List.map doTy tyargs)
           | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
           | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
+        and doUnaryConstraint(HasField{label, fieldTy}) = HasField{label=label, fieldTy=doTy fieldTy}
+          | doUnaryConstraint ct = ct
     in { doExp = doExp, doDec = doDec }
     end
 (* mapTyInExp : (Ty -> Ty) -> Exp -> Exp *)
@@ -337,7 +339,7 @@ fun freeTyVarsInExp(bound, exp)
     = (case exp of
            SConExp _ => TyVarSet.empty
          | VarExp(_, _, _) => TyVarSet.empty
-         | InstantiatedVarExp(_, _, _, tyargs) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
+         | InstantiatedVarExp(_, _, _, tyargs) => List.foldl (fn ((ty,cts), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordExp(_, xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
          | LetInExp(_, decls, exp) => TyVarSet.union(freeTyVarsInDecs(bound, decls), freeTyVarsInExp(bound, exp))
          | AppExp(_, exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
@@ -361,6 +363,17 @@ and freeTyVarsInValBinds(bound, nil, acc) = acc
   | freeTyVarsInValBinds(bound, PatBind(_, pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
   | freeTyVarsInValBinds(bound, TupleBind(_, xs, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) (* TODO *)
   | freeTyVarsInValBinds(bound, PolyVarBind(_, vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
+and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
+    = (case unaryConstraint of
+           HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)
+         | IsEqType     => TyVarSet.empty
+         | IsIntegral   => TyVarSet.empty
+         | IsSignedReal => TyVarSet.empty
+         | IsRing       => TyVarSet.empty
+         | IsField      => TyVarSet.empty
+         | IsSigned     => TyVarSet.empty
+         | IsOrdered    => TyVarSet.empty
+      )
 
 (* filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
 fun filterVarsInPat pred =

@@ -301,7 +301,7 @@ local function _EQUAL_list(eq)
       return false
     elseif at == "nil" then
       return true
-    elseif eq(a.payload[1], b.payload[1]) then
+    elseif eq({a.payload[1], b.payload[1]}) then
       return go(a.payload[2], b.payload[2])
     else
       return false

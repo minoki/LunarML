@@ -226,7 +226,7 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                               end
 and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.VarExp(span, longvid, _)) = F.VarExp(longvid)
-  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as Syntax.MkQualified([], vid), _, [tyarg]))
+  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as Syntax.MkQualified([], vid), _, [(tyarg, cts)]))
     = let open InitialEnv
       in if U.eqVId(vid, VId_EQUAL) then
              getEquality(ctx, env, tyarg)
@@ -343,10 +343,18 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
              else
                  raise Fail "invalid use of >= operator"
          else
-             F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
+             if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
+                 F.AppExp(F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
+             else
+                 F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
       end
   | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid, _, tyargs))
-    = List.foldl (fn (ty, e) => F.TyAppExp(e, toFTy(ctx, env, ty))) (F.VarExp(longvid)) tyargs
+    = List.foldl (fn ((ty, cts), e) =>
+                     if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
+                         F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
+                     else
+                         F.TyAppExp(e, toFTy(ctx, env, ty))
+                 ) (F.VarExp(longvid)) tyargs
   | toFExp(ctx, env, U.RecordExp(span, fields)) = let fun doField (label, e) = (label, toFExp(ctx, env, e))
                                                   in F.RecordExp (List.map doField fields)
                                                   end

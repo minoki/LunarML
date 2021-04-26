@@ -29,17 +29,6 @@ fun freeTyVarsInConstraint(bound, USyntax.EqConstr(ty1, ty2)) = USyntax.TyVarSet
          | USyntax.IsSigned     => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsOrdered    => USyntax.freeTyVarsInTy(bound, ty)
       )
-fun freeTyVarsInUnaryConstraint(bound, unaryConstraint)
-    = (case unaryConstraint of
-           USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.freeTyVarsInTy(bound, fieldTy)
-         | USyntax.IsEqType     => USyntax.TyVarSet.empty
-         | USyntax.IsIntegral   => USyntax.TyVarSet.empty
-         | USyntax.IsSignedReal => USyntax.TyVarSet.empty
-         | USyntax.IsRing       => USyntax.TyVarSet.empty
-         | USyntax.IsField      => USyntax.TyVarSet.empty
-         | USyntax.IsSigned     => USyntax.TyVarSet.empty
-         | USyntax.IsOrdered    => USyntax.TyVarSet.empty
-      )
 
 type Context = { nextTyVar : int ref
                , nextVId : int ref
@@ -224,13 +213,13 @@ fun applySubstEnv subst =
     in substEnv
     end
 
-(* instantiate : Context * SourcePos.span * TypeScheme -> Ty * Ty list *)
+(* instantiate : Context * SourcePos.span * TypeScheme -> Ty * (Ty * UnaryConstraint list) list *)
 fun instantiate(ctx, span, TypeScheme(vars, ty))
     = let val (subst, tyargs) = List.foldl (fn ((v, preds), (set, rest)) =>
                                                let val tv = freshTyVar(ctx)
                                                    val tyarg = TyVar(span, tv)
                                                in List.app (fn pred => addTyVarConstraint(ctx, tv, pred)) preds
-                                                ; (USyntax.TyVarMap.insert(set, v, tyarg), tyarg :: rest)
+                                                ; (USyntax.TyVarMap.insert(set, v, tyarg), (tyarg, preds) :: rest)
                                                end
                                            ) (USyntax.TyVarMap.empty, []) vars
       in (applySubstTy subst ty, List.rev tyargs)
@@ -258,13 +247,13 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                                                                    NONE => emitError(ctx, [span, span'], "unification failed: incompatible record types")
                                                                  | SOME(_,ty') => EqConstr(ty, ty') :: acc)
                                      ctrs fields)
-         | EqConstr(TyCon(span, tyarg, con), TyCon(span', tyarg', con')) =>
+         | EqConstr(t1 as TyCon(span, tyarg, con), t2 as TyCon(span', tyarg', con')) =>
            if eqULongTyCon(con, con') then
                unify(ctx, (ListPair.mapEq EqConstr (tyarg, tyarg')
                            handle ListPair.UnequalLengths => emitError(ctx, [span, span'], "unification failed: the number of type arguments differ")
                           ) @ ctrs)
            else
-               emitError(ctx, [span, span'], "unification failed: type constructor mismatch") (* ??? *)
+               emitError(ctx, [span, span'], "unification failed: type constructor mismatch (" ^ USyntax.PrettyPrint.print_Ty t1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty t2 ^ ")") (* ??? *)
          | EqConstr(ty1, ty2) => emitError(ctx, [], "unification failed: not match (" ^ USyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty ty2 ^ ")")
          | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) =>
            (case recordTy of
@@ -302,8 +291,13 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                (* TODO: check tyargs? *)
                unify(ctx, ctrs) (* do nothing *)
            else if eqULongTyCon(longtycon, primTyCon_list) then
-               (* TODO: enforce the type argument is an equality type *)
-               emitError(ctx, [span], "IsEqType list: not implemented yet")
+               case tyargs of
+                   [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
+                 | _ => emitError(ctx, [span], "bad type arguments to list")
+           else if eqULongTyCon(longtycon, primTyCon_vector) then
+               case tyargs of
+                   [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
+                 | _ => emitError(ctx, [span], "bad type arguments to vector")
            else
                (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
                emitError(ctx, [span], "IsEqType TyCon: not impl")
@@ -413,7 +407,7 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
   | typeCheckExp(ctx, env, exp as InstantiatedVarExp(span, longvid as Syntax.MkQualified(_, USyntax.MkVId(name, _)), idstatus, tyargs)) (* should not reach here *)
     = let val ty = case lookupLongVIdInEnv(ctx, env, span, longvid) of
                        SOME (TypeScheme(vars, ty), ids) =>
-                       let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
+                       let val subst = ListPair.foldlEq (fn ((var, constraints), (tyarg, _), set) =>
                                                             ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
                                                             ; USyntax.TyVarMap.insert(set, var, tyarg)
                                                             )
@@ -728,13 +722,13 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
            (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
                 let val (ty, tyargs) = instantiate(ctx, span, tysc)
                 in case opt_innerPat of
-                       NONE => (ty, USyntax.VIdMap.empty, InstantiatedConPat(span, longvid, NONE, tyargs))
+                       NONE => (ty, USyntax.VIdMap.empty, InstantiatedConPat(span, longvid, NONE, List.map #1 tyargs))
                      | SOME innerPat =>
                        (case ty of
                             USyntax.FnType(span', argTy, resultTy) =>
                             let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
                             in addConstraint(ctx, EqConstr(argTy, argTy'))
-                             ; (resultTy, innerVars, InstantiatedConPat(span, longvid, SOME innerPat', tyargs))
+                             ; (resultTy, innerVars, InstantiatedConPat(span, longvid, SOME innerPat', List.map #1 tyargs))
                             end
                           | _ => emitError(ctx, [span], "invalid pattern")
                        )
