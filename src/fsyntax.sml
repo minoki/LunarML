@@ -21,7 +21,10 @@ datatype Exp = SConExp of Syntax.SCon
              | LetExp of ValBind * Exp
              | LetRecExp of ValBind list * Exp
              | AppExp of Exp * Exp
-             (* | HandleExp of Exp * (Pat * Exp) list *)
+             | HandleExp of { body : Exp
+                            , exnName : USyntax.VId
+                            , handler : Exp
+                            }
              | RaiseExp of SourcePos.span * Exp
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
@@ -128,6 +131,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (LetExp(valbind,x)) = "LetExp(" ^ print_ValBind valbind ^ "," ^ print_Exp x ^ ")"
   | print_Exp (LetRecExp(valbinds,x)) = "LetRecExp(" ^ Syntax.print_list print_ValBind valbinds ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
+  | print_Exp (HandleExp{body,exnName,handler}) = "HandleExp{body=" ^ print_Exp body ^ ",exnName=" ^ USyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler ^ ")"
   | print_Exp (RaiseExp(span,x)) = "RaiseExp(" ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
@@ -377,7 +381,17 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
       end
   | toFExp(ctx, env, U.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
     = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
-  | toFExp(ctx, env, U.HandleExp _) = raise Fail "HandleExp: not implemented yet"
+  | toFExp(ctx, env, U.HandleExp(span, exp, matches))
+    = let val exnName = freshVId(ctx, "exn")
+          val exnTy = F.TyCon([], Typing.primTyCon_exn)
+          fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
+                                  in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
+                                  end
+      in F.HandleExp { body = toFExp(ctx, env, exp)
+                     , exnName = exnName
+                     , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName)), exnTy, List.map doMatch matches @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName))))]) (* TODO: Avoid redundant match *)
+                     }
+      end
   | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, toFExp(ctx, env, exp))
 and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
   | doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))

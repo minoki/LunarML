@@ -77,6 +77,18 @@ val builtins = let open InitialEnv
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
+                    ,(VId_Div, "_Div")
+                    ,(VId_Overflow, "_Overflow")
+                    ,(VId_Size, "_Size")
+                    ,(VId_Subscript, "_Subscript")
+                    ,(VId_Fail, "_Fail")
+                    ,(VId_Match_tag, "_Match_tag")
+                    ,(VId_Bind_tag, "_Bind_tag")
+                    ,(VId_Div_tag, "_Div_tag")
+                    ,(VId_Overflow_tag, "_Overflow_tag")
+                    ,(VId_Size_tag, "_Size_tag")
+                    ,(VId_Subscript_tag, "_Subscript_tag")
+                    ,(VId_Fail_tag, "_Fail_tag")
 	            (* VId_EQUAL *)
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
                     ,(VId_EQUAL_bool, "_EQUAL_prim") (* Lua == *)
@@ -88,6 +100,7 @@ val builtins = let open InitialEnv
                     ,(VId_EQUAL_ref, "_EQUAL_prim") (* Lua == *)
                     ,(VId_EQUAL_array, "_EQUAL_prim") (* Lua == *)
                     ,(VId_EQUAL_vector, "_EQUAL_vector")
+                    ,(VId_EQUAL_exntag, "_EQUAL_exntag") (* Lua == *)
                          (* int *)
                     ,(VId_PLUS_int, "_add_int") (* may raise Overflow *)
                     ,(VId_MINUS_int, "_sub_int") (* may raise Overflow *)
@@ -255,7 +268,8 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
             orelse USyntax.eqVId(vid, VId_EQUAL_int)
             orelse USyntax.eqVId(vid, VId_EQUAL_word)
             orelse USyntax.eqVId(vid, VId_EQUAL_string)
-            orelse USyntax.eqVId(vid, VId_EQUAL_char) then
+            orelse USyntax.eqVId(vid, VId_EQUAL_char)
+            orelse USyntax.eqVId(vid, VId_EQUAL_exntag) then
              doBinaryOp "=="
          else if USyntax.eqVId(vid, VId_PLUS_int) then
              doBinaryFn "__add_int"
@@ -340,6 +354,19 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
     = let val (stmts1, exp1') = doExp ctx env exp1
           val (stmts2, exp2') = doExp ctx env exp2
       in (stmts1 @ stmts2, "(" ^ exp1' ^ ")(" ^ exp2' ^ ")") (* TODO: evaluation order *)
+      end
+  | doExp ctx env (F.HandleExp { body, exnName, handler } )
+    = let val (stmts, body') = doExp ctx env body
+          val status = genSym ctx
+          val result = genSym ctx
+          val (handlerstmts, handler') = doExp ctx env handler
+      in ( ["local " ^ status ^ ", " ^ result ^ " = pcall(function()\n"] @ stmts @ ["return " ^ body' ^ "\nend)\n\
+           \if not " ^ status ^ " then\n\
+           \local " ^ VIdToLua exnName ^ " = " ^ result ^ "\n\
+           \"] @ handlerstmts @ [result ^ " = " ^ handler' ^ "\n\
+           \end\n"]
+         , result
+         )
       end
   | doExp ctx env (F.RaiseExp (span, exp))
     = let val (stmts, exp') = doExp ctx env exp

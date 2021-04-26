@@ -66,6 +66,13 @@ val VId_Overflow  = newVId "Overflow"
 val VId_Size      = newVId "Size"
 val VId_Subscript = newVId "Subscript"
 val VId_Fail      = newVId "Fail"
+val VId_Match_tag     = newVId "Match"
+val VId_Bind_tag      = newVId "Bind"
+val VId_Div_tag       = newVId "Div"
+val VId_Overflow_tag  = newVId "Overflow"
+val VId_Size_tag      = newVId "Size"
+val VId_Subscript_tag = newVId "Subscript"
+val VId_Fail_tag      = newVId "Fail"
 
 (* Overloaded *)
 val VId_abs    = newVId "abs"
@@ -92,6 +99,7 @@ val VId_EQUAL_list   = newVId "=@list"
 val VId_EQUAL_ref    = newVId "=@ref"
 val VId_EQUAL_array  = newVId "=@array"
 val VId_EQUAL_vector = newVId "=@vector"
+val VId_EQUAL_exntag = newVId "=@exntag"
 
 (* Int *)
 val VId_PLUS_int     = newVId "Int.+"

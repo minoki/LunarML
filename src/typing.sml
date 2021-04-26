@@ -445,9 +445,14 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
       in addConstraint(ctx, EqConstr(expTy, ty)) (* ety = ty *)
        ; (ty, TypedExp(span, exp', ty))
       end
-  | typeCheckExp(ctx, env, HandleExp(span, e, handlers))
-          (* e: t, handlers: exn -> t *)
-    = emitError(ctx, [span], "handle expression not implemented yet")
+  | typeCheckExp(ctx, env, HandleExp(span, exp, matches))
+          (* exp: t, matches: exn -> t *)
+    = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
+          val (patTy, retTy, matches') = typeCheckMatch(ctx, env, matches)
+      in addConstraint(ctx, EqConstr(patTy, primTy_exn)) (* patTy = exn *)
+       ; addConstraint(ctx, EqConstr(expTy, retTy))
+       ; (expTy, HandleExp(span, exp', matches'))
+      end
   | typeCheckExp(ctx, env, RaiseExp(span, exp))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
       in addConstraint(ctx, EqConstr(expTy, primTy_exn)) (* expTy = exn *)

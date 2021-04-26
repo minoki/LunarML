@@ -580,7 +580,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
       end
   | toUExp(ctx, tvenv, env, S.AppExp(span, exp1, exp2)) = U.AppExp(span, toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2))
   | toUExp(ctx, tvenv, env, S.TypedExp(span, exp, ty)) = U.TypedExp(span, toUExp(ctx, tvenv, env, exp), toUTy(ctx, tvenv, env, ty))
-  | toUExp(ctx, tvenv, env, S.HandleExp(span, exp, ty)) = emitError(ctx, [span], "handle: not implemented yet")
+  | toUExp(ctx, tvenv, env, S.HandleExp(span, exp, match)) = U.HandleExp(span, toUExp(ctx, tvenv, env, exp), toUMatch(ctx, tvenv, env, match))
   | toUExp(ctx, tvenv, env, S.RaiseExp(span, exp)) = U.RaiseExp(span, toUExp(ctx, tvenv, env, exp))
   | toUExp(ctx, tvenv, env, S.IfThenElseExp(span, exp1, exp2, exp3)) = U.IfThenElseExp(span, toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
   | toUExp(ctx, tvenv, env, S.WhileDoExp(span, exp1, exp2))
