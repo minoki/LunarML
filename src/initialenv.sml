@@ -320,8 +320,8 @@ val initialEnv : Typing.Env
                                           ,(VId_LE_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
                                           ,(VId_GT_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
                                           ,(VId_GE_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                          ,(VId_TILDE_int, TypeScheme ([], primTy_int --> primTy_bool))
-                                          ,(VId_abs_int, TypeScheme ([], primTy_int --> primTy_bool))
+                                          ,(VId_TILDE_int, TypeScheme ([], primTy_int --> primTy_int))
+                                          ,(VId_abs_int, TypeScheme ([], primTy_int --> primTy_int))
                                           ,(VId_Int_toString, TypeScheme ([], primTy_int --> primTy_string))
                                           ]
                            , strMap = mkStrMap []
