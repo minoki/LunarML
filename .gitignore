@@ -3,3 +3,4 @@ MLB/
 src/syntax.grm.desc
 src/syntax.grm.sig
 src/syntax.grm.sml
+test/should_run/*.lua

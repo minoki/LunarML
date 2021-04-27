@@ -1,3 +1,5 @@
+LUA = lua
+
 all: DamepoML
 
 sources = \
@@ -23,4 +25,7 @@ DamepoML: DamepoML.mlb $(sources)
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
 
-.PHONY: all
+test: DamepoML
+	$(LUA) test/run.lua ./DamepoML $(LUA)
+
+.PHONY: all test
