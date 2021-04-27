@@ -29,6 +29,6 @@ case args of
                        val () = TextIO.output (outs, lua)
                        val () = TextIO.closeOut outs
                    in ()
-                   end handle Driver.Abort => ()
+                   end handle Driver.Abort => OS.Process.exit OS.Process.failure
 		  )
   | _ => (print "Too many arguments\n"; OS.Process.exit OS.Process.failure);
