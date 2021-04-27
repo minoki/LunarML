@@ -70,6 +70,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | Opt_OP of bool
        | AtPat of UnfixedSyntax.Pat
        | AtPats of UnfixedSyntax.Pat list
+       | TypedPatPun of Syntax.Label * UnfixedSyntax.Pat
+       | PatPun of Syntax.Label * UnfixedSyntax.Pat
        | PatRow of (Syntax.Label * UnfixedSyntax.Pat) list * bool
        | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
@@ -221,10 +223,18 @@ Pat : TypedPat (TypedPat)
 *)
     | TypedPat AS Pat (UnfixedSyntax.ConjunctivePat(span(TypedPatleft,Patright), TypedPat, Pat)) (* layered or [Successor ML] conjunctive (R) *)
 
+TypedPatPun : BoundVId ((case BoundVId of Syntax.MkVId vid => Syntax.IdentifierLabel vid, UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId))))
+            | BoundVId COLON Ty ((case BoundVId of Syntax.MkVId vid => Syntax.IdentifierLabel vid, UnfixedSyntax.TypedPat(span(BoundVIdleft,Tyright),UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId)),Ty)))
+
+PatPun : TypedPatPun (TypedPatPun)
+       | TypedPatPun AS Pat ((#1 TypedPatPun, UnfixedSyntax.ConjunctivePat(span(TypedPatPunleft,Patright), #2 TypedPatPun, Pat)))
+
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
        | Lab EQUALS Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
        | Lab EQUALS Pat (([(Lab, Pat)], false))
+       | PatPun COMMA PatRow (case PatRow of (s,t) => ((#1 PatPun, #2 PatPun) :: s, t)) (* [derived] punning *)
+       | PatPun (([(#1 PatPun, #2 PatPun)], false)) (* [derived] punning *)
 
 PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
            | (nil)
