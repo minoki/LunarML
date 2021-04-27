@@ -101,7 +101,7 @@ fun compile(name, source) =
            val ftenv = FTransform.addTopDecs fctx FTransform.initialEnv topdecs
            val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) ftenv) fdecs
            val luactx = { nextLuaId = ref 0 }
-           val luaenv = CodeGenLua.MkEnv
+           val luaenv = CodeGenLua.initialEnv
            val lua = CodeGenLua.doTopDecs luactx luaenv topdecs ^ CodeGenLua.doDecs luactx luaenv fdecs'
        in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
        end handle DamepoMLParser.ParseError => raise Abort

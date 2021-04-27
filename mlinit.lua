@@ -319,6 +319,9 @@ end
 local function _set(t)
   t[1].payload = t[2]
 end
+local function _read(t)
+  return t.payload
+end
 
 local function _print(x)
   io.write(x)

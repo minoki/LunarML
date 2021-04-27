@@ -158,7 +158,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
             | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) innerPat) fields)
-            | genBinders env exp (F.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = genBinders env (F.DataPayloadExp exp) innerPat
+            | genBinders env exp (F.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = if USyntax.eqULongVId(longvid, Syntax.MkQualified([], InitialEnv.VId_ref)) then
+                                                                                              case tyargs of
+                                                                                                  [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EXCLAM)), tyarg), exp)) innerPat
+                                                                                                | _ => raise Fail "invalid type arguments to 'ref'"
+                                                                                          else
+                                                                                              genBinders env (F.DataPayloadExp exp) innerPat
             | genBinders env exp (F.InstantiatedConPat(longvid, NONE, tyargs)) = []
             | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
           and isExhaustive env F.WildcardPat = true

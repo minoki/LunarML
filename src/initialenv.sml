@@ -48,6 +48,7 @@ fun newVId name = let val n = !vidCounter
 (* Ref *)
 val VId_ref        = newVId "ref"
 val VId_COLONEQUAL = newVId "General.:="
+val VId_EXCLAM     = newVId "General.!"
 
 (* Bool *)
 val VId_true  = newVId "true"
@@ -246,6 +247,7 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                       ]
                           ,mkValMap [("=", VId_EQUAL)
                                     ,(":=", VId_COLONEQUAL)
+                                    ,("!", VId_EXCLAM)
                                     ,("abs", VId_abs)
                                     ,("~", VId_TILDE)
                                     ,("div", VId_div)
@@ -403,6 +405,7 @@ val initialEnv : Typing.Env
                                       ]
                           ,mkValMap [(VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
                                     ,(VId_COLONEQUAL, TypeScheme ([(tyVarA, [])], mkPairType(refOf tyA, tyA) --> primTy_unit)) (* forall 'a. 'a ref * 'a -> {} *)
+                                    ,(VId_EXCLAM, TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
                                     (* Overloaded identifiers *)
                                     ,(VId_abs, TypeScheme([(tyVarA, [IsSignedReal])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
                                     ,(VId_TILDE, TypeScheme([(tyVarA, [IsSigned])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
