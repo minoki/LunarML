@@ -428,12 +428,11 @@ datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of USyntax.LongTyCon (* and data constructors *)
                     (* BDuplicatedTyCon of USyntax.TyVar list * USyntax.Ty *)
 
-type 'env Env_ = { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
-                 , tyConMap : BoundTyCon Syntax.TyConMap.map
-                 , strMap : 'env Syntax.StrIdMap.map
-                 }
-datatype Env' = MkEnv of Env' Env_
-type Env = Env' Env_
+datatype Env' = MkEnv of Env
+withtype Env = { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
+               , tyConMap : BoundTyCon Syntax.TyConMap.map
+               , strMap : Env' Syntax.StrIdMap.map
+               }
 
 val emptyEnv = { valMap = Syntax.VIdMap.empty
                , tyConMap = Syntax.TyConMap.empty

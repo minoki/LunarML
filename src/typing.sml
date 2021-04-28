@@ -2,12 +2,11 @@ structure Typing = struct
 
 datatype TyStr = TyStr of USyntax.TypeFcn * USyntax.ValEnv
 
-type 'env Env_ = { tyMap : TyStr USyntax.TyConMap.map
-                 , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
-                 , strMap : 'env Syntax.StrIdMap.map
-                 }
-datatype Env' = MkEnv of Env' Env_
-type Env = Env' Env_
+datatype Env' = MkEnv of Env
+withtype Env = { tyMap : TyStr USyntax.TyConMap.map
+               , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
+               , strMap : Env' Syntax.StrIdMap.map
+               }
 
 type Subst = USyntax.Ty USyntax.TyVarMap.map
 

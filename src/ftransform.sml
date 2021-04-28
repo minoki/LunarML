@@ -6,13 +6,14 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
                                              ; USyntax.MkVId(name, n)
                                             end
-datatype Env = MkEnv of { strMap : Env Syntax.StrIdMap.map
-                        , dataConMap : FSyntax.Ty USyntax.VIdMap.map
-                        , exnConMap : USyntax.VId USyntax.VIdMap.map (* exception constructor -> exception tag *)
-                        }
-val emptyEnv = MkEnv { strMap = Syntax.StrIdMap.empty, dataConMap = USyntax.VIdMap.empty, exnConMap = USyntax.VIdMap.empty }
+datatype Env' = MkEnv of Env
+withtype Env = { strMap : Env' Syntax.StrIdMap.map
+               , dataConMap : FSyntax.Ty USyntax.VIdMap.map
+               , exnConMap : USyntax.VId USyntax.VIdMap.map (* exception constructor -> exception tag *)
+               }
+val emptyEnv : Env = { strMap = Syntax.StrIdMap.empty, dataConMap = USyntax.VIdMap.empty, exnConMap = USyntax.VIdMap.empty }
 (* true, false, nil, ::, ref *)
-val initialEnv = MkEnv { strMap = Syntax.StrIdMap.empty
+val initialEnv : Env = { strMap = Syntax.StrIdMap.empty
                        , dataConMap = let open InitialEnv
                                           val tyVarA = USyntax.AnonymousTyVar(0)
                                           val primTyCon_list = Typing.primTyCon_list
@@ -50,7 +51,7 @@ and addTopDec (ctx : Context) (USyntax.TypeDec _, env) = env
   | addTopDec ctx (USyntax.DatatypeRepDec(span, _, _), env) = env
   | addTopDec ctx (USyntax.AbstypeDec(span, _, _), env) = env
   | addTopDec ctx (USyntax.ExceptionDec(span, _), env) = env (* not implemented yet *)
-and addDatBind ctx (USyntax.DatBind(span, tyvars, tycon, conbinds), MkEnv { strMap, dataConMap, exnConMap })
+and addDatBind ctx (USyntax.DatBind(span, tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })
     = let fun quantify [] ty = ty
             | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
           fun doConBind(USyntax.ConBind(span, vid, NONE), dataConMap)
@@ -61,10 +62,10 @@ and addDatBind ctx (USyntax.DatBind(span, tyvars, tycon, conbinds), MkEnv { strM
               = let val typeScheme = quantify tyvars (F.FnType(ToFSyntax.toFTy(ctx, ToFSyntax.emptyEnv, payloadTy), F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon))))
                 in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
                 end
-      in MkEnv { strMap = strMap
-               , dataConMap = List.foldl doConBind dataConMap conbinds
-               , exnConMap = exnConMap
-               }
+      in { strMap = strMap
+         , dataConMap = List.foldl doConBind dataConMap conbinds
+         , exnConMap = exnConMap
+         }
       end
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
@@ -128,7 +129,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                            (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
                            fields
             | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
-            | genMatcher (env as MkEnv { dataConMap, exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
+            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
               = (case USyntax.VIdMap.find(dataConMap, vid) of
                      SOME dataConTy => let val payloadTy = getPayloadTy(tyargs, dataConTy)
                                        in if ty = FSyntax.TyCon([], Typing.primTyCon_exn) then
@@ -142,7 +143,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                        end
                   | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
                 )
-            | genMatcher (env as MkEnv { exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
+            | genMatcher (env as { exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
               = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                     exp
                 else if USyntax.eqVId(vid, InitialEnv.VId_false) then
