@@ -235,8 +235,11 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
   | unify(ctx, ct :: ctrs)
     = (case ct of
            (* TODO: Disallow unifying NamedTyVar *)
-           EqConstr(TyVar(span, tv), ty) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
-         | EqConstr(ty, TyVar(span, tv)) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
+           EqConstr(TyVar(span, tv as AnonymousTyVar _), ty) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
+         | EqConstr(ty, TyVar(span, tv as AnonymousTyVar _)) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
+         | EqConstr(TyVar(span, tv as NamedTyVar (name, eq, x)), TyVar(span', tv' as NamedTyVar (name', eq', x'))) => if USyntax.eqUTyVar (tv, tv') then () else emitError(ctx, [span], "cannot unify named type variable: " ^ name ^ " and " ^ name')
+         | EqConstr(TyVar(span, NamedTyVar (name, eq, _)), ty) => emitError(ctx, [span], "cannot unify named type variable: " ^ name)
+         | EqConstr(ty, TyVar(span, NamedTyVar (name, eq, _))) => emitError(ctx, [span], "cannot unify named type variable: " ^ name)
          | EqConstr(FnType(_, s0, s1), FnType(_, t0, t1)) => unify(ctx, EqConstr(s0, t0) :: EqConstr(s1, t1) :: ctrs)
          | EqConstr(RecordType(span, fields), RecordType(span', fields')) =>
            if List.length fields <> List.length fields then
