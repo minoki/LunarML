@@ -54,6 +54,7 @@ fun compare(NamedTyVar(x,_,a), NamedTyVar(y,_,b)) = (case String.compare (x,y) o
   | compare(NamedTyVar _, AnonymousTyVar _) = LESS
   | compare(AnonymousTyVar _, NamedTyVar _) = GREATER
 end : ORD_KEY
+structure TyVarSet = BinarySetFn(TyVarKey)
 structure TyVarMap = BinaryMapFn(TyVarKey)
 
 datatype UnaryConstraint
@@ -143,20 +144,6 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(CaseExp(span, _, _, _)) = span
   | getSourceSpanOfExp(FnExp(span, _, _, _)) = span
   | getSourceSpanOfExp(ProjectionExp{sourceSpan, ...}) = sourceSpan
-
-structure TyVarKey = struct
-type ord_key = TyVar
-fun compare (NamedTyVar(name, eq, a), NamedTyVar(name', eq', b)) =
-    (case String.compare (name, name') of
-         EQUAL => Int.compare(a, b)
-       | ord => ord
-    )
-  | compare (AnonymousTyVar(a), AnonymousTyVar(b)) = Int.compare(a, b)
-  | compare (NamedTyVar _, AnonymousTyVar _) = LESS
-  | compare (AnonymousTyVar _, NamedTyVar _) = GREATER
-end : ORD_KEY
-structure TyVarSet = BinarySetFn(TyVarKey)
-structure TyVarMap = BinaryMapFn(TyVarKey)
 
 (* pretty printing *)
 structure PrettyPrint = struct
