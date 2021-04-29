@@ -71,17 +71,17 @@ fun parse(name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,colum
                                       ; printSpan(name, lines, {start=p1, end_=p2})
                                       )
                                   val lexErrors = ref []
-                                  val lexer = DamepoMLParser.makeLexer (DamepoMLLex.makeInputFromString str) (name, lexErrors)
+                                  val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
                               in case !lexErrors of
-                                     [] => #2 (Fixity.doDecs({}, InitialEnv.initialFixity, #1 (DamepoMLParser.parse((* lookahead *) 0, lexer, printError, name))))
-                                   | errors => ( List.app (fn DamepoMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
-                                                                                                     ; printPos (name, lines, pos)
-                                                                                                     )
-                                                          | DamepoMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
-                                                                                                     ; printPos (name, lines, pos)
-                                                                                                     )
+                                     [] => #2 (Fixity.doDecs({}, InitialEnv.initialFixity, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name))))
+                                   | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
+                                                                                                    ; printPos (name, lines, pos)
+                                                                                                    )
+                                                          | LunarMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
+                                                                                                    ; printPos (name, lines, pos)
+                                                                                                    )
                                                           ) errors
-                                               ; DamepoMLParser.parse((* lookahead *) 0, lexer, printError, name)
+                                               ; LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)
                                                ; raise Abort
                                                )
                               end
@@ -104,7 +104,7 @@ fun compile(name, source) =
            val luaenv = CodeGenLua.initialEnv
            val lua = CodeGenLua.doTopDecs luactx luaenv topdecs ^ CodeGenLua.doDecs luactx luaenv fdecs'
        in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
-       end handle DamepoMLParser.ParseError => raise Abort
+       end handle LunarMLParser.ParseError => raise Abort
                 | Syntax.SyntaxError ([], message) =>
                   ( print ("error: " ^ message ^ "\n")
                   ; raise Abort

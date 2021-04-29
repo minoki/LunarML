@@ -1,4 +1,4 @@
-functor DamepoMLLexFun(structure Tokens: DamepoML_TOKENS) = struct
+functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
         datatype TokError = TokError of SourcePos.pos * string
                           | TokWarning of SourcePos.pos * string
         structure UserDeclarations = struct

@@ -6,7 +6,7 @@ if progname:find("[/\\]") then
 else
   testdir = "."
 end
-local compiler = arg[1] or "../DamepoML"
+local compiler = arg[1] or "../lunarml"
 local lua_interpreter = arg[2] or "lua"
 function compile(file)
   local h = io.popen(string.format("\"%s\" \"%s\" 2>&1", compiler, file), "r")

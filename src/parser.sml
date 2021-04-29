@@ -1,5 +1,5 @@
-structure DamepoMLLrVals = DamepoMLLrValsFun(structure Token = LrParser.Token)
-structure DamepoMLLex = DamepoMLLexFun(structure Tokens = DamepoMLLrVals.Tokens)
-structure DamepoMLParser = JoinWithArg(structure Lex = DamepoMLLex
-                                       structure ParserData = DamepoMLLrVals.ParserData
-                                       structure LrParser = LrParser)
+structure LunarMLLrVals = LunarMLLrValsFun(structure Token = LrParser.Token)
+structure LunarMLLex = LunarMLLexFun(structure Tokens = LunarMLLrVals.Tokens)
+structure LunarMLParser = JoinWithArg(structure Lex = LunarMLLex
+                                      structure ParserData = LunarMLLrVals.ParserData
+                                      structure LrParser = LrParser)

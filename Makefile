@@ -1,6 +1,6 @@
 LUA = lua
 
-all: DamepoML
+all: lunarml
 
 sources = \
   src/syntax.grm.sig \
@@ -19,13 +19,13 @@ sources = \
   src/driver.sml \
   src/main.sml
 
-DamepoML: DamepoML.mlb $(sources)
-	mlton DamepoML.mlb
+lunarml: LunarML.mlb $(sources)
+	mlton -output $@ LunarML.mlb
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
 
-test: DamepoML
-	$(LUA) test/run.lua ./DamepoML $(LUA)
+test: lunarml
+	$(LUA) test/run.lua ./lunarml $(LUA)
 
 .PHONY: all test

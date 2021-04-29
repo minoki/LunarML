@@ -1,6 +1,6 @@
 (*
 SML/NJ style main:
-structure DamepoML = struct
+structure LunarML = struct
 fun main (progName : string, args : string list) = (print "Hello world!\n" ; OS.Process.success)
 end
 *)
