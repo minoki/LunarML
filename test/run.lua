@@ -64,6 +64,8 @@ local should_not_compile = {
   "generalization.sml",
   "pat.sml",
   "val_rec_override.sml",
+  "typevar_unification.sml",
+  "typevar_scope.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
