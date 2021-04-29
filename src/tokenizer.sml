@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
         datatype TokError = TokError of SourcePos.pos * string
                           | TokWarning of SourcePos.pos * string

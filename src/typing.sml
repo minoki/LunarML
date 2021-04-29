@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure Typing = struct
 
 datatype TyStr = TyStr of USyntax.TypeFcn * USyntax.ValEnv

@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 fun nilPat span = UnfixedSyntax.NonInfixVIdPat (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
 fun trueExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
 fun falseExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("false")))

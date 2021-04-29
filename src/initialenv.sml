@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure InitialEnv = struct
 (*
 Top-level environment:

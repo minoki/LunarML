@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure USyntax = struct
 datatype VId = MkVId of string * int
 type LongVId = VId Syntax.Qualified

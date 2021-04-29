@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure Driver = struct
 fun rep(c, n) = CharVector.tabulate(n, fn _ => c)
 fun printPos(name, lines, p) =

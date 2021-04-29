@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure Syntax = struct
 datatype SCon = IntegerConstant of int (* decimal / hexadecimal *)
               | WordConstant of word (* decimal / hexadecimal *)

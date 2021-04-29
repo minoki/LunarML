@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure CodeGenLua = struct
 (* Mapping of types:
  * SML -> Lua

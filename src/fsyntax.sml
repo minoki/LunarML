@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure FSyntax = struct
 type TyVar = USyntax.TyVar
 type TyCon = USyntax.TyCon

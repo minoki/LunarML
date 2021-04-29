@@ -1,4 +1,8 @@
 (*
+ * Copyright (c) 2021 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+(*
 SML/NJ style main:
 structure LunarML = struct
 fun main (progName : string, args : string list) = (print "Hello world!\n" ; OS.Process.success)
