@@ -335,6 +335,7 @@ val initialEnv : Typing.Env
                                           ,(VId_Int_toString, TypeScheme ([], primTy_int --> primTy_string))
                                           ]
                            , strMap = mkStrMap []
+                           , boundTyVars = USyntax.TyVarSet.empty
                            }
           val module_Array = { tyMap = mkTyMap
                                            [(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], arrayOf tyA), emptyValEnv))
@@ -349,6 +350,7 @@ val initialEnv : Typing.Env
                                             ,(VId_Array_update, TypeScheme ([(tyVarA, [])], USyntax.TupleType(SourcePos.nullSpan, [arrayOf tyA, primTy_int, tyA]) --> primTy_unit))
                                             ]
                              , strMap = mkStrMap []
+                             , boundTyVars = USyntax.TyVarSet.empty
                              }
           val module_Vector = { tyMap = mkTyMap
                                             [(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
@@ -360,6 +362,7 @@ val initialEnv : Typing.Env
                                              ,(VId_Vector_sub, TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
                                              ]
                               , strMap = mkStrMap []
+                              , boundTyVars = USyntax.TyVarSet.empty
                               }
       in { tyMap = mkTyMap
                        [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
@@ -430,6 +433,7 @@ val initialEnv : Typing.Env
                         ,("Array", module_Array)
                         ,("Vector", module_Vector)
                         ]
+         , boundTyVars = USyntax.TyVarSet.empty
          }
       end
 end
