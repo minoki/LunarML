@@ -157,30 +157,31 @@ end (* structure FSyntax *)
 structure ToFSyntax = struct
 type Context = { nextVId : int ref
                }
-datatype Env = MkEnv of { valMap : {} USyntax.VIdMap.map
-                        , tyConMap : FSyntax.TyCon USyntax.TyConMap.map
-                        , equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
-                        , strMap : Env Syntax.StrIdMap.map
-                        }
-val emptyEnv = MkEnv { valMap = USyntax.VIdMap.empty
-                     , tyConMap = USyntax.TyConMap.empty
-                     , equalityForTyVarMap = USyntax.TyVarMap.empty
-                     , strMap = Syntax.StrIdMap.empty
-                     }
-fun mergeEnv(MkEnv env1 : Env, MkEnv env2 : Env)
-    = MkEnv { valMap = USyntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
-            , tyConMap = USyntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
-            , equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
-            , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
-            }
+datatype Env' = MkEnv of Env
+withtype Env = { valMap : {} USyntax.VIdMap.map
+               , tyConMap : FSyntax.TyCon USyntax.TyConMap.map
+               , equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
+               , strMap : Env' Syntax.StrIdMap.map
+               }
+val emptyEnv = { valMap = USyntax.VIdMap.empty
+               , tyConMap = USyntax.TyConMap.empty
+               , equalityForTyVarMap = USyntax.TyVarMap.empty
+               , strMap = Syntax.StrIdMap.empty
+               }
+fun mergeEnv(env1 : Env, env2 : Env)
+    = { valMap = USyntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
+      , tyConMap = USyntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
+      , equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
+      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
+      }
 
-fun updateEqualityForTyVarMap(f, MkEnv r) = MkEnv { valMap = #valMap r
-                                                  , tyConMap = #tyConMap r
-                                                  , equalityForTyVarMap = f (#equalityForTyVarMap r)
-                                                  , strMap = #strMap r
-                                                  }
+fun updateEqualityForTyVarMap(f, env : Env) = { valMap = #valMap env
+                                              , tyConMap = #tyConMap env
+                                              , equalityForTyVarMap = f (#equalityForTyVarMap env)
+                                              , strMap = #strMap env
+                                              }
 
-fun envWithValEnv valEnv = MkEnv { valMap = valEnv
+fun envWithValEnv valEnv : Env = { valMap = valEnv
                                  , tyConMap = USyntax.TyConMap.empty
                                  , equalityForTyVarMap = USyntax.TyVarMap.empty
                                  , strMap = Syntax.StrIdMap.empty
@@ -472,10 +473,10 @@ and getEquality(ctx, env, U.TyCon(span, [], longtycon))
       else
           raise Fail "equality for user-defined data types are not implemented yet"
   | getEquality (ctx, env, U.TyCon(span, tyargs, longtycon)) = raise Fail "equality for used-defined data types are not implemented yet"
-  | getEquality (ctx, env as MkEnv r, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap r, tv) of
-                                                                NONE => raise Fail "equality for the type variable not found"
-                                                              | SOME vid => F.VarExp(Syntax.MkQualified([], vid))
-                                                           )
+  | getEquality (ctx, env, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap env, tv) of
+                                                     NONE => raise Fail "equality for the type variable not found"
+                                                   | SOME vid => F.VarExp(Syntax.MkQualified([], vid))
+                                                )
   | getEquality (ctx, env, U.RecordType(span, fields)) = let fun doField (label, ty) = (label, getEquality(ctx, env, ty))
                                                          in F.RecordEqualityExp (List.map doField fields)
                                                          end
