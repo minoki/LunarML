@@ -151,7 +151,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
               = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                     exp
                 else if USyntax.eqVId(vid, InitialEnv.VId_false) then
-                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_not)), exp)
+                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_Bool_not)), exp)
                 else if ty = FSyntax.TyCon([], Typing.primTyCon_exn) then
                     case USyntax.VIdMap.find(exnConMap, vid) of
                         SOME exntag => F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_exntag)), F.TupleExp [F.DataTagExp exp, F.VarExp(Syntax.MkQualified([], exntag))])

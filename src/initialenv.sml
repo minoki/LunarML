@@ -57,7 +57,7 @@ val VId_EXCLAM     = newVId "General.!"
 (* Bool *)
 val VId_true  = newVId "true"
 val VId_false = newVId "false"
-val VId_not   = newVId "Bool.not"
+val VId_Bool_not = newVId "Bool.not"
 
 (* List *)
 val VId_nil    = newVId "nil"
@@ -144,7 +144,7 @@ val VId_GT_real     = newVId "Real.>"
 val VId_GE_real     = newVId "Real.>="
 
 (* String *)
-val VId_HAT       = newVId "String.^"
+val VId_String_HAT = newVId "String.^"
 val VId_LT_string = newVId "String.<"
 val VId_LE_string = newVId "String.<="
 val VId_GT_string = newVId "String.>"
@@ -171,7 +171,7 @@ val VId_Array_sub      = newVId "Array.sub"
 val VId_Array_update   = newVId "Array.update"
 
 (* TextIO *)
-val VId_print = newVId "TextIO.print"
+val VId_TextIO_print = newVId "TextIO.print"
 
 val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
     = let val ValueConstructor = Syntax.ValueConstructor
@@ -250,8 +250,11 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                       ,("Fail", VId_Fail)
                                       ]
                           ,mkValMap [("=", VId_EQUAL)
-                                    ,(":=", VId_COLONEQUAL)
                                     ,("!", VId_EXCLAM)
+                                    ,(":=", VId_COLONEQUAL)
+                                    ,("^", VId_String_HAT)
+                                    ,("not", VId_Bool_not)
+                                    ,("print", VId_TextIO_print)
                                     ,("abs", VId_abs)
                                     ,("~", VId_TILDE)
                                     ,("div", VId_div)
@@ -264,9 +267,6 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                     ,(">", VId_GT)
                                     ,("<=", VId_LE)
                                     ,(">=", VId_GE)
-                                    ,("print", VId_print)
-                                    ,("^", VId_HAT)
-                                    ,("not", VId_not)
                                     ]
                           ]
          , tyConMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
@@ -427,9 +427,9 @@ val initialEnv : Typing.Env
                                     ,(VId_LE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                     ,(VId_GE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                     (* Non-overloaded identifiers *)
-                                    ,(VId_print, TypeScheme ([], primTy_string --> primTy_unit))
-                                    ,(VId_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
-                                    ,(VId_not, TypeScheme ([], primTy_bool --> primTy_bool))
+                                    ,(VId_TextIO_print, TypeScheme ([], primTy_string --> primTy_unit))
+                                    ,(VId_String_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
+                                    ,(VId_Bool_not, TypeScheme ([], primTy_bool --> primTy_bool))
                                     ]
                           ]
          , strMap = mkStrMap

@@ -148,10 +148,10 @@ val builtins
                     ,(VId_GE_real, "_GE_prim")
                     ,(VId_GE_string, "_GE_prim")
                     ,(VId_GE_char, "_GE_prim")
-                    ,(VId_print, "_print")
+                    ,(VId_TextIO_print, "_print")
                     ,(VId_Int_toString, "_Int_toString")
-                    ,(VId_HAT, "_string_append")
-                    ,(VId_not, "_not") (* Lua not *)
+                    ,(VId_String_HAT, "_string_append")
+                    ,(VId_Bool_not, "_not") (* Lua not *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_Array_fromList")
                     ,(VId_Array_tabulate, "_Array_tabulate")
@@ -208,7 +208,7 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
                     ,(VId_GE_string,    (InfixOp ">=", true))
                     ,(VId_GE_char,      (InfixOp ">=", true))
                     ,(VId_GE_word,      (NamedBinaryFn "__GE_word", true))
-                    ,(VId_HAT,          (InfixOp "..", true))
+                    ,(VId_String_HAT,   (InfixOp "..", true))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
@@ -354,7 +354,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "- (" ^ exp2' ^ ")")
              end
-         else if USyntax.eqVId(vid, VId_not) then
+         else if USyntax.eqVId(vid, VId_Bool_not) then
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "not (" ^ exp2' ^ ")")
              end
@@ -529,7 +529,7 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
       in String.concat stmts
          ^ (if USyntax.eqVId(vid, VId_TILDE_real) then
                 putPureTo ctx env dest ("- " ^ e2')
-            else if USyntax.eqVId(vid, VId_not) then
+            else if USyntax.eqVId(vid, VId_Bool_not) then
                 putPureTo ctx env dest ("not " ^ e2')
             else if USyntax.eqVId(vid, VId_EXCLAM) then
                 putImpureTo ctx env dest ("(" ^ e2' ^ ").payload")
