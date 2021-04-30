@@ -50,6 +50,8 @@ local should_run = {
   "listrev.sml",
   "prime_trialdiv.sml",
   "prime_eratos.sml",
+  "fix_by_datatype.sml",
+  "fix_by_ref.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
