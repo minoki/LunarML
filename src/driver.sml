@@ -67,7 +67,7 @@ fun printSpan(name, lines, {start=p1, end_=p2}) =
 
 exception Abort
 
-fun parse(name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
+fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
                                       ( if p1 = p2 then
                                             print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
                                         else
@@ -77,7 +77,7 @@ fun parse(name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,colum
                                   val lexErrors = ref []
                                   val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
                               in case !lexErrors of
-                                     [] => #2 (Fixity.doDecs({}, InitialEnv.initialFixity, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name))))
+                                     [] => Fixity.doDecs({}, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
                                    | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
                                                                                                     ; printPos (name, lines, pos)
                                                                                                     )
@@ -90,24 +90,54 @@ fun parse(name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,colum
                                                )
                               end
 
-fun compile(name, source) =
+type Context = { typingContext : Typing.Context
+               , toFContext : ToFSyntax.Context
+               , luaContext : CodeGenLua.Context
+               }
+fun newContext() : Context = let val typingContext = Typing.newContext()
+                             in { typingContext = typingContext
+                                , toFContext = { nextVId = #nextVId typingContext }
+                                , luaContext = { nextLuaId = ref 0 }
+                                }
+                             end
+
+type Env = { fixity : Fixity.FixityStatusMap
+           , toTypedSyntaxEnv : ToTypedSyntax.Env
+           , typingEnv : Typing.Env
+           , toFEnv : ToFSyntax.Env
+           , fTransEnv : FTransform.Env
+           , luaEnv : CodeGenLua.Env
+           }
+val initialEnv : Env = { fixity = InitialEnv.initialFixity
+                       , toTypedSyntaxEnv = InitialEnv.initialEnv_ToTypedSyntax
+                       , typingEnv = InitialEnv.initialEnv
+                       , toFEnv = ToFSyntax.emptyEnv
+                       , fTransEnv = FTransform.initialEnv
+                       , luaEnv = CodeGenLua.initialEnv
+                       }
+
+fun compile({ typingContext, toFContext, luaContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, toFEnv, fTransEnv, luaEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
-    in let val ast1 = parse(name, lines, source)
-           val ctx = Typing.newContext()
+    in let val (fixity', ast1) = parse(fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInDecs(Syntax.TyVarSet.empty, ast1)
-           val (_, ast2) = ToTypedSyntax.toUDecs(ctx, Syntax.TyVarMap.empty, InitialEnv.initialEnv_ToTypedSyntax, ast1')
-           val topdecs = !(#topDecs ctx)
-           val typingEnv = Typing.addTopDecs(ctx, InitialEnv.initialEnv, topdecs)
-           val (env, tvc, decs) = Typing.typeCheckProgram(ctx, typingEnv, ast2)
-           val decs' = Typing.applyDefaultTypes(ctx, tvc, decs)
-           val fctx = { nextVId = #nextVId ctx }
-           val fdecs = ToFSyntax.toFDecs(fctx, ToFSyntax.emptyEnv, decs')
-           val ftenv = FTransform.addTopDecs fctx FTransform.initialEnv topdecs
-           val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches fctx) ftenv) fdecs
-           val luactx = { nextLuaId = ref 0 }
-           val luaenv = CodeGenLua.initialEnv
-           val lua = CodeGenLua.doTopDecs luactx luaenv topdecs ^ CodeGenLua.doDecs luactx luaenv fdecs'
-       in (topdecs, ast1, ast2, decs', fdecs, fdecs', lua)
+           val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUDecs(typingContext, Syntax.TyVarMap.empty, toTypedSyntaxEnv, ast1')
+           val topdecs = !(#topDecs typingContext)
+           val () = #topDecs typingContext := [] (* TODO *)
+           val typingEnv' = Typing.addTopDecs(typingContext, typingEnv, topdecs)
+           val (typingEnv'', tvc, decs) = Typing.typeCheckProgram(typingContext, typingEnv', ast2)
+           val decs' = Typing.applyDefaultTypes(typingContext, tvc, decs)
+           val fdecs = ToFSyntax.toFDecs(toFContext, toFEnv, decs')
+           val fTransEnv' = FTransform.addTopDecs toFContext fTransEnv topdecs
+           val fdecs' = List.map (#doDec (FTransform.desugarPatternMatches toFContext) fTransEnv') fdecs
+           val lua = CodeGenLua.doTopDecs luaContext luaEnv topdecs ^ CodeGenLua.doDecs luaContext luaEnv fdecs'
+           val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
+                             , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')
+                             , typingEnv = Typing.mergeEnv (typingEnv', typingEnv'')
+                             , toFEnv = toFEnv (* not really used *)
+                             , fTransEnv = fTransEnv'
+                             , luaEnv = luaEnv (* indent only *)
+                             }
+       in (modifiedEnv, lua)
        end handle LunarMLParser.ParseError => raise Abort
                 | Syntax.SyntaxError ([], message) =>
                   ( print ("error: " ^ message ^ "\n")
