@@ -17,13 +17,13 @@ datatype Pat = WildcardPat
              | RecordPat of (Syntax.Label * Pat) list * bool
              | InstantiatedConPat of USyntax.LongVId * Pat option * Ty list
              | LayeredPat of USyntax.VId * Ty * Pat
-(* datatype DatBind = DatBind of TyVar list * TyCon * ConBind list *)
-(* datatype ExBind = ExBind of Syntax.VId of Ty option *)
+datatype ConBind = ConBind of USyntax.VId * Ty option
+datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
+datatype ExBind = ExBind of USyntax.VId * Ty option
 datatype Exp = SConExp of Syntax.SCon
              | VarExp of USyntax.LongVId
              | RecordExp of (Syntax.Label * Exp) list
-             | LetExp of ValBind * Exp
-             | LetRecExp of ValBind list * Exp
+             | LetExp of Dec * Exp
              | AppExp of Exp * Exp
              | HandleExp of { body : Exp
                             , exnName : USyntax.VId
@@ -41,8 +41,10 @@ datatype Exp = SConExp of Syntax.SCon
              | DataPayloadExp of Exp (* * USyntax.LongVId * LongTyCon *)
      and ValBind = SimpleBind of USyntax.VId * Ty * Exp
                  | TupleBind of (USyntax.VId * Ty) list * Exp
-datatype Dec = ValDec of ValBind
+     and Dec = ValDec of ValBind
              | RecValDec of ValBind list
+             | DatatypeDec of DatBind list
+             | ExceptionDec of ExBind
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -132,8 +134,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                  | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
                               )
-  | print_Exp (LetExp(valbind,x)) = "LetExp(" ^ print_ValBind valbind ^ "," ^ print_Exp x ^ ")"
-  | print_Exp (LetRecExp(valbinds,x)) = "LetRecExp(" ^ Syntax.print_list print_ValBind valbinds ^ "," ^ print_Exp x ^ ")"
+  | print_Exp (LetExp(dec,x)) = "LetExp(" ^ print_Dec dec ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (HandleExp{body,exnName,handler}) = "HandleExp{body=" ^ print_Exp body ^ ",exnName=" ^ USyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler ^ ")"
   | print_Exp (RaiseExp(span,x)) = "RaiseExp(" ^ print_Exp x ^ ")"
@@ -148,8 +149,10 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (DataPayloadExp exp) = "DataPayloadExp(" ^ print_Exp exp ^ ")"
 and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
-fun print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
+and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+  | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
+  | print_Dec (ExceptionDec exbind) = "ExceptionDec"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -364,21 +367,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                                                   in F.RecordExp (List.map doField fields)
                                                   end
   | toFExp(ctx, env, U.LetInExp(span, decs, e))
-    = let fun go env' [] = toFExp(ctx, env', e)
-            | go env' (U.ValDec(span', _, valbinds, _) :: decs)
-              = let fun go' env'' [] = go env'' decs
-                      | go' env'' (valbind :: valbinds')
-                        = let val valbind' = doValBind ctx env'' valbind
-                          in F.LetExp(valbind', go' env'' valbinds')
-                          end
-                in go' env' valbinds
-                end
-            | go env' (U.RecValDec(span', _, valbinds, _) :: decs)
-              = let val valbinds' = List.map (doValBind ctx env') valbinds
-                in F.LetRecExp(valbinds', go env' decs)
-                end
-      in go env decs
-      end
+    = List.foldr F.LetExp (toFExp(ctx, env, e)) (toFDecs(ctx, env, decs)) (* new environment? *)
   | toFExp(ctx, env, U.AppExp(span, e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
   | toFExp(ctx, env, U.TypedExp(span, exp, _)) = toFExp(ctx, env, exp)
   | toFExp(ctx, env, U.IfThenElseExp(span, e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
@@ -481,10 +470,18 @@ and getEquality(ctx, env, U.TyCon(span, [], longtycon))
                                                          in F.RecordEqualityExp (List.map doField fields)
                                                          end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
-fun toFDecs(ctx, env, []) = []
+and toFDecs(ctx, env, []) = []
   | toFDecs(ctx, env, U.ValDec(span, tvs, valbinds, valenv) :: decs)
     = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds @ toFDecs (ctx, env, decs)
   | toFDecs(ctx, env, U.RecValDec(span, tvs, valbinds, valenv) :: decs)
     = F.RecValDec (List.map (doValBind ctx env) valbinds) :: toFDecs (ctx, env, decs)
+  | toFDecs(ctx, env, U.TypeDec(span, typbinds) :: decs) = toFDecs(ctx, env, decs)
+  | toFDecs(ctx, env, U.DatatypeDec(span, datbinds) :: decs)
+    = F.DatatypeDec (List.map (fn datbind => doDatBind(ctx, env, datbind)) datbinds) :: toFDecs(ctx, env, decs)
+  | toFDecs(ctx, env, U.ExceptionDec(span, exbinds) :: decs) = List.mapPartial (fn exbind => doExBind(ctx, env, exbind)) exbinds @ toFDecs(ctx, env, decs)
+and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
+and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
+  | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
+and doExBind(ctx, env, exbind) = NONE (* TODO *)
 end (* local *)
 end (* structure ToFSyntax *)

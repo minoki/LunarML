@@ -49,39 +49,18 @@ val initialEnv : Env = { strMap = Syntax.StrIdMap.empty
                                                    ]
                                      end
                        }
-fun addTopDecs (ctx : Context) : Env -> USyntax.TopDec list -> Env = List.foldl (addTopDec ctx)
-and addTopDec (ctx : Context) (USyntax.TypeDec _, env) = env
-  | addTopDec ctx (USyntax.DatatypeDec(span, datbinds), env) = List.foldl (addDatBind ctx) env datbinds (* TODO: equality *)
-  | addTopDec ctx (USyntax.DatatypeRepDec(span, _, _), env) = env
-  | addTopDec ctx (USyntax.AbstypeDec(span, _, _), env) = env
-  | addTopDec ctx (USyntax.ExceptionDec(span, _), env) = env (* not implemented yet *)
-and addDatBind ctx (USyntax.DatBind(span, tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })
-    = let fun quantify [] ty = ty
-            | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
-          fun doConBind(USyntax.ConBind(span, vid, NONE), dataConMap)
-              = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon)))
-                in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
-                end
-            | doConBind(USyntax.ConBind(span, vid, SOME payloadTy), dataConMap)
-              = let val typeScheme = quantify tyvars (F.FnType(ToFSyntax.toFTy(ctx, ToFSyntax.emptyEnv, payloadTy), F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon))))
-                in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
-                end
-      in { strMap = strMap
-         , dataConMap = List.foldl doConBind dataConMap conbinds
-         , exnConMap = exnConMap
-         }
-      end
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
-fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValBind: Env -> F.ValBind -> F.ValBind, doDec : Env -> F.Dec -> F.Dec }
+fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValBind: Env -> F.ValBind -> F.ValBind, doDec : Env -> F.Dec -> Env * F.Dec, doDecs : Env -> F.Dec list -> Env * F.Dec list }
     = let fun doExp (env: Env) exp0
               = (case exp0 of
                      F.SConExp scon => exp0
                    | F.VarExp longvid => exp0
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, e) => (label, doExp env e)) fields)
-                   | F.LetExp (valbind, exp) => F.LetExp (doValBind env valbind, doExp env exp) (* TODO: modify environment *)
-                   | F.LetRecExp (valbinds, exp) => F.LetRecExp (List.map (doValBind env) valbinds, doExp env exp)
+                   | F.LetExp (dec, exp) => let val (env', dec') = doDec env dec
+                                            in F.LetExp (dec', doExp env' exp)
+                                            end
                    | F.AppExp(exp1, exp2) => F.AppExp(doExp env exp1, doExp env exp2)
                    | F.HandleExp{body, exnName, handler} => F.HandleExp { body = doExp env body
                                                                         , exnName = exnName
@@ -104,19 +83,39 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                              = let val binders = genBinders env examinedExp pat
                                in if isExhaustive env pat then
                                       if List.null rest then
-                                          List.foldr F.LetExp (doExp env innerExp) binders
+                                          List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders
                                       else
                                           raise Fail "A redundant pattern match found"
                                   else
                                       let val matcher = genMatcher env examinedExp ty pat
-                                      in F.IfThenElseExp(matcher, List.foldr F.LetExp (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
+                                      in F.IfThenElseExp(matcher, List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
                                       end
                                end
-                     in F.LetExp(F.SimpleBind(examinedVId, ty, doExp env exp), go matches)
+                     in F.LetExp(F.ValDec(F.SimpleBind(examinedVId, ty, doExp env exp)), go matches)
                      end
                 )
+          and doDec env (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
+            | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
+            | doDec env (dec as F.ExceptionDec exbind) = (env, dec) (* TODO: exnconmap *)
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
+          and doDatBind (F.DatBind (tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })
+              = let fun quantify [] ty = ty
+                      | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
+                    fun doConBind (F.ConBind (vid, NONE), dataConMap)
+                        = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon)))
+                          in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                          end
+                      | doConBind(F.ConBind (vid, SOME payloadTy), dataConMap)
+                        = let val typeScheme = quantify tyvars (F.FnType(payloadTy, F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon))))
+                          in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                          end
+                in { strMap = strMap
+                   , dataConMap = List.foldl doConBind dataConMap conbinds
+                   , exnConMap = exnConMap
+                   }
+                end
           and genMatcher env exp _ F.WildcardPat = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
             | genMatcher env exp ty (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_int)), F.TupleExp [exp, F.SConExp scon])
             | genMatcher env exp ty (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_word)), F.TupleExp [exp, F.SConExp scon])
@@ -177,11 +176,15 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | isExhaustive env (F.RecordPat (row, _)) = List.all (fn (_, e) => isExhaustive env e) row
             | isExhaustive env (F.InstantiatedConPat (longvid, pat, _)) = false (* TODO *)
             | isExhaustive env (F.LayeredPat (_, _, innerPat)) = isExhaustive env innerPat
-          fun doDec env (F.ValDec valbind) = F.ValDec (doValBind env valbind)
-            | doDec env (F.RecValDec valbinds) = F.RecValDec (List.map (doValBind env) valbinds)
+          fun doDecs env [] = (env, [])
+            | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
+                                             val (env'', decs') = doDecs env' decs
+                                         in (env'', dec' :: decs')
+                                         end
       in { doExp = doExp
          , doValBind = doValBind
          , doDec = doDec
+         , doDecs = doDecs
          }
       end
 end (* structure FTransform *)

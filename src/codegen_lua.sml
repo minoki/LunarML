@@ -293,35 +293,11 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                   | NONE => let val (stmts, ys) = ListPair.unzip (List.map (fn (label, exp) => case doExp ctx env exp of (stmt, e) => (stmt, "[" ^ LabelToLua label ^ "] = " ^ e)) fields)
                                                             in (List.concat stmts, "{" ^ String.concatWith ", " ys ^ "}")
                                                             end
-                                               )
-  | doExp ctx env (F.LetExp (F.SimpleBind (v, _, exp1), exp2))
-    = let val v' = VIdToLua v
-          val stmt1 = doExpTo ctx env (AssignTo v') exp1
-          val (stmt2, exp2') = doExp ctx env exp2
-      in ((indent env ^ "local " ^ v' ^ "\n") :: stmt1 :: stmt2, exp2')
-      end
-  | doExp ctx env (F.LetExp (F.TupleBind ([], exp1), exp2))
-    = let val stmt1 = doExpTo ctx env Discard exp1
-          val (stmt2, exp2') = doExp ctx env exp2
-      in (stmt1 :: stmt2, exp2')
-      end
-  | doExp ctx env (F.LetExp (F.TupleBind (vars, exp1), exp2))
-    = let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-          val stmt1 = doExpTo ctx env (UnpackingAssignTo vars')exp1
-          val (stmt2, exp2') = doExp ctx env exp2
-      in (stmt1 :: stmt2, exp2')
-      end
-  | doExp ctx env (F.LetRecExp (valbinds, exp2))
-    = let val (decls, assignments) = ListPair.unzip (List.map (fn F.SimpleBind (v,_,exp) => let val v' = VIdToLua v
-                                                                                          in (indent env ^ "local " ^ v' ^ "\n", doExpTo ctx env (AssignTo v') exp)
-                                                                                          end
-                                                              | F.TupleBind ([], exp) => ("", doExpTo ctx env Discard exp)
-                                                              | F.TupleBind (vars, exp) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-                                                                                         in (indent env ^ "local " ^ String.concatWith ", " vars' ^ "\n", doExpTo ctx env (UnpackingAssignTo vars') exp)
-                                                                                         end
-                                                              ) valbinds)
-          val (stmts2, exp2') = doExp ctx env exp2
-      in (decls @ assignments @ stmts2, exp2')
+                                         )
+  | doExp ctx env (F.LetExp (dec, exp))
+    = let val dec' = doDec ctx env dec
+          val (stmt', exp') = doExp ctx env exp
+      in (dec' :: stmt', exp')
       end
   | doExp ctx env (F.AppExp(F.ProjectionExp { label = label, ... }, exp2))
     = let val (stmts, exp2') = doExp ctx env exp2
@@ -466,29 +442,10 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
                                      | NONE => "{" ^ String.concatWith ", " (List.map (fn (label, v) => "[" ^ LabelToLua label ^ "] = " ^ v) fields') ^ "}"
                                   )
       end
-  | doExpTo ctx env dest (F.LetExp (F.SimpleBind (v, _, exp1), exp2))
-    = let val v' = VIdToLua v
-          val decl = indent env ^ "local " ^ v' ^ "\n"
-          val stmts1 = doExpTo ctx env (AssignTo v') exp1
-          val stmts2 = doExpTo ctx env dest exp2
-      in decl ^ stmts1 ^ stmts2
-      end
-  | doExpTo ctx env dest (F.LetExp (F.TupleBind ([], exp1), exp2)) = doExpTo ctx env Discard exp1 ^ doExpTo ctx env dest exp2
-  | doExpTo ctx env dest (F.LetExp (F.TupleBind (vars, exp1), exp2))
-    = let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-          val decl = indent env ^ "local " ^ String.concatWith ", " vars' ^ "\n"
-      in decl ^ doExpTo ctx env (UnpackingAssignTo vars') exp1 ^ doExpTo ctx env dest exp2
-      end
-  | doExpTo ctx env dest (F.LetRecExp (valbinds, exp2))
-    = let val (decls, assignments) = ListPair.unzip (List.map (fn F.SimpleBind (v,_,exp) => let val v' = VIdToLua v
-                                                                                            in (indent env ^ "local " ^ v' ^ "\n", doExpTo ctx env (AssignTo v') exp)
-                                                                                            end
-                                                              | F.TupleBind ([], exp) => ("", doExpTo ctx env Discard exp)
-                                                              | F.TupleBind (vars, exp) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-                                                                                           in (indent env ^ "local " ^ String.concatWith ", " vars' ^ "\n", doExpTo ctx env (UnpackingAssignTo vars') exp)
-                                                                                           end
-                                                              ) valbinds)
-      in String.concat decls ^ String.concat assignments ^ doExpTo ctx env dest exp2
+  | doExpTo ctx env dest (F.LetExp (dec, exp))
+    = let val dec' = doDec ctx env dec
+          val stmts = doExpTo ctx env dest exp
+      in dec' ^ stmts
       end
   | doExpTo ctx env dest (F.AppExp (F.ProjectionExp { label, ...}, exp2))
     = let val v = genSym ctx
@@ -594,7 +551,7 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
                                                   end
 
 (* doDec : Context -> Env -> F.Dec -> string *)
-fun doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
+and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
     = let val luavid = VIdToLua v
       in indent env ^ "local " ^ luavid ^ "\n" ^ doExpTo ctx env (AssignTo luavid) exp
       end
@@ -616,17 +573,12 @@ fun doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
                                                               ) valbinds)
       in String.concat decls ^ String.concat assignments
       end
+  | doDec ctx env (F.DatatypeDec datbinds) = String.concat (List.map (doDatBind ctx env) datbinds)
+  | doDec ctx env (F.ExceptionDec exbind) = "" (* not implemented yet *)
+and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
+and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }\n"
+  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = " ^ toLuaStringLit name ^ ", payload = x }\nend\n"
 
 fun doDecs ctx env decs = String.concat (List.map (doDec ctx env) decs)
-
-fun doTopDecs ctx env decs = String.concat (List.map (doTopDec ctx env) decs)
-and doTopDec ctx env (USyntax.TypeDec (span, _)) = ""
-  | doTopDec ctx env (USyntax.DatatypeDec (span, datbinds)) = String.concat (List.map (doDatBind ctx env) datbinds)
-  | doTopDec ctx env (USyntax.DatatypeRepDec (span, _, _)) = ""
-  | doTopDec ctx env (USyntax.AbstypeDec (span, _, _)) = ""
-  | doTopDec ctx env (USyntax.ExceptionDec (span, _)) = ""
-and doDatBind ctx env (USyntax.DatBind (span, tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
-and doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }\n"
-  | doConBind ctx env (USyntax.ConBind (span, vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = " ^ toLuaStringLit name ^ ", payload = x }\nend\n"
 
 end (* structure CodeGenLua *)

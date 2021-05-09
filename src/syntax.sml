@@ -117,7 +117,16 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
                                 , arity : int
                                 , rules : (Pat list * Ty option * Exp) list
                                 }
-type Program = Dec list
+
+datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
+                         | StrIdExp of SourcePos.span * LongStrId
+                         (* TODO: transparent constraint, opaque constraint, functor application *)
+                         | LetInStrExp of SourcePos.span * ('coreDec StrDec) list * 'coreDec StrExp
+     and 'coreDec StrDec = CoreDec of SourcePos.span * 'coreDec
+                         | StrBindDec of SourcePos.span * (StrId * 'coreDec StrExp) list
+                         | LocalStrDec of SourcePos.span * ('coreDec StrDec) list * ('coreDec StrDec) list
+
+type Program = (Dec StrDec) list
 
 fun SimpleVarExp(span, vid) = VarExp (span, MkLongVId ([], vid))
 local
@@ -290,7 +299,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
      and FValBind = FValBind of SourcePos.span * FMRule list
      and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp
      and FPat = FPat of SourcePos.span * Pat list
-type Program = Dec list
+type Program = (Dec Syntax.StrDec) list
 
 local
     fun doFields i nil = nil

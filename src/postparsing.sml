@@ -250,6 +250,27 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
     = emitError(ctx, [span], "invalid function declaration")
 and doInfixFPat(ctx, env, span, vidspan, vid, patL, patR, pats) = (vidspan, vid, Syntax.TuplePat(span, [doPat(ctx, env, patL), doPat(ctx, env, patR)]) :: List.map (fn p => doPat(ctx, env, p)) pats)
 and doPrefixFPat(ctx, env, span, vid, pats) = (span, vid, List.map (fn p => doPat(ctx, env, p)) pats)
+(* doStrExp : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrExp -> Syntax.Exp *)
+(* doDec : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrDec -> FixityStatusMap * Syntax.Dec *)
+(* doDecs : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrDec list -> FixityStatusMap * Syntax.Dec list *)
+fun doStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = Syntax.StructExp(span, #2 (doStrDecs(ctx, env, strdecs)))
+  | doStrExp(ctx, env, Syntax.StrIdExp(span, longstrid)) = Syntax.StrIdExp(span, longstrid)
+  | doStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs') = doStrDecs(ctx, env, strdecs)
+                                                                    in Syntax.LetInStrExp(span, strdecs', doStrExp(ctx, env', strexp))
+                                                                    end
+and doStrDec(ctx, env, Syntax.CoreDec(span, dec)) = let val (env', dec') = doDec(ctx, env, dec)
+                                                    in (env', Syntax.CoreDec(span, dec'))
+                                                    end
+  | doStrDec(ctx, env, Syntax.StrBindDec(span, binds)) = (Syntax.VIdMap.empty, Syntax.StrBindDec(span, List.map (fn (strid, strexp) => (strid, doStrExp(ctx, env, strexp))) binds))
+  | doStrDec(ctx, env, Syntax.LocalStrDec(span, decs, decs')) = let val (env', decs) = doStrDecs(ctx, env, decs)
+                                                                    val (env'', decs') = doStrDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs')
+                                                                in (env'', Syntax.LocalStrDec(span, decs, decs'))
+                                                                end
+and doStrDecs(ctx, env, []) = (env, [])
+  | doStrDecs(ctx, env, dec :: decs) = let val (env', dec) = doStrDec(ctx, env, dec)
+                                           val (env'', decs) = doStrDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
+                                       in (Syntax.VIdMap.unionWith #2 (env', env''), dec :: decs)
+                                       end
 end (* structure Fixity *)
 
 structure PostParsing = struct
@@ -357,10 +378,19 @@ local
       | doExp(bound, FnExp(span, match)) = FnExp(span, doMatch(bound, match))
       | doExp(bound, exp as ProjectionExp _) = exp
     and doMatch(bound, xs) = List.map (fn (pat, exp) => (pat, doExp(bound, exp))) xs
+    fun doStrExp(StructExp(span, strdecs)) = StructExp(span, List.map doStrDec strdecs)
+      | doStrExp(exp as StrIdExp _) = exp
+      | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, doStrDecs strdecs, doStrExp strexp)
+    and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec(TyVarSet.empty, dec))
+      | doStrDec(StrBindDec(span, binds)) = StrBindDec(span, List.map (fn (strid, strexp) => (strid, doStrExp strexp)) binds)
+      | doStrDec(LocalStrDec(span, decs1, decs2)) = LocalStrDec(span, doStrDecs decs1, List.map doStrDec decs2)
+    and doStrDecs(strdecs) = List.map doStrDec strdecs
 in
 val scopeTyVarsInDecs: TyVarSet.set * Dec list -> Dec list = doDecList
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
+val scopeTyVarsInStrDec: Dec StrDec -> Dec StrDec = doStrDec
+val scopeTyVarsInStrDecs: (Dec StrDec) list -> (Dec StrDec) list = doStrDecs
 end (* local *)
 end (* local *)
 
