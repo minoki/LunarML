@@ -9,19 +9,16 @@ fun MkLongVId(strids, vid: VId) = Syntax.MkQualified(strids, vid)
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
 datatype TyCon = MkTyCon of string * int
-type LongTyCon = TyCon Syntax.Qualified
-fun MkLongTyCon(Syntax.MkQualified(strids, Syntax.MkTyCon(tycon)), n) = Syntax.MkQualified(strids, MkTyCon(tycon, n))
 fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andalso eq = eq' andalso a = b
   | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
   | eqUTyVar(_, _) = false
 fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
-fun eqULongTyCon(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = eqUTyCon(a, b)
 fun eqVId(a, b : VId) = a = b
 fun eqULongVId(Syntax.MkQualified(_,a),Syntax.MkQualified(_,b)) = a = b
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Syntax.Label * Ty) list (* record type expression *)
-            | TyCon of SourcePos.span * Ty list * LongTyCon (* type construction *)
+            | TyCon of SourcePos.span * Ty list * TyCon (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
 
 fun PairType(span, a, b) = RecordType(span, [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
@@ -154,33 +151,29 @@ fun print_VId(MkVId(name, n)) = "MkVId(\"" ^ String.toString name ^ "\"," ^ Int.
 fun print_LongVId(Syntax.MkQualified(strids, vid)) = "MkLongVId(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_VId vid ^ ")"
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
-fun print_TyCon(MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
-fun print_LongTyCon(Syntax.MkQualified([], tycon)) = (case tycon of
-                                                          MkTyCon ("int", 0) => "primTyCon_int"
-                                                        | MkTyCon ("word", 1) => "primTyCon_word"
-                                                        | MkTyCon ("real", 2) => "primTyCon_real"
-                                                        | MkTyCon ("string", 3) => "primTyCon_string"
-                                                        | MkTyCon ("char", 4) => "primTyCon_char"
-                                                        | MkTyCon ("exn", 5) => "primTyCon_exn"
-                                                        | MkTyCon ("bool", 6) => "primTyCon_bool"
-                                                        | MkTyCon ("ref", 7) => "primTyCon_ref"
-                                                        | MkTyCon ("list", 8) => "primTyCon_list"
-                                                        | _ => "MkQualified([]," ^ print_TyCon tycon ^ ")"
-                                                     )
-  | print_LongTyCon(Syntax.MkQualified(strids, tycon)) = "MkQualified(" ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ print_TyCon tycon ^ ")"
+fun print_TyCon (MkTyCon ("int", 0)) = "primTyCon_int"
+  | print_TyCon (MkTyCon ("word", 1)) = "primTyCon_word"
+  | print_TyCon (MkTyCon ("real", 2)) = "primTyCon_real"
+  | print_TyCon (MkTyCon ("string", 3)) = "primTyCon_string"
+  | print_TyCon (MkTyCon ("char", 4)) = "primTyCon_char"
+  | print_TyCon (MkTyCon ("exn", 5)) = "primTyCon_exn"
+  | print_TyCon (MkTyCon ("bool", 6)) = "primTyCon_bool"
+  | print_TyCon (MkTyCon ("ref", 7)) = "primTyCon_ref"
+  | print_TyCon (MkTyCon ("list", 8)) = "primTyCon_list"
+  | print_TyCon (MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType(_,xs)) = (case Syntax.extractTuple (1, xs) of
                                        NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                      | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                   )
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("int", 0)))) = "primTy_int"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("word", 1)))) = "primTy_word"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("real", 2)))) = "primTy_real"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("string", 3)))) = "primTy_string"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("char", 4)))) = "primTy_char"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("exn", 5)))) = "primTy_exn"
-  | print_Ty (TyCon(_,[],Syntax.MkQualified([],MkTyCon("bool", 6)))) = "primTy_bool"
-  | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
+  | print_Ty (TyCon(_,[],MkTyCon("int", 0))) = "primTy_int"
+  | print_Ty (TyCon(_,[],MkTyCon("word", 1))) = "primTy_word"
+  | print_Ty (TyCon(_,[],MkTyCon("real", 2))) = "primTy_real"
+  | print_Ty (TyCon(_,[],MkTyCon("string", 3))) = "primTy_string"
+  | print_Ty (TyCon(_,[],MkTyCon("char", 4))) = "primTy_char"
+  | print_Ty (TyCon(_,[],MkTyCon("exn", 5))) = "primTy_exn"
+  | print_Ty (TyCon(_,[],MkTyCon("bool", 6))) = "primTy_bool"
+  | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyCon y ^ ")"
   | print_Ty (FnType(_,x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat(_, x)) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
@@ -250,7 +243,7 @@ fun applySubstTy subst =
                  | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
               )
           | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
-          | substTy (TyCon(span, tyargs, longtycon)) = TyCon(span, List.map substTy tyargs, longtycon)
+          | substTy (TyCon(span, tyargs, tycon)) = TyCon(span, List.map substTy tyargs, tycon)
           | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
     in substTy
     end
@@ -433,8 +426,9 @@ type ('a,'b) Context = { nextTyVar : int ref
 fun emitError(ctx : ('a,'b) Context, spans, message) = raise Syntax.SyntaxError (spans, message)
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
-                    | BTyCon of USyntax.LongTyCon (* and data constructors *)
-                    (* BDuplicatedTyCon of USyntax.TyVar list * USyntax.Ty *)
+                    | BTyCon of { tyCon : USyntax.TyCon
+                                , valConMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
+                                }
 
 datatype Env' = MkEnv of Env
 withtype Env = { valMap : (USyntax.VId * Syntax.IdStatus) Syntax.VIdMap.map
@@ -518,7 +512,7 @@ fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
   | toUTy(ctx, tvenv, env, S.RecordType(span, row)) = U.RecordType(span, Syntax.mapRecordRow (fn ty => toUTy(ctx, tvenv, env, ty)) row)
   | toUTy(ctx, tvenv, env, S.TyCon(span, args, tycon))
     = (case lookupLongTyCon(ctx, env, span, tycon) of
-           BTyCon ulongtycon => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, ulongtycon)
+           BTyCon { tyCon, ... } => U.TyCon(span, List.map (fn ty => toUTy(ctx, tvenv, env, ty)) args, tyCon)
          | BTyAlias (tyvars, ty) => let val subst = ListPair.foldlEq (fn (tv, arg, m) => USyntax.TyVarMap.insert (m, tv, toUTy(ctx, tvenv, env, arg))) USyntax.TyVarMap.empty (tyvars, args)
                                     in USyntax.applySubstTy subst ty
                                     end
@@ -757,21 +751,25 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                    = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                          val tvenv = List.foldl Syntax.TyVarMap.insert' Syntax.TyVarMap.empty tyvars'
                          val tycon' = newTyCon(ctx, tycon)
-                     in (Syntax.TyConMap.insert(tyConEnv, tycon, tycon'), (span, List.map #2 tyvars', tvenv, tycon', conbinds) :: datbinds)
+                         fun doConBind (conbind as S.ConBind(span, vid, _), (valConMap, conbinds))
+                             = let val vid' = newVId(ctx, vid)
+                               in (Syntax.VIdMap.insert(valConMap, vid, (vid', Syntax.ValueConstructor)), (conbind, vid') :: conbinds)
+                               end
+                         val (valConMap, conbinds') = List.foldl doConBind (Syntax.VIdMap.empty, []) conbinds
+                     in (Syntax.TyConMap.insert(tyConEnv, tycon, { tyCon = tycon', valConMap = valConMap }), (span, List.map #2 tyvars', tvenv, tycon', List.rev conbinds', valConMap) :: datbinds)
                      end
                val (tyConEnv, datbinds') = List.foldr doDatBind1 (Syntax.TyConMap.empty, []) datbinds
-               val tyConEnv' = envWithTyConEnv(Syntax.TyConMap.map (fn utycon => BTyCon (Syntax.MkQualified([ (* TODO *) ],utycon))) tyConEnv)
+               val tyConEnv' = envWithTyConEnv(Syntax.TyConMap.map BTyCon tyConEnv)
                val env' = mergeEnv(env, tyConEnv')
-               fun doDatBind2 ((span, tyvars, tvenv, tycon, conbinds), (valEnv, datbinds))
-                   = let fun doConBind (S.ConBind(span, vid, optPayloadTy), (valEnv, conbinds))
-                             = let val vid' = newVId(ctx, vid)
-                                   val optPayloadTy' = case optPayloadTy of
+               fun doDatBind2 ((span, tyvars, tvenv, tycon, conbinds, valConMap), (valEnv, datbinds))
+                   = let fun doConBind (S.ConBind(span, vid, optPayloadTy), vid')
+                             = let val optPayloadTy' = case optPayloadTy of
                                                            NONE => NONE
                                                          | SOME payloadTy => SOME (toUTy(ctx, tvenv, env', payloadTy))
-                               in (Syntax.VIdMap.insert(valEnv, vid, (vid', Syntax.ValueConstructor)), U.ConBind(span, vid', optPayloadTy') :: conbinds)
+                               in U.ConBind(span, vid', optPayloadTy')
                                end
-                         val (valEnv', conbinds') = List.foldr doConBind (Syntax.VIdMap.empty, []) conbinds
-                     in (Syntax.VIdMap.unionWith #2 (valEnv', valEnv), USyntax.DatBind(span, tyvars, tycon, conbinds') :: datbinds)
+                         val conbinds' = List.map doConBind conbinds
+                     in (Syntax.VIdMap.unionWith #2 (valConMap, valEnv), USyntax.DatBind(span, tyvars, tycon, conbinds') :: datbinds)
                      end
                val (valEnv, datbinds'') = List.foldr doDatBind2 (Syntax.VIdMap.empty, []) datbinds'
                val datbindEnv = mergeEnv(tyConEnv', envWithValEnv valEnv)
@@ -779,9 +777,16 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            in (mergeEnv(datbindEnv, env'), U.DatatypeDec(span, datbinds'') :: decls')
            end
          | S.DatatypeRepDec(span, tycon, longtycon) =>
-           let val _ = lookupLongTyCon(ctx, env, span (* TODO *), longtycon)
-               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
-           in emitError(ctx, [span], "datatype replication: not implemented yet") (* ((* TODO: add type ctor *) env', decl' :: decls') *)
+           let val btycon = lookupLongTyCon(ctx, env, span, longtycon)
+               val valConMap = case btycon of
+                                   BTyAlias _ => Syntax.VIdMap.empty (* TODO: emit warning? *)
+                                 | BTyCon { valConMap, ... } => valConMap
+               val replicatedEnv = { valMap = valConMap
+                                   , tyConMap = Syntax.TyConMap.insert (Syntax.TyConMap.empty, tycon, btycon)
+                                   , strMap = Syntax.StrIdMap.empty
+                                   }
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, replicatedEnv), decls)
+           in (mergeEnv(replicatedEnv, env'), decls')
            end
          | S.AbstypeDec(span, datbinds, dec) =>
            let val decl' = emitError(ctx, [span], "abstype: not implemented yet")

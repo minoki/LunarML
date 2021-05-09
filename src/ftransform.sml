@@ -104,11 +104,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
               = let fun quantify [] ty = ty
                       | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
                     fun doConBind (F.ConBind (vid, NONE), dataConMap)
-                        = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon)))
+                        = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, tycon))
                           in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
                           end
                       | doConBind(F.ConBind (vid, SOME payloadTy), dataConMap)
-                        = let val typeScheme = quantify tyvars (F.FnType(payloadTy, F.TyCon(List.map FSyntax.TyVar tyvars, Syntax.MkQualified([], tycon))))
+                        = let val typeScheme = quantify tyvars (F.FnType(payloadTy, F.TyCon(List.map FSyntax.TyVar tyvars, tycon)))
                           in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
                           end
                 in { strMap = strMap

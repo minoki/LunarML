@@ -5,10 +5,9 @@
 structure FSyntax = struct
 type TyVar = USyntax.TyVar
 type TyCon = USyntax.TyCon
-type LongTyCon = USyntax.LongTyCon
 datatype Ty = TyVar of TyVar
             | RecordType of (Syntax.Label * Ty) list
-            | TyCon of Ty list * LongTyCon
+            | TyCon of Ty list * TyCon
             | FnType of Ty * Ty
             | ForallType of TyVar * Ty
 datatype Pat = WildcardPat
@@ -37,8 +36,8 @@ datatype Exp = SConExp of Syntax.SCon
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
-             | DataTagExp of Exp (* * LongTyCon *)
-             | DataPayloadExp of Exp (* * USyntax.LongVId * LongTyCon *)
+             | DataTagExp of Exp (* * TyCon *)
+             | DataPayloadExp of Exp (* * USyntax.LongVId * TyCon *)
      and ValBind = SimpleBind of USyntax.VId * Ty * Exp
                  | TupleBind of (USyntax.VId * Ty) list * Exp
      and Dec = ValDec of ValBind
@@ -101,20 +100,20 @@ structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
 val print_LongVId = USyntax.print_LongVId
-val print_LongTyCon = USyntax.print_LongTyCon
+val print_TyCon = USyntax.print_TyCon
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                   | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                )
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("int", 0)))) = "primTy_int"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("word", 1)))) = "primTy_word"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("real", 2)))) = "primTy_real"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("string", 3)))) = "primTy_string"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("char", 4)))) = "primTy_char"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("exn", 5)))) = "primTy_exn"
-  | print_Ty (TyCon([],Syntax.MkQualified([],USyntax.MkTyCon("bool", 6)))) = "primTy_bool"
-  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
+  | print_Ty (TyCon([],USyntax.MkTyCon("int", 0))) = "primTy_int"
+  | print_Ty (TyCon([],USyntax.MkTyCon("word", 1))) = "primTy_word"
+  | print_Ty (TyCon([],USyntax.MkTyCon("real", 2))) = "primTy_real"
+  | print_Ty (TyCon([],USyntax.MkTyCon("string", 3))) = "primTy_string"
+  | print_Ty (TyCon([],USyntax.MkTyCon("char", 4))) = "primTy_char"
+  | print_Ty (TyCon([],USyntax.MkTyCon("exn", 5))) = "primTy_exn"
+  | print_Ty (TyCon([],USyntax.MkTyCon("bool", 6))) = "primTy_bool"
+  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyCon y ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
 fun print_Pat WildcardPat = "WildcardPat"
@@ -202,7 +201,7 @@ local structure U = USyntax
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
       (* toFDecs : Context * Env * USyntax.Dec list -> FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
-      fun isSimpleTy(U.TyCon(_, [], longtycon1), longtycon2) = U.eqULongTyCon(longtycon1, longtycon2)
+      fun isSimpleTy(U.TyCon(_, [], tycon1), tycon2) = U.eqUTyCon(tycon1, tycon2)
         | isSimpleTy _ = false
 in
 fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
@@ -431,33 +430,33 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
-and getEquality(ctx, env, U.TyCon(span, [], longtycon))
+and getEquality(ctx, env, U.TyCon(span, [], tycon))
     = let open InitialEnv
-      in if U.eqULongTyCon(longtycon, Typing.primTyCon_int) then
+      in if U.eqUTyCon(tycon, Typing.primTyCon_int) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_int))
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_word) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_word) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_word))
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_string) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_string) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_string))
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_char) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_char) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_char))
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_bool) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_bool) then
              F.VarExp(Syntax.MkQualified([], VId_EQUAL_bool))
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_real) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_real) then
              raise Fail "'real' does not admit equality; this should have been a type error"
-         else if U.eqULongTyCon(longtycon, Typing.primTyCon_exn) then
+         else if U.eqUTyCon(tycon, Typing.primTyCon_exn) then
              raise Fail "'exn' does not admit equality; this should have been a type error"
          else
              raise Fail "equality for user-defined data types are not implemented yet"
       end
-  | getEquality(ctx, env, U.TyCon(span, [tyarg], longtycon))
-    = if U.eqULongTyCon(longtycon, Typing.primTyCon_ref) then
+  | getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
+    = if U.eqUTyCon(tycon, Typing.primTyCon_ref) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_ref)), toFTy(ctx, env, tyarg))
-      else if U.eqULongTyCon(longtycon, Typing.primTyCon_list) then
+      else if U.eqUTyCon(tycon, Typing.primTyCon_list) then
           F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_list)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
-      else if U.eqULongTyCon(longtycon, Typing.primTyCon_array) then
+      else if U.eqUTyCon(tycon, Typing.primTyCon_array) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_array)), toFTy(ctx, env, tyarg))
-      else if U.eqULongTyCon(longtycon, Typing.primTyCon_vector) then
+      else if U.eqUTyCon(tycon, Typing.primTyCon_vector) then
           F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_vector)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
       else
           raise Fail "equality for user-defined data types are not implemented yet"

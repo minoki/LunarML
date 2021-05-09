@@ -63,10 +63,10 @@ fun lookupLongVIdInEnv(ctx, env, span, Syntax.MkQualified(strid, vid))
       in USyntax.VIdMap.find(#valMap strEnv, vid)
       end
 
-(* getConstructedType : Context * SourcePos.span * USyntax.Ty -> USyntax.LongTyCon *)
+(* getConstructedType : Context * SourcePos.span * USyntax.Ty -> USyntax.TyCon *)
 fun getConstructedType(ctx, span, USyntax.TyVar _) = emitError(ctx, [span], "getConstructedType: got a type variable")
   | getConstructedType(ctx, span, USyntax.RecordType _) = emitError(ctx, [span], "getConstructedType: got a record")
-  | getConstructedType(ctx, span, USyntax.TyCon(_, tyargs, longtycon)) = longtycon
+  | getConstructedType(ctx, span, USyntax.TyCon(_, tyargs, tycon)) = tycon
   | getConstructedType(ctx, span, USyntax.FnType(_, _, t)) = getConstructedType(ctx, span, t)
 
 (* isSoleConstructor : Context * Env * SourcePos.span * USyntax.LongVId -> bool *)
@@ -74,8 +74,8 @@ fun isSoleConstructor(ctx : Context, env : Env, span : SourcePos.span, longvid: 
     (case lookupLongVIdInEnv(ctx, env, span, longvid) of
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
-         let val Syntax.MkQualified(strids, tycon) = getConstructedType(ctx, span, ty)
-             val TyStr (_, valenv) = lookupTyConInEnv(ctx, lookupStr(ctx, env, span, strids), span, tycon)
+         let val tycon = getConstructedType(ctx, span, ty)
+             val TyStr (_, valenv) = lookupTyConInEnv(ctx, env, span, tycon)
          in USyntax.VIdMap.numItems valenv = 1
          end
        | SOME (_, Syntax.ValueVariable) => false
@@ -115,17 +115,17 @@ fun isExhaustive(ctx, env : Env, USyntax.WildcardPat _) = true
   | isExhaustive(ctx, env, USyntax.TypedPat(_, innerPat, _)) = isExhaustive(ctx, env, innerPat)
   | isExhaustive(ctx, env, USyntax.LayeredPat(_, _, _, innerPat)) = isExhaustive(ctx, env, innerPat)
 
-val primTyCon_int    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "int"), 0)
-val primTyCon_word   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "word"), 1)
-val primTyCon_real   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "real"), 2)
-val primTyCon_string = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "string"), 3)
-val primTyCon_char   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "char"), 4)
-val primTyCon_exn    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "exn"), 5)
-val primTyCon_bool   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "bool"), 6)
-val primTyCon_ref    = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "ref"), 7)
-val primTyCon_list   = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "list"), 8)
-val primTyCon_array  = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "array"), 9)
-val primTyCon_vector = USyntax.MkLongTyCon(Syntax.MkLongTyCon([], Syntax.MkTyCon "vector"), 10)
+val primTyCon_int    = USyntax.MkTyCon("int", 0)
+val primTyCon_word   = USyntax.MkTyCon("word", 1)
+val primTyCon_real   = USyntax.MkTyCon("real", 2)
+val primTyCon_string = USyntax.MkTyCon("string", 3)
+val primTyCon_char   = USyntax.MkTyCon("char", 4)
+val primTyCon_exn    = USyntax.MkTyCon("exn", 5)
+val primTyCon_bool   = USyntax.MkTyCon("bool", 6)
+val primTyCon_ref    = USyntax.MkTyCon("ref", 7)
+val primTyCon_list   = USyntax.MkTyCon("list", 8)
+val primTyCon_array  = USyntax.MkTyCon("array", 9)
+val primTyCon_vector = USyntax.MkTyCon("vector", 10)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, [])
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_word)
@@ -169,7 +169,7 @@ in
 (* occurCheck : TyVar -> Ty -> bool; returns true if the type variable occurs in the type *)
 fun occurCheck tv = let fun check (TyVar(_, tv')) = eqUTyVar(tv, tv')
                           | check (RecordType(_, xs)) = List.exists (fn (label, ty) => check ty) xs
-                          | check (TyCon(_, tyargs, longtycon)) = List.exists check tyargs
+                          | check (TyCon(_, tyargs, tycon)) = List.exists check tyargs
                           | check (FnType(_, ty1, ty2)) = check ty1 orelse check ty2
                     in check
                     end
@@ -181,7 +181,7 @@ fun substituteTy (tv, replacement) =
                                             else
                                                 ty
           | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
-          | substTy (TyCon(span, tyargs, longtycon)) = TyCon(span, List.map substTy tyargs, longtycon)
+          | substTy (TyCon(span, tyargs, tycon)) = TyCon(span, List.map substTy tyargs, tycon)
           | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
     in substTy
     end
@@ -256,7 +256,7 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
                                                                  | SOME(_,ty') => EqConstr(ty, ty') :: acc)
                                      ctrs fields)
          | EqConstr(t1 as TyCon(span, tyarg, con), t2 as TyCon(span', tyarg', con')) =>
-           if eqULongTyCon(con, con') then
+           if eqUTyCon(con, con') then
                unify(ctx, (ListPair.mapEq EqConstr (tyarg, tyarg')
                            handle ListPair.UnequalLengths => emitError(ctx, [span, span'], "unification failed: the number of type arguments differ")
                           ) @ ctrs)
@@ -294,48 +294,48 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
          | UnaryConstraint(FnType(span, _, _), IsField) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
          | UnaryConstraint(FnType(span, _, _), IsSigned) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
          | UnaryConstraint(FnType(span, _, _), IsOrdered) => emitError(ctx, [span], "cannot compare functions")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsEqType) =>
-           if List.exists (fn x => eqULongTyCon(longtycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref, primTyCon_array] then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsEqType) =>
+           if List.exists (fn x => eqUTyCon(tycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref, primTyCon_array] then
                (* TODO: check tyargs? *)
                unify(ctx, ctrs) (* do nothing *)
-           else if eqULongTyCon(longtycon, primTyCon_list) then
+           else if eqUTyCon(tycon, primTyCon_list) then
                case tyargs of
                    [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
                  | _ => emitError(ctx, [span], "bad type arguments to list")
-           else if eqULongTyCon(longtycon, primTyCon_vector) then
+           else if eqUTyCon(tycon, primTyCon_vector) then
                case tyargs of
                    [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
                  | _ => emitError(ctx, [span], "bad type arguments to vector")
            else
-               (* (longtycon???) : List.map IsEqType tyargs @ ctrs *)
+               (* (tycon???) : List.map IsEqType tyargs @ ctrs *)
                emitError(ctx, [span], "IsEqType TyCon: not impl")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsIntegral) =>
-           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsIntegral) =>
+           if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsSignedReal) =>
-           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_real) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsSignedReal) =>
+           if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsRing) =>
-           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) orelse eqULongTyCon(longtycon, primTyCon_real) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsRing) =>
+           if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsField) =>
-           if eqULongTyCon(longtycon, primTyCon_real) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsField) =>
+           if eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsSigned) =>
-           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_real) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsSigned) =>
+           if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, longtycon), IsOrdered) =>
-           if eqULongTyCon(longtycon, primTyCon_int) orelse eqULongTyCon(longtycon, primTyCon_word) orelse eqULongTyCon(longtycon, primTyCon_real) orelse eqULongTyCon(longtycon, primTyCon_string) orelse eqULongTyCon(longtycon, primTyCon_char) then
+         | UnaryConstraint(TyCon(span, tyargs, tycon), IsOrdered) =>
+           if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) orelse eqUTyCon(tycon, primTyCon_real) orelse eqUTyCon(tycon, primTyCon_string) orelse eqUTyCon(tycon, primTyCon_char) then
                unify(ctx, ctrs) (* do nothing *)
            else
                emitError(ctx, [span], "comparison operator on unsupported type")
@@ -646,7 +646,7 @@ and typeCheckValBind(ctx, env, PatBind(span, pat, exp))
   | typeCheckValBind(ctx, env, PolyVarBind(span, vid, tysc, exp))
     = emitError(ctx, [span], "unexpected PolyVarBind")
 and addDatBind(ctx, { tyMap, valMap, strMap, boundTyVars }, USyntax.DatBind(span, tyvars, tycon, conbinds))
-    = let val ty = USyntax.TyCon(span, List.map (fn tv => USyntax.TyVar(span, tv)) tyvars, Syntax.MkQualified([], tycon))
+    = let val ty = USyntax.TyCon(span, List.map (fn tv => USyntax.TyVar(span, tv)) tyvars, tycon)
           fun doConBind(USyntax.ConBind(span, vid, NONE), valMap)
               = let val typeScheme = USyntax.TypeScheme(List.map (fn tv => (tv, [])) tyvars, ty)
                 in USyntax.VIdMap.insert(valMap, vid, (typeScheme, Syntax.ValueConstructor))
