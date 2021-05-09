@@ -114,10 +114,11 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | FPat of UnfixedSyntax.FPat
        | TypBind of Syntax.TypBind list
        | DatBind of Syntax.DatBind list
+       | DatBindRest of Syntax.DatBind list
        | ConBind of Syntax.ConBind list
-       | Opt_BAR_ConBind of Syntax.ConBind list
+       | ConBindRest of Syntax.ConBind list
        | ExBind of Syntax.ExBind list
-       | Opt_AND_ExBind of Syntax.ExBind list
+       | ExBindRest of Syntax.ExBind list
        | StrExp of UnfixedSyntax.Dec Syntax.StrExp
        | ProperStrDec of UnfixedSyntax.Dec Syntax.StrDec
        | StrDecs of (UnfixedSyntax.Dec Syntax.StrDec) list
@@ -363,8 +364,11 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | FUN TyVar FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), [TyVar], FValBind)) (* [derived] function declaration *)
             | FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), TyVar :: TyVarSeqRest, FValBind)) (* [derived] function declaration *)
             | TYPE TypBind (UnfixedSyntax.TypeDec(span(TYPEleft, TypBindright), TypBind)) (* type declaration *)
-            | DATATYPE DatBind (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindright), DatBind)) (* datatype declaration *)
-         (* | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)) (* datatype replication *) *)
+            (* | DATATYPE DatBind (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindright), DatBind)) (* datatype declaration *) *)
+            | DATATYPE TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(TyConleft, ConBindright), [], TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
+            | DATATYPE TyVar TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(TyVarleft, ConBindright), [TyVar], TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
+            | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(LPARENleft, ConBindright), TyVar :: TyVarSeqRest, TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
+            | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)) (* datatype replication *)
             | ABSTYPE DatBind WITH Decs END (UnfixedSyntax.AbstypeDec (span(ABSTYPEleft, ENDright), DatBind, Decs)) (* abstype declaration *)
             | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec(span(EXCEPTIONleft, ExBindright), ExBind)) (* exception declaration *)
             | OPEN LongStrIds (UnfixedSyntax.OpenDec(span(OPENleft, LongStrIdsright), LongStrIds)) (* open declaration *)
@@ -421,23 +425,26 @@ TypBind : TyVarSeq TyCon EQUALS Ty AND TypBind (Syntax.TypBind (span(TyVarSeqlef
         | TyVarSeq TyCon EQUALS Ty (Syntax.TypBind (span(TyVarSeqleft, Tyright), TyVarSeq, TyCon, Ty) :: nil)
 
 (* datatype bindings *)
-DatBind : TyVarSeq TyCon EQUALS ConBind AND DatBind (Syntax.DatBind (span(TyVarSeqleft, ConBindright), TyVarSeq, TyCon, ConBind) :: DatBind)
-        | TyVarSeq TyCon EQUALS ConBind (Syntax.DatBind (span(TyVarSeqleft, ConBindright), TyVarSeq, TyCon, ConBind) :: nil)
+DatBind : TyVarSeq TyCon EQUALS ConBind DatBindRest (Syntax.DatBind (span(TyVarSeqleft, ConBindright), TyVarSeq, TyCon, ConBind) :: DatBindRest)
+
+(* datatype bindings *)
+DatBindRest : AND DatBind (DatBind)
+            | (nil)
 
 (* constructor bindings *)
-ConBind : Opt_OP BoundVId OF Ty Opt_BAR_ConBind (Syntax.ConBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: Opt_BAR_ConBind)
-        | Opt_OP BoundVId Opt_BAR_ConBind (Syntax.ConBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: Opt_BAR_ConBind)
+ConBind : Opt_OP BoundVId OF Ty ConBindRest (Syntax.ConBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ConBindRest)
+        | Opt_OP BoundVId ConBindRest (Syntax.ConBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ConBindRest)
 
-Opt_BAR_ConBind : BAR ConBind (ConBind)
-                | (nil)
+ConBindRest : BAR ConBind (ConBind)
+            | (nil)
 
 (* exception bindings *)
-ExBind : Opt_OP BoundVId OF Ty Opt_AND_ExBind (Syntax.ExBind1 (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: Opt_AND_ExBind)
-       | Opt_OP BoundVId Opt_AND_ExBind (Syntax.ExBind1 (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: Opt_AND_ExBind)
-       | Opt_OP BoundVId EQUALS Opt_OP LongVId Opt_AND_ExBind (Syntax.ExBind2 (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: Opt_AND_ExBind)
+ExBind : Opt_OP BoundVId OF Ty ExBindRest (Syntax.ExBind1 (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ExBindRest)
+       | Opt_OP BoundVId ExBindRest (Syntax.ExBind1 (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ExBindRest)
+       | Opt_OP BoundVId EQUALS Opt_OP LongVId ExBindRest (Syntax.ExBind2 (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: ExBindRest)
 
-Opt_AND_ExBind : AND ExBind (ExBind)
-               | (nil)
+ExBindRest : AND ExBind (ExBind)
+           | (nil)
 
 StrExp : STRUCT StrDecs END (Syntax.StructExp(span(STRUCTleft, ENDright), StrDecs))
        | LongStrId (Syntax.StrIdExp(span(LongStrIdleft, LongStrIdright), LongStrId))
