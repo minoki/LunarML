@@ -118,7 +118,8 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
      and ValBind = PatBind of SourcePos.span * Pat * Exp
                  | TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
-type Program = (Dec Syntax.StrDec) list
+datatype TopDec = StrDec of Dec list
+type Program = TopDec list
 
 local
     fun doFields i nil = nil
@@ -501,14 +502,14 @@ local structure S = Syntax
       fun lookupLongVId(ctx, env : Env, span, Syntax.MkQualified(strpath, vid))
           = (case lookupVId(lookupStr(ctx, env, span, strpath), vid) of
                  NONE => NONE
-               | SOME (vid', x) => SOME (USyntax.MkLongVId(strpath, vid'), x)
+               | SOME (vid', x) => SOME (Syntax.MkQualified([], vid'), x)
             )
 in
 (* toUTy : Context * TVEnv * Env * Syntax.Ty -> USyntax.Ty *)
 (* toUPat : Context * TVEnv * Env * Syntax.Pat -> USyntax.VId Syntax.VIdMap.map * USyntax.Pat *)
 (* toUExp : Context * TVEnv * Env * Syntax.Exp -> USyntax.Exp *)
 (* toUMatch : Context * TVEnv * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
-(* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> Env * USyntax.Dec list *)
+(* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> (* created environment *) Env * USyntax.Dec list *)
 fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
     = (case Syntax.TyVarMap.find(tvenv, tv) of
            NONE => emitError(ctx, [span], "unknown type variable `" ^ Syntax.print_TyVar tv ^ "`")
@@ -804,5 +805,51 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
            end
          | S.FixityDec(_) => toUDecs(ctx, tvenv, env, decls) (* ignore *)
       )
+(* doUStrExp : Context * Env * Syntax.Dec Syntax.StrExp -> (* structure *) Env * USyntax.Dec list *)
+(* doUStrDecs : Context * Env * (Syntax.Dec Syntax.StrDec) list -> (* created environment *) Env * USyntax.Dec list *)
+fun doUStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = let val (env', decs') = doUStrDecs(ctx, env, strdecs)
+                                                           in (env', decs')
+                                                           end
+  | doUStrExp(ctx, env, Syntax.StrIdExp(span, Syntax.MkQualified(strids, strid as Syntax.MkStrId name)))
+    = let val env = lookupStr(ctx, env, span, strids)
+      in case Syntax.StrIdMap.find(#strMap env, strid) of
+             NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'") (* TODO: print full name *)
+           | SOME (MkEnv innerEnv) => (innerEnv, [])
+      end
+  | doUStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs') = doUStrDecs(ctx, env, strdecs)
+                                                                         val (env'', decs') = doUStrExp(ctx, mergeEnv(env, env'), strexp)
+                                                                     in (env'', strdecs' @ decs')
+                                                                     end
+and doUStrDecs(ctx, env, [] : (Syntax.Dec Syntax.StrDec) list) : Env * USyntax.Dec list = (emptyEnv, [])
+  | doUStrDecs(ctx, env, Syntax.CoreDec(span, dec) :: strdecs) = let val (env', dec') = toUDecs(ctx, Syntax.TyVarMap.empty, env, [dec])
+                                                                     val (env'', strdecs') = doUStrDecs(ctx, mergeEnv(env, env'), strdecs)
+                                                                 in (mergeEnv(env', env''), dec' @ strdecs')
+                                                                 end
+  | doUStrDecs(ctx, env, Syntax.StrBindDec(span, strbinds) :: strdecs) = let val (strMap, decs) = List.foldl (doStrBind (ctx, env)) (Syntax.StrIdMap.empty, []) strbinds
+                                                                             val env' = { valMap = #valMap emptyEnv
+                                                                                        , tyConMap = #tyConMap emptyEnv
+                                                                                        , strMap = strMap
+                                                                                        }
+                                                                             val (env'', strdecs') = doUStrDecs(ctx, mergeEnv(env, env'), strdecs)
+                                                                         in (mergeEnv(env', env''), decs @ strdecs')
+                                                                         end
+  | doUStrDecs(ctx, env, Syntax.LocalStrDec(span, strdecs1, strdecs2) :: strdecs3) = let val (env', strdecs1') = doUStrDecs(ctx, env, strdecs1)
+                                                                                         val (env'', strdecs2') = doUStrDecs(ctx, mergeEnv(env, env'), strdecs2)
+                                                                                         val (env''', strdecs3') = doUStrDecs(ctx, mergeEnv(env, env''), strdecs3)
+                                                                                     in (mergeEnv(env'', env'''), strdecs1' @ strdecs2' @ strdecs3')
+                                                                                     end
+and doStrBind (ctx, env) ((strid, strexp), (acc, decs0)) = let val (strenv, decs) = doUStrExp(ctx, env, strexp)
+                                                           in (Syntax.StrIdMap.insert (acc, strid, MkEnv strenv), decs0 @ decs)
+                                                           end
+(* toUTopDec : Context * Env * Syntax.Dec Syntax.StrDec -> Env * USyntax.TopDec *)
+fun toUTopDec(ctx, env, strdec : Syntax.Dec Syntax.StrDec) = let val (env', decs) = doUStrDecs(ctx, env, [strdec])
+                                                             in (env', USyntax.StrDec decs)
+                                                             end
+(* toUProgram : Context * Env * (Syntax.Dec Syntax.StrDec) list -> Env * USyntax.TopDec list *)
+fun toUProgram(ctx, env, [] : (Syntax.Dec Syntax.StrDec) list) : Env * USyntax.TopDec list = (emptyEnv, [])
+  | toUProgram(ctx, env, strdec :: strdecs) = let val (env', topdec) = toUTopDec(ctx, env, strdec)
+                                                  val (env'', topdecs) = toUProgram(ctx, mergeEnv(env, env'), strdecs)
+                                              in (mergeEnv(env', env''), topdec :: topdecs)
+                                              end
 end (* local *)
 end (* structure ToTypedSyntax *)

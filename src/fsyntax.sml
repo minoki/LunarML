@@ -200,7 +200,7 @@ local structure U = USyntax
       (* toFTy : Context * Env * USyntax.Ty -> FSyntax.Ty *)
       (* toFPat : Context * Env * USyntax.Pat -> unit USyntax.VIdMap.map * FSyntax.Pat *)
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
-      (* toFDecs : Context * Env * USyntax.Dec list -> Env * FSyntax.Dec list *)
+      (* toFDecs : Context * Env * USyntax.Dec list -> FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
       fun isSimpleTy(U.TyCon(_, [], longtycon1), longtycon2) = U.eqULongTyCon(longtycon1, longtycon2)
         | isSimpleTy _ = false
@@ -483,5 +483,7 @@ and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds)) = F.DatBind(ty
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
 and doExBind(ctx, env, exbind) = NONE (* TODO *)
+fun programToFDecs(ctx, env, []) = []
+  | programToFDecs(ctx, env, USyntax.StrDec decs :: topdecs) = toFDecs(ctx, env, decs) @ programToFDecs(ctx, env, topdecs)
 end (* local *)
 end (* structure ToFSyntax *)

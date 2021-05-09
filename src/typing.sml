@@ -794,22 +794,6 @@ and typeCheckPatRow(ctx, env, row)
       in List.foldr oneField ([], USyntax.VIdMap.empty, []) row (* TODO: Is this right? *)
       end
 
-(* typeCheckExp : Context * Env * USyntax.Exp -> (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Ty * USyntax.Exp *)
-fun typeCheckExp_(ctx, env, exp) = let val (ty, exp') = typeCheckExp(ctx, env, exp)
-                                       val subst = !(#tyVarSubst ctx)
-                                       val tvc = !(#tyVarConstraints ctx)
-                                       val applySubst = applySubstTy subst
-                                   in (tvc, applySubst ty, USyntax.mapTyInExp applySubst exp')
-                                   end
-
-(* typeCheckProgram : Context * Env * USyntax.Dec list -> Env * (UnaryConstraint list) USyntax.TyVarMap.map * USyntax.Dec list *)
-fun typeCheckProgram(ctx, env, decls) = let val (env', decls') = typeCheckDecs(ctx, env, decls)
-                                            val subst = !(#tyVarSubst ctx)
-                                            val tvc = !(#tyVarConstraints ctx)
-                                            val applySubst = applySubstTy subst
-                                        in (env', tvc, List.map (USyntax.mapTyInDec applySubst) decls')
-                                        end
-
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_Env ({ tyMap, valMap, strMap, boundTyVars } : Env) = "Env{tyMap=" ^ USyntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap (fn MkEnv env => print_Env env) strMap ^ ",boundTyVars=...}"
@@ -862,5 +846,20 @@ fun applyDefaultTypes(ctx, tvc, decs) =
     in List.map (USyntax.mapTyInDec (applySubstTy subst)) decs
     end
 
+(* typeCheckTopDec : Context * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
+fun typeCheckTopDec(ctx, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
+    let val (env', decs') = typeCheckDecs(ctx, env, decs)
+        val subst = !(#tyVarSubst ctx)
+        val tvc = !(#tyVarConstraints ctx)
+        val decs'' = List.map (USyntax.mapTyInDec (applySubstTy subst)) decs'
+        val decs''' = applyDefaultTypes(ctx, tvc, decs'')
+    in (env', USyntax.StrDec decs''')
+    end
+(* typeCheckProgram : Context * Env * USyntax.TopDec list -> Env * USyntax.TopDec list *)
+fun typeCheckProgram(ctx, env, [] : USyntax.TopDec list) : Env * USyntax.TopDec list = (emptyEnv, [])
+  | typeCheckProgram(ctx, env, topdec :: topdecs) = let val (env', topdec') = typeCheckTopDec(ctx, env, topdec)
+                                                        val (env'', topdecs') = typeCheckProgram(ctx, mergeEnv(env, env'), topdecs)
+                                                    in (mergeEnv(env', env''), topdec' :: topdecs')
+                                                    end
 end (* local *)
 end (* structure Typing *)

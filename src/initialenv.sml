@@ -368,76 +368,77 @@ val initialEnv : Typing.Env
                               , strMap = mkStrMap []
                               , boundTyVars = USyntax.TyVarSet.empty
                               }
-      in { tyMap = mkTyMap
-                       [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
-                       ,(USyntax.MkTyCon("bool", 6), TyStr(TypeFcn([], primTy_bool)
-                                                          , mkValConMap [(VId_true, TypeScheme ([], primTy_bool))
-                                                                        ,(VId_false, TypeScheme ([], primTy_bool))
-                                                                        ]
-                                                          )
-                        )
-                       ,(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv))
-                       ,(USyntax.MkTyCon("word", 1), TyStr(TypeFcn([], primTy_word), emptyValEnv))
-                       ,(USyntax.MkTyCon("real", 2), TyStr(TypeFcn([], primTy_real), emptyValEnv))
-                       ,(USyntax.MkTyCon("string", 3), TyStr(TypeFcn([], primTy_string), emptyValEnv))
-                       ,(USyntax.MkTyCon("char", 4), TyStr(TypeFcn([], primTy_char), emptyValEnv))
-                       ,(USyntax.MkTyCon("list", 5), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
-                                                          , mkValConMap [(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA))
-                                                                        ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
-                                                                        ]
-                                                          )
-                        )
-                       ,(USyntax.MkTyCon("ref", 7), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
-                                                         , mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
-                                                                       ]
-                                                         )
-                        )
-                       ,(USyntax.MkTyCon("exn", 5), TyStr(TypeFcn([], primTy_exn), emptyValEnv))
-                       ,(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], arrayOf tyA), emptyValEnv))
-                       ,(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
-                       ]
-         , valMap = union [mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
-                                       ,(VId_true, TypeScheme ([], primTy_bool))
-                                       ,(VId_false, TypeScheme ([], primTy_bool))
-                                       ,(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
-                                       ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
-                                       ]
-                          ,mkExConMap [(VId_Match, TypeScheme ([], primTy_exn))
-                                      ,(VId_Bind, TypeScheme ([], primTy_exn))
-                                      ,(VId_Div, TypeScheme ([], primTy_exn))
-                                      ,(VId_Overflow, TypeScheme ([], primTy_exn))
-                                      ,(VId_Size, TypeScheme ([], primTy_exn))
-                                      ,(VId_Subscript, TypeScheme ([], primTy_exn))
-                                      ,(VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
-                                      ]
-                          ,mkValMap [(VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
-                                    ,(VId_COLONEQUAL, TypeScheme ([(tyVarA, [])], mkPairType(refOf tyA, tyA) --> primTy_unit)) (* forall 'a. 'a ref * 'a -> {} *)
-                                    ,(VId_EXCLAM, TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
-                                    (* Overloaded identifiers *)
-                                    ,(VId_abs, TypeScheme([(tyVarA, [IsSignedReal])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
-                                    ,(VId_TILDE, TypeScheme([(tyVarA, [IsSigned])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
-                                    ,(VId_div, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                                    ,(VId_mod, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                                    ,(VId_TIMES, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                    ,(VId_DIVIDE, TypeScheme([(tyVarA, [IsField])], mkPairType(tyA, tyA) --> tyA)) (* Real * Real -> Real, default: real * real -> real *)
-                                    ,(VId_PLUS, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                    ,(VId_MINUS, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                    ,(VId_LT, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                    ,(VId_GT, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                    ,(VId_LE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                    ,(VId_GE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                    (* Non-overloaded identifiers *)
-                                    ,(VId_TextIO_print, TypeScheme ([], primTy_string --> primTy_unit))
-                                    ,(VId_String_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
-                                    ,(VId_Bool_not, TypeScheme ([], primTy_bool --> primTy_bool))
-                                    ]
-                          ]
-         , strMap = mkStrMap
-                        [("Int", module_Int)
-                        ,("Array", module_Array)
-                        ,("Vector", module_Vector)
-                        ]
-         , boundTyVars = USyntax.TyVarSet.empty
-         }
+      in List.foldl Typing.mergeEnv
+                    { tyMap = mkTyMap
+                                  [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
+                                  ,(USyntax.MkTyCon("bool", 6), TyStr(TypeFcn([], primTy_bool)
+                                                                     , mkValConMap [(VId_true, TypeScheme ([], primTy_bool))
+                                                                                   ,(VId_false, TypeScheme ([], primTy_bool))
+                                                                                   ]
+                                                                     )
+                                   )
+                                  ,(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv))
+                                  ,(USyntax.MkTyCon("word", 1), TyStr(TypeFcn([], primTy_word), emptyValEnv))
+                                  ,(USyntax.MkTyCon("real", 2), TyStr(TypeFcn([], primTy_real), emptyValEnv))
+                                  ,(USyntax.MkTyCon("string", 3), TyStr(TypeFcn([], primTy_string), emptyValEnv))
+                                  ,(USyntax.MkTyCon("char", 4), TyStr(TypeFcn([], primTy_char), emptyValEnv))
+                                  ,(USyntax.MkTyCon("list", 5), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
+                                                                     , mkValConMap [(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA))
+                                                                                   ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
+                                                                                   ]
+                                                                     )
+                                   )
+                                  ,(USyntax.MkTyCon("ref", 7), TyStr(TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
+                                                                    , mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
+                                                                                  ]
+                                                                    )
+                                   )
+                                  ,(USyntax.MkTyCon("exn", 5), TyStr(TypeFcn([], primTy_exn), emptyValEnv))
+                                  ,(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], arrayOf tyA), emptyValEnv))
+                                  ,(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
+                                  ]
+                    , valMap = union [mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
+                                                  ,(VId_true, TypeScheme ([], primTy_bool))
+                                                  ,(VId_false, TypeScheme ([], primTy_bool))
+                                                  ,(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
+                                                  ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
+                                                  ]
+                                     ,mkExConMap [(VId_Match, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Bind, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Div, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Overflow, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Size, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Subscript, TypeScheme ([], primTy_exn))
+                                                 ,(VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
+                                                 ]
+                                     ,mkValMap [(VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
+                                               ,(VId_COLONEQUAL, TypeScheme ([(tyVarA, [])], mkPairType(refOf tyA, tyA) --> primTy_unit)) (* forall 'a. 'a ref * 'a -> {} *)
+                                               ,(VId_EXCLAM, TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
+                                               (* Overloaded identifiers *)
+                                               ,(VId_abs, TypeScheme([(tyVarA, [IsSignedReal])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
+                                               ,(VId_TILDE, TypeScheme([(tyVarA, [IsSigned])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
+                                               ,(VId_div, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
+                                               ,(VId_mod, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
+                                               ,(VId_TIMES, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
+                                               ,(VId_DIVIDE, TypeScheme([(tyVarA, [IsField])], mkPairType(tyA, tyA) --> tyA)) (* Real * Real -> Real, default: real * real -> real *)
+                                               ,(VId_PLUS, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
+                                               ,(VId_MINUS, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
+                                               ,(VId_LT, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                               ,(VId_GT, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                               ,(VId_LE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                               ,(VId_GE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                               (* Non-overloaded identifiers *)
+                                               ,(VId_TextIO_print, TypeScheme ([], primTy_string --> primTy_unit))
+                                               ,(VId_String_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
+                                               ,(VId_Bool_not, TypeScheme ([], primTy_bool --> primTy_bool))
+                                               ]
+                                     ]
+                    , strMap = mkStrMap []
+                    , boundTyVars = USyntax.TyVarSet.empty
+                    }
+                    [module_Int
+                    ,module_Array
+                    ,module_Vector
+                    ]
       end
 end
