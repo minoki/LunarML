@@ -52,6 +52,7 @@ local should_run = {
   "prime_eratos.sml",
   "fix_by_datatype.sml",
   "fix_by_ref.sml",
+  "prime_as_typevar.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
