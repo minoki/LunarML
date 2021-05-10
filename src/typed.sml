@@ -803,10 +803,15 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val (env2, decls2') = toUDecs(ctx, tvenv, mergeEnv(env, env1), decls2)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, env2), decls)
            in (mergeEnv(env2, env'), decls1' @ decls2' @ decls') end
-         | S.OpenDec(span, _) =>
-           let val decl' = emitError(ctx, [span], "open: not implemented yet")
-               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
-           in ((* TODO: add type ctor *) env', decl' :: decls')
+         | S.OpenDec(span, longstrids) =>
+           let val env' = List.foldl (fn (Syntax.MkQualified (strids, strid as Syntax.MkStrId name), accEnv) =>
+                                         case Syntax.StrIdMap.find(#strMap (lookupStr(ctx, env, span, strids)), strid) of
+                                             NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'")
+                                           | SOME (MkEnv strEnv) => mergeEnv(accEnv, strEnv))
+                                     emptyEnv
+                                     longstrids
+               val (env'', decls') = toUDecs(ctx, tvenv, mergeEnv(env, env'), decls)
+           in (mergeEnv(env', env''), decls')
            end
          | S.FixityDec(_) => toUDecs(ctx, tvenv, env, decls) (* ignore *)
       )
