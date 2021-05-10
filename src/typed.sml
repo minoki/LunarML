@@ -407,6 +407,28 @@ fun filterVarsInPat pred =
     in List.rev (doPat([], pat))
     end
 *)
+
+(* renameVarsInPat : VId VIdMap.map -> Pat -> Pat *)
+fun renameVarsInPat m =
+    let fun doPat (pat as WildcardPat _) = pat
+          | doPat (pat as SConPat _) = pat
+          | doPat (pat as VarPat(span, vid, ty)) = (case VIdMap.find(m, vid) of
+                                                        NONE => pat
+                                                      | SOME repl => VarPat(span, repl, ty)
+                                                   )
+          | doPat (RecordPat { sourceSpan, fields, wildcard }) = RecordPat { sourceSpan = sourceSpan
+                                                                           , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
+                                                                           , wildcard = wildcard
+                                                                           }
+          | doPat (ConPat(span, longvid, optPat)) = ConPat(span, longvid, Option.map doPat optPat)
+          | doPat (InstantiatedConPat(span, longvid, optPat, tyargs)) = InstantiatedConPat(span, longvid, Option.map doPat optPat, tyargs)
+          | doPat (TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, ty)
+          | doPat (LayeredPat(span, vid, ty, pat)) = LayeredPat(span, case VIdMap.find(m, vid) of
+                                                                          NONE => vid
+                                                                        | SOME repl => repl
+                                                                , ty, doPat pat)
+    in doPat
+    end
 end (* structure USyntax *)
 
 structure ToTypedSyntax = struct

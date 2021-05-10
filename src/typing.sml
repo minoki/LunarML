@@ -164,6 +164,12 @@ fun freshTyVar(ctx : Context) : USyntax.TyVar
        ; USyntax.AnonymousTyVar(i)
       end
 
+fun renewVId (ctx : Context) (USyntax.MkVId(name, _)) : USyntax.VId
+    = let val n = !(#nextVId ctx)
+      in #nextVId ctx := n + 1
+       ; USyntax.MkVId(name, n)
+      end
+
 local open USyntax
 in
 (* occurCheck : TyVar -> Ty -> bool; returns true if the type variable occurs in the type *)
@@ -481,10 +487,12 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                                                                                                         USyntax.VarPat _ => exp
                                                                                                       | USyntax.TypedPat (_, USyntax.VarPat _, _) => exp
                                                                                                       | _ => let val espan = USyntax.getSourceSpanOfExp exp
+                                                                                                                 val vid' = renewVId ctx vid
+                                                                                                                 val pat' = USyntax.renameVarsInPat (USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, vid')) pat
                                                                                                              in USyntax.CaseExp(espan, exp, ty, if isExhaustive(ctx, env, pat) then
-                                                                                                                                                    [(pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))]
+                                                                                                                                                    [(pat', VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable))]
                                                                                                                                                 else
-                                                                                                                                                    [(pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))
+                                                                                                                                                    [(pat', VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable))
                                                                                                                                                     ,(USyntax.WildcardPat span, USyntax.RaiseExp(span, VarExp(span, USyntax.MkLongVId([], VId_Bind), Syntax.ExceptionConstructor)))
                                                                                                                                                     ]
                                                                                                                                )
@@ -493,11 +501,14 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                                       in (valbind' :: valbinds, USyntax.VIdMap.unionWith #2 (USyntax.VIdMap.map (fn ty => TypeScheme([], ty)) valEnv, valEnvRest))
                                       end
                      | _ => let val espan = USyntax.getSourceSpanOfExp exp
-                                val tup = USyntax.TupleExp(espan, List.map (fn (vid, _) => VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable)) vars) (* TODO: fresh vid *)
+                                val vars' = List.map (fn (vid, _) => (vid, renewVId ctx vid)) vars
+                                val varsMap = List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty vars'
+                                val pat' = USyntax.renameVarsInPat varsMap pat
+                                val tup = USyntax.TupleExp(espan, List.map (fn (_, vid') => VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable)) vars') (* TODO: fresh vid *)
                                 val valbind' = TupleBind(span, vars, USyntax.CaseExp(espan, exp, expTy, if isExhaustive(ctx, env, pat) then
-                                                                                                            [(pat, tup)]
+                                                                                                            [(pat', tup)]
                                                                                                         else
-                                                                                                            [(pat, tup)
+                                                                                                            [(pat', tup)
                                                                                                             ,(USyntax.WildcardPat span, USyntax.RaiseExp(span, VarExp(span, USyntax.MkLongVId([], VId_Bind), Syntax.ExceptionConstructor)))
                                                                                                             ]
                                                                                     )
@@ -530,7 +541,10 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                     val espan = USyntax.getSourceSpanOfExp exp
                     fun polyPart [] = []
                       | polyPart ((vid, TypeScheme([], _)) :: rest) = polyPart rest
-                      | polyPart ((vid, tysc) :: rest) = PolyVarBind(span, vid, tysc, USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat (fn x => x = vid) pat, USyntax.VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart rest
+                      | polyPart ((vid, tysc) :: rest) = let val vid' = renewVId ctx vid
+                                                             val pat' = USyntax.renameVarsInPat (USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, vid')) pat
+                                                         in PolyVarBind(span, vid, tysc, USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat (fn x => x = vid') pat', USyntax.VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable))])) :: polyPart rest
+                                                         end
                     fun isMonoVar vid = case USyntax.VIdMap.find(valEnv', vid) of
                                             NONE => emitError(ctx, [span], "isMonoVar: internal error")
                                           | SOME (TypeScheme([], _)) => true
@@ -543,9 +557,15 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                                                                                          | TypeScheme(_ :: _, _) => NONE
                                                                     ) valEnv'L
                                        in case xs of
-                                              [(vid, ty)] => PolyVarBind(span, vid, TypeScheme([], ty), USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat isMonoVar pat, VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable))])) :: polyPart valEnv'L
-                                            | _ => let val tup = USyntax.TupleExp(espan, List.map (fn (vid, _) => VarExp(espan, USyntax.MkLongVId([], vid), Syntax.ValueVariable)) xs)
-                                                   in TupleBind(span, xs, USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat isMonoVar pat, tup)])) :: polyPart valEnv'L
+                                              [(vid, ty)] => let val vid' = renewVId ctx vid
+                                                                 val pat' = USyntax.renameVarsInPat (USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, vid')) (USyntax.filterVarsInPat isMonoVar pat)
+                                                             in PolyVarBind(span, vid, TypeScheme([], ty), USyntax.CaseExp(espan, exp, expTy, [(pat', VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable))])) :: polyPart valEnv'L
+                                                             end
+                                            | _ => let val vars' = List.map (fn (vid, _) => (vid, renewVId ctx vid)) xs
+                                                       val varsMap = List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty vars'
+                                                       val pat' = USyntax.renameVarsInPat varsMap (USyntax.filterVarsInPat isMonoVar pat)
+                                                       val tup = USyntax.TupleExp(espan, List.map (fn (_, vid') => VarExp(espan, USyntax.MkLongVId([], vid'), Syntax.ValueVariable)) vars')
+                                                   in TupleBind(span, xs, USyntax.CaseExp(espan, exp, expTy, [(pat', tup)])) :: polyPart valEnv'L
                                                    end
                                        end
                 in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
