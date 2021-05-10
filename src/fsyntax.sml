@@ -18,7 +18,6 @@ datatype Pat = WildcardPat
              | LayeredPat of USyntax.VId * Ty * Pat
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
-datatype ExBind = ExBind of USyntax.VId * Ty option
 datatype Exp = SConExp of Syntax.SCon
              | VarExp of USyntax.LongVId
              | RecordExp of (Syntax.Label * Exp) list
@@ -43,7 +42,7 @@ datatype Exp = SConExp of Syntax.SCon
      and Dec = ValDec of ValBind
              | RecValDec of ValBind list
              | DatatypeDec of DatBind list
-             | ExceptionDec of ExBind
+             | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -151,7 +150,7 @@ and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," 
 and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
-  | print_Dec (ExceptionDec exbind) = "ExceptionDec"
+  | print_Dec (ExceptionDec _) = "ExceptionDec"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -477,11 +476,18 @@ and toFDecs(ctx, env, []) = []
   | toFDecs(ctx, env, U.TypeDec(span, typbinds) :: decs) = toFDecs(ctx, env, decs)
   | toFDecs(ctx, env, U.DatatypeDec(span, datbinds) :: decs)
     = F.DatatypeDec (List.map (fn datbind => doDatBind(ctx, env, datbind)) datbinds) :: toFDecs(ctx, env, decs)
-  | toFDecs(ctx, env, U.ExceptionDec(span, exbinds) :: decs) = List.mapPartial (fn exbind => doExBind(ctx, env, exbind)) exbinds @ toFDecs(ctx, env, decs)
+  | toFDecs(ctx, env, U.ExceptionDec(span, exbinds) :: decs) = List.map (fn exbind => doExBind(ctx, env, exbind)) exbinds @ toFDecs(ctx, env, decs)
 and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
-and doExBind(ctx, env, exbind) = NONE (* TODO *)
+and doExBind(ctx, env, U.ExBind(span, vid as USyntax.MkVId(name, _), optTy)) = let val tag = freshVId(ctx, name)
+                                                                               in F.ExceptionDec { conName = vid
+                                                                                                 , tagName = tag
+                                                                                                 , payloadTy = case optTy of
+                                                                                                                   NONE => NONE 
+                                                                                                                 | SOME ty => SOME (toFTy(ctx, env, ty))
+                                                                                                 }
+                                                                               end
 fun programToFDecs(ctx, env, []) = []
   | programToFDecs(ctx, env, USyntax.StrDec decs :: topdecs) = toFDecs(ctx, env, decs) @ programToFDecs(ctx, env, topdecs)
 end (* local *)

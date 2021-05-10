@@ -574,7 +574,17 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
       in String.concat decls ^ String.concat assignments
       end
   | doDec ctx env (F.DatatypeDec datbinds) = String.concat (List.map (doDatBind ctx env) datbinds)
-  | doDec ctx env (F.ExceptionDec exbind) = "" (* not implemented yet *)
+  | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
+    = let val conName' = VIdToLua conName
+          val tagName' = VIdToLua tagName
+      in indent env ^ "local " ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }\n"
+         ^ (case payloadTy of
+                NONE => indent env ^ "local " ^ conName' ^ " = { tag = " ^ tagName' ^ " }\n"
+              | SOME _ => indent env ^ "local function " ^ conName' ^ "(payload)\n"
+                          ^ indent (nextIndentLevel env) ^ "return { tag = " ^ tagName' ^ ", payload = payload }\n"
+                          ^ indent env ^ "end\n"
+           )
+      end
 and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
 and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }\n"
   | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = " ^ toLuaStringLit name ^ ", payload = x }\nend\n"

@@ -91,8 +91,7 @@ datatype Pat = WildcardPat of SourcePos.span
 datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
 datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
-datatype ExBind = ExBind1 of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
-                | ExBind2 of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
+datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.IdStatus (* value identifier; IdStatus is used by isNonexpansive *)
@@ -285,11 +284,8 @@ fun mapTy doTy =
           | doUnaryConstraint ct = ct
         and doTypBind(TypBind(span, tyvars, tycon, ty)) = TypBind(span, tyvars, tycon, doTy ty) (* TODO: tyvars *)
         and doDatBind(DatBind(span, tyvars, tycon, conbinds)) = DatBind(span, tyvars, tycon, List.map doConBind conbinds) (* TODO: tyvars *)
-        and doConBind(ConBind(span, vid, NONE)) = ConBind(span, vid, NONE)
-          | doConBind(ConBind(span, vid, SOME ty)) = ConBind(span, vid, SOME (doTy ty))
-        and doExBind(ExBind1(span, vid, NONE)) = ExBind1(span, vid, NONE)
-          | doExBind(ExBind1(span, vid, SOME ty)) = ExBind1(span, vid, SOME (doTy ty))
-          | doExBind(ExBind2(span, vid, longvid)) = ExBind2(span, vid, longvid)
+        and doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map doTy optTy)
+        and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
     in { doExp = doExp, doDec = doDec }
     end
 (* mapTyInExp : (Ty -> Ty) -> Exp -> Exp *)
@@ -362,9 +358,8 @@ and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds)) = let val bo
                                                                       end
 and freeTyVarsInConBind(bound, ConBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInConBind(bound, ConBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
-and freeTyVarsInExBind(bound, ExBind1(_, vid, NONE)) = TyVarSet.empty
-  | freeTyVarsInExBind(bound, ExBind1(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
-  | freeTyVarsInExBind(bound, ExBind2(_, _, _)) = TyVarSet.empty
+and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
+  | freeTyVarsInExBind(bound, ExBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
            HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)
@@ -793,10 +788,36 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add type ctor *) env, decls)
            in ((* TODO: add type ctor *) env', decl' :: decls')
            end
-         | S.ExceptionDec(span, _) =>
-           let val decl' = emitError(ctx, [span], "exception declaration: not implemented yet")
-               val (env', decls') = toUDecs(ctx, tvenv, (* TODO: add exception ctor *) env, decls)
-           in ((* TODO: add exception ctor *) env', decl' :: decls')
+         | S.ExceptionDec(span, exbinds) =>
+           let fun doExBind(S.ExBind(span, vid, optTy), (exconmap, exbinds')) =
+                   if Syntax.VIdMap.inDomain(exconmap, vid) then
+                       emitError(ctx, [span], "exception: the same identifier is bound twice")
+                   else
+                       let val vid' = newVId(ctx, vid)
+                           val optTy' = case optTy of
+                                            NONE => NONE
+                                          | SOME ty => SOME (toUTy(ctx, tvenv, env, ty))
+                       in (Syntax.VIdMap.insert(exconmap, vid, (vid', Syntax.ExceptionConstructor)), U.ExBind(span, vid', optTy') :: exbinds')
+                       end
+                 | doExBind(S.ExReplication(span, vid, longvid), (exconmap, exbinds')) =
+                   if Syntax.VIdMap.inDomain(exconmap, vid) then
+                       emitError(ctx, [span], "exception: the same identifier is bound twice")
+                   else
+                       (case lookupLongVId(ctx, env, span, longvid) of
+                            NONE => emitError(ctx, [span], "exception constructor not found")
+                          | SOME (Syntax.MkQualified(_, vid'), idstatus) =>
+                            if idstatus = Syntax.ExceptionConstructor then
+                                (Syntax.VIdMap.insert(exconmap, vid, (vid', idstatus)), exbinds')
+                            else
+                                emitError(ctx, [span], "exception: RHS is not an exception constructor")
+                       )
+               val (exconmap, exbinds') = List.foldr doExBind (Syntax.VIdMap.empty, []) exbinds
+               val exenv = { valMap = exconmap, tyConMap = Syntax.TyConMap.empty, strMap = Syntax.StrIdMap.empty }
+               val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, exenv), decls)
+           in (mergeEnv(exenv, env'), if List.null exbinds' then
+                                          decls'
+                                      else
+                                          U.ExceptionDec(span, exbinds') :: decls')
            end
          | S.LocalDec(span, decls1, decls2) =>
            let val (env1, decls1') = toUDecs(ctx, tvenv, env, decls1)

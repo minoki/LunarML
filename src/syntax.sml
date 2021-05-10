@@ -84,8 +84,8 @@ datatype Pat = WildcardPat of SourcePos.span
 datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
 datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
-datatype ExBind = ExBind1 of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
-                | ExBind2 of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
+datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
+                | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
 
 datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)

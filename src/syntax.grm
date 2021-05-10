@@ -439,9 +439,9 @@ ConBindRest : BAR ConBind (ConBind)
             | (nil)
 
 (* exception bindings *)
-ExBind : Opt_OP BoundVId OF Ty ExBindRest (Syntax.ExBind1 (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ExBindRest)
-       | Opt_OP BoundVId ExBindRest (Syntax.ExBind1 (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ExBindRest)
-       | Opt_OP BoundVId EQUALS Opt_OP LongVId ExBindRest (Syntax.ExBind2 (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: ExBindRest)
+ExBind : Opt_OP BoundVId OF Ty ExBindRest (Syntax.ExBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ExBindRest)
+       | Opt_OP BoundVId ExBindRest (Syntax.ExBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ExBindRest)
+       | Opt_OP BoundVId EQUALS Opt_OP LongVId ExBindRest (Syntax.ExReplication (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: ExBindRest)
 
 ExBindRest : AND ExBind (ExBind)
            | (nil)

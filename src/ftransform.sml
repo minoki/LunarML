@@ -97,7 +97,16 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
           and doDec env (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
-            | doDec env (dec as F.ExceptionDec exbind) = (env, dec) (* TODO: exnconmap *)
+            | doDec env (dec as F.ExceptionDec { conName, tagName, payloadTy })
+              = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
+                    val env' = { strMap = #strMap env
+                               , dataConMap = USyntax.VIdMap.insert (#dataConMap env, conName, case payloadTy of
+                                                                                                   NONE => exnTy
+                                                                                                 | SOME ty => FSyntax.FnType(ty, exnTy))
+                               , exnConMap = USyntax.VIdMap.insert (#exnConMap env, conName, tagName)
+                               }
+                in (env', dec)
+                end
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           and doDatBind (F.DatBind (tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })

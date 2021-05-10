@@ -626,7 +626,13 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
       in (env', dec)
       end
   | typeCheckDec(ctx, env, dec as ExceptionDec(span, exbinds))
-    = (emptyEnv, dec) (* not implemented yet *)
+    = let fun doExBind(USyntax.ExBind(span, vid, optTy), valMap)
+              = USyntax.VIdMap.insert(valMap, vid, (USyntax.TypeScheme([], case optTy of NONE => primTy_exn
+                                                                                       | SOME ty => USyntax.FnType(span, ty, primTy_exn)
+                                                                      ), Syntax.ExceptionConstructor))
+          val valMap = List.foldl doExBind USyntax.VIdMap.empty exbinds
+      in ({ tyMap = USyntax.TyConMap.empty, valMap = valMap, strMap = Syntax.StrIdMap.empty, boundTyVars = USyntax.TyVarSet.empty }, dec)
+      end
 (* typeCheckDecs : Context * Env * Dec list -> (* created environment *) Env * Dec list *)
 and typeCheckDecs(ctx, env, []) : Env * Dec list = (emptyEnv, [])
   | typeCheckDecs(ctx, env, dec :: decs) = let val (env', dec') = typeCheckDec(ctx, env, dec)
