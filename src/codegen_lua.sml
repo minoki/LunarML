@@ -304,9 +304,6 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
       in (stmts, "(" ^ exp2' ^ ")[" ^ LabelToLua(label) ^ "]")
       end
   | doExp ctx env (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), exp2 as F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]))
-    (* built-in operator? *)
-    (* TODO: evaluation order *)
-    (* TODO: check for overflow *)
     = (case USyntax.VIdMap.find(builtinBinaryOps, vid) of
            SOME (InfixOp luaop, true) => let val (stmts1, e1') = doExp ctx env e1
                                              val (stmts2, e2') = doExp ctx env e2
@@ -316,6 +313,11 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                    val (stmts2, e2') = doExp ctx env e2
                                                in (stmts1 @ stmts2, luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")")
                                                end
+         | SOME (NamedBinaryFn luafn, false) => let val (stmts1, e1') = doExp ctx env e1
+                                                    val (stmts2, e2') = doExp ctx env e2
+                                                    val dest = genSym ctx
+                                                in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = " ^ luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")\n"], dest)
+                                                end
          | _ => let val (stmts1, exp1') = doExp ctx env exp1
                     val (stmts2, exp2') = doExp ctx env exp2
                     val dest = genSym ctx
@@ -323,8 +325,6 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                 end
       )
   | doExp ctx env (F.AppExp (F.VarExp (Syntax.MkQualified([], vid)), exp2))
-    (* built-in operator? *)
-    (* TODO: check for overflow *)
     = let open InitialEnv
       in if USyntax.eqVId(vid, VId_TILDE_real) then
              let val (stmts, exp2') = doExp ctx env exp2
