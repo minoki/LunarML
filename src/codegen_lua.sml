@@ -282,7 +282,11 @@ fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
 
 fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then "(-" ^ Int.toString (~ x) ^ ")" else Int.toString x
   | doLiteral (Syntax.WordConstant x) = "0x" ^ Word.toString x
-  | doLiteral (Syntax.RealConstant x) = raise Fail "CodeGenLua: real constant not implemented yet"
+  | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
+                                             "(" ^ String.map (fn #"~" => #"-" | c => c) x ^ ")"
+                                         else
+                                             String.map (fn #"~" => #"-" | c => c) x
+                                        )
   | doLiteral (Syntax.StringConstant x) = toLuaStringLit x
   | doLiteral (Syntax.CharacterConstant x) = toLuaStringLit x
 

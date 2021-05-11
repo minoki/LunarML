@@ -209,9 +209,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                             Int.toString intPart ^ "e" ^ Int.toString expPart
                                         else
                                             Int.toString intPart ^ "." ^ fracPart ^ "e" ^ Int.toString expPart
-                            in case Real.fromString s of
-                                   SOME a => Tokens.RealConst (a,pos(l1,c1),p2)
-                                 | NONE => raise Fail "impossible"
+                            in Tokens.RealConst (s,pos(l1,c1),p2)
                             end
                       fun parseIntPart (l, c, a, rest0 as #"." :: x2 :: rest1)
                           = if numericLitType <> NLTWord andalso Char.isDigit x2 then

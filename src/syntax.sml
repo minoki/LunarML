@@ -5,7 +5,7 @@
 structure Syntax = struct
 datatype SCon = IntegerConstant of int (* decimal / hexadecimal *)
               | WordConstant of word (* decimal / hexadecimal *)
-              | RealConstant of real (* decimal *)
+              | RealConstant of string (* decimal *)
               | StringConstant of string
               | CharacterConstant of string
 datatype VId = MkVId of string
@@ -189,7 +189,7 @@ fun print_pair (f,g) (x,y) = "(" ^ f x ^ "," ^ g y ^ ")"
 
 fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ Int.toString x
   | print_SCon (WordConstant x) = "WordConstant " ^ Word.toString x
-  | print_SCon (RealConstant x) = "RealConstant " ^ Real.toString x
+  | print_SCon (RealConstant x) = "RealConstant " ^ x
   | print_SCon (StringConstant x) = "StringConstant \"" ^ String.toString x ^ "\""
   | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ String.toString x ^ "\""
 fun print_VId (MkVId x) = "MkVId \"" ^ String.toString x ^ "\""
