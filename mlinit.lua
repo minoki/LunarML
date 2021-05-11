@@ -346,44 +346,47 @@ local function _Array_array(t)
   if n < 0 then -- or maxLen < n
     error(_Size)
   end
-  local t = {}
+  local t = { n = n }
   for i = 1, n do
     t[i] = init
   end
   return t
 end
-local function _Array_fromList(xs)
+local function _VectorOrArray_fromList(xs)
   local t = {}
+  local n = 0
   while xs.tag == "::" do
     table.insert(t, xs.payload[1])
     xs = xs.payload[2]
+    n = n + 1
   end
+  t.n = n
   return t
 end
-local function _Array_tabulate(t)
+local function _VectorOrArray_tabulate(t)
   local n, f = t[1], t[2]
   if n < 0 then -- or maxLen < n
     error(_Size)
   end
-  local t = {}
+  local t = { n = n }
   for i = 1, n do
     t[i] = f(i - 1)
   end
   return t
 end
-local function _Array_length(t)
-  return #t
+local function _VectorOrArray_length(t)
+  return t.n
 end
-local function _Array_sub(t)
+local function _VectorOrArray_sub(t)
   local a, i = t[1], t[2]
-  if i < 0 or #a <= i then
+  if i < 0 or a.n <= i then
     error(_Subscript)
   end
   return a[i+1]
 end
 local function _Array_update(t)
   local a, i, x = t[1], t[2], t[3]
-  if i < 0 or #a <= i then
+  if i < 0 or a.n <= i then
     error(_Subscript)
   end
   a[i+1] = x
@@ -393,8 +396,8 @@ end
 -- Vector
 local function _EQUAL_vector(eq)
   local function go(a, b)
-    local n = #a
-    if n ~= #b then
+    local n = a.n
+    if n ~= b.n then
       return false
     end
     for i = 1, n do
@@ -408,7 +411,3 @@ local function _EQUAL_vector(eq)
     return go(t[1], t[2])
   end
 end
-local _Vector_fromList = _Array_fromList
-local _Vector_tabulate = _Array_tabulate
-local _Vector_length = _Array_length
-local _Vector_sub = _Array_sub
