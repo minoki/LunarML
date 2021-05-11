@@ -387,9 +387,20 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
           fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
                                   in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
                                   end
+          fun isExhaustive F.WildcardPat = true
+            | isExhaustive (F.SConPat _) = false
+            | isExhaustive (F.VarPat _) = true
+            | isExhaustive (F.RecordPat _) = false (* exn is not a record *)
+            | isExhaustive (F.InstantiatedConPat _) = false (* exn is open *)
+            | isExhaustive (F.LayeredPat (_, _, pat)) = isExhaustive pat
+          val matches' = List.map doMatch matches
+          val matches'' = if List.exists (fn (pat, _) => isExhaustive pat) matches' then
+                              matches'
+                          else
+                              matches' @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName))))]
       in F.HandleExp { body = toFExp(ctx, env, exp)
                      , exnName = exnName
-                     , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName)), exnTy, List.map doMatch matches @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName))))]) (* TODO: Avoid redundant match *)
+                     , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(Syntax.MkQualified([], exnName)), exnTy, matches'')
                      }
       end
   | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, toFExp(ctx, env, exp))
