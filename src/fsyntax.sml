@@ -200,8 +200,72 @@ local structure U = USyntax
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
       (* toFDecs : Context * Env * USyntax.Dec list -> FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
-      fun isSimpleTy(U.TyCon(_, [], tycon1), tycon2) = U.eqUTyCon(tycon1, tycon2)
-        | isSimpleTy _ = false
+      val overloads = let open Typing InitialEnv
+                      in List.foldl (fn ((vid, xs), m) => USyntax.VIdMap.insert (m, vid, List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty xs)) USyntax.VIdMap.empty
+                                    [(VId_abs, [(primTyCon_int, VId_Int_abs)
+                                               ,(primTyCon_real, VId_Real_abs)
+                                               ]
+                                     )
+                                    ,(VId_TILDE, [(primTyCon_int, VId_Int_TILDE)
+                                                 ,(primTyCon_real, VId_Real_TILDE)
+                                                 ]
+                                     )
+                                    ,(VId_div, [(primTyCon_int, VId_Int_div)
+                                               ,(primTyCon_word, VId_Word_div)
+                                               ]
+                                     )
+                                    ,(VId_mod, [(primTyCon_int, VId_Int_mod)
+                                               ,(primTyCon_word, VId_Word_mod)
+                                               ]
+                                     )
+                                    ,(VId_TIMES, [(primTyCon_int, VId_Int_TIMES)
+                                                 ,(primTyCon_word, VId_Word_TIMES)
+                                                 ,(primTyCon_real, VId_Real_TIMES)
+                                                 ]
+                                     )
+                                    ,(VId_DIVIDE, [(primTyCon_real, VId_Real_DIVIDE)
+                                                  ]
+                                     )
+                                    ,(VId_PLUS, [(primTyCon_int, VId_Int_PLUS)
+                                                ,(primTyCon_word, VId_Word_PLUS)
+                                                ,(primTyCon_real, VId_Real_PLUS)
+                                                ]
+                                     )
+                                    ,(VId_MINUS, [(primTyCon_int, VId_Int_MINUS)
+                                                 ,(primTyCon_word, VId_Word_MINUS)
+                                                 ,(primTyCon_real, VId_Real_MINUS)
+                                                 ]
+                                     )
+                                    ,(VId_LT, [(primTyCon_int, VId_Int_LT)
+                                              ,(primTyCon_word, VId_Word_LT)
+                                              ,(primTyCon_real, VId_Real_LT)
+                                              ,(primTyCon_string, VId_String_LT)
+                                              ,(primTyCon_char, VId_Char_LT)
+                                              ]
+                                     )
+                                    ,(VId_LE, [(primTyCon_int, VId_Int_LE)
+                                              ,(primTyCon_word, VId_Word_LE)
+                                              ,(primTyCon_real, VId_Real_LE)
+                                              ,(primTyCon_string, VId_String_LE)
+                                              ,(primTyCon_char, VId_Char_LE)
+                                              ]
+                                     )
+                                    ,(VId_GT, [(primTyCon_int, VId_Int_GT)
+                                              ,(primTyCon_word, VId_Word_GT)
+                                              ,(primTyCon_real, VId_Real_GT)
+                                              ,(primTyCon_string, VId_String_GT)
+                                              ,(primTyCon_char, VId_Char_GT)
+                                              ]
+                                     )
+                                    ,(VId_GE, [(primTyCon_int, VId_Int_GE)
+                                              ,(primTyCon_word, VId_Word_GE)
+                                              ,(primTyCon_real, VId_Real_GE)
+                                              ,(primTyCon_string, VId_String_GE)
+                                              ,(primTyCon_char, VId_Char_GE)
+                                              ]
+                                     )
+                                    ]
+                      end
 in
 fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
   | toFTy(ctx, env, U.RecordType(span, fields)) = let fun doField(label, ty) = (label, toFTy(ctx, env, ty))
@@ -232,128 +296,23 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                               end
 and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.VarExp(span, longvid, _)) = F.VarExp(longvid)
-  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as Syntax.MkQualified([], vid), _, [(tyarg, cts)]))
-    = let open InitialEnv
-      in if U.eqVId(vid, VId_EQUAL) then
-             getEquality(ctx, env, tyarg)
-         else if U.eqVId(vid, VId_abs) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_abs_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_abs_real))
-             else
-                 raise Fail "invalid use of abs"
-         else if U.eqVId(vid, VId_TILDE) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_TILDE_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_TILDE_real))
-             else
-                 raise Fail "invalid use of ~ operator"
-         else if U.eqVId(vid, VId_div) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_div_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_div_word))
-             else
-                 raise Fail "invalid use of div operator"
-         else if U.eqVId(vid, VId_mod) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_mod_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_mod_word))
-             else
-                 raise Fail "invalid use of mod operator"
-         else if U.eqVId(vid, VId_TIMES) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_TIMES_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_TIMES_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_TIMES_real))
-             else
-                 raise Fail "invalid use of * operator"
-         else if U.eqVId(vid, VId_DIVIDE) then
-             if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_DIVIDE_real))
-             else
-                 raise Fail "invalid use of / operator"
-         else if U.eqVId(vid, VId_PLUS) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_PLUS_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_PLUS_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_PLUS_real))
-             else
-                 raise Fail "invalid use of + operator"
-         else if U.eqVId(vid, VId_MINUS) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_MINUS_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_MINUS_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_MINUS_real))
-             else
-                 raise Fail "invalid use of - operator"
-         else if U.eqVId(vid, VId_LT) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_LT_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_LT_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_LT_real))
-             else if isSimpleTy(tyarg, Typing.primTyCon_string) then
-                 F.VarExp(Syntax.MkQualified([], VId_LT_string))
-             else if isSimpleTy(tyarg, Typing.primTyCon_char) then
-                 F.VarExp(Syntax.MkQualified([], VId_LT_char))
-             else
-                 raise Fail "invalid use of < operator"
-         else if U.eqVId(vid, VId_GT) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_GT_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_GT_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_GT_real))
-             else if isSimpleTy(tyarg, Typing.primTyCon_string) then
-                 F.VarExp(Syntax.MkQualified([], VId_GT_string))
-             else if isSimpleTy(tyarg, Typing.primTyCon_char) then
-                 F.VarExp(Syntax.MkQualified([], VId_GT_char))
-             else
-                 raise Fail "invalid use of > operator"
-         else if U.eqVId(vid, VId_LE) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_LE_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_LE_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_LE_real))
-             else if isSimpleTy(tyarg, Typing.primTyCon_string) then
-                 F.VarExp(Syntax.MkQualified([], VId_LE_string))
-             else if isSimpleTy(tyarg, Typing.primTyCon_char) then
-                 F.VarExp(Syntax.MkQualified([], VId_LE_char))
-             else
-                 raise Fail "invalid use of <= operator"
-         else if U.eqVId(vid, VId_GE) then
-             if isSimpleTy(tyarg, Typing.primTyCon_int) then
-                 F.VarExp(Syntax.MkQualified([], VId_GE_int))
-             else if isSimpleTy(tyarg, Typing.primTyCon_word) then
-                 F.VarExp(Syntax.MkQualified([], VId_GE_word))
-             else if isSimpleTy(tyarg, Typing.primTyCon_real) then
-                 F.VarExp(Syntax.MkQualified([], VId_GE_real))
-             else if isSimpleTy(tyarg, Typing.primTyCon_string) then
-                 F.VarExp(Syntax.MkQualified([], VId_GE_string))
-             else if isSimpleTy(tyarg, Typing.primTyCon_char) then
-                 F.VarExp(Syntax.MkQualified([], VId_GE_char))
-             else
-                 raise Fail "invalid use of >= operator"
-         else
-             if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
-                 F.AppExp(F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
-             else
-                 F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
-      end
+  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as Syntax.MkQualified([], vid as USyntax.MkVId(vidname, _)), _, [(tyarg, cts)]))
+    = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
+          getEquality(ctx, env, tyarg)
+      else
+          (case USyntax.VIdMap.find(overloads, vid) of
+               SOME ov => (case tyarg of
+                               U.TyCon(_, [], tycon) => (case USyntax.TyConMap.find (ov, tycon) of
+                                                             SOME vid' => F.VarExp(Syntax.MkQualified([], vid'))
+                                                           | NONE => raise Fail ("invalid use of " ^ vidname)
+                                                        )
+                             | _ => raise Fail ("invalid use of " ^ vidname)
+                          )
+             | NONE => if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
+                           F.AppExp(F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
+                       else
+                           F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
+          )
   | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
                      if List.exists (fn USyntax.IsEqType => true | _ => false) cts then

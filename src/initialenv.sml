@@ -107,54 +107,56 @@ val VId_EQUAL_vector = newVId "=@vector"
 val VId_EQUAL_exntag = newVId "=@exntag"
 
 (* Int *)
-val VId_PLUS_int     = newVId "Int.+"
-val VId_MINUS_int    = newVId "Int.-"
-val VId_TIMES_int    = newVId "Int.*"
-val VId_div_int      = newVId "Int.div"
-val VId_mod_int      = newVId "Int.mod"
-val VId_LT_int       = newVId "Int.<"
-val VId_LE_int       = newVId "Int.<="
-val VId_GT_int       = newVId "Int.>"
-val VId_GE_int       = newVId "Int.>="
-val VId_TILDE_int    = newVId "Int.~"
-val VId_abs_int      = newVId "Int.abs"
+val VId_Int_PLUS     = newVId "Int.+"
+val VId_Int_MINUS    = newVId "Int.-"
+val VId_Int_TIMES    = newVId "Int.*"
+val VId_Int_div      = newVId "Int.div"
+val VId_Int_mod      = newVId "Int.mod"
+val VId_Int_LT       = newVId "Int.<"
+val VId_Int_LE       = newVId "Int.<="
+val VId_Int_GT       = newVId "Int.>"
+val VId_Int_GE       = newVId "Int.>="
+val VId_Int_TILDE    = newVId "Int.~"
+val VId_Int_abs      = newVId "Int.abs"
 val VId_Int_toString = newVId "Int.toString"
 
 (* Word *)
-val VId_PLUS_word  = newVId "Word.+"
-val VId_MINUS_word = newVId "Word.-"
-val VId_TIMES_word = newVId "Word.*"
-val VId_div_word   = newVId "Word.div"
-val VId_mod_word   = newVId "Word.mod"
-val VId_LT_word    = newVId "Word.<"
-val VId_LE_word    = newVId "Word.<="
-val VId_GT_word    = newVId "Word.>"
-val VId_GE_word    = newVId "Word.>="
+val VId_Word_PLUS  = newVId "Word.+"
+val VId_Word_MINUS = newVId "Word.-"
+val VId_Word_TIMES = newVId "Word.*"
+val VId_Word_div   = newVId "Word.div"
+val VId_Word_mod   = newVId "Word.mod"
+val VId_Word_LT    = newVId "Word.<"
+val VId_Word_LE    = newVId "Word.<="
+val VId_Word_GT    = newVId "Word.>"
+val VId_Word_GE    = newVId "Word.>="
 
 (* Real *)
-val VId_PLUS_real   = newVId "Real.+"
-val VId_MINUS_real  = newVId "Real.-"
-val VId_TIMES_real  = newVId "Real.*"
-val VId_DIVIDE_real = newVId "Real./"
-val VId_TILDE_real  = newVId "Real.~"
-val VId_abs_real    = newVId "Real.abs"
-val VId_LT_real     = newVId "Real.<"
-val VId_LE_real     = newVId "Real.<="
-val VId_GT_real     = newVId "Real.>"
-val VId_GE_real     = newVId "Real.>="
+val VId_Real_PLUS   = newVId "Real.+"
+val VId_Real_MINUS  = newVId "Real.-"
+val VId_Real_TIMES  = newVId "Real.*"
+val VId_Real_DIVIDE = newVId "Real./"
+val VId_Real_TILDE  = newVId "Real.~"
+val VId_Real_abs    = newVId "Real.abs"
+val VId_Real_LT     = newVId "Real.<"
+val VId_Real_LE     = newVId "Real.<="
+val VId_Real_GT     = newVId "Real.>"
+val VId_Real_GE     = newVId "Real.>="
 
 (* String *)
+val VId_String_size = newVId "String.size"
 val VId_String_HAT = newVId "String.^"
-val VId_LT_string = newVId "String.<"
-val VId_LE_string = newVId "String.<="
-val VId_GT_string = newVId "String.>"
-val VId_GE_string = newVId "String.>="
+val VId_String_str = newVId "String.str"
+val VId_String_LT = newVId "String.<"
+val VId_String_LE = newVId "String.<="
+val VId_String_GT = newVId "String.>"
+val VId_String_GE = newVId "String.>="
 
 (* Char *)
-val VId_LT_char = newVId "Char.<"
-val VId_GT_char = newVId "Char.>"
-val VId_LE_char = newVId "Char.<="
-val VId_GE_char = newVId "Char.>="
+val VId_Char_LT = newVId "Char.<"
+val VId_Char_GT = newVId "Char.>"
+val VId_Char_LE = newVId "Char.<="
+val VId_Char_GE = newVId "Char.>="
 
 (* Vector *)
 val VId_Vector_fromList = newVId "Vector.fromList"
@@ -186,27 +188,79 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
           fun OpaqueBTyCon tycon = ToTypedSyntax.BTyCon { tyCon = tycon, valConMap = Syntax.VIdMap.empty }
           val module_Int = { valMap = mkValMap
                                           [(* toLarge, fromLarge, toInt, fromInt, precision, minInt, maxInt *)
-                                           ("+", VId_PLUS_int)
-                                          ,("-", VId_MINUS_int)
-                                          ,("*", VId_TIMES_int)
-                                          ,("div", VId_div_int)
-                                          ,("mod", VId_mod_int)
+                                           ("+", VId_Int_PLUS)
+                                          ,("-", VId_Int_MINUS)
+                                          ,("*", VId_Int_TIMES)
+                                          ,("div", VId_Int_div)
+                                          ,("mod", VId_Int_mod)
                                            (* quot, rem, compare *)
-                                          ,("<", VId_LT_int)
-                                          ,("<=", VId_LE_int)
-                                          ,(">", VId_GT_int)
-                                          ,(">=", VId_GE_int)
-                                          ,("~", VId_TILDE_int)
-                                          ,("abs", VId_abs_int)
+                                          ,("<", VId_Int_LT)
+                                          ,("<=", VId_Int_LE)
+                                          ,(">", VId_Int_GT)
+                                          ,(">=", VId_Int_GE)
+                                          ,("~", VId_Int_TILDE)
+                                          ,("abs", VId_Int_abs)
                                            (* min, max, sign, sameSign, fmt *)
                                           ,("toString", VId_Int_toString)
                                            (* scan, fromString *)
                                           ]
-                           , tyConMap = mkTyConMap
-                                            [(Syntax.MkTyCon "int", OpaqueBTyCon Typing.primTyCon_int)
-                                            ]
+                           , tyConMap = mkTyConMap []
                            , strMap = Syntax.StrIdMap.empty
                            }
+          val module_Word = { valMap = mkValMap
+                                           [(* andb, orb, xorb, notb, <<. >>, ~>> *)
+                                            ("+", VId_Word_PLUS)
+                                           ,("-", VId_Word_MINUS)
+                                           ,("*", VId_Word_TIMES)
+                                           ,("div", VId_Word_div)
+                                           ,("mod", VId_Word_mod)
+                                           ,("<", VId_Word_LT)
+                                           ,("<=", VId_Word_LE)
+                                           ,(">", VId_Word_GT)
+                                           ,(">=", VId_Word_GE)
+                                           ]
+                            , tyConMap = mkTyConMap []
+                            , strMap = Syntax.StrIdMap.empty
+                            }
+          val module_Real = { valMap = mkValMap
+                                           [("+", VId_Real_PLUS)
+                                           ,("-", VId_Real_MINUS)
+                                           ,("*", VId_Real_TIMES)
+                                           ,("/", VId_Real_DIVIDE)
+                                           ,("~", VId_Real_TILDE)
+                                           ,("abs", VId_Real_abs)
+                                           ,("<", VId_Real_LT)
+                                           ,("<=", VId_Real_LE)
+                                           ,(">", VId_Real_GT)
+                                           ,(">=", VId_Real_GE)
+                                           (* ,("==", VId_Real_EQUAL) *)
+                                           ]
+                            , tyConMap = mkTyConMap []
+                            , strMap = Syntax.StrIdMap.empty
+                            }
+          val module_String = { valMap = mkValMap
+                                             [(* maxSize *)
+                                              ("size", VId_String_size)
+                                             ,("^", VId_String_HAT)
+                                             ,("str", VId_String_str)
+                                             ,("<", VId_String_LT)
+                                             ,("<=", VId_String_LE)
+                                             ,(">", VId_String_GT)
+                                             ,(">=", VId_String_GE)
+                                             ]
+                              , tyConMap = mkTyConMap []
+                              , strMap = Syntax.StrIdMap.empty
+                              }
+          val module_Char = { valMap = mkValMap
+                                           [(* minChar, maxChar, maxOrd, ord, chr, succ, pred, compare *)
+                                            ("<", VId_Char_LT)
+                                           ,("<=", VId_Char_LE)
+                                           ,(">", VId_Char_GT)
+                                           ,(">=", VId_Char_GE)
+                                           ]
+                            , tyConMap = mkTyConMap []
+                            , strMap = Syntax.StrIdMap.empty
+                            }
           val module_Array = { valMap = mkValMap
                                             [(* maxLen *)
                                              ("array", VId_Array_array)
@@ -217,10 +271,7 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                             ,("update", VId_Array_update)
                                              (* vector, copy, copyVec, appi, app, modifyi, modify, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
                                             ]
-                             , tyConMap = mkTyConMap
-                                              [(Syntax.MkTyCon "array", OpaqueBTyCon Typing.primTyCon_array)
-                                              ,(Syntax.MkTyCon "vector", OpaqueBTyCon Typing.primTyCon_vector)
-                                              ]
+                             , tyConMap = mkTyConMap []
                              , strMap = Syntax.StrIdMap.empty
                              }
           val module_Vector = { valMap = mkValMap
@@ -231,11 +282,21 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                              ,("sub", VId_Vector_sub)
                                               (* update, concat, appi, app, mapi, map, foldli, foldri, foldl, foldr, findi, find, exists, all, collate *)
                                              ]
-                              , tyConMap = mkTyConMap
-                                               [(Syntax.MkTyCon "vector", OpaqueBTyCon Typing.primTyCon_vector)
-                                               ]
+                              , tyConMap = mkTyConMap []
                               , strMap = Syntax.StrIdMap.empty
                               }
+          val module_LunarML = { valMap = mkValMap []
+                               , tyConMap = mkTyConMap []
+                               , strMap = mkStrMap
+                                              [("Int", module_Int)
+                                              ,("Word", module_Word)
+                                              ,("Real", module_Real)
+                                              ,("String", module_String)
+                                              ,("Char", module_Char)
+                                              ,("Array", module_Array)
+                                              ,("Vector", module_Vector)
+                                              ]
+                               }
       in { valMap = union [mkValConMap [("ref", VId_ref)
                                        ,("true", VId_true)
                                        ,("false", VId_false)
@@ -253,9 +314,9 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                           ,mkValMap [("=", VId_EQUAL)
                                     ,("!", VId_EXCLAM)
                                     ,(":=", VId_COLONEQUAL)
-                                    ,("^", VId_String_HAT)
                                     ,("not", VId_Bool_not)
                                     ,("print", VId_TextIO_print)
+                                     (* Overloaded identifiers *)
                                     ,("abs", VId_abs)
                                     ,("~", VId_TILDE)
                                     ,("div", VId_div)
@@ -298,9 +359,7 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                  ,(Syntax.MkTyCon "vector", OpaqueBTyCon Typing.primTyCon_vector)
                                  ]
          , strMap = mkStrMap
-                        [("Int", module_Int)
-                        ,("Array", module_Array)
-                        ,("Vector", module_Vector)
+                        [("LunarML", module_LunarML)
                         ]
          }
       end
@@ -335,30 +394,83 @@ val initialEnv : Typing.Env
           fun listOf(t) = mkTyCon([t], primTyCon_list)
           fun arrayOf(t) = mkTyCon([t], primTyCon_array)
           fun vectorOf(t) = mkTyCon([t], primTyCon_vector)
-          val module_Int = { tyMap = mkTyMap
-                                         [(USyntax.MkTyCon("int", 0), TyStr(TypeFcn([], primTy_int), emptyValEnv)) (* ??? *)
-                                         ]
+          val module_Int = { tyMap = mkTyMap []
                            , valMap = mkValMap
-                                          [(VId_PLUS_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
-                                          ,(VId_MINUS_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
-                                          ,(VId_TIMES_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
-                                          ,(VId_div_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
-                                          ,(VId_mod_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
-                                          ,(VId_LT_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                          ,(VId_LE_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                          ,(VId_GT_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                          ,(VId_GE_int, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                          ,(VId_TILDE_int, TypeScheme ([], primTy_int --> primTy_int))
-                                          ,(VId_abs_int, TypeScheme ([], primTy_int --> primTy_int))
+                                          [(VId_Int_PLUS, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
+                                          ,(VId_Int_MINUS, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
+                                          ,(VId_Int_TIMES, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
+                                          ,(VId_Int_div, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
+                                          ,(VId_Int_mod, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_int))
+                                          ,(VId_Int_LT, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
+                                          ,(VId_Int_LE, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
+                                          ,(VId_Int_GT, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
+                                          ,(VId_Int_GE, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
+                                          ,(VId_Int_TILDE, TypeScheme ([], primTy_int --> primTy_int))
+                                          ,(VId_Int_abs, TypeScheme ([], primTy_int --> primTy_int))
                                           ,(VId_Int_toString, TypeScheme ([], primTy_int --> primTy_string))
+                                          (* ,(VId_Int_fromString, TypeScheme ([], primTy_string --> optionOf primTy_int)) *)
                                           ]
                            , strMap = mkStrMap []
                            , boundTyVars = USyntax.TyVarSet.empty
                            }
-          val module_Array = { tyMap = mkTyMap
-                                           [(USyntax.MkTyCon("array", 9), TyStr(TypeFcn([tyVarA], arrayOf tyA), emptyValEnv))
-                                           ,(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
+          val module_Word = { tyMap = mkTyMap []
+                            , valMap = mkValMap
+                                          [(VId_Word_PLUS, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_MINUS, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_TIMES, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_div, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_mod, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_LT, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
+                                          ,(VId_Word_LE, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
+                                          ,(VId_Word_GT, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
+                                          ,(VId_Word_GE, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
+                                          ]
+                            , strMap = mkStrMap []
+                            , boundTyVars = USyntax.TyVarSet.empty
+                            }
+          val module_Real = { tyMap = mkTyMap []
+                            , valMap = mkValMap
+                                          [(VId_Real_PLUS, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
+                                          ,(VId_Real_MINUS, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
+                                          ,(VId_Real_TIMES, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
+                                          ,(VId_Real_DIVIDE, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
+                                          ,(VId_Real_LT, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
+                                          ,(VId_Real_LE, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
+                                          ,(VId_Real_GT, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
+                                          ,(VId_Real_GE, TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
+                                          ,(VId_Real_TILDE, TypeScheme ([], primTy_real --> primTy_real))
+                                          ,(VId_Real_abs, TypeScheme ([], primTy_real --> primTy_real))
+                                          ]
+                            , strMap = mkStrMap []
+                            , boundTyVars = USyntax.TyVarSet.empty
+                            }
+          val module_String = { tyMap = mkTyMap []
+                              , valMap = mkValMap
+                                             [(* size, sub, extract, substring, ^, concat, concatWith, str, implode, explode, map, translate, tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate *)
+                                              (VId_String_size, TypeScheme ([], primTy_string --> primTy_int))
+                                             ,(VId_String_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
+                                             ,(VId_String_str, TypeScheme ([], primTy_char --> primTy_string))
+                                             ,(VId_String_LT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
+                                             ,(VId_String_LE, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
+                                             ,(VId_String_GT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
+                                             ,(VId_String_GE, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
+                                              (* toString, scan, fromString, toCString, fromCString *)
+                                             ]
+                              , strMap = mkStrMap []
+                              , boundTyVars = USyntax.TyVarSet.empty
+                              }
+          val module_Char = { tyMap = mkTyMap []
+                            , valMap = mkValMap
+                                           [(* size, sub, extract, substring, ^, concat, concatWith, str, implode, explode, map, translate, tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate *)
+                                            (VId_Char_LT, TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
+                                           ,(VId_Char_LE, TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
+                                           ,(VId_Char_GT, TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
+                                           ,(VId_Char_GE, TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
                                            ]
+                            , strMap = mkStrMap []
+                            , boundTyVars = USyntax.TyVarSet.empty
+                            }
+          val module_Array = { tyMap = mkTyMap []
                              , valMap = mkValMap
                                             [(VId_Array_array, TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
                                             ,(VId_Array_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
@@ -370,9 +482,7 @@ val initialEnv : Typing.Env
                              , strMap = mkStrMap []
                              , boundTyVars = USyntax.TyVarSet.empty
                              }
-          val module_Vector = { tyMap = mkTyMap
-                                            [(USyntax.MkTyCon("vector", 9), TyStr(TypeFcn([tyVarA], vectorOf tyA), emptyValEnv))
-                                            ]
+          val module_Vector = { tyMap = mkTyMap []
                               , valMap = mkValMap
                                              [(VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
                                              ,(VId_Vector_tabulate, TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
@@ -443,7 +553,6 @@ val initialEnv : Typing.Env
                                                ,(VId_GE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                                (* Non-overloaded identifiers *)
                                                ,(VId_TextIO_print, TypeScheme ([], primTy_string --> primTy_unit))
-                                               ,(VId_String_HAT, TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
                                                ,(VId_Bool_not, TypeScheme ([], primTy_bool --> primTy_bool))
                                                ]
                                      ]
@@ -451,6 +560,10 @@ val initialEnv : Typing.Env
                     , boundTyVars = USyntax.TyVarSet.empty
                     }
                     [module_Int
+                    ,module_Word
+                    ,module_Real
+                    ,module_String
+                    ,module_Char
                     ,module_Array
                     ,module_Vector
                     ]
