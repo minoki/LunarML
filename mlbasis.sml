@@ -45,6 +45,16 @@ type int = int
 open LunarML.Int (* +, -, *, div, mod, <, <=, >, >=, ~, abs, toString *)
 end;
 
+structure Word = struct
+type word = word
+open LunarML.Word (* +, -, *, div, mod, <, <=, >, >= *)
+end;
+
+structure Real = struct
+type real = real
+open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >=, ~, abs, toString *)
+end;
+
 structure Char = struct
 type char = char
 type string = string
