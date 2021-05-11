@@ -419,11 +419,11 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                            end
 and putPureTo ctx env Return (exp : string) = indent env ^ "return " ^ exp ^ "\n"
   | putPureTo ctx env (AssignTo v) exp = indent env ^ v ^ " = " ^ exp ^ "\n"
-  | putPureTo ctx env (UnpackingAssignTo v) exp = indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ")\n"
+  | putPureTo ctx env (UnpackingAssignTo v) exp = indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
   | putPureTo ctx env Discard exp = ""
 and putImpureTo ctx env Return (exp : string) = indent env ^ "return " ^ exp ^ "\n"
   | putImpureTo ctx env (AssignTo v) exp = indent env ^ v ^ " = " ^ exp ^ "\n"
-  | putImpureTo ctx env (UnpackingAssignTo v) exp = indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ")\n"
+  | putImpureTo ctx env (UnpackingAssignTo v) exp = indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
   | putImpureTo ctx env Discard exp = indent env ^ "local _ = " ^ exp ^ "\n"
 and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doLiteral scon)
   | doExpTo ctx env dest (F.VarExp (Syntax.MkQualified (_, vid))) = putPureTo ctx env dest (VIdToLua vid)
