@@ -123,7 +123,7 @@ fun compile({ typingContext, toFContext, luaContext } : Context, { fixity, toTyp
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
            val fdecs = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
-           val (fTransEnv', fdecs') = #doDecs (FTransform.desugarPatternMatches toFContext) fTransEnv fdecs
+           val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val lua = CodeGenLua.doDecs luaContext luaEnv fdecs'
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')

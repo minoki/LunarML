@@ -2,7 +2,7 @@
  * Copyright (c) 2021 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure FTransform = struct
+structure DesugarPatternMatches = struct
 structure F = FSyntax
 type Context = { nextVId : int ref
                }
@@ -196,4 +196,114 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
          , doDecs = doDecs
          }
       end
+end (* structure DesugarPatternMatches *)
+
+structure EliminateVariables = struct
+local structure F = FSyntax in
+type Context = { nextVId : int ref }
+type Env = { vidMap : USyntax.VId USyntax.VIdMap.map }
+val emptyEnv : Env = { vidMap = USyntax.VIdMap.empty }
+fun freeVarsInPat F.WildcardPat = USyntax.VIdSet.empty
+  | freeVarsInPat (F.SConPat _) = USyntax.VIdSet.empty
+  | freeVarsInPat (F.VarPat (vid, _)) = USyntax.VIdSet.singleton vid
+  | freeVarsInPat (F.RecordPat (fields, wildcard)) = List.foldl (fn ((_, pat), acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) USyntax.VIdSet.empty fields
+  | freeVarsInPat (F.InstantiatedConPat (longvid, optPat, tyargs)) = (case optPat of
+                                                                          NONE => USyntax.VIdSet.empty
+                                                                        | SOME pat => freeVarsInPat pat
+                                                                     )
+  | freeVarsInPat (F.LayeredPat (vid, ty, pat)) = USyntax.VIdSet.add (freeVarsInPat pat, vid)
+fun removeFromEnv (vid, env as { vidMap } : Env) = if USyntax.VIdMap.inDomain (vidMap, vid) then
+                                                       { vidMap = #1 (USyntax.VIdMap.remove (vidMap, vid)) }
+                                                   else
+                                                       env
+fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
+                                         , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec option
+                                         , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
+                                         }
+    = let fun doExp (env : Env) exp0
+              = (case exp0 of
+                     F.SConExp _ => exp0
+                   | F.VarExp (Syntax.MkQualified (_, vid)) => (case USyntax.VIdMap.find (#vidMap env, vid) of
+                                                                    NONE => exp0
+                                                                  | SOME vid' => F.VarExp (Syntax.MkQualified([], vid'))
+                                                               )
+                   | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
+                   | F.LetExp (dec, exp) => (case doDec env dec of
+                                                 (env', NONE) => doExp env' exp
+                                               | (env', SOME dec') => F.LetExp (dec', doExp env' exp)
+                                            )
+                   | F.AppExp (exp1, exp2) => F.AppExp (doExp env exp1, doExp env exp2)
+                   | F.HandleExp { body, exnName, handler } => F.HandleExp { body = doExp env body
+                                                                           , exnName = exnName
+                                                                           , handler = let val env' = removeFromEnv (exnName, env)
+                                                                                       in doExp env' handler
+                                                                                       end
+                                                                           }
+                   | F.RaiseExp (span, exp) => F.RaiseExp (span, doExp env exp)
+                   | F.IfThenElseExp (exp1, exp2, exp3) => F.IfThenElseExp (doExp env exp1, doExp env exp2, doExp env exp3)
+                   | F.CaseExp (span, exp, ty, matches) => let fun doMatch (pat, exp) = let val vars = freeVarsInPat pat
+                                                                                            val env' = { vidMap = USyntax.VIdMap.filteri (fn (vid, _) => not (USyntax.VIdSet.member (vars, vid))) (#vidMap env) }
+                                                                                        in (pat, doExp env' exp)
+                                                                                        end
+                                                           in F.CaseExp (span, doExp env exp, ty, List.map doMatch matches)
+                                                           end
+                   | F.FnExp (vid, ty, exp) => let val env' = removeFromEnv (vid, env)
+                                               in F.FnExp (vid, ty, doExp env' exp)
+                                               end
+                   | F.ProjectionExp { label, recordTy, fieldTy } => exp0
+                   | F.TyAbsExp (tyvar, exp) => F.TyAbsExp (tyvar, doExp env exp)
+                   | F.TyAppExp (exp, ty) => F.TyAppExp (doExp env exp, ty)
+                   | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
+                   | F.DataTagExp exp => F.DataTagExp (doExp env exp)
+                   | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
+                )
+          and doDec (env : Env) (F.ValDec valbind) = (case doValBind env valbind of
+                                                          (env', NONE) => (env', NONE)
+                                                        | (env', SOME valbind') => (env', SOME (F.ValDec valbind'))
+                                                     )
+            | doDec env (F.RecValDec valbinds) = let fun go (env, acc, []) = (env, SOME (F.RecValDec (List.rev acc)))
+                                                       | go (env, acc, valbind :: valbinds) = let val (env', optBind) = doValBind env valbind
+                                                                                                  val acc' = case optBind of
+                                                                                                                 NONE => acc 
+                                                                                                               | SOME bind => bind :: acc
+                                                                                              in go (env', acc', valbinds)
+                                                                                              end
+                                                 in go (env, [], valbinds)
+                                                 end
+            | doDec env (dec as F.DatatypeDec datbinds) = (env, SOME dec) (* TODO *)
+            | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
+          and doValBind env (F.SimpleBind (vid, ty, exp)) = (case doExp env exp of
+                                                                 F.VarExp (Syntax.MkQualified (_, vid')) => ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, vid') }, NONE)
+                                                               | exp' => (removeFromEnv (vid, env), SOME (F.SimpleBind (vid, ty, exp')))
+                                                            )
+            | doValBind env (F.TupleBind (binds, exp)) = let val vars = List.map #1 binds
+                                                             val env' = List.foldl removeFromEnv env vars
+                                                         in (env', SOME (F.TupleBind (binds, doExp env exp)))
+                                                         end
+          fun doDecs env [] = (env, [])
+            | doDecs env (dec :: decs) = (case doDec env dec of
+                                              (env', NONE) => doDecs env' decs
+                                            | (env', SOME dec') => let val (env'', decs') = doDecs env' decs
+                                                                   in (env'', dec' :: decs')
+                                                                   end
+                                         )
+      in { doExp = doExp
+         , doDec = doDec
+         , doDecs = doDecs
+         }
+      end
+end (* local *)
+end (* structure EliminateVariables *)
+
+structure FTransform = struct
+type Env = { desugarPatternMatches : DesugarPatternMatches.Env
+           , eliminateVariables : EliminateVariables.Env
+           }
+val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEnv
+                       , eliminateVariables = EliminateVariables.emptyEnv
+                       }
+fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
+                                      val (evEnv, decs) = #doDecs (EliminateVariables.eliminateVariables ctx) (#eliminateVariables env) decs
+                              in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv}, decs)
+                              end
 end (* structure FTransform *)
