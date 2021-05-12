@@ -175,6 +175,22 @@ val VId_Array_update   = newVId "Array.update"
 (* TextIO *)
 val VId_TextIO_print = newVId "TextIO.print"
 
+(* Lua interface *)
+val primTyCon_Lua_value = USyntax.MkTyCon("Lua.value", 11)
+val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_Lua_value)
+val VId_Lua_sub = newVId "Lua.sub"
+val VId_Lua_set = newVId "Lua.set"
+val VId_Lua_global = newVId "Lua.global"
+val VId_Lua_call = newVId "Lua.call"
+val VId_Lua_method = newVId "Lua.method"
+val VId_Lua_NIL = newVId "Lua.NIL"
+val VId_Lua_isNil = newVId "Lua.isNil"
+val VId_Lua_isFalsy = newVId "Lua.isFalsy"
+val VId_Lua_unsafeToValue = newVId "Lua.unsafeToValue"
+val VId_Lua_unsafeFromValue = newVId "Lua.unsafeFromValue"
+val VId_Lua_newTable = newVId "Lua.newTable"
+val VId_Lua_function = newVId "Lua.function"
+
 val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
@@ -285,6 +301,23 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                               , tyConMap = mkTyConMap []
                               , strMap = Syntax.StrIdMap.empty
                               }
+          val module_Lua = { valMap = mkValMap
+                                          [("sub", VId_Lua_sub)
+                                          ,("set", VId_Lua_set)
+                                          ,("global", VId_Lua_global)
+                                          ,("call", VId_Lua_call)
+                                          ,("method", VId_Lua_method)
+                                          ,("NIL", VId_Lua_NIL)
+                                          ,("isNil", VId_Lua_isNil)
+                                          ,("isFalsy", VId_Lua_isFalsy)
+                                          ,("unsafeToValue", VId_Lua_unsafeToValue)
+                                          ,("unsafeFromValue", VId_Lua_unsafeFromValue)
+                                          ,("newTable", VId_Lua_newTable)
+                                          ,("function", VId_Lua_function)
+                                          ]
+                           , tyConMap = mkTyConMap [(Syntax.MkTyCon "value", OpaqueBTyCon primTyCon_Lua_value)]
+                           , strMap = Syntax.StrIdMap.empty
+                           }
           val module_LunarML = { valMap = mkValMap []
                                , tyConMap = mkTyConMap []
                                , strMap = mkStrMap
@@ -295,6 +328,7 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                               ,("Char", module_Char)
                                               ,("Array", module_Array)
                                               ,("Vector", module_Vector)
+                                              ,("Lua", module_Lua)
                                               ]
                                }
       in { valMap = union [mkValConMap [("ref", VId_ref)
@@ -389,6 +423,7 @@ val initialEnv : Typing.Env
           fun mkFnType(a, b) = USyntax.FnType(SourcePos.nullSpan, a, b)
           val op --> = mkFnType
           fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
+          fun mkTupleType(xs) = USyntax.TupleType(SourcePos.nullSpan, xs)
           fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
           fun refOf(t) = mkTyCon([t], primTyCon_ref)
           fun listOf(t) = mkTyCon([t], primTyCon_list)
@@ -492,6 +527,24 @@ val initialEnv : Typing.Env
                               , strMap = mkStrMap []
                               , boundTyVars = USyntax.TyVarSet.empty
                               }
+          val module_Lua = { tyMap = mkTyMap [(primTyCon_Lua_value, TyStr(TypeFcn([], primTy_Lua_value), emptyValEnv))]
+                           , valMap = mkValMap
+                                          [(VId_Lua_sub, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_set, TypeScheme ([], mkTupleType[primTy_Lua_value, primTy_Lua_value, primTy_Lua_value] --> primTy_unit))
+                                          ,(VId_Lua_global, TypeScheme ([], primTy_string --> primTy_Lua_value))
+                                          ,(VId_Lua_call, TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                          ,(VId_Lua_method, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                          ,(VId_Lua_NIL, TypeScheme ([], primTy_Lua_value))
+                                          ,(VId_Lua_isNil, TypeScheme ([], primTy_Lua_value --> primTy_bool))
+                                          ,(VId_Lua_isFalsy, TypeScheme ([], primTy_Lua_value --> primTy_bool))
+                                          ,(VId_Lua_unsafeToValue, TypeScheme ([(tyVarA, [])], tyA --> primTy_Lua_value))
+                                          ,(VId_Lua_unsafeFromValue, TypeScheme ([(tyVarA, [])], primTy_Lua_value --> tyA))
+                                          ,(VId_Lua_newTable, TypeScheme ([], primTy_unit --> primTy_Lua_value))
+                                          ,(VId_Lua_function, TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
+                                          ]
+                           , strMap = mkStrMap []
+                           , boundTyVars = USyntax.TyVarSet.empty
+                           }
       in List.foldl Typing.mergeEnv
                     { tyMap = mkTyMap
                                   [(USyntax.MkTyCon("unit", 9), TyStr(TypeFcn([], primTy_unit), emptyValEnv))
@@ -566,6 +619,7 @@ val initialEnv : Typing.Env
                     ,module_Char
                     ,module_Array
                     ,module_Vector
+                    ,module_Lua
                     ]
       end
 end

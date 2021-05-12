@@ -27,6 +27,10 @@ end
 
 local _unit = {}
 
+local function _id(x)
+  return x
+end
+
 local _exn_meta = {}
 function _exn_meta:__tostring()
   return string.format("%s:%d:%d: %s", self.file, self.line, self.column, self.tag[1])
@@ -416,5 +420,40 @@ local function _EQUAL_vector(eq)
   end
   return function(t)
     return go(t[1], t[2])
+  end
+end
+
+-- Lua interface
+local function _lua_sub(t)
+  return t[1][t[2]]
+end
+local function _lua_set(t)
+  t[1][t[2]] = t[3]
+  return _unit
+end
+local function _lua_global(name)
+  return _ENV[name]
+end
+local function _lua_call(f)
+  return function(v)
+    return table.pack(f(table.unpack(v, 1, v.n)))
+  end
+end
+local function _lua_method(t)
+  local self, name = t[1], t[2]
+  return function(v)
+    return table.pack(self[name](self, table.unpack(v, 1, v.n)))
+  end
+end
+local function _lua_isNil(x)
+  return x == nil
+end
+local function _lua_newTable()
+  return {}
+end
+local function _lua_function(f)
+  return function(...)
+    local r = f(table.pack(...))
+    return table.unpack(r, 1, r.n)
   end
 end

@@ -145,7 +145,7 @@ val builtins
                     (* String *)
                     ,(VId_String_HAT, "_string_append")
                     ,(VId_String_size, "_len_prim")
-                    ,(VId_String_str, "_id")
+                    ,(VId_String_str, "_id") (* no-op *)
                     ,(VId_String_LT, "_LT_prim")
                     ,(VId_String_GT, "_GT_prim")
                     ,(VId_String_LE, "_LE_prim")
@@ -168,6 +168,19 @@ val builtins
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
+                    (* Lua interface *)
+                    ,(VId_Lua_sub, "_lua_sub")
+                    ,(VId_Lua_set, "_lua_set")
+                    ,(VId_Lua_global, "_lua_global")
+                    ,(VId_Lua_call, "_lua_call")
+                    ,(VId_Lua_method, "_lua_method")
+                    ,(VId_Lua_NIL, "nil") (* literal *)
+                    ,(VId_Lua_isNil, "_lua_isNil")
+                    ,(VId_Lua_isFalsy, "_not")
+                    ,(VId_Lua_unsafeToValue, "_id") (* no-op *)
+                    ,(VId_Lua_unsafeFromValue, "_id") (* no-op *)
+                    ,(VId_Lua_newTable, "_lua_newTable")
+                    ,(VId_Lua_function, "_lua_function")
                     ]
       end
 datatype BinaryOp = InfixOp of string | NamedBinaryFn of string
@@ -328,11 +341,18 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                     val dest = genSym ctx
                                                 in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = " ^ luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")\n"], dest)
                                                 end
-         | _ => let val (stmts1, exp1') = doExp ctx env exp1
-                    val (stmts2, exp2') = doExp ctx env exp2
-                    val dest = genSym ctx
-                in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = (" ^ exp1' ^ ")(" ^ exp2' ^ ")\n"], dest)
-                end
+         | _ => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
+                    let val (stmts1, e1') = doExp ctx env e1
+                        val (stmts2, e2') = doExp ctx env e2
+                        val dest = genSym ctx
+                    in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = (" ^ e1' ^ ")[" ^ e2' ^ "]\n"], dest)
+                    end
+                else
+                    let val (stmts1, exp1') = doExp ctx env exp1
+                        val (stmts2, exp2') = doExp ctx env exp2
+                        val dest = genSym ctx
+                    in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = (" ^ exp1' ^ ")(" ^ exp2' ^ ")\n"], dest)
+                    end
       )
   | doExp ctx env (F.AppExp (F.VarExp (Syntax.MkQualified([], vid)), exp2))
     = let open InitialEnv
@@ -340,7 +360,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "- (" ^ exp2' ^ ")")
              end
-         else if USyntax.eqVId(vid, VId_Bool_not) then
+         else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
              let val (stmts, exp2') = doExp ctx env exp2
              in (stmts, "not (" ^ exp2' ^ ")")
              end
@@ -354,7 +374,7 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
              in (stmts,  "#(" ^ exp2' ^ ")")
              end
          else if USyntax.eqVId(vid, VId_String_str) then
-             let val (stmts, exp2') = doExp ctx env exp2
+             let val (stmts, exp2') = doExp ctx env exp2 (* no-op *)
              in (stmts, exp2')
              end
          else
@@ -364,10 +384,17 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
              end
       end
   | doExp ctx env (F.AppExp (exp1, exp2))
-    = let val (stmts1, exp1') = doExp ctx env exp1
-          val (stmts2, exp2') = doExp ctx env exp2
-          val dest = genSym ctx
-      in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = (" ^ exp1' ^ ")(" ^ exp2' ^ ")\n"], dest)
+    = let val isNoop = case exp1 of
+                           F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
+                         | _ => false
+      in if isNoop then
+             doExp ctx env exp2
+         else
+             let val (stmts1, exp1') = doExp ctx env exp1
+                 val (stmts2, exp2') = doExp ctx env exp2
+                 val dest = genSym ctx
+             in (stmts1 @ stmts2 @ [indent env ^ "local " ^ dest ^ " = (" ^ exp1' ^ ")(" ^ exp2' ^ ")\n"], dest)
+             end
       end
   | doExp ctx env (F.HandleExp { body, exnName, handler } )
     = let val body' = doExpTo ctx (nextIndentLevel env) Return body
@@ -499,9 +526,14 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
                                                          putImpureTo ctx env dest e
                                                     )
                                                end
-         | NONE => String.concat stmts1
-                   ^ String.concat stmts2
-                   ^ putImpureTo ctx env dest (VIdToLua vid ^ "({" ^ e1' ^ ", " ^ e2' ^ "})")
+         | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
+                       String.concat stmts1
+                       ^ String.concat stmts2
+                       ^ putImpureTo ctx env dest ("(" ^ e1' ^ ")[" ^ e2' ^ "]")
+                   else
+                       String.concat stmts1
+                       ^ String.concat stmts2
+                       ^ putImpureTo ctx env dest (VIdToLua vid ^ "({" ^ e1' ^ ", " ^ e2' ^ "})")
       end
   | doExpTo ctx env dest (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), exp2))
     = let open InitialEnv
@@ -510,7 +542,7 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
       in String.concat stmts
          ^ (if USyntax.eqVId(vid, VId_Real_TILDE) then
                 putPureTo ctx env dest ("- " ^ e2')
-            else if USyntax.eqVId(vid, VId_Bool_not) then
+            else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
                 putPureTo ctx env dest ("not " ^ e2')
             else if USyntax.eqVId(vid, VId_EXCLAM) then
                 putImpureTo ctx env dest ("(" ^ e2' ^ ").payload")
@@ -523,11 +555,18 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
            )
       end
   | doExpTo ctx env dest (F.AppExp (exp1, exp2))
-    = let val (stmts1, e1') = doExp ctx env exp1
-          val (stmts2, e2') = doExp ctx env exp2
-      in String.concat stmts1
-         ^ String.concat stmts2
-         ^ putImpureTo ctx env dest ("(" ^ e1' ^ ")(" ^ e2' ^ ")")
+    = let val isNoop = case exp1 of
+                           F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
+                         | _ => false
+      in if isNoop then
+             doExpTo ctx env dest exp2
+         else
+             let val (stmts1, e1') = doExp ctx env exp1
+                 val (stmts2, e2') = doExp ctx env exp2
+             in String.concat stmts1
+                ^ String.concat stmts2
+                ^ putImpureTo ctx env dest ("(" ^ e1' ^ ")(" ^ e2' ^ ")")
+             end
       end
   | doExpTo ctx env dest (F.HandleExp { body, exnName, handler })
     = let val status = genSym ctx
