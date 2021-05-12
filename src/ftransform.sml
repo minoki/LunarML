@@ -207,7 +207,7 @@ end (* structure DesugarPatternMatches *)
 structure EliminateVariables = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref }
-type Env = { vidMap : USyntax.VId USyntax.VIdMap.map }
+type Env = { vidMap : F.Exp USyntax.VIdMap.map }
 val emptyEnv : Env = { vidMap = USyntax.VIdMap.empty }
 fun freeVarsInPat F.WildcardPat = USyntax.VIdSet.empty
   | freeVarsInPat (F.SConPat _) = USyntax.VIdSet.empty
@@ -222,6 +222,11 @@ fun removeFromEnv (vid, env as { vidMap } : Env) = if USyntax.VIdMap.inDomain (v
                                                        { vidMap = #1 (USyntax.VIdMap.remove (vidMap, vid)) }
                                                    else
                                                        env
+(* Should we inline an expression? *)
+fun isSimpleExp (F.VarExp _) = true
+  | isSimpleExp (F.TyAbsExp (tv, exp)) = isSimpleExp exp
+  | isSimpleExp (F.TyAppExp (exp, ty)) = isSimpleExp exp
+  | isSimpleExp _ = false
 fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                          , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec option
                                          , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
@@ -231,7 +236,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                      F.SConExp _ => exp0
                    | F.VarExp (Syntax.MkQualified (_, vid)) => (case USyntax.VIdMap.find (#vidMap env, vid) of
                                                                     NONE => exp0
-                                                                  | SOME vid' => F.VarExp (Syntax.MkQualified([], vid'))
+                                                                  | SOME exp => exp
                                                                )
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.LetExp (dec, exp) => (case doDec env dec of
@@ -279,10 +284,12 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                  end
             | doDec env (dec as F.DatatypeDec datbinds) = (env, SOME dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
-          and doValBind env (F.SimpleBind (vid, ty, exp)) = (case doExp env exp of
-                                                                 F.VarExp (Syntax.MkQualified (_, vid')) => ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, vid') }, NONE)
-                                                               | exp' => (removeFromEnv (vid, env), SOME (F.SimpleBind (vid, ty, exp')))
-                                                            )
+          and doValBind env (F.SimpleBind (vid, ty, exp)) = let val exp' = doExp env exp
+                                                            in if isSimpleExp exp' then
+                                                                   ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, exp') }, NONE)
+                                                               else
+                                                                   (removeFromEnv (vid, env), SOME (F.SimpleBind (vid, ty, exp')))
+                                                            end
             | doValBind env (F.TupleBind (binds, exp)) = let val vars = List.map #1 binds
                                                              val env' = List.foldl removeFromEnv env vars
                                                          in (env', SOME (F.TupleBind (binds, doExp env exp)))
