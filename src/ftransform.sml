@@ -76,6 +76,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.DataTagExp _ => raise Fail "DataTagExp should not occur here"
                    | F.DataPayloadExp _ => raise Fail "DataPayloadExp should not occur here"
                    | F.ListExp(xs, ty) => F.ListExp(Vector.map (doExp env) xs, ty)
+                   | F.VectorExp(xs, ty) => F.VectorExp(Vector.map (doExp env) xs, ty)
                    | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (Syntax.MkQualified ([], vid')))]) =>
                                               if USyntax.eqVId(vid, vid') then
                                                   doExp env exp
@@ -263,6 +264,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                end
                    | F.ProjectionExp { label, recordTy, fieldTy } => exp0
                    | F.ListExp (xs, ty) => F.ListExp (Vector.map (doExp env) xs, ty)
+                   | F.VectorExp (xs, ty) => F.VectorExp (Vector.map (doExp env) xs, ty)
                    | F.TyAbsExp (tyvar, exp) => F.TyAbsExp (tyvar, doExp env exp)
                    | F.TyAppExp (exp, ty) => F.TyAppExp (doExp env exp, ty)
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
@@ -309,15 +311,86 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
 end (* local *)
 end (* structure EliminateVariables *)
 
+structure Fuse = struct
+local structure F = FSyntax in
+type Context = { nextVId : int ref }
+type Env = {}
+val emptyEnv : Env = {}
+fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
+                           , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
+                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
+                           }
+    = let fun doExp (env : Env) exp0
+              = (case exp0 of
+                     F.SConExp _ => exp0
+                   | F.VarExp _ => exp0
+                   | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
+                   | F.LetExp (dec, exp) => let val (env', dec') = doDec env dec
+                                            in F.LetExp (dec', doExp env' exp)
+                                            end
+                   | F.AppExp (exp1, exp2) => (case (doExp env exp1, doExp env exp2) of
+                                                   (exp1 as F.TyAppExp (F.VarExp (Syntax.MkQualified (_, vid)), ty1), exp2 as F.ListExp (xs, ty2)) =>
+                                                   if USyntax.eqVId(vid, InitialEnv.VId_Vector_fromList) then
+                                                       F.VectorExp (xs, ty2)
+                                                   else
+                                                       F.AppExp (exp1, exp2)
+                                                 | (exp1, exp2) => F.AppExp (exp1, exp2)
+                                              )
+                   | F.HandleExp { body, exnName, handler } => F.HandleExp { body = doExp env body
+                                                                           , exnName = exnName
+                                                                           , handler = doExp env handler
+                                                                           }
+                   | F.RaiseExp (span, exp) => F.RaiseExp (span, doExp env exp)
+                   | F.IfThenElseExp (exp1, exp2, exp3) => F.IfThenElseExp (doExp env exp1, doExp env exp2, doExp env exp3)
+                   | F.CaseExp (span, exp, ty, matches) => let fun doMatch (pat, exp) = (pat, doExp env exp)
+                                                           in F.CaseExp (span, doExp env exp, ty, List.map doMatch matches)
+                                                           end
+                   | F.FnExp (vid, ty, exp) => F.FnExp (vid, ty, doExp env exp)
+                   | F.ProjectionExp { label, recordTy, fieldTy } => exp0
+                   | F.ListExp (xs, ty) => F.ListExp (Vector.map (doExp env) xs, ty)
+                   | F.VectorExp (xs, ty) => F.VectorExp (Vector.map (doExp env) xs, ty)
+                   | F.TyAbsExp (tyvar, exp) => F.TyAbsExp (tyvar, doExp env exp)
+                   | F.TyAppExp (exp, ty) => (case doExp env exp of
+                                                  F.TyAbsExp(tyvar, exp') => let val substExp = #doExp (F.substTy (USyntax.TyVarMap.singleton (tyvar, ty)))
+                                                                             in substExp exp'
+                                                                             end
+                                                | exp => F.TyAppExp (doExp env exp, ty)
+                                             )
+                   | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
+                   | F.DataTagExp exp => F.DataTagExp (doExp env exp)
+                   | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
+                )
+          and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
+            | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
+            | doDec env (dec as F.ExceptionDec datbinds) = (env, dec)
+          and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
+            | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
+          fun doDecs env [] = (env, [])
+            | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
+                                             val (env'', decs') = doDecs env' decs
+                                         in (env'', dec' :: decs')
+                                         end
+      in { doExp = doExp
+         , doDec = doDec
+         , doDecs = doDecs
+         }
+      end
+end (* local *)
+end (* structure Fuse *)
+
 structure FTransform = struct
 type Env = { desugarPatternMatches : DesugarPatternMatches.Env
            , eliminateVariables : EliminateVariables.Env
+           , fuse : Fuse.Env
            }
 val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEnv
                        , eliminateVariables = EliminateVariables.emptyEnv
+                       , fuse = Fuse.emptyEnv
                        }
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
                                       val (evEnv, decs) = #doDecs (EliminateVariables.eliminateVariables ctx) (#eliminateVariables env) decs
-                              in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv}, decs)
+                                      val (fuseEnv, decs) = #doDecs (Fuse.fuse ctx) (#fuse env) decs
+                              in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv, fuse = fuseEnv}, decs)
                               end
 end (* structure FTransform *)

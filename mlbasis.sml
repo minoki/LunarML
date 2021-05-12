@@ -155,6 +155,7 @@ structure Vector = struct
 datatype vector = datatype vector
 open LunarML.Vector (* fromList, tabulate, length, sub *)
 end;
+val vector : 'a list -> 'a vector = Vector.fromList;
 
 structure Lua = struct
 open LunarML.Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)

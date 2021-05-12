@@ -33,6 +33,7 @@ datatype Exp = SConExp of Syntax.SCon
              | FnExp of USyntax.VId * Ty * Exp
              | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of Exp vector * Ty
+             | VectorExp of Exp vector * Ty
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
@@ -96,6 +97,66 @@ fun substituteTy (tv, replacement) =
     in go
     end
 
+(* substTy : Ty TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Decs -> Decs } *)
+fun substTy (subst : Ty USyntax.TyVarMap.map) =
+    let fun doTy (ty as TyVar tv) = (case USyntax.TyVarMap.find(subst, tv) of
+                                         NONE => ty
+                                       | SOME replacement => replacement
+                                    )
+          | doTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, doTy ty)) fields)
+          | doTy (TyCon (tyargs, tycon)) = TyCon (List.map doTy tyargs, tycon)
+          | doTy (FnType (ty1, ty2)) = FnType (doTy ty1, doTy ty2)
+          | doTy (ForallType (tv, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                             ForallType (tv, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
+                                         else
+                                             ForallType (tv, doTy ty)
+       
+        fun doPat (pat as WildcardPat) = pat
+          | doPat (pat as SConPat _) = pat
+          | doPat (VarPat (vid, ty)) = VarPat (vid, doTy ty)
+          | doPat (RecordPat (fields, wildcard)) = RecordPat (List.map (fn (label, pat) => (label, doPat pat)) fields, wildcard)
+          | doPat (InstantiatedConPat (longvid, optPat, tyargs)) = InstantiatedConPat (longvid, Option.map doPat optPat, List.map doTy tyargs)
+          | doPat (LayeredPat (vid, ty, pat)) = LayeredPat (vid, doTy ty, doPat pat)
+        fun doConBind (ConBind (vid, optTy)) = ConBind (vid, Option.map doTy optTy)
+        fun doDatBind (DatBind (tyvars, tycon, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
+                                                            in DatBind (tyvars, tycon, List.map (#doConBind (substTy subst')) conbinds)
+                                                            end
+        fun doExp (exp as SConExp _) = exp
+          | doExp (exp as VarExp _) = exp
+          | doExp (RecordExp fields) = RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doExp (LetExp (dec, exp)) = LetExp (doDec dec, doExp exp)
+          | doExp (AppExp (exp1, exp2)) = AppExp (doExp exp1, doExp exp2)
+          | doExp (HandleExp { body, exnName, handler }) = HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
+          | doExp (RaiseExp (span, exp)) = RaiseExp (span, doExp exp)
+          | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
+          | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
+          | doExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
+          | doExp (ProjectionExp { label, recordTy, fieldTy }) = ProjectionExp { label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
+          | doExp (ListExp (xs, ty)) = ListExp (Vector.map doExp xs, doTy ty)
+          | doExp (VectorExp (xs, ty)) = VectorExp (Vector.map doExp xs, doTy ty)
+          | doExp (TyAbsExp (tv, exp)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                             TyAbsExp (tv, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
+                                         else
+                                             TyAbsExp (tv, doExp exp)
+          | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
+          | doExp (RecordEqualityExp fields) = RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doExp (DataTagExp exp) = DataTagExp (doExp exp)
+          | doExp (DataPayloadExp exp) = DataPayloadExp (doExp exp)
+        and doDec (ValDec valbind) = ValDec (doValBind valbind)
+          | doDec (RecValDec valbinds) = RecValDec (List.map doValBind valbinds)
+          | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
+          | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
+        and doValBind (SimpleBind (vid, ty, exp)) = SimpleBind (vid, doTy ty, doExp exp)
+          | doValBind (TupleBind (binds, exp)) = TupleBind (List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
+    in { doTy = doTy
+       , doConBind = doConBind
+       , doPat = doPat
+       , doExp = doExp
+       , doDec = doDec
+       , doDecs = List.map doDec
+       }
+    end
+
 structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
@@ -142,6 +203,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
+  | print_Exp (VectorExp _) = "VectorExp"
   | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"

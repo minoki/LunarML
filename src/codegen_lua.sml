@@ -452,6 +452,9 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                             let val ys = Vector.map (doExp ctx env) xs
                                             in (Vector.foldr (fn ((t, _), acc) => t @ acc) [] ys, "_list{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
                                             end
+  | doExp ctx env (F.VectorExp (xs, _)) = let val ys = Vector.map (doExp ctx env) xs
+                                          in (Vector.foldr (fn ((t, _), acc) => t @ acc) [] ys, "{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                                          end
   | doExp ctx env (F.TyAbsExp (_, exp)) = doExp ctx env exp
   | doExp ctx env (F.TyAppExp (exp, _)) = doExp ctx env exp
   | doExp ctx env (F.RecordEqualityExp fields) = (case Syntax.extractTuple(1, fields) of
@@ -602,6 +605,10 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
                                                    in Vector.foldr (fn ((x, _), acc) => String.concat x ^ acc) "" ys
                                                       ^ putPureTo ctx env dest ("_list{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
                                                    end
+  | doExpTo ctx env dest (F.VectorExp (xs, _)) = let val ys = Vector.map (doExp ctx env) xs
+                                                 in Vector.foldr (fn ((x, _), acc) => String.concat x ^ acc) "" ys
+                                                    ^ putPureTo ctx env dest ("{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                                                 end
   | doExpTo ctx env dest (F.TyAbsExp (_, exp)) = doExpTo ctx env dest exp
   | doExpTo ctx env dest (F.TyAppExp (exp, _)) = doExpTo ctx env dest exp
   | doExpTo ctx env dest (F.RecordEqualityExp fields)
