@@ -19,7 +19,7 @@ Hello world!
 Available types and functions:
 
 ```sml
-type unit = ()
+type unit = {}
 eqtype int  (* primitive *)
 eqtype word  (* primitive *)
 type real  (* primitive *)
@@ -31,10 +31,29 @@ datatype bool = false | true
 datatype 'a list = nil | :: of 'a * 'a list
 eqtype 'a array  (* primitive *)
 eqtype 'a vector  (* primitive *)
-exception Match
-exception Bind
+
 val = : ''a * ''a -> bool
-val := : 'a ref * 'a -> unit
+val <> : ''a * ''a -> bool
+
+structure General : sig
+  type unit = {}
+  type exn = exn
+  exception Bind
+  exception Match
+  exception Div
+  exception Fail of string
+  exception Overflow
+  exception Size
+  exception Subscript
+  datatype order = LESS | EQUAL | GREATER
+  val ! : 'a ref -> 'a
+  val := : 'a ref * 'a -> unit
+  val before : 'a * unit -> 'a
+  val ignore : 'a -> unit
+  val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
+end
+open General
+
 val abs : realint -> realint  (* overloaded *)
 val ~ : realint -> realint  (* overloaded *)
 val + : num * num -> num  (* overloaded *)
@@ -47,10 +66,16 @@ val < : numtxt * numtxt -> bool  (* overloaded *)
 val <= : numtxt * numtxt -> bool  (* overloaded *)
 val > : numtxt * numtxt -> bool  (* overloaded *)
 val >= : numtxt * numtxt -> bool  (* overloaded *)
-val ^ : string * string -> string
-val print : string -> unit
-val not : bool -> bool
+
+structure Bool : sig
+  datatype bool = datatype bool
+  val not : bool -> bool
+  val toString : bool -> string
+end
+val not = Bool.not
+
 structure Int : sig
+  type int = int
   val + : int * int -> int
   val - : int * int -> int
   val * : int * int -> int
@@ -64,7 +89,105 @@ structure Int : sig
   val abs : int -> int
   val toString : int -> string
 end
+
+structure Word : sig
+  type word = word
+  val + : word * word -> word
+  val - : word * word -> word
+  val * : word * word -> word
+  val div : word * word -> word
+  val mod : word * word -> word
+  val < : word * word -> bool
+  val <= : word * word -> bool
+  val > : word * word -> bool
+  val >= : word * word -> bool
+end
+
+structure Real : sig
+  type real = real
+  val + : real * real -> real
+  val - : real * real -> real
+  val * : real * real -> real
+  val / : real * real -> real
+  val < : real * real -> bool
+  val <= : real * real -> bool
+  val > : real * real -> bool
+  val >= : real * real -> bool
+  val ~ : real -> real
+  val abs : real -> real
+end
+
+structure Char : sig
+  type char = char
+  type string = string
+  val < : char * char -> bool
+  val <= : char * char -> bool
+  val > : char * char -> bool
+  val >= : char * char -> bool
+end
+
+structure String : sig
+  type string = string
+  type char = char
+  val size : string -> int
+  val ^ : string * string -> string
+  val str : char -> string
+  val < : char * char -> bool
+  val <= : char * char -> bool
+  val > : char * char -> bool
+  val >= : char * char -> bool
+end
+val size = String.size
+val ^ = String.^
+val str = String.str
+
+structure List : sig
+  datatype list = datatype list
+  exception Empty
+  val @ : 'a list * 'a list -> 'a list
+  val app : ('a -> unit) -> 'a list -> unit
+  val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+  val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+  val hd : 'a list -> 'a
+  val length : 'a list -> int
+  val map : ('a -> 'b) -> 'a list -> 'b list
+  val null : 'a list -> bool
+  val rev : 'a list -> 'a list
+  val tl : 'a list -> 'a list
+end
+val @ = List.@
+val app = List.app
+val foldl = List.foldl
+val foldr = List.foldr
+val hd = List.hd
+val length = List.length
+val map = List.map
+val null = List.null
+val rev = List.rev
+val tl = List.tl
+
+structure Option : sig
+  datatype 'a option = NONE | SOME of 'a
+  exception Option
+  val getOpt : 'a option * 'a -> 'a
+  val isSome : 'a option -> bool
+  val valOf : 'a option -> 'a
+  val filter : ('a -> bool) -> 'a -> 'a option
+  val join : 'a option option -> 'a option
+  val app : ('a -> unit) -> 'a option -> unit
+  val map : ('a -> 'b) -> 'a option -> 'b option
+  val mapPartial : ('a -> 'b option) -> 'a option -> 'b option
+  val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
+  val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
+end
+datatype option = datatype Option.option
+val getOpt = Option.getOpt
+val isSome = Option.isSome
+val valOf = Option.valOf
+
 structure Array : sig
+  datatype array = datatype array
+  datatype vector = datatype vector
   val array : int * 'a -> 'a array
   val fromList : 'a list -> 'a array
   val tabulate : int * (int -> 'a) -> 'a array
@@ -73,17 +196,44 @@ structure Array : sig
   val update : 'a array * int * 'a -> unit
 end
 structure Vector : sig
+  datatype vector = datatype vector
   val fromList : 'a list -> 'a vector
   val tabulate : int * (int -> 'a) -> 'a vector
   val length : 'a vector -> int
   val sub : 'a vector * int -> 'a
 end
+val vector = Vector.fromList
+
+val print : string -> unit
+```
+
+Interface to Lua:
+
+```sml
+structure Lua : sig
+  type value
+  val sub : value * value -> value  (* t[k] *)
+  val set : value * value * value -> unit  (* t[k] = v *)
+  val global : string -> value  (* _ENV[name] *)
+  val call : value -> value vector -> value vector  (* f(args) *)
+  val method : value * string -> value vector -> value vector  (* f:name(args) *)
+  val NIL : value  (* Lua nil *)
+  val isNil : value -> bool  (* x == nil *)
+  val isFalsy : value -> bool  (* not x *)
+  val fromBool : bool -> value
+  val fromInt : int -> value
+  val fromReal : real -> value
+  val fromString : string -> value
+  val unsafeToValue : 'a -> value
+  val unsafeFromValue : value -> 'a
+  val newTable : unit -> value  (* {} *)
+  val function : (value vector -> value vector) -> value
+end
 ```
 
 The following features are not implemented yet:
 
-* Exceptions
-* Modules
+* Functors and signatures
 
 Intentional divergences from SML '97:
 

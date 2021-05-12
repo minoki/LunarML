@@ -52,7 +52,7 @@ end;
 
 structure Real = struct
 type real = real
-open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >=, ~, abs, toString *)
+open LunarML.Real (* +, -, *, /, <, <=, >, >=, ~, abs, toString *)
 end;
 
 structure Char = struct
