@@ -92,6 +92,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.AppExp(_, conexp, e)) = isConexp(env, conexp) andalso isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.FnExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
+  | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(_, Syntax.MkQualified([], USyntax.MkVId("ref", 0)), _)) = false
@@ -471,6 +472,13 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
     = ( addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = fieldTy }))
       ; (USyntax.FnType(sourceSpan, recordTy, fieldTy), exp)
       )
+  | typeCheckExp(ctx, env, ListExp(span, xs, ty))
+    = let val xs' = Vector.map (fn exp => let val (expTy, exp') = typeCheckExp(ctx, env, exp)
+                                          in addConstraint(ctx, EqConstr(expTy, ty))
+                                           ; exp'
+                                          end) xs
+      in (USyntax.TyCon(span, [ty], primTyCon_list), ListExp(span, xs', ty))
+      end
 (* typeCheckDec : Context * Env * Dec -> (* created environment *) Env * Dec *)
 and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
     = let val valbinds' = let val innerEnv = { valMap = #valMap env, tyMap = #tyMap env, strMap = #strMap env, boundTyVars = USyntax.TyVarSet.addList (#boundTyVars env, tyvarseq) }

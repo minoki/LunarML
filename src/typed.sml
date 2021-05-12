@@ -106,6 +106,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of SourcePos.span * VId * Ty * Exp (* parameter name, parameter type, body *)
              | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
+             | ListExp of SourcePos.span * Exp vector * Ty
      and Dec = ValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* non-recursive *)
              | RecValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list
@@ -143,6 +144,7 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(CaseExp(span, _, _, _)) = span
   | getSourceSpanOfExp(FnExp(span, _, _, _)) = span
   | getSourceSpanOfExp(ProjectionExp{sourceSpan, ...}) = sourceSpan
+  | getSourceSpanOfExp(ListExp(span, _, _)) = span
 
 (* pretty printing *)
 structure PrettyPrint = struct
@@ -204,6 +206,7 @@ fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(_,pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy, ... }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_Exp (ListExp _) = "ListExp"
 and print_Dec (ValDec (_,bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
   | print_Dec (RecValDec (_,bound,valbind,valenv)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
@@ -263,6 +266,7 @@ fun mapTy doTy =
           | doExp(CaseExp(span, e, ty, matches)) = CaseExp(span, doExp e, doTy ty, List.map doMatch matches)
           | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
           | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
+          | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, ty)
         and doDec(ValDec(span, tyvars, valbind, valenv)) = ValDec(span, tyvars, List.map doValBind valbind, valenv) (* TODO: tyvars *)
           | doDec(RecValDec(span, tyvars, valbind, valenv)) = RecValDec(span, tyvars, List.map doValBind valbind, valenv) (* TODO: tyvars *)
           | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
@@ -336,6 +340,7 @@ fun freeTyVarsInExp(bound, exp)
          | CaseExp(_, exp, ty, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInMatches(bound, matches, TyVarSet.empty)))
          | FnExp(_, vid, ty, body) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInExp(bound, body))
          | ProjectionExp { recordTy = recordTy, fieldTy = fieldTy, ... } => TyVarSet.union(freeTyVarsInTy(bound, recordTy), freeTyVarsInTy(bound, fieldTy))
+         | ListExp(_, xs, ty) => Vector.foldl (fn (x, set) => TyVarSet.union(freeTyVarsInExp(bound, x), set)) (freeTyVarsInTy(bound, ty)) xs
       )
 and freeTyVarsInMatches(bound, nil, acc) = acc
   | freeTyVarsInMatches(bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
@@ -681,6 +686,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
       in U.FnExp(span, vid', ty, U.CaseExp(span, U.VarExp(span, U.MkLongVId([], vid'), Syntax.ValueVariable), ty, toUMatch(ctx, tvenv, env, match)))
       end
   | toUExp(ctx, tvenv, env, S.ProjectionExp(span, label)) = U.ProjectionExp { sourceSpan = span, label = label, recordTy = USyntax.TyVar(span, freshTyVar(ctx)), fieldTy = USyntax.TyVar(span, freshTyVar(ctx)) }
+  | toUExp(ctx, tvenv, env, S.ListExp(span, xs)) = U.ListExp(span, Vector.map (fn x => toUExp(ctx, tvenv, env, x)) xs, USyntax.TyVar(span, freshTyVar(ctx)))
 and toUMatch(ctx, tvenv, env, matches : (S.Pat * S.Exp) list)
     = List.map (fn (pat, exp) => let val (vidmap, pat') = toUPat(ctx, tvenv, env, pat)
                                      val valEnv = Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap

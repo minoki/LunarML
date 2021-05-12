@@ -419,6 +419,12 @@ fun doExp ctx env (F.SConExp scon): string list * string = ([], doLiteral scon)
                                                  ^ "end\n"
                                             )
   | doExp ctx env (F.ProjectionExp { label = label, ... }) = ([], "function(x) return x[" ^ LabelToLua(label) ^ "] end")
+  | doExp ctx env (F.ListExp (xs, _)) = if Vector.length xs = 0 then
+                                            ([], "_nil")
+                                        else
+                                            let val ys = Vector.map (doExp ctx env) xs
+                                            in (Vector.foldr (fn ((t, _), acc) => t @ acc) [] ys, "_list{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                                            end
   | doExp ctx env (F.TyAbsExp (_, exp)) = doExp ctx env exp
   | doExp ctx env (F.TyAppExp (exp, _)) = doExp ctx env exp
   | doExp ctx env (F.RecordEqualityExp fields) = (case Syntax.extractTuple(1, fields) of
@@ -550,6 +556,13 @@ and doExpTo ctx env dest (F.SConExp scon) : string = putPureTo ctx env dest (doL
   | doExpTo ctx env dest (F.CaseExp _) = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env dest (F.FnExp (vid, _, exp)) = putPureTo ctx env dest ("function(" ^ VIdToLua vid ^ ")\n" ^ doExpTo ctx (nextIndentLevel env) Return exp ^ indent env ^ "end\n") (* TODO: update environment *)
   | doExpTo ctx env dest (F.ProjectionExp { label, ... }) = putPureTo ctx env dest ("function(x) return x[" ^ LabelToLua label ^ "] end\n")
+  | doExpTo ctx env dest (F.ListExp (xs, _)) = if Vector.length xs = 0 then
+                                                   putPureTo ctx env dest "_nil"
+                                               else
+                                                   let val ys = Vector.map (doExp ctx env) xs
+                                                   in Vector.foldr (fn ((x, _), acc) => String.concat x ^ acc) "" ys
+                                                      ^ putPureTo ctx env dest ("_list{ n = " ^ Int.toString (Vector.length xs) ^ Vector.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                                                   end
   | doExpTo ctx env dest (F.TyAbsExp (_, exp)) = doExpTo ctx env dest exp
   | doExpTo ctx env dest (F.TyAppExp (exp, _)) = doExpTo ctx env dest exp
   | doExpTo ctx env dest (F.RecordEqualityExp fields)

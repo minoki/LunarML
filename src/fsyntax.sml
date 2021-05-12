@@ -32,6 +32,7 @@ datatype Exp = SConExp of Syntax.SCon
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of USyntax.VId * Ty * Exp
              | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
+             | ListExp of Exp vector * Ty
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
@@ -140,6 +141,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_Exp (ListExp _) = "ListExp"
   | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
@@ -363,6 +365,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                      }
       end
   | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, toFExp(ctx, env, exp))
+  | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
 and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
   | doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
   | doValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))

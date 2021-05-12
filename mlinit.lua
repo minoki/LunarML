@@ -311,6 +311,13 @@ local function _EQUAL_list(eq)
     return go(t[1], t[2])
   end
 end
+local function _list(t)
+  local xs = _nil
+  for i = t.n, 1, -1 do
+    xs = { tag = "::", payload = { t[i], xs } }
+  end
+  return xs
+end
 
 -- Ref
 local function _ref(x)

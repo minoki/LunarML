@@ -75,6 +75,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.RecordEqualityExp fields => F.RecordEqualityExp(List.map (fn (label, e) => (label, doExp env e)) fields)
                    | F.DataTagExp _ => raise Fail "DataTagExp should not occur here"
                    | F.DataPayloadExp _ => raise Fail "DataPayloadExp should not occur here"
+                   | F.ListExp(xs, ty) => F.ListExp(Vector.map (doExp env) xs, ty)
                    | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (Syntax.MkQualified ([], vid')))]) =>
                                               if USyntax.eqVId(vid, vid') then
                                                   doExp env exp
@@ -256,6 +257,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                in F.FnExp (vid, ty, doExp env' exp)
                                                end
                    | F.ProjectionExp { label, recordTy, fieldTy } => exp0
+                   | F.ListExp (xs, ty) => F.ListExp (Vector.map (doExp env) xs, ty)
                    | F.TyAbsExp (tyvar, exp) => F.TyAbsExp (tyvar, doExp env exp)
                    | F.TyAppExp (exp, ty) => F.TyAppExp (doExp env exp, ty)
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
