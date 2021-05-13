@@ -49,6 +49,13 @@ val initialEnv : Env = { strMap = Syntax.StrIdMap.empty
                                                    ]
                                      end
                        }
+(* Check if the pattern is exhaustive and binds no variable *)
+fun isWildcardPat F.WildcardPat = true
+  | isWildcardPat (F.SConPat _) = false
+  | isWildcardPat (F.VarPat _) = false
+  | isWildcardPat (F.RecordPat (fields, _)) = List.all (fn (label, pat) => isWildcardPat pat) fields
+  | isWildcardPat (F.InstantiatedConPat (longvid, optPat, tyargs)) = false (* TODO *)
+  | isWildcardPat (F.LayeredPat _) = false
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
@@ -83,26 +90,33 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                               else
                                                   F.LetExp(F.ValDec(F.SimpleBind(vid, ty', doExp env exp)), exp2)
                    | F.CaseExp(span, exp, ty, matches) =>
-                     let val examinedVId = freshVId(ctx, "exp")
-                         val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
-                         fun go [] = F.RaiseExp(span, F.VarExp(Syntax.MkQualified([], InitialEnv.VId_Match)))
-                           | go ((pat, innerExp) :: rest)
-                             = let val binders = genBinders env examinedExp pat
-                               in if isExhaustive env pat then
-                                      if List.null rest then
-                                          List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders
-                                      else
-                                          raise Fail "A redundant pattern match found"
-                                  else
-                                      let val matcher = genMatcher env examinedExp ty pat
-                                      in F.IfThenElseExp(matcher, List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
-                                      end
-                               end
-                     in F.LetExp(F.ValDec(F.SimpleBind(examinedVId, ty, doExp env exp)), go matches)
+                     let val canIgnore = case matches of
+                                             [(pat, innerExp)] => if isWildcardPat pat then SOME innerExp else NONE
+                                           | _ => NONE
+                     in case canIgnore of
+                            SOME innerExp => F.LetExp(F.IgnoreDec(doExp env exp), doExp env innerExp)
+                          | NONE => let val examinedVId = freshVId(ctx, "exp")
+                                        val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
+                                        fun go [] = F.RaiseExp(span, F.VarExp(Syntax.MkQualified([], InitialEnv.VId_Match)))
+                                          | go ((pat, innerExp) :: rest)
+                                            = let val binders = genBinders env examinedExp pat
+                                              in if isExhaustive env pat then
+                                                     if List.null rest then
+                                                         List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders
+                                                     else
+                                                         raise Fail "A redundant pattern match found"
+                                                 else
+                                                     let val matcher = genMatcher env examinedExp ty pat
+                                                     in F.IfThenElseExp(matcher, List.foldr (fn (valbind, exp) => F.LetExp(F.ValDec(valbind), exp)) (doExp env innerExp) binders, go rest) (* TODO: modify environment? *)
+                                                     end
+                                              end
+                                    in F.LetExp(F.ValDec(F.SimpleBind(examinedVId, ty, doExp env exp)), go matches)
+                                    end
                      end
                 )
           and doDec env (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
             | doDec env (dec as F.ExceptionDec { conName, tagName, payloadTy })
               = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
@@ -284,6 +298,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                               end
                                                  in go (env, [], valbinds)
                                                  end
+            | doDec env (F.IgnoreDec exp) = (env, SOME (F.IgnoreDec (doExp env exp)))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, SOME dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
           and doValBind env (F.SimpleBind (vid, ty, exp)) = let val exp' = doExp env exp
@@ -362,6 +377,7 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                 )
           and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
             | doDec env (dec as F.ExceptionDec datbinds) = (env, dec)
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)

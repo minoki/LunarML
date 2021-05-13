@@ -43,6 +43,7 @@ datatype Exp = SConExp of Syntax.SCon
                  | TupleBind of (USyntax.VId * Ty) list * Exp
      and Dec = ValDec of ValBind
              | RecValDec of ValBind list
+             | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
@@ -144,6 +145,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doExp (DataPayloadExp exp) = DataPayloadExp (doExp exp)
         and doDec (ValDec valbind) = ValDec (doValBind valbind)
           | doDec (RecValDec valbinds) = RecValDec (List.map doValBind valbinds)
+          | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
         and doValBind (SimpleBind (vid, ty, exp)) = SimpleBind (vid, doTy ty, doExp exp)
@@ -213,6 +215,7 @@ and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," 
   | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+  | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
 val print_Decs = Syntax.print_list print_Dec

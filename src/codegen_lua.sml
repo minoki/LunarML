@@ -529,6 +529,7 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
                                                               ) valbinds)
       in String.concat decls ^ String.concat assignments
       end
+  | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = String.concat (List.map (doDatBind ctx env) datbinds)
   | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
     = let val conName' = VIdToLua conName
