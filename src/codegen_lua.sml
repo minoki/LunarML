@@ -155,8 +155,6 @@ val builtins
                     ,(VId_Char_GT, "_GT_prim")
                     ,(VId_Char_LE, "_LE_prim")
                     ,(VId_Char_GE, "_GE_prim")
-                    (* Other *)
-                    ,(VId_TextIO_print, "_print")
                     (* Array and Vector *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")

@@ -163,4 +163,86 @@ val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
+fun field (t : value, name : string) = sub (t, fromString name)
 end;
+
+structure IO = struct
+exception Io of { name : string
+                , function : string
+                , cause : exn
+                }
+end;
+
+structure TextIO = struct
+local
+    datatype instream = Instream of Lua.value
+    datatype outstream = Outstream of Lua.value
+    val io = Lua.global "io"
+    val io_open = Lua.field (io, "open")
+    val io_write = Lua.field (io, "write")
+in
+(* IMPERATIVE_IO *)
+type vector = string
+type elem = char
+type instream = instream
+type outstream = outstream
+fun inputAll (Instream f) = (Lua.method (f, "read") (vector [Lua.fromString "a"]); ())
+fun input1 (Instream f) = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
+                          in if Lua.isNil result then
+                                 NONE
+                             else
+                                 SOME (Lua.unsafeFromValue result : elem)
+                          end
+fun inputN (Instream f, n : int) = if n < 0 then
+                                       raise Size
+                                   else
+                                       let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt n]), 0)
+                                       in if Lua.isNil result then
+                                              ""
+                                          else
+                                              (Lua.unsafeFromValue result : vector)
+                                       end
+fun inputAll (Instream f) = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "a"]), 0)
+                            in Lua.unsafeFromValue result : vector
+                            end
+fun closeIn (Instream f) = (Lua.method (f, "close") (vector []); ())
+fun output (Outstream f, s) = (Lua.method (f, "write") (vector [Lua.fromString s]); ())
+fun output1 (Outstream f, c) = (Lua.method (f, "write") (vector [Lua.fromString (String.str c)]); ())
+fun flushOut (Outstream f) = (Lua.method (f, "flush") (vector []); ())
+fun closeOut (Outstream f) = (Lua.method (f, "close") (vector []); ())
+
+(* TEXT_IO *)
+fun inputLine (Instream f) = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "L"]), 0)
+                             in if Lua.isNil result then
+                                    NONE
+                                else
+                                    SOME (Lua.unsafeFromValue result : string)
+                             end
+(* outputsubstr : outstream * substring -> unit *)
+fun openIn f = let val result = Lua.call io_open (vector [Lua.fromString f, Lua.fromString "r"])
+               in if Lua.isNil (Vector.sub (result, 0)) then
+                      raise IO.Io { name = f, function = "TextIO.openIn", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
+                  else
+                      Instream (Vector.sub (result, 0))
+               end
+fun openOut f = let val result = Lua.call io_open (vector [Lua.fromString f, Lua.fromString "w"])
+               in if Lua.isNil (Vector.sub (result, 0)) then
+                      raise IO.Io { name = f, function = "TextIO.openOut", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
+                  else
+                      Outstream (Vector.sub (result, 0))
+               end
+fun openAppend f = let val result = Lua.call io_open (vector [Lua.fromString f, Lua.fromString "a"])
+                   in if Lua.isNil (Vector.sub (result, 0)) then
+                          raise IO.Io { name = f, function = "TextIO.openAppend", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
+                      else
+                          Outstream (Vector.sub (result, 0))
+                   end
+(* fun openString f *)
+val stdIn = Instream (Lua.field (io, "stdin"))
+val stdOut = Outstream (Lua.field (io, "stdout"))
+val stdErr = Outstream (Lua.field (io, "stderr"))
+fun print s = (Lua.call io_write (vector [Lua.fromString s]); ())
+(* scanStream *)
+end
+end;
+val print : string -> unit = TextIO.print;

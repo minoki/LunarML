@@ -12,12 +12,6 @@ infix  4  = <> > >= < <=
 infix  3  := o
 infix  0  before
 *)
-(* ! : 'a ref -> 'a (General.!)
-   := : 'a ref * 'a -> unit (General.:=)
-   ^ : string * string -> string (String.^)
-   not : bool -> bool (Bool.not)
-   print : string -> unit (TextIO.print)
-*)
 val initialFixity = let open Syntax
                         fun InfixL p = Syntax.Infix (Syntax.LeftAssoc p)
                         fun InfixR p = Syntax.Infix (Syntax.RightAssoc p)
@@ -171,9 +165,6 @@ val VId_Array_tabulate = newVId "Array.tabulate"
 val VId_Array_length   = newVId "Array.length"
 val VId_Array_sub      = newVId "Array.sub"
 val VId_Array_update   = newVId "Array.update"
-
-(* TextIO *)
-val VId_TextIO_print = newVId "TextIO.print"
 
 (* Lua interface *)
 val primTyCon_Lua_value = USyntax.MkTyCon("Lua.value", 11)
@@ -349,7 +340,6 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                     ,("!", VId_EXCLAM)
                                     ,(":=", VId_COLONEQUAL)
                                     ,("not", VId_Bool_not)
-                                    ,("print", VId_TextIO_print)
                                      (* Overloaded identifiers *)
                                     ,("abs", VId_abs)
                                     ,("~", VId_TILDE)
@@ -605,7 +595,6 @@ val initialEnv : Typing.Env
                                                ,(VId_LE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                                ,(VId_GE, TypeScheme([(tyVarA, [IsOrdered])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                                (* Non-overloaded identifiers *)
-                                               ,(VId_TextIO_print, TypeScheme ([], primTy_string --> primTy_unit))
                                                ,(VId_Bool_not, TypeScheme ([], primTy_bool --> primTy_bool))
                                                ]
                                      ]
