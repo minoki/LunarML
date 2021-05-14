@@ -235,6 +235,17 @@ fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
                                               else
                                                   smlNameToLua name ^ "_" ^ Int.toString n
 
+structure StringSet = BinarySetFn(struct open String; type ord_key = string end)
+val LuaKeywords = StringSet.fromList
+                      ["and", "break", "do", "else", "elseif", "end",
+                       "false", "for", "function", "goto", "if", "in",
+                       "local", "nil", "not", "or", "repeat", "return",
+                       "then", "true", "until", "while"]
+fun isLuaIdentifier name = case String.explode name of
+                               [] => false
+                             | x0 :: xs => (Char.isAlpha x0 orelse x0 = #"_")
+                                           andalso (List.all (fn c => Char.isAlphaNum c orelse c = #"_") xs)
+                                           andalso (not (StringSet.member(LuaKeywords, name)))
 fun LabelToLua(Syntax.NumericLabel(n)) = Int.toString n
   | LabelToLua(Syntax.IdentifierLabel(s)) = "\"" ^ String.toString s ^ "\"" (* TODO: pretty-printing? *)
 
@@ -395,11 +406,49 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                    NONE
                             end
                           | _ => NONE
+          val doLuaCall = case (exp1, exp2) of
+                              (F.AppExp(F.VarExp(Syntax.MkQualified([], vid_luacall)), f), F.VectorExp(xs, _)) =>
+                              if USyntax.eqVId(vid_luacall, InitialEnv.VId_Lua_call) then
+                                  SOME (fn () => doExpCont ctx env f
+                                                           (fn (stmts1, f) =>
+                                                               mapCont (fn (e, cont) => doExpCont ctx env e cont)
+                                                                       (Vector.foldr (op ::) [] xs)
+                                                                       (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
+                                                                                     val zs = List.map #2 ys
+                                                                                 in case dest of
+                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ f ^ ")(" ^ String.concatWith ", " zs ^ ")")
+                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, "table.pack((" ^ f ^ ")(" ^ String.concatWith ", " zs ^ "))")
+                                                                                 end
+                                                                       )
+                                                           )
+                                       )
+                              else
+                                  NONE
+                            | _ => NONE
+          val doLuaMethod = case (exp1, exp2) of
+                                (F.AppExp(F.VarExp(Syntax.MkQualified([], vid_luamethod)), F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.SConExp(Syntax.StringConstant method))]), F.VectorExp(xs, _)) =>
+                                if USyntax.eqVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
+                                    SOME (fn () => doExpCont ctx env self
+                                                             (fn (stmts1, self) =>
+                                                                 mapCont (fn (e, cont) => doExpCont ctx env e cont)
+                                                                         (Vector.foldr (op ::) [] xs)
+                                                                         (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
+                                                                                       val zs = List.map #2 ys
+                                                                                   in case dest of
+                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ self ^ "):" ^ method ^ "(" ^ String.concatWith ", " zs ^ ")")
+                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, "table.pack((" ^ self ^ "):" ^ method ^ "(" ^ String.concatWith ", " zs ^ "))")
+                                                                                   end
+                                                                         )
+                                                             )
+                                         )
+                                else
+                                    NONE
+                              | _ => NONE
           val isNoop = case exp1 of
                            F.VarExp(Syntax.MkQualified([], vid)) => USyntax.eqVId(vid, InitialEnv.VId_String_str)
                          | F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
                          | _ => false
-      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary] of
+      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
