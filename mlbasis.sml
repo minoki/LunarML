@@ -1,5 +1,33 @@
 fun x <> y = not (x = y);
 
+structure Lua = struct
+open LunarML.Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
+val fromBool : bool -> value = unsafeToValue
+val fromInt : int -> value = unsafeToValue
+val fromReal : real -> value = unsafeToValue
+val fromString : string -> value = unsafeToValue
+fun field (t : value, name : string) = sub (t, fromString name)
+end;
+
+structure Vector = struct
+datatype vector = datatype vector
+open LunarML.Vector (* fromList, tabulate, length, sub *)
+local
+    fun foldl' (f, acc, vec, i) = if i >= length vec then
+                                      acc
+                                  else
+                                      foldl' (f, f (sub (vec, i), acc), vec, i + 1)
+    fun foldr' (f, acc, vec, i) = if i < 0 then
+                                      acc
+                                  else
+                                      foldr' (f, f (sub (vec, i), acc), vec, i - 1)
+in
+fun foldl (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldl' (f, init, vec, 0)
+fun foldr (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldr' (f, init, vec, length vec - 1)
+end
+end;
+val vector : 'a list -> 'a vector = Vector.fromList;
+
 (* General *)
 structure General = struct
 type unit = unit
@@ -32,6 +60,8 @@ val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
+datatype 'a option = NONE | SOME of 'a;
+
 structure Bool = struct
 datatype bool = datatype bool
 val not = not
@@ -43,6 +73,25 @@ end;
 structure Int = struct
 type int = int
 open LunarML.Int (* +, -, *, div, mod, <, <=, >, >=, ~, abs, toString *)
+local
+    val stringlib = Lua.global "string"
+    val string_match = Lua.field (stringlib, "match")
+    val tonumber = Lua.global "tonumber"
+in
+fun fromString (s : string) : int option = let val result = Lua.call string_match (vector [Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"])
+                                           in if Lua.isNil (Vector.sub (result, 0)) then
+                                                  NONE
+                                              else
+                                                  let val sign = Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                                      val digits = Lua.unsafeFromValue (Vector.sub (result, 1)) : string
+                                                      val result' = if sign = "~" orelse sign = "-" then
+                                                                        Lua.call tonumber (vector [Lua.fromString (LunarML.String.^ ("-", digits))])
+                                                                    else
+                                                                        Lua.call tonumber (vector [Lua.fromString digits])
+                                                  in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
+                                                  end
+                                           end
+end
 end;
 
 structure Word = struct
@@ -65,7 +114,55 @@ end;
 structure String = struct
 type string = string
 type char = char
+val size = LunarML.String.size
+val str = LunarML.String.str
+val op ^ = LunarML.String.^
+local
+    val stringlib = Lua.global "string"
+    val string_sub = Lua.field (stringlib, "sub")
+    val string_gsub = Lua.field (stringlib, "gsub")
+    val tablelib = Lua.global "table"
+    val table_concat = Lua.field (tablelib, "concat")
+in
+fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
+                                           raise Subscript
+                                       else
+                                           let val i' = i + 1
+                                               val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt i', Lua.fromInt i'])
+                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                           end
+fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
+                                                          raise Subscript
+                                                      else
+                                                          let val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)])
+                                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                          end
+fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
+                                                                    raise Subscript
+                                                                else
+                                                                    let val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt (i + 1)])
+                                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                                    end
+  | extract (s, i, SOME j) = substring (s, i, j)
+fun concat (l : string list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l)])
+                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                        end
+fun concatWith (s : string) (l : string list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l), Lua.fromString s])
+                                                         in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                         end
+fun implode (l : char list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l)])
+                                       in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                       end
+fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
+fun map (f : char -> char) (s : string) : string = let val result = Lua.call string_gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
+                                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                   end
+fun translate (f : char -> string) (s : string) : string = let val result = Lua.call string_gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
+                                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                           end
+(* tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate, toString, scan, fromString, toCString, fromCString *)
 open LunarML.String (* size, ^, str, <, <=, >, >= *)
+end
 end;
 val op ^ : string * string -> string = String.^;
 val size : string -> int = String.size;
@@ -112,7 +209,6 @@ val rev : 'a list -> 'a list = List.rev;
 val tl : 'a list -> 'a list = List.tl;
 
 (* Option *)
-datatype 'a option = NONE | SOME of 'a;
 structure Option = struct
 datatype option = datatype option
 exception Option
@@ -149,21 +245,6 @@ structure Array = struct
 datatype array = datatype array
 datatype vector = datatype vector
 open LunarML.Array (* array, fromList, tabulate, length, sub, update *)
-end;
-
-structure Vector = struct
-datatype vector = datatype vector
-open LunarML.Vector (* fromList, tabulate, length, sub *)
-end;
-val vector : 'a list -> 'a vector = Vector.fromList;
-
-structure Lua = struct
-open LunarML.Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
-val fromBool : bool -> value = unsafeToValue
-val fromInt : int -> value = unsafeToValue
-val fromReal : real -> value = unsafeToValue
-val fromString : string -> value = unsafeToValue
-fun field (t : value, name : string) = sub (t, fromString name)
 end;
 
 structure IO = struct
