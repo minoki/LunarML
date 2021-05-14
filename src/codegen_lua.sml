@@ -477,8 +477,8 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
     = doExpCont ctx env exp
                 (fn (stmts, exp') =>
                     case dest of
-                        Continue cont => cont (stmts @ [indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit file ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"], "nil")
-                      | _ => String.concat stmts ^ indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit file ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"
+                        Continue cont => cont (stmts @ [indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"], "nil")
+                      | _ => String.concat stmts ^ indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"
                 )
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
