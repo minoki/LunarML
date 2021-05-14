@@ -305,7 +305,7 @@ datatype Destination = Return
                      | AssignTo of string
                      | UnpackingAssignTo of string list
                      | Discard
-                     | Continue of (* statements *) string list * (* pure expression *) string -> string
+                     | Continue of (* statements *) string list * (* pure expression *) string -> string (* the continuation should be called exactly once, and the expression should be used only once *)
 
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
@@ -348,65 +348,69 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
     = let val dec' = doDec ctx env dec
       in dec' ^ doExpTo ctx env exp dest
       end
-  | doExpTo ctx env (F.AppExp (F.ProjectionExp { label, ...}, exp2)) (Continue cont)
-    = doExpCont ctx env exp2 (fn (stmts, exp2') => cont (stmts, "(" ^ exp2' ^ ")[" ^ LabelToLua label ^ "]"))
-  | doExpTo ctx env (F.AppExp (F.ProjectionExp { label, ...}, exp2)) dest
-    = let val v = genSym ctx
-          val stmts = [indent env ^ "local " ^ v ^ "\n", doExpTo ctx env exp2 (AssignTo v)]
-      in putPureTo ctx env dest (stmts, v ^ "[" ^ LabelToLua label ^ "]")
-      end
-  | doExpTo ctx env (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)])) dest
-    = doExpCont ctx env e1
-                (fn (stmts1, e1') => 
-                    doExpCont ctx env e2
-                              (fn (stmts2, e2') =>
-                                  let val stmts = stmts1 @ stmts2
-                                      val (pure, e) = case USyntax.VIdMap.find(builtinBinaryOps, vid) of
-                                                          SOME (InfixOp luaop, pure) => (pure, "(" ^ e1' ^ ") " ^ luaop ^ " (" ^ e2' ^ ")")
-                                                        | SOME (NamedBinaryFn luafn, pure) => (pure, luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")")
-                                                        | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
-                                                                      (false, "(" ^ e1' ^ ")[" ^ e2' ^ "]")
-                                                                  else
-                                                                      (false, VIdToLua vid ^ "({" ^ e1' ^ ", " ^ e2' ^ "})")
-                                  in if pure then
-                                         putPureTo ctx env dest (stmts1 @ stmts2, e)
-                                     else
-                                         putImpureTo ctx env dest (stmts1 @ stmts2, e)
-                                  end
-                              )
-                )
-  | doExpTo ctx env (F.AppExp (exp1 as F.VarExp (Syntax.MkQualified([], vid)), exp2)) dest
-    = doExpCont ctx env exp2
-                (fn (stmts, e2') =>
-                    let open InitialEnv
-                    in if USyntax.eqVId(vid, VId_Real_TILDE) then
-                           putPureTo ctx env dest (stmts, "- " ^ e2')
-                       else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
-                           putPureTo ctx env dest (stmts, "not " ^ e2')
-                       else if USyntax.eqVId(vid, VId_EXCLAM) then
-                           putImpureTo ctx env dest (stmts, "(" ^ e2' ^ ").payload")
-                       else if USyntax.eqVId(vid, VId_String_size) then
-                           putPureTo ctx env dest (stmts, "#(" ^ e2' ^ ")")
-                       else if USyntax.eqVId(vid, VId_String_str) then
-                           putPureTo ctx env dest (stmts, e2')
-                       else
-                           putImpureTo ctx env dest (stmts, VIdToLua vid ^ "(" ^ e2' ^ ")")
-                    end
-                )
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val isNoop = case exp1 of
-                           F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
+    = let val doProjection = case exp1 of
+                                 F.ProjectionExp { label, ... } =>
+                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, "(" ^ exp2' ^ ")[" ^ LabelToLua label ^ "]")))
+                               | _ => NONE
+          val doBinary = case (exp1, exp2) of
+                             (F.VarExp (Syntax.MkQualified([], vid)), F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
+                             let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, e1') => doExpCont ctx env e2 (fn (stmts2, e2') => f (stmts1 @ stmts2, e1', e2'))))
+                             in case USyntax.VIdMap.find(builtinBinaryOps, vid) of
+                                    SOME (binop, pure) => wrap (fn (stmts, e1', e2') =>
+                                                                   let val e = case binop of
+                                                                                   InfixOp luaop => "(" ^ e1' ^ ") " ^ luaop ^ " (" ^ e2' ^ ")"
+                                                                                 | NamedBinaryFn luafn => luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")"
+                                                                   in if pure then
+                                                                          putPureTo ctx env dest (stmts, e)
+                                                                      else
+                                                                          putImpureTo ctx env dest (stmts, e)
+                                                                   end
+                                                               )
+                                  | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
+                                                wrap (fn (stmts, e1', e2') =>
+                                                         let val e = "(" ^ e1' ^ ")[" ^ e2' ^ "]"
+                                                         in putImpureTo ctx env dest (stmts, e)
+                                                         end
+                                                     )
+                                            else
+                                                NONE
+                             end
+                           | _ => NONE
+          val doUnary = case exp1 of
+                            F.VarExp(Syntax.MkQualified([], vid)) =>
+                            let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
+                                open InitialEnv
+                            in if USyntax.eqVId(vid, VId_Real_TILDE) then
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "- (" ^ e2' ^ ")"))
+                               else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "not (" ^ e2' ^ ")"))
+                               else if USyntax.eqVId(vid, VId_EXCLAM) then
+                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, "(" ^ e2' ^ ").payload"))
+                               else if USyntax.eqVId(vid, VId_String_size) then
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "#(" ^ e2' ^ ")"))
+                               else if USyntax.eqVId(vid, VId_Lua_isNil) then
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "(" ^ e2' ^ ") == nil"))
+                               else
+                                   NONE
+                            end
+                          | _ => NONE
+          val isNoop = case exp1 of
+                           F.VarExp(Syntax.MkQualified([], vid)) => USyntax.eqVId(vid, InitialEnv.VId_String_str)
+                         | F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
                          | _ => false
-      in if isNoop then
-             doExpTo ctx env exp2 dest
-         else
-             doExpCont ctx env exp1
-                       (fn (stmts1, e1') =>
-                           doExpCont ctx env exp2
-                                     (fn (stmts2, e2') =>
-                                         putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ e1' ^ ")(" ^ e2' ^ ")")
-                                     )
-                       )
+      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary] of
+             f :: _ => f ()
+           | [] => if isNoop then
+                       doExpTo ctx env exp2 dest
+                   else
+                       doExpCont ctx env exp1
+                                 (fn (stmts1, e1') =>
+                                     doExpCont ctx env exp2
+                                               (fn (stmts2, e2') =>
+                                                   putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ e1' ^ ")(" ^ e2' ^ ")")
+                                               )
+                                 )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = let val status = genSym ctx
