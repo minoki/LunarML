@@ -9,20 +9,74 @@ local function _recordEqual(fields)
     return true
   end
 end
-local function _EQUAL_prim(t)
+local function _EQUAL(t)
   return t[1] == t[2]
 end
-local function _LT_prim(t)
+local function _NOTEQUAL(t)
+  return t[1] ~= t[2]
+end
+local function _LT(t)
   return t[1] < t[2]
 end
-local function _GT_prim(t)
+local function _GT(t)
   return t[1] > t[2]
 end
-local function _LE_prim(t)
+local function _LE(t)
   return t[1] <= t[2]
 end
-local function _GE_prim(t)
+local function _GE(t)
   return t[1] >= t[2]
+end
+local function _PLUS(t)
+  return t[1] + t[2]
+end
+local function _MINUS(t)
+  return t[1] - t[2]
+end
+local function _TIMES(t)
+  return t[1] * t[2]
+end
+local function _DIVIDE(t)
+  return t[1] / t[2]
+end
+local function _INTDIV(t)
+  return t[1] // t[2]
+end
+local function _MOD(t)
+  return t[1] % t[2]
+end
+local function _pow(t)
+  return t[1] ^ t[2]
+end
+local function _unm(x)
+  return -x
+end
+local function _andb(t)
+  return t[1] & t[2]
+end
+local function _orb(t)
+  return t[1] | t[2]
+end
+local function _xorb(t)
+  return t[1] ~ t[2]
+end
+local function _notb(x)
+  return ~x
+end
+local function _LSHIFT(t)
+  return t[1] << t[2]
+end
+local function _RSHIFT(t)
+  return t[1] >> t[2]
+end
+local function _concat(t)
+  return t[1] .. t[2]
+end
+local function _length(x)
+  return #x
+end
+local function _not(x)
+  return not x
 end
 
 local _unit = {}
@@ -141,15 +195,6 @@ local function _abs_int(x)
 end
 
 -- Word
-local function _add_word(t)
-  return t[1] + t[2]
-end
-local function _sub_word(t)
-  return t[1] - t[2]
-end
-local function _mul_word(t)
-  return t[1] * t[2]
-end
 local function __div_word(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
@@ -276,22 +321,7 @@ local function _GE_word(t)
 end
 
 -- Real
-local function _add_real(t)
-  return t[1] + t[2]
-end
-local function _sub_real(t)
-  return t[1] - t[2]
-end
-local function _mul_real(t)
-  return t[1] * t[2]
-end
-local function _divide_real(t)
-  return t[1] / t[2]
-end
 local _abs_real = math.abs
-local function _negate_real(x)
-  return -x
-end
 
 -- List
 local _nil = { tag = "nil" }
@@ -334,21 +364,8 @@ local function _read(t)
   return t.payload
 end
 
-local function _print(x)
-  io.write(x)
-  return _unit
-end
-
 local function _Int_toString(x)
   return string.gsub(tostring(x), "-", "~")
-end
-
-local function _string_append(t)
-  return t[1] .. t[2]
-end
-
-local function _not(x)
-  return not x
 end
 
 -- Array

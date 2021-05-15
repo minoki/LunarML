@@ -181,6 +181,28 @@ val VId_Lua_unsafeToValue = newVId "Lua.unsafeToValue"
 val VId_Lua_unsafeFromValue = newVId "Lua.unsafeFromValue"
 val VId_Lua_newTable = newVId "Lua.newTable"
 val VId_Lua_function = newVId "Lua.function"
+val VId_Lua_PLUS = newVId "Lua.+"
+val VId_Lua_MINUS = newVId "Lua.-"
+val VId_Lua_TIMES = newVId "Lua.*"
+val VId_Lua_DIVIDE = newVId "Lua./"
+val VId_Lua_INTDIV = newVId "Lua.//"
+val VId_Lua_MOD = newVId "Lua.%"
+val VId_Lua_pow = newVId "Lua.pow" (* ^ *)
+val VId_Lua_unm = newVId "Lua.unm" (* unary minus *)
+val VId_Lua_andb = newVId "Lua.andb" (* & *)
+val VId_Lua_orb = newVId "Lua.orb" (* | *)
+val VId_Lua_xorb = newVId "Lua.xorb" (* binary ~ *)
+val VId_Lua_notb = newVId "Lua.notb" (* unary ~ *)
+val VId_Lua_LSHIFT = newVId "Lua.<<"
+val VId_Lua_RSHIFT = newVId "Lua.>>"
+val VId_Lua_EQUAL = newVId "Lua.=="
+val VId_Lua_NOTEQUAL = newVId "Lua.~="
+val VId_Lua_LT = newVId "Lua.<"
+val VId_Lua_GT = newVId "Lua.>"
+val VId_Lua_LE = newVId "Lua.<="
+val VId_Lua_GE = newVId "Lua.>="
+val VId_Lua_concat = newVId "Lua.concat" (* .. *)
+val VId_Lua_length = newVId "Lua.length" (* # *)
 
 val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
     = let val ValueConstructor = Syntax.ValueConstructor
@@ -305,6 +327,28 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                           ,("unsafeFromValue", VId_Lua_unsafeFromValue)
                                           ,("newTable", VId_Lua_newTable)
                                           ,("function", VId_Lua_function)
+                                          ,("+", VId_Lua_PLUS)
+                                          ,("-", VId_Lua_MINUS)
+                                          ,("*", VId_Lua_TIMES)
+                                          ,("/", VId_Lua_DIVIDE)
+                                          ,("//", VId_Lua_INTDIV)
+                                          ,("%", VId_Lua_MOD)
+                                          ,("pow", VId_Lua_pow)
+                                          ,("unm", VId_Lua_unm)
+                                          ,("andb", VId_Lua_andb)
+                                          ,("orb", VId_Lua_orb)
+                                          ,("xorb", VId_Lua_xorb)
+                                          ,("notb", VId_Lua_notb)
+                                          ,("<<", VId_Lua_LSHIFT)
+                                          ,(">>", VId_Lua_RSHIFT)
+                                          ,("==", VId_Lua_EQUAL)
+                                          ,("~=", VId_Lua_NOTEQUAL)
+                                          ,("<", VId_Lua_LT)
+                                          ,(">", VId_Lua_GT)
+                                          ,("<=", VId_Lua_LE)
+                                          ,(">=", VId_Lua_GE)
+                                          ,("concat", VId_Lua_concat)
+                                          ,("length", VId_Lua_length)
                                           ]
                            , tyConMap = mkTyConMap [(Syntax.MkTyCon "value", OpaqueBTyCon primTyCon_Lua_value)]
                            , strMap = Syntax.StrIdMap.empty
@@ -531,6 +575,28 @@ val initialEnv : Typing.Env
                                           ,(VId_Lua_unsafeFromValue, TypeScheme ([(tyVarA, [])], primTy_Lua_value --> tyA))
                                           ,(VId_Lua_newTable, TypeScheme ([], primTy_unit --> primTy_Lua_value))
                                           ,(VId_Lua_function, TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_PLUS, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_MINUS, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_TIMES, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_DIVIDE, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_INTDIV, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_MOD, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_pow, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_unm, TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
+                                          ,(VId_Lua_andb, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_orb, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_xorb, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_notb, TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
+                                          ,(VId_Lua_LSHIFT, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_RSHIFT, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_EQUAL, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_NOTEQUAL, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_LT, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_GT, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_LE, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_GE, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
+                                          ,(VId_Lua_concat, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
+                                          ,(VId_Lua_length, TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
                                           ]
                            , strMap = mkStrMap []
                            , boundTyVars = USyntax.TyVarSet.empty

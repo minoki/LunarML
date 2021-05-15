@@ -267,7 +267,6 @@ type vector = string
 type elem = char
 type instream = instream
 type outstream = outstream
-fun inputAll (Instream f) = (Lua.method (f, "read") (vector [Lua.fromString "a"]); ())
 fun input1 (Instream f) = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
                           in if Lua.isNil result then
                                  NONE

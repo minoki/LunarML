@@ -88,6 +88,7 @@ structure Int : sig
   val ~ : int -> int
   val abs : int -> int
   val toString : int -> string
+  val fromString : string -> int option
 end
 
 structure Word : sig
@@ -130,8 +131,17 @@ structure String : sig
   type string = string
   type char = char
   val size : string -> int
+  val sub : string * int -> char
+  val extract : string * int * int option -> string
+  val substring : string * int * int -> string
   val ^ : string * string -> string
+  val concat : string list -> string
+  val concatWith : string -> string list -> string
   val str : char -> string
+  val implode : char list -> string
+  val explode : string -> char list
+  val map : (char -> char) -> string -> string
+  val translate : (char -> string) -> string -> string
   val < : char * char -> bool
   val <= : char * char -> bool
   val > : char * char -> bool
@@ -201,10 +211,34 @@ structure Vector : sig
   val tabulate : int * (int -> 'a) -> 'a vector
   val length : 'a vector -> int
   val sub : 'a vector * int -> 'a
+  val foldl : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+  val foldr : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
 end
 val vector = Vector.fromList
 
-val print : string -> unit
+structure TextIO : sig
+  type instream
+  type outstream
+  type vector = string
+  type elem = char
+  val input1 : instream -> elem option
+  val inputN : instream * int -> vector
+  val inputAll : instream -> vector
+  val closeIn : instream -> unit
+  val output : outstream * vector -> unit
+  val output1 : outstream * elem -> unit
+  val flushOut : outstream -> unit
+  val closeOut : outstream -> unit
+  val inputLine : instream -> string option
+  val openIn : string -> instream
+  val openOut : string -> outstream
+  val openAppend : string -> outstream
+  val stdIn : instream
+  val stdOut : outstream
+  val stdErr : outstream
+  val print : string -> unit
+end
+val print = TextIO.print
 ```
 
 Interface to Lua:
@@ -213,6 +247,7 @@ Interface to Lua:
 structure Lua : sig
   type value
   val sub : value * value -> value  (* t[k] *)
+  val field : value * string -> value  (* t[k] *)
   val set : value * value * value -> unit  (* t[k] = v *)
   val global : string -> value  (* _ENV[name] *)
   val call : value -> value vector -> value vector  (* f(args) *)
@@ -228,6 +263,28 @@ structure Lua : sig
   val unsafeFromValue : value -> 'a
   val newTable : unit -> value  (* {} *)
   val function : (value vector -> value vector) -> value
+  val + : value * value -> value
+  val - : value * value -> value
+  val * : value * value -> value
+  val / : value * value -> value
+  val // : value * value -> value
+  val % : value * value -> value
+  val pow : value * value -> value  (* x ^ y *)
+  val unm : value -> value  (* unary minus *)
+  val andb : value * value -> value  (* x & y *)
+  val orb : value * value -> value  (* x | y *)
+  val xorb : value * value -> value  (* x ~ y *)
+  val notb : value -> value  (* ~ x *)
+  val << : value * value -> value
+  val >> : value * value -> value
+  val == : value * value -> bool
+  val ~= : value * value -> bool
+  val < : value * value -> bool
+  val > : value * value -> bool
+  val <= : value * value -> bool
+  val >= : value * value -> bool
+  val concat : value * value -> value  (* x .. y *)
+  val length : value -> value  (* #x *)
 end
 ```
 
