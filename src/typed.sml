@@ -237,6 +237,18 @@ val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 open PrettyPrint
 
+(* freeTyVarsInTy : TyVarSet * Ty -> TyVarSet *)
+fun freeTyVarsInTy(bound, ty)
+    = (case ty of
+           TyVar(_,tv) => if TyVarSet.member(bound, tv) then
+                              TyVarSet.empty
+                          else
+                              TyVarSet.singleton tv
+         | RecordType(_,xs) => List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+         | TyCon(_,xs,_) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+         | FnType(_,s,t) => TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
+      )
+
 (* applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
 fun applySubstTy subst =
     let fun substTy (ty as TyVar(_, tv'))
@@ -250,10 +262,30 @@ fun applySubstTy subst =
     in substTy
     end
 
-(* mapTy : (Ty -> Ty) -> { doExp : Exp -> Exp, doDec : Dec -> Dec } *)
-fun mapTy doTy =
-    (* assumes that doTy only acts on type variables *)
-    let fun doExp(e as SConExp _) = e
+(* mapTy : Context * Ty TyVarMap.map -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doValBind : ValBind -> ValBind } *)
+fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConstraints : 'c, tyVarSubst : 'd }, subst) =
+    let val doTy = applySubstTy subst
+        val range = TyVarMap.foldl (fn (ty, tyvarset) => TyVarSet.union(freeTyVarsInTy(TyVarSet.empty, ty), tyvarset)) TyVarSet.empty subst
+        fun genFreshTyVars(subst, tyvars) = List.foldr (fn (tv, (subst, tyvars)) => if TyVarSet.member (range, tv) then
+                                                                                        let val nextTyVar = #nextTyVar ctx
+                                                                                            val x = !nextTyVar
+                                                                                            val () = nextTyVar := x + 1
+                                                                                            val tv' = case tv of
+                                                                                                          NamedTyVar(name, eq, _) => NamedTyVar(name, eq, x)
+                                                                                                        | AnonymousTyVar _ => AnonymousTyVar x
+                                                                                        in (TyVarMap.insert (subst, tv, TyVar(SourcePos.nullSpan, tv')), tv' :: tyvars)
+                                                                                        end
+                                                                                    else
+                                                                                        (subst, tv :: tyvars))
+                                                       (subst, []) tyvars
+        fun doUnaryConstraint(HasField{label, fieldTy}) = HasField{label=label, fieldTy=doTy fieldTy}
+          | doUnaryConstraint ct = ct
+        fun doTypeScheme(TypeScheme (tyvarsWithConstraints, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
+                                                                       val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
+                                                                   in TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty)
+                                                                   end
+        val doValEnv = VIdMap.map (fn (tysc, idstatus) => (doTypeScheme tysc, idstatus))
+        fun doExp(e as SConExp _) = e
           | doExp(e as VarExp _) = e
           | doExp(InstantiatedVarExp(span, longvid, idstatus, tyargs)) = InstantiatedVarExp(span, longvid, idstatus, List.map (fn (ty, cts) => (doTy ty, List.map doUnaryConstraint cts)) tyargs)
           | doExp(RecordExp(span, fields)) = RecordExp(span, Syntax.mapRecordRow doExp fields)
@@ -267,14 +299,18 @@ fun mapTy doTy =
           | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
           | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
           | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, ty)
-        and doDec(ValDec(span, tyvars, valbind, valenv)) = ValDec(span, tyvars, List.map doValBind valbind, valenv) (* TODO: tyvars *)
-          | doDec(RecValDec(span, tyvars, valbind, valenv)) = RecValDec(span, tyvars, List.map doValBind valbind, valenv) (* TODO: tyvars *)
+        and doDec(ValDec(span, tyvars, valbind, valenv)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                           in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind, doValEnv valenv)
+                                                           end
+          | doDec(RecValDec(span, tyvars, valbind, valenv)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                              in RecValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind, doValEnv valenv)
+                                                              end
           | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
           | doDec(DatatypeDec(span, datbinds)) = DatatypeDec(span, List.map doDatBind datbinds)
           | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
         and doValBind(PatBind(span, pat, exp)) = PatBind(span, doPat pat, doExp exp)
-          | doValBind(TupleBind(span, xs, exp)) = TupleBind(span, xs, doExp exp) (* TODO *)
-          | doValBind(PolyVarBind(span, vid, tysc, exp)) = PolyVarBind(span, vid, tysc, doExp exp) (* TODO *)
+          | doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
+          | doValBind(PolyVarBind(span, vid, tysc, exp)) = PolyVarBind(span, vid, doTypeScheme tysc, doExp exp)
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat(pat as WildcardPat _) = pat
           | doPat(s as SConPat _) = s
@@ -284,30 +320,20 @@ fun mapTy doTy =
           | doPat(InstantiatedConPat(span, ct, pat, tyargs)) = InstantiatedConPat(span, ct, Option.map doPat pat, List.map doTy tyargs)
           | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
           | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
-        and doUnaryConstraint(HasField{label, fieldTy}) = HasField{label=label, fieldTy=doTy fieldTy}
-          | doUnaryConstraint ct = ct
-        and doTypBind(TypBind(span, tyvars, tycon, ty)) = TypBind(span, tyvars, tycon, doTy ty) (* TODO: tyvars *)
-        and doDatBind(DatBind(span, tyvars, tycon, conbinds)) = DatBind(span, tyvars, tycon, List.map doConBind conbinds) (* TODO: tyvars *)
-        and doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map doTy optTy)
+        and doTypBind(TypBind(span, tyvars, tycon, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                          in TypBind(span, tyvars, tycon, applySubstTy subst ty)
+                                                          end
+        and doDatBind(DatBind(span, tyvars, tycon, conbinds)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                                    fun doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map (applySubstTy subst) optTy)
+                                                                in DatBind(span, tyvars, tycon, List.map doConBind conbinds)
+                                                                end
         and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
-    in { doExp = doExp, doDec = doDec }
+    in { doExp = doExp
+       , doDec = doDec
+       , doDecs = List.map doDec
+       , doValBind = doValBind
+       }
     end
-(* mapTyInExp : (Ty -> Ty) -> Exp -> Exp *)
-(* mapTyInDec : (Ty -> Ty) -> Dec -> Dec *)
-fun mapTyInExp doTy = #doExp (mapTy doTy)
-fun mapTyInDec doTy = #doDec (mapTy doTy)
-
-(* freeTyVarsInTy : TyVarSet * Ty -> TyVarSet *)
-fun freeTyVarsInTy(bound, ty)
-    = (case ty of
-           TyVar(_,tv) => if TyVarSet.member(bound, tv) then
-                              TyVarSet.empty
-                          else
-                              TyVarSet.singleton tv
-         | RecordType(_,xs) => List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
-         | TyCon(_,xs,_) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
-         | FnType(_,s,t) => TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
-      )
 
 (* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
 fun freeTyVarsInPat(bound, pat)

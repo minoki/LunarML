@@ -878,7 +878,7 @@ fun applyDefaultTypes(ctx, tvc, decs) =
                            | SOME constraints => defaultTyForConstraints(false, constraints)
         val freeTyVars = USyntax.freeTyVarsInDecs(USyntax.TyVarSet.empty, decs)
         val subst = USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
-    in List.map (USyntax.mapTyInDec (applySubstTy subst)) decs
+    in #doDecs (USyntax.mapTy (ctx, subst)) decs
     end
 
 (* typeCheckTopDec : Context * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
@@ -886,7 +886,7 @@ fun typeCheckTopDec(ctx, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
     let val (env', decs') = typeCheckDecs(ctx, env, decs)
         val subst = !(#tyVarSubst ctx)
         val tvc = !(#tyVarConstraints ctx)
-        val decs'' = List.map (USyntax.mapTyInDec (applySubstTy subst)) decs'
+        val decs'' = #doDecs (USyntax.mapTy (ctx, subst)) decs'
         val decs''' = applyDefaultTypes(ctx, tvc, decs'')
     in (env', USyntax.StrDec decs''')
     end
