@@ -92,12 +92,10 @@ fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,li
 
 type Context = { typingContext : Typing.Context
                , toFContext : ToFSyntax.Context
-               , luaContext : CodeGenLua.Context
                }
 fun newContext() : Context = let val typingContext = Typing.newContext()
                              in { typingContext = typingContext
                                 , toFContext = { nextVId = #nextVId typingContext }
-                                , luaContext = { nextLuaId = ref 0 }
                                 }
                              end
 
@@ -106,17 +104,15 @@ type Env = { fixity : Fixity.FixityStatusMap
            , typingEnv : Typing.Env
            , toFEnv : ToFSyntax.Env
            , fTransEnv : FTransform.Env
-           , luaEnv : CodeGenLua.Env
            }
 val initialEnv : Env = { fixity = InitialEnv.initialFixity
                        , toTypedSyntaxEnv = InitialEnv.initialEnv_ToTypedSyntax
                        , typingEnv = InitialEnv.initialEnv
                        , toFEnv = ToFSyntax.emptyEnv
                        , fTransEnv = FTransform.initialEnv
-                       , luaEnv = CodeGenLua.initialEnv
                        }
 
-fun compile({ typingContext, toFContext, luaContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, toFEnv, fTransEnv, luaEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse(fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInStrDecs(ast1)
@@ -124,15 +120,13 @@ fun compile({ typingContext, toFContext, luaContext } : Context, { fixity, toTyp
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
            val fdecs = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
-           val lua = CodeGenLua.doDecs luaContext luaEnv fdecs'
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
                              , toFEnv = toFEnv (* not really used *)
                              , fTransEnv = fTransEnv'
-                             , luaEnv = luaEnv (* indent only *)
                              }
-       in (modifiedEnv, lua)
+       in (modifiedEnv, fdecs')
        end handle LunarMLParser.ParseError => raise Abort
                 | Syntax.SyntaxError ([], message) =>
                   ( print ("error: " ^ message ^ "\n")
@@ -165,4 +159,6 @@ fun compile({ typingContext, toFContext, luaContext } : Context, { fixity, toTyp
                   ; raise Abort
                   )
     end
+fun wholeProgramOptimization decs = case DeadCodeElimination.doDecs (USyntax.VIdSet.empty, decs) of
+                                        (_, decs) => decs
 end (* structure Driver *)

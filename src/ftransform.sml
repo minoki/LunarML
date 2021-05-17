@@ -410,3 +410,215 @@ fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatter
                               in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv, fuse = fuseEnv}, decs)
                               end
 end (* structure FTransform *)
+
+structure DeadCodeElimination = struct
+structure F = FSyntax
+fun isDiscardable (F.SConExp _) = true
+  | isDiscardable (F.VarExp _) = true
+  | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
+  | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
+  | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
+  | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
+  | isDiscardable (F.RaiseExp (span, exp)) = false
+  | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3
+  | isDiscardable (F.CaseExp (span, exp, ty, matches)) = false (* TODO *)
+  | isDiscardable (F.FnExp (vid, ty, exp)) = true
+  | isDiscardable (F.ProjectionExp { label, recordTy, fieldTy }) = true
+  | isDiscardable (F.ListExp (xs, ty)) = Vector.all isDiscardable xs
+  | isDiscardable (F.VectorExp (xs, ty)) = Vector.all isDiscardable xs
+  | isDiscardable (F.TyAbsExp (tyvar, exp)) = isDiscardable exp
+  | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
+  | isDiscardable (F.RecordEqualityExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
+  | isDiscardable (F.DataTagExp exp) = isDiscardable exp
+  | isDiscardable (F.DataPayloadExp exp) = isDiscardable exp
+(* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
+fun doPat F.WildcardPat = USyntax.VIdSet.empty
+  | doPat (F.SConPat _) = USyntax.VIdSet.empty
+  | doPat (F.VarPat _) = USyntax.VIdSet.empty
+  | doPat (F.RecordPat (fields, wildcard)) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty fields
+  | doPat (F.InstantiatedConPat (Syntax.MkQualified (_, vid), NONE, tyargs)) = USyntax.VIdSet.singleton vid
+  | doPat (F.InstantiatedConPat (Syntax.MkQualified (_, vid), SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
+  | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
+(* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
+fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.VIdSet.empty, exp)
+  | doExp (exp as F.VarExp (Syntax.MkQualified (_, vid))) = (USyntax.VIdSet.singleton vid, exp)
+  | doExp (F.RecordExp fields) = let val fields = List.map (fn (label, exp) => (label, doExp exp)) fields
+                                 in (List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (List.map (#1 o #2) fields), F.RecordExp (List.map (fn (label, (_, exp)) => (label, exp)) fields))
+                                 end
+  | doExp (F.LetExp (dec, exp)) = let val (used, exp) = doExp exp
+                                      val (used', decs) = doDec (used, dec)
+                                  in (used', List.foldr F.LetExp exp decs)
+                                  end
+  | doExp (F.AppExp (exp1, exp2)) = let val (used, exp1) = doExp exp1
+                                        val (used', exp2) = doExp exp2
+                                    in (USyntax.VIdSet.union (used, used'), F.AppExp (exp1, exp2))
+                                    end
+  | doExp (F.HandleExp { body, exnName, handler }) = let val (used, body) = doExp body
+                                                         val (used', handler) = doExp handler
+                                                     in (USyntax.VIdSet.union (used, USyntax.VIdSet.subtract (used', exnName)), F.HandleExp { body = body, exnName = exnName, handler = handler })
+                                                     end
+  | doExp (F.RaiseExp (span, exp)) = let val (used, exp) = doExp exp
+                                     in (used, F.RaiseExp (span, exp))
+                                     end
+  | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = let val (used1, exp1) = doExp exp1
+                                                     val (used2, exp2) = doExp exp2
+                                                     val (used3, exp3) = doExp exp3
+                                                 in (USyntax.VIdSet.union (used1, USyntax.VIdSet.union (used2, used3)), F.IfThenElseExp (exp1, exp2, exp3))
+                                                 end
+  | doExp (F.CaseExp (span, exp, ty, matches)) = let val (used, exp) = doExp exp
+                                                     val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doExp exp
+                                                                                                                           in (USyntax.VIdSet.union (USyntax.VIdSet.union (used, used'), doPat pat), (pat, exp) :: matches)
+                                                                                                                           end)
+                                                                                      (used, []) matches
+                                                 in (used, F.CaseExp (span, exp, ty, matches))
+                                                 end
+  | doExp (F.FnExp (vid, ty, exp)) = let val (used, exp) = doExp exp
+                                     in (used, F.FnExp (vid, ty, exp))
+                                     end
+  | doExp (exp as F.ProjectionExp _) = (USyntax.VIdSet.empty, exp)
+  | doExp (F.ListExp (xs, ty)) = let val xs' = Vector.map doExp xs
+                                 in (Vector.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (Vector.map #1 xs'), F.ListExp (Vector.map #2 xs', ty))
+                                 end
+  | doExp (F.VectorExp (xs, ty)) = let val xs' = Vector.map doExp xs
+                                   in (Vector.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (Vector.map #1 xs'), F.VectorExp (Vector.map #2 xs', ty))
+                                   end
+  | doExp (F.TyAbsExp (tyvar, exp)) = let val (used, exp) = doExp exp
+                                      in (used, F.TyAbsExp (tyvar, exp))
+                                      end
+  | doExp (F.TyAppExp (exp, ty)) = let val (used, exp) = doExp exp
+                                   in (used, F.TyAppExp (exp, ty))
+                                   end
+  | doExp (F.RecordEqualityExp fields) = let val fields' = List.map (fn (label, exp) => (label, doExp exp)) fields
+                                         in (List.foldl (fn ((_, (used, _)), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty fields', F.RecordEqualityExp (List.foldr (fn ((label, (_, exp)), acc) => (label, exp) :: acc) [] fields'))
+                                         end
+  | doExp (F.DataTagExp exp) = let val (used, exp) = doExp exp
+                               in (used, F.DataTagExp exp)
+                               end
+  | doExp (F.DataPayloadExp exp) = let val (used, exp) = doExp exp
+                                   in (used, F.DataPayloadExp exp)
+                                   end
+and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
+                            in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
+                            end
+(* doIgnoredExp : F.Exp -> USyntax.VIdSet.set * F.Exp list *)
+and doIgnoredExp (F.SConExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.VarExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.RecordExp fields) = let val fields' = List.map (fn (label, exp) => doIgnoredExp exp) fields
+                                        in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty fields', List.foldr (fn ((_, exp), exps) => exp @ exps) [] fields')
+                                        end
+  | doIgnoredExp (F.LetExp (dec, exp)) = let val (used, exp) = doIgnoredExpAsExp exp
+                                             val (used, decs) = doDec (used, dec)
+                                         in case List.foldr F.LetExp exp decs of
+                                                F.RecordExp [] => (used, [])
+                                              | exp => (used, [exp])
+                                         end
+  | doIgnoredExp (F.AppExp (exp1, exp2)) = let val (used1, exp1) = doExp exp1
+                                               val (used2, exp2) = doExp exp2
+                                           in (USyntax.VIdSet.union (used1, used2), [F.AppExp (exp1, exp2)])
+                                           end
+  | doIgnoredExp (F.HandleExp { body, exnName, handler }) = let val (used1, body) = doIgnoredExpAsExp body
+                                                                val (used2, handler) = doIgnoredExpAsExp handler
+                                                            in case body of
+                                                                   F.RecordExp [] => (used1, [])
+                                                                 | _ => (USyntax.VIdSet.union (used1, USyntax.VIdSet.subtract (used2, exnName)), [F.HandleExp { body = body, exnName = exnName, handler = handler }])
+                                                            end
+  | doIgnoredExp (exp as F.RaiseExp _) = let val (used, exp) = doExp exp
+                                         in (used, [exp])
+                                         end
+  | doIgnoredExp (F.IfThenElseExp (exp1, exp2, exp3)) = let val (used2, exp2) = doIgnoredExpAsExp exp2
+                                                            val (used3, exp3) = doIgnoredExpAsExp exp3
+                                                        in case (exp2, exp3) of
+                                                               (F.RecordExp [], F.RecordExp []) => doIgnoredExp exp1
+                                                             | (exp2, exp3) => let val (used1, exp1) = doExp exp1
+                                                                               in (USyntax.VIdSet.union (used1, USyntax.VIdSet.union (used2, used3)), [F.IfThenElseExp (exp1, exp2, exp3)])
+                                                                               end
+                                                        end
+  | doIgnoredExp (F.CaseExp (span, exp, ty, matches)) = let val (used, exp) = doExp exp
+                                                            val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doIgnoredExpAsExp exp
+                                                                                                                                      val used'' = doPat pat
+                                                                                                                                  in (USyntax.VIdSet.union (used, USyntax.VIdSet.union (used', used'')), (pat, exp) :: matches)
+                                                                                                                                  end)
+                                                                                             (used, []) matches
+                                                        in (used, [F.CaseExp (span, exp, ty, matches)])
+                                                        end
+  | doIgnoredExp (F.FnExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.ProjectionExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.ListExp (xs, ty)) = let val xs' = Vector.map doIgnoredExp xs
+                                        in (Vector.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs', Vector.foldr (fn ((_, e), xs) => e @ xs) [] xs')
+                                        end
+  | doIgnoredExp (F.VectorExp (xs, ty)) = let val xs' = Vector.map doIgnoredExp xs
+                                        in (Vector.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs', Vector.foldr (fn ((_, e), xs) => e @ xs) [] xs')
+                                        end
+  | doIgnoredExp (F.TyAbsExp (tyvar, exp)) = let val (used, exp) = doIgnoredExpAsExp exp (* should be pure *)
+                                             in case exp of
+                                                    F.RecordExp [] => (used, [])
+                                                  | exp => (used, [F.TyAbsExp (tyvar, exp)])
+                                             end
+  | doIgnoredExp (F.TyAppExp (exp, ty)) = let val (used, exp) = doIgnoredExpAsExp exp
+                                          in case exp of
+                                                 F.RecordExp [] => (used, [])
+                                               | exp => (used, [F.TyAppExp (exp, ty)])
+                                          end
+  | doIgnoredExp (F.RecordEqualityExp fields) = let val fields' = List.map (fn (label, exp) => doIgnoredExp exp) fields
+                                                in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty fields', List.foldr (fn ((_, e), xs) => e @ xs) [] fields')
+                                                end
+  | doIgnoredExp (F.DataTagExp exp) = doIgnoredExp exp
+  | doIgnoredExp (F.DataPayloadExp exp) = doIgnoredExp exp
+(* doDec : USyntax.VIdSet.set * F.Dec -> USyntax.VIdSet.set * F.Dec *)
+and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : USyntax.VIdSet.set * F.Dec list
+    = if not (USyntax.VIdSet.member (used, vid)) then
+          if isDiscardable exp then
+              (used, [])
+          else
+              let val (used', exps) = doIgnoredExp exp
+              in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+              end
+      else
+          let val (used', exp') = doExp exp
+          in (USyntax.VIdSet.union (used, used'), [F.ValDec (F.SimpleBind (vid, ty, exp'))])
+          end
+  | doDec (used, F.ValDec (F.TupleBind (binds, exp)))
+    = let val bound = USyntax.VIdSet.fromList (List.map #1 binds)
+      in if USyntax.VIdSet.disjoint (used, bound) then
+             if isDiscardable exp then
+                 (used, [])
+             else
+                 let val (used', exps) = doIgnoredExp exp
+                 in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+                 end
+         else
+             let val (used', exp) = doExp exp
+             in (USyntax.VIdSet.union (used, used'), [F.ValDec (F.TupleBind (binds, exp))])
+             end
+      end
+  | doDec (used, F.RecValDec valbinds)
+    = let val bound = List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
+                                 (List.map (fn F.SimpleBind (vid, _, _) => USyntax.VIdSet.singleton vid
+                                           | F.TupleBind (binds, _) => USyntax.VIdSet.fromList (List.map #1 binds)
+                                           ) valbinds)
+      in if USyntax.VIdSet.disjoint (used, bound) then
+             (used, []) (* RHS should be fn _ => _, and therefore discardable *)
+         else
+             let val (used, valbinds) = List.foldr (fn (F.SimpleBind (vid, ty, exp), (used, valbinds)) => let val (used', exp) = doExp exp
+                                                                                                          in (USyntax.VIdSet.union (used, used'), F.SimpleBind (vid, ty, exp) :: valbinds)
+                                                                                                          end
+                                                   | (F.TupleBind (binds, exp), (used, valbinds)) => let val (used', exp) = doExp exp
+                                                                                                     in (USyntax.VIdSet.union (used, used'), F.TupleBind (binds, exp) :: valbinds)
+                                                                                                     end
+                                                   ) (used, []) valbinds
+             in (used, [F.RecValDec valbinds])
+             end
+      end
+  | doDec (used, F.IgnoreDec exp) = let val (used', exps) = doIgnoredExp exp
+                                    in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+                                    end
+  | doDec (used, dec as F.DatatypeDec datbinds) = (used, [dec]) (* TODO *)
+  | doDec (used, dec as F.ExceptionDec { conName, tagName, payloadTy }) = if USyntax.VIdSet.member (used, conName) orelse USyntax.VIdSet.member (used, tagName) then
+                                                                              (used, [dec])
+                                                                          else
+                                                                              (used, [])
+(* doDecs : USyntax.VIdSet.set * F.Dec list -> USyntax.VIdSet.set * F.Dec list *)
+fun doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
+                                                                in (used, dec @ decs)
+                                                                end) (used, []) decs
+end (* structure DeadCodeElimination *)
