@@ -652,7 +652,7 @@ val initialEnv : Typing.Env
                                                ,(VId_EXCLAM, TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
                                                (* Overloaded identifiers *)
                                                ,(VId_abs, TypeScheme([(tyVarA, [IsSignedReal])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
-                                               ,(VId_TILDE, TypeScheme([(tyVarA, [IsSigned])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
+                                               ,(VId_TILDE, TypeScheme([(tyVarA, [IsRing])], tyA --> tyA)) (* num -> num, default: int -> int *)
                                                ,(VId_div, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
                                                ,(VId_mod, TypeScheme([(tyVarA, [IsIntegral])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
                                                ,(VId_TIMES, TypeScheme([(tyVarA, [IsRing])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)

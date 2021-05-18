@@ -55,7 +55,7 @@ end
 open General
 
 val abs : realint -> realint  (* overloaded *)
-val ~ : realint -> realint  (* overloaded *)
+val ~ : num -> num  (* overloaded *)
 val + : num * num -> num  (* overloaded *)
 val - : num * num -> num  (* overloaded *)
 val * : num * num -> num  (* overloaded *)

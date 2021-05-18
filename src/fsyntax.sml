@@ -274,6 +274,7 @@ local structure U = USyntax
                                                ]
                                      )
                                     ,(VId_TILDE, [(primTyCon_int, VId_Int_TILDE)
+                                                 ,(primTyCon_word, VId_Word_TILDE)
                                                  ,(primTyCon_real, VId_Real_TILDE)
                                                  ]
                                      )
