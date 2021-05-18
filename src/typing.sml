@@ -82,6 +82,8 @@ fun isSoleConstructor(ctx : Context, env : Env, span : SourcePos.span, longvid: 
        | SOME (_, Syntax.ExceptionConstructor) => false
     )
 
+val VId_ref = USyntax.MkVId("ref", ~2)
+
 (* The Definition, 4.7 Non-expansive Expressions *)
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
 fun isNonexpansive(env : Env, USyntax.SConExp _) = true
@@ -95,9 +97,8 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
-  | isConexp(env, USyntax.VarExp(_, Syntax.MkQualified([], USyntax.MkVId("ref", 0)), _)) = false
   | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueVariable)) = false
-  | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueConstructor)) = true
+  | isConexp(env, USyntax.VarExp(_, Syntax.MkQualified(_, vid), Syntax.ValueConstructor)) = not (USyntax.eqVId(vid, VId_ref))
   | isConexp(env, USyntax.VarExp(_, _, Syntax.ExceptionConstructor)) = true
   | isConexp(env, USyntax.InstantiatedVarExp(_, _, Syntax.ValueVariable, _)) = false
   | isConexp(env, USyntax.InstantiatedVarExp(_, _, Syntax.ValueConstructor, _)) = true

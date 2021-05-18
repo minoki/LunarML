@@ -37,14 +37,14 @@ val initialFixity = let open Syntax
                                   ]
                     end
 
-val vidCounter = ref ~2
+val vidCounter = ref ~3
 fun newVId name = let val n = !vidCounter
                   in vidCounter := n - 1
                    ; USyntax.MkVId(name, n)
                   end
 
 (* Ref *)
-val VId_ref        = newVId "ref"
+val VId_ref        = Typing.VId_ref (* USyntax.MkVId("ref", ~2) *)
 val VId_COLONEQUAL = newVId "General.:="
 val VId_EXCLAM     = newVId "General.!"
 
