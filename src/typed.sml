@@ -298,7 +298,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
           | doExp(CaseExp(span, e, ty, matches)) = CaseExp(span, doExp e, doTy ty, List.map doMatch matches)
           | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
           | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
-          | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, ty)
+          | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
         and doDec(ValDec(span, tyvars, valbind, valenv)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                                            in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind, doValEnv valenv)
                                                            end
