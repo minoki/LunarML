@@ -306,7 +306,7 @@ local
     fun collectExp(_, SConExp _) = TyVarSet.empty
       | collectExp(_, VarExp _) = TyVarSet.empty
       | collectExp(bound, RecordExp(_, xs)) = List.foldl (fn ((_, e), set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
-      | collectExp(bound, LetInExp(_, _, e)) = collectExp(bound, e) (* declarations are not examined *)
+      | collectExp(bound, LetInExp(_, decs, e)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (collectExp(bound, e)) decs
       | collectExp(bound, AppExp(_, x, y)) = TyVarSet.union(collectExp(bound, x), collectExp(bound,y))
       | collectExp(bound, TypedExp(_ ,x, ty)) = TyVarSet.union(collectExp(bound, x), TyVarSet.difference(freeTyVarsInTy(bound, ty), bound))
       | collectExp(bound, HandleExp(_, x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
@@ -326,6 +326,24 @@ local
                                                                             | SOME expTy => TyVarSet.difference(freeTyVarsInTy(bound, expTy), bound)
                                                   in union3(tyVarsInPats, tyVarsInOptTy, collectExp(bound, exp))
                                                   end
+    and collectDec(bound, ValDec _) = TyVarSet.empty
+      | collectDec(bound, RecValDec _) = TyVarSet.empty
+      | collectDec(bound, FunDec _) = TyVarSet.empty
+      | collectDec(bound, TypeDec(_, typbinds)) = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
+      | collectDec(bound, DatatypeDec(_, datbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) TyVarSet.empty datbinds
+      | collectDec(bound, DatatypeRepDec(_, _, _)) = TyVarSet.empty
+      | collectDec(bound, AbstypeDec(_, _, _)) = TyVarSet.empty (* not implemeted yet *)
+      | collectDec(bound, ExceptionDec(span, exbinds)) = List.foldl (fn (ExBind(span, vid, SOME ty), acc) => TyVarSet.union(freeTyVarsInTy(bound, ty), acc)
+                                                                    | (ExBind(span, vid, NONE), acc) => acc
+                                                                    | (ExReplication(_, _, _), acc) => acc) TyVarSet.empty exbinds
+      | collectDec(bound, LocalDec(_, decs1, decs2)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) TyVarSet.empty decs1) decs2
+      | collectDec(bound, OpenDec _) = TyVarSet.empty
+      | collectDec(bound, FixityDec _) = TyVarSet.empty
+    and collectDatBind(bound, DatBind (_, tyvars, _, conbinds)) = let val bound = TyVarSet.addList(bound, tyvars)
+                                                                      fun doConBind(ConBind(_, _, NONE)) = TyVarSet.empty
+                                                                        | doConBind(ConBind(_, _, SOME ty)) = freeTyVarsInTy(bound, ty)
+                                                                  in List.foldl (fn (conbind, acc) => TyVarSet.union(doConBind conbind, acc)) TyVarSet.empty conbinds
+                                                                  end
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds

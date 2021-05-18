@@ -784,7 +784,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
          | S.TypeDec(span, typbinds) =>
            let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))
                    = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
-                         val tvenv = List.foldl Syntax.TyVarMap.insert' Syntax.TyVarMap.empty tyvars'
+                         val tvenv = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
                          val tyvars'' = List.map #2 tyvars'
                          val ty' = toUTy(ctx, tvenv, env, ty)
                          val tycon' = newTyCon(ctx, tycon)
@@ -798,7 +798,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
          | S.DatatypeDec(span, datbinds) =>
            let fun doDatBind1 (S.DatBind(span, tyvars, tycon, conbinds), (tyConEnv, datbinds))
                    = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
-                         val tvenv = List.foldl Syntax.TyVarMap.insert' Syntax.TyVarMap.empty tyvars'
+                         val tvenv = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
                          val tycon' = newTyCon(ctx, tycon)
                          fun doConBind (conbind as S.ConBind(span, vid, _), (valConMap, conbinds))
                              = let val vid' = newVId(ctx, vid)
