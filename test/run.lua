@@ -17,7 +17,7 @@ function compile(file)
 end
 function compile_and_run(file)
   local compile_succ, output = compile(file)
-  if not compile(file) then
+  if not compile_succ then
     return false, output
   end
   local luafile = file:gsub("%.sml$", ".lua")
@@ -56,9 +56,24 @@ local should_run = {
   "open.sml",
   "exception.sml",
   "local_exception.sml",
+  "local_datatype.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
+  print("Running should_run/" .. f .. "...")
+  local succ, output = compile_and_run(file)
+  if not succ then
+    io.stderr:write(string.format("%s failed to compile with:\n%s", file, output))
+    os.exit(1)
+  end
+end
+local should_run = {
+  "general.sml",
+  "string.sml",
+}
+for _,f in ipairs(should_run) do
+  local file = testdir .. "/mlbasis/should_run/" .. f
+  print("Running mlbasis/should_run/" .. f .. "...")
   local succ, output = compile_and_run(file)
   if not succ then
     io.stderr:write(string.format("%s failed to compile with:\n%s", file, output))
@@ -72,9 +87,14 @@ local should_not_compile = {
   "val_rec_override.sml",
   "typevar_unification.sml",
   "typevar_scope.sml",
+  "local_datatype_1.sml",
+  "local_datatype_2.sml",
+  "local_datatype_3.sml",
+  "ref.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
+  print("Compiling should_not_compile/" .. f .. "...")
   if compile(file) then
     io.stderr:write(string.format("%s should not compile, but it did!\n", file))
     os.exit(1)
