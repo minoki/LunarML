@@ -72,7 +72,7 @@ end;
 
 structure Int = struct
 type int = int
-open LunarML.Int (* +, -, *, div, mod, <, <=, >, >=, ~, abs, toString *)
+open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, toString *)
 local
     val stringlib = Lua.global "string"
     val string_match = Lua.field (stringlib, "match")
@@ -96,12 +96,12 @@ end;
 
 structure Word = struct
 type word = word
-open LunarML.Word (* +, -, *, div, mod, <, <=, >, >= *)
+open LunarML.Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 end;
 
 structure Real = struct
 type real = real
-open LunarML.Real (* +, -, *, /, <, <=, >, >=, ~, abs, toString *)
+open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >=, toString *)
 end;
 
 structure Char = struct

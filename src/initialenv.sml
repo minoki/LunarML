@@ -106,12 +106,12 @@ val VId_Int_MINUS    = newVId "Int.-"
 val VId_Int_TIMES    = newVId "Int.*"
 val VId_Int_div      = newVId "Int.div"
 val VId_Int_mod      = newVId "Int.mod"
+val VId_Int_TILDE    = newVId "Int.~"
+val VId_Int_abs      = newVId "Int.abs"
 val VId_Int_LT       = newVId "Int.<"
 val VId_Int_LE       = newVId "Int.<="
 val VId_Int_GT       = newVId "Int.>"
 val VId_Int_GE       = newVId "Int.>="
-val VId_Int_TILDE    = newVId "Int.~"
-val VId_Int_abs      = newVId "Int.abs"
 val VId_Int_toString = newVId "Int.toString"
 
 (* Word *)
@@ -120,6 +120,7 @@ val VId_Word_MINUS = newVId "Word.-"
 val VId_Word_TIMES = newVId "Word.*"
 val VId_Word_div   = newVId "Word.div"
 val VId_Word_mod   = newVId "Word.mod"
+val VId_Word_TILDE = newVId "Word.~"
 val VId_Word_LT    = newVId "Word.<"
 val VId_Word_LE    = newVId "Word.<="
 val VId_Word_GT    = newVId "Word.>"
@@ -223,12 +224,12 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                           ,("div", VId_Int_div)
                                           ,("mod", VId_Int_mod)
                                            (* quot, rem, compare *)
+                                          ,("~", VId_Int_TILDE)
+                                          ,("abs", VId_Int_abs)
                                           ,("<", VId_Int_LT)
                                           ,("<=", VId_Int_LE)
                                           ,(">", VId_Int_GT)
                                           ,(">=", VId_Int_GE)
-                                          ,("~", VId_Int_TILDE)
-                                          ,("abs", VId_Int_abs)
                                            (* min, max, sign, sameSign, fmt *)
                                           ,("toString", VId_Int_toString)
                                            (* scan, fromString *)
@@ -243,6 +244,7 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                            ,("*", VId_Word_TIMES)
                                            ,("div", VId_Word_div)
                                            ,("mod", VId_Word_mod)
+                                           ,("~", VId_Word_TILDE)
                                            ,("<", VId_Word_LT)
                                            ,("<=", VId_Word_LE)
                                            ,(">", VId_Word_GT)
@@ -489,6 +491,7 @@ val initialEnv : Typing.Env
                                           ,(VId_Word_TIMES, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
                                           ,(VId_Word_div, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
                                           ,(VId_Word_mod, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
+                                          ,(VId_Word_TILDE, TypeScheme ([], primTy_word --> primTy_word))
                                           ,(VId_Word_LT, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
                                           ,(VId_Word_LE, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
                                           ,(VId_Word_GT, TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))

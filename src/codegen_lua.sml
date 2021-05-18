@@ -127,6 +127,7 @@ val builtins
                     ,(VId_Word_TIMES, "_TIMES") (* Lua *; does not raise Overflow *)
                     ,(VId_Word_div, "_div_word") (* may raise Div *)
                     ,(VId_Word_mod, "_mod_word") (* may raise Div *)
+                    ,(VId_Word_TILDE, "_unm") (* Lua - (unary) *)
                     ,(VId_Word_LT, "_LT_word")
                     ,(VId_Word_GT, "_GT_word")
                     ,(VId_Word_LE, "_LE_word")
@@ -408,7 +409,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                             F.VarExp(Syntax.MkQualified([], vid)) =>
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
-                            in if USyntax.eqVId(vid, VId_Real_TILDE) then
+                            in if USyntax.eqVId(vid, VId_Real_TILDE) orelse USyntax.eqVId(vid, VId_Word_TILDE) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "- (" ^ e2' ^ ")"))
                                else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "not (" ^ e2' ^ ")"))

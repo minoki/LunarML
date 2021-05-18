@@ -81,12 +81,12 @@ structure Int : sig
   val * : int * int -> int
   val div : int * int -> int
   val mod : int * int -> int
+  val ~ : int -> int
+  val abs : int -> int
   val < : int * int -> bool
   val <= : int * int -> bool
   val > : int * int -> bool
   val >= : int * int -> bool
-  val ~ : int -> int
-  val abs : int -> int
   val toString : int -> string
   val fromString : string -> int option
 end
@@ -98,6 +98,7 @@ structure Word : sig
   val * : word * word -> word
   val div : word * word -> word
   val mod : word * word -> word
+  val ~ : word -> word
   val < : word * word -> bool
   val <= : word * word -> bool
   val > : word * word -> bool
@@ -110,12 +111,12 @@ structure Real : sig
   val - : real * real -> real
   val * : real * real -> real
   val / : real * real -> real
+  val ~ : real -> real
+  val abs : real -> real
   val < : real * real -> bool
   val <= : real * real -> bool
   val > : real * real -> bool
   val >= : real * real -> bool
-  val ~ : real -> real
-  val abs : real -> real
 end
 
 structure Char : sig
