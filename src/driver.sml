@@ -102,27 +102,31 @@ fun newContext() : Context = let val typingContext = Typing.newContext()
 type Env = { fixity : Fixity.FixityStatusMap
            , toTypedSyntaxEnv : ToTypedSyntax.Env
            , typingEnv : Typing.Env
+           , tyconset : USyntax.TyConSet.set
            , toFEnv : ToFSyntax.Env
            , fTransEnv : FTransform.Env
            }
 val initialEnv : Env = { fixity = InitialEnv.initialFixity
                        , toTypedSyntaxEnv = InitialEnv.initialEnv_ToTypedSyntax
                        , typingEnv = InitialEnv.initialEnv
+                       , tyconset = InitialEnv.initialTyConSet
                        , toFEnv = ToFSyntax.emptyEnv
                        , fTransEnv = FTransform.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, toFEnv, fTransEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse(fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInStrDecs(ast1)
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
+           val tyconset = Typing.checkTyScopeOfProgram(typingContext, tyconset, decs)
            val fdecs = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
+                             , tyconset = tyconset
                              , toFEnv = toFEnv (* not really used *)
                              , fTransEnv = fTransEnv'
                              }

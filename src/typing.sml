@@ -489,7 +489,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
           val tvc = !(#tyVarConstraints ctx)
           val subst = !(#tyVarSubst ctx)
           val env' = applySubstEnv subst env
-          val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
+          val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env')
           fun generalize((valbind as PatBind(span, pat, exp), expTy, valEnv, (* generalizable *) false), (valbinds, valEnvRest))
               = let val vars = USyntax.VIdMap.listItemsi valEnv
                 in case vars of
@@ -614,7 +614,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
           val tvc = !(#tyVarConstraints ctx)
           val subst = !(#tyVarSubst ctx)
           val env' = applySubstEnv subst localEnv
-          val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, env)
+          val tyVars_env = freeTyVarsInEnv(TyVarSet.empty, applySubstEnv subst env)
           fun generalize ((span, (pat, exp), expTy, valEnv), (valbinds, valEnvRest))
               = let fun doVal (vid, ty)
                         = let val ty' = applySubstTy subst ty
@@ -881,6 +881,113 @@ fun applyDefaultTypes(ctx, tvc, decs) =
         val subst = USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
     in #doDecs (USyntax.mapTy (ctx, subst)) decs
     end
+
+local structure U = USyntax
+in
+fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
+    = let fun goTy (U.TyVar(span, tv))
+              = if U.TyVarSet.member(tvset, tv) then
+                    ()
+                else
+                    emitError(ctx, [span], "type variable scope violation " ^ USyntax.PrettyPrint.print_TyVar tv)
+            | goTy (U.RecordType(span, fields)) = List.app (fn (label, ty) => goTy ty) fields
+            | goTy (U.TyCon(span, tyargs, tycon))
+              = if U.TyConSet.member(tyconset, tycon) then
+                    List.app goTy tyargs
+                else
+                    emitError(ctx, [span], "type constructor scope violation")
+            | goTy (U.FnType(span, ty1, ty2)) = ( goTy ty1; goTy ty2 )
+          fun goUnaryConstraint (HasField { label, fieldTy }) = goTy fieldTy
+            | goUnaryConstraint _ = ()
+          fun goTypeScheme (U.TypeScheme (typarams, ty)) = ( List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
+                                                           ; #goTy (checkTyScope (ctx, U.TyVarSet.addList (tvset, List.map #1 typarams), tyconset)) ty
+                                                           )
+          fun goPat (U.WildcardPat _) = ()
+            | goPat (U.SConPat _) = ()
+            | goPat (U.VarPat (_, _, ty)) = goTy ty
+            | goPat (U.RecordPat { sourceSpan, fields, wildcard }) = List.app (fn (label, pat) => goPat pat) fields
+            | goPat (U.ConPat(span, longvid, optPat)) = Option.app goPat optPat
+            | goPat (U.InstantiatedConPat(span, longvid, optPat, tyargs)) = ( List.app goTy tyargs
+                                                                            ; Option.app goPat optPat
+                                                                            )
+            | goPat (U.TypedPat(span, pat, ty)) = ( goTy ty; goPat pat )
+            | goPat (U.LayeredPat(span, vid, ty, pat)) = ( goTy ty; goPat pat )
+          fun goExp (U.SConExp (span, scon)) = ()
+            | goExp (U.VarExp (span, longvid, ids)) = ()
+            | goExp (U.InstantiatedVarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
+            | goExp (U.RecordExp (span, fields)) = List.app (fn (label, exp) => goExp exp) fields
+            | goExp (U.LetInExp (span, decs, exp)) = let val tyconset = goDecs decs
+                                                         val { goExp, ... } = checkTyScope (ctx, tvset, tyconset)
+                                                     in goExp exp
+                                                     end
+            | goExp (U.AppExp (span, exp1, exp2)) = ( goExp exp1; goExp exp2 )
+            | goExp (U.TypedExp (span, exp, ty)) = ( goExp exp; goTy ty )
+            | goExp (U.HandleExp (span, exp, matches)) = ( goExp exp; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
+            | goExp (U.RaiseExp (span, exp)) = goExp exp
+            | goExp (U.IfThenElseExp (span, exp1, exp2, exp3)) = ( goExp exp1; goExp exp2; goExp exp3 )
+            | goExp (U.CaseExp (span, exp, ty, matches)) = ( goExp exp; goTy ty; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
+            | goExp (U.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )
+            | goExp (U.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
+            | goExp (U.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
+          and goDec (U.ValDec (span, tyvars, valbinds, valenv)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                                  in List.app goValBind valbinds
+                                                                   ; U.VIdMap.app (fn (tysc, ids) => goTypeScheme tysc) valenv
+                                                                   ; tyconset
+                                                                  end
+            | goDec (U.RecValDec (span, tyvars, valbinds, valenv)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                                     in List.app goValBind valbinds
+                                                                      ; U.VIdMap.app (fn (tysc, ids) => goTypeScheme tysc) valenv
+                                                                      ; tyconset
+                                                                     end
+            | goDec (U.TypeDec (span, typbinds)) = let fun goTypBind (U.TypBind (span, tyvars, tycon, ty), acc) = let val { goTy, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                                                                                  in goTy ty
+                                                                                                                   ; U.TyConSet.add (acc, tycon)
+                                                                                                                  end
+                                                   in List.foldl goTypBind tyconset typbinds
+                                                   end
+            | goDec (U.DatatypeDec (span, datbinds)) = let val tyconset = List.foldl (fn (U.DatBind (span, _, tycon, _), tyconset) => U.TyConSet.add (tyconset, tycon)) tyconset datbinds
+                                                           fun goDatBind (U.DatBind (span, tyvars, tycon, conbinds))
+                                                               = let val { goTy, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                                     fun goConBind (U.ConBind (span, vid, optTy)) = Option.app goTy optTy
+                                                                 in List.app goConBind conbinds
+                                                                 end
+                                                       in List.app goDatBind datbinds
+                                                        ; tyconset
+                                                       end
+            | goDec (U.ExceptionDec (span, exbinds)) = ( List.app (fn ExBind (span, vid, optTy) => Option.app goTy optTy) exbinds
+                                                       ; tyconset
+                                                       )
+          and goDecs decs = List.foldl (fn (dec, tyconset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tyconset)
+                                                              in goDec dec
+                                                              end)
+                                       tyconset decs
+          fun goValBind (U.PatBind (span, pat, exp)) = ( goPat pat; goExp exp )
+            | goValBind (U.TupleBind (span, binds, exp)) = ( List.app (fn (vid, ty) => goTy ty) binds
+                                                           ; goExp exp
+                                                           )
+            | goValBind (U.PolyVarBind (span, vid, U.TypeScheme (typarams, ty), exp))
+              = let val { goTy, goExp, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, List.map #1 typarams), tyconset)
+                in List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
+                 ; goTy ty
+                 ; goExp exp
+                end
+          fun goTopDec (U.StrDec decs) = goDecs decs
+      in { goTy = goTy
+         , goTypeScheme = goTypeScheme
+         , goPat = goPat
+         , goExp = goExp
+         , goDec = goDec
+         , goDecs = goDecs
+         , goValBind = goValBind
+         , goTopDec = goTopDec
+         }
+      end
+fun checkTyScopeOfProgram (ctx, tyconset : U.TyConSet.set, program : U.Program)
+    = List.foldl (fn (topdec, tyconset) => let val { goTopDec, ... } = checkTyScope (ctx, U.TyVarSet.empty, tyconset)
+                                           in goTopDec topdec
+                                           end)
+                 tyconset program
+end
 
 (* typeCheckTopDec : Context * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
 fun typeCheckTopDec(ctx, env, USyntax.StrDec decs) : Env * USyntax.TopDec =

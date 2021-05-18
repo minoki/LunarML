@@ -677,4 +677,21 @@ val initialEnv : Typing.Env
                     ,module_Lua
                     ]
       end
+
+val initialTyConSet = let open Typing
+                      in USyntax.TyConSet.fromList
+                             [primTyCon_int
+                             ,primTyCon_word
+                             ,primTyCon_real
+                             ,primTyCon_string
+                             ,primTyCon_char
+                             ,primTyCon_exn
+                             ,primTyCon_bool
+                             ,primTyCon_ref
+                             ,primTyCon_list
+                             ,primTyCon_array
+                             ,primTyCon_vector
+                             ,primTyCon_Lua_value
+                             ]
+                      end
 end
