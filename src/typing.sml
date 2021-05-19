@@ -21,17 +21,17 @@ fun freeTyVarsInEnv(bound, { tyMap, valMap, strMap, boundTyVars })
           (* TODO: tyMap? *)
       in Syntax.StrIdMap.foldl (fn (MkEnv env, set) => USyntax.TyVarSet.union(set, freeTyVarsInEnv(bound, env))) valMapSet strMap
       end
-fun freeTyVarsInConstraint(bound, USyntax.EqConstr(ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
-  | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(ty, unaryConstraint))
+fun freeTyVarsInConstraint(bound, USyntax.EqConstr(span, ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
+  | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(span, ty, unaryConstraint))
     = (case unaryConstraint of
            USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty), USyntax.freeTyVarsInTy(bound, fieldTy))
-         | USyntax.IsEqType     => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsIntegral   => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsSignedReal => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsRing       => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsField      => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsSigned     => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsOrdered    => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsEqType _    => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsIntegral _   => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsSignedReal _ => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsRing _       => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsField _      => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsSigned _     => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsOrdered _    => USyntax.freeTyVarsInTy(bound, ty)
       )
 
 type Context = { nextTyVar : int ref
@@ -198,15 +198,15 @@ fun substituteTy (tv, replacement) =
 (* substituteConstraint : TyVar * Ty -> Constraint -> Constraint *)
 fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
-    in fn EqConstr(ty1, ty2) => EqConstr(substTy ty1, substTy ty2)
-     | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) => UnaryConstraint(substTy recordTy, HasField{label = label, fieldTy = substTy fieldTy})
-     | UnaryConstraint(ty, IsEqType) => UnaryConstraint(substTy ty, IsEqType)
-     | UnaryConstraint(ty, IsIntegral) => UnaryConstraint(substTy ty, IsIntegral)
-     | UnaryConstraint(ty, IsSignedReal) => UnaryConstraint(substTy ty, IsSignedReal)
-     | UnaryConstraint(ty, IsRing) => UnaryConstraint(substTy ty, IsRing)
-     | UnaryConstraint(ty, IsField) => UnaryConstraint(substTy ty, IsField)
-     | UnaryConstraint(ty, IsSigned) => UnaryConstraint(substTy ty, IsSigned)
-     | UnaryConstraint(ty, IsOrdered) => UnaryConstraint(substTy ty, IsOrdered)
+    in fn EqConstr(span, ty1, ty2) => EqConstr(span, substTy ty1, substTy ty2)
+     | UnaryConstraint(span1, recordTy, HasField{sourceSpan, label, fieldTy }) => UnaryConstraint(span1, substTy recordTy, HasField{sourceSpan = sourceSpan, label = label, fieldTy = substTy fieldTy})
+     | UnaryConstraint(span1, ty, IsEqType span2) => UnaryConstraint(span1, substTy ty, IsEqType span2)
+     | UnaryConstraint(span1, ty, IsIntegral span2) => UnaryConstraint(span1, substTy ty, IsIntegral span2)
+     | UnaryConstraint(span1, ty, IsSignedReal span2) => UnaryConstraint(span1, substTy ty, IsSignedReal span2)
+     | UnaryConstraint(span1, ty, IsRing span2) => UnaryConstraint(span1, substTy ty, IsRing span2)
+     | UnaryConstraint(span1, ty, IsField span2) => UnaryConstraint(span1, substTy ty, IsField span2)
+     | UnaryConstraint(span1, ty, IsSigned span2) => UnaryConstraint(span1, substTy ty, IsSigned span2)
+     | UnaryConstraint(span1, ty, IsOrdered span2) => UnaryConstraint(span1, substTy ty, IsOrdered span2)
     end
 
 val applySubstTy = USyntax.applySubstTy
@@ -250,120 +250,121 @@ fun unify(ctx : Context, nil : Constraint list) : unit = ()
   | unify(ctx, ct :: ctrs)
     = (case ct of
            (* TODO: Disallow unifying NamedTyVar *)
-           EqConstr(TyVar(span, tv as AnonymousTyVar _), ty) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
-         | EqConstr(ty, TyVar(span, tv as AnonymousTyVar _)) => unifyTyVarAndTy(ctx, tv, ty, ctrs)
-         | EqConstr(TyVar(span, tv as NamedTyVar (name, eq, x)), TyVar(span', tv' as NamedTyVar (name', eq', x'))) => if USyntax.eqUTyVar (tv, tv') then () else emitError(ctx, [span], "cannot unify named type variable: " ^ name ^ " and " ^ name')
-         | EqConstr(TyVar(span, NamedTyVar (name, eq, _)), ty) => emitError(ctx, [span], "cannot unify named type variable: " ^ name)
-         | EqConstr(ty, TyVar(span, NamedTyVar (name, eq, _))) => emitError(ctx, [span], "cannot unify named type variable: " ^ name)
-         | EqConstr(FnType(_, s0, s1), FnType(_, t0, t1)) => unify(ctx, EqConstr(s0, t0) :: EqConstr(s1, t1) :: ctrs)
-         | EqConstr(RecordType(span, fields), RecordType(span', fields')) =>
+           EqConstr(span1, TyVar(span2, tv as AnonymousTyVar _), ty) => unifyTyVarAndTy(ctx, span1, tv, ty, ctrs)
+         | EqConstr(span1, ty, TyVar(span2, tv as AnonymousTyVar _)) => unifyTyVarAndTy(ctx, span1, tv, ty, ctrs)
+         | EqConstr(span1, TyVar(span2, tv as NamedTyVar (name, eq, x)), TyVar(span3, tv' as NamedTyVar (name', eq', x'))) => if USyntax.eqUTyVar (tv, tv') then () else emitError(ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
+         | EqConstr(span1, TyVar(span2, NamedTyVar (name, eq, _)), ty) => emitError(ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | EqConstr(span1, ty, TyVar(span2, NamedTyVar (name, eq, _))) => emitError(ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | EqConstr(span, FnType(_, s0, s1), FnType(_, t0, t1)) => unify(ctx, EqConstr(span, s0, t0) :: EqConstr(span, s1, t1) :: ctrs)
+         | EqConstr(span1, RecordType(span2, fields), RecordType(span3, fields')) =>
            if List.length fields <> List.length fields then
-               emitError(ctx, [span, span'], "unification failed: incompatible record types (different number of fields)")
+               emitError(ctx, [span1, span2, span3], "unification failed: incompatible record types (different number of fields)")
            else
                unify(ctx, List.foldl (fn ((label, ty), acc) => case List.find (fn (label', _) => label = label') fields' of
-                                                                   NONE => emitError(ctx, [span, span'], "unification failed: incompatible record types")
-                                                                 | SOME(_,ty') => EqConstr(ty, ty') :: acc)
+                                                                   NONE => emitError(ctx, [span1, span2, span3], "unification failed: incompatible record types")
+                                                                 | SOME(_,ty') => EqConstr(span1, ty, ty') :: acc)
                                      ctrs fields)
-         | EqConstr(t1 as TyCon(span, tyarg, con), t2 as TyCon(span', tyarg', con')) =>
+         | EqConstr(span1, t1 as TyCon(span2, tyarg, con), t2 as TyCon(span3, tyarg', con')) =>
            if eqUTyCon(con, con') then
-               unify(ctx, (ListPair.mapEq EqConstr (tyarg, tyarg')
-                           handle ListPair.UnequalLengths => emitError(ctx, [span, span'], "unification failed: the number of type arguments differ")
+               unify(ctx, (ListPair.mapEq (fn (x, y) => EqConstr(span1, x, y)) (tyarg, tyarg')
+                           handle ListPair.UnequalLengths => emitError(ctx, [span1, span2, span3], "unification failed: the number of type arguments differ")
                           ) @ ctrs)
            else
-               emitError(ctx, [span, span'], "unification failed: type constructor mismatch (" ^ USyntax.PrettyPrint.print_Ty t1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty t2 ^ ")") (* ??? *)
-         | EqConstr(ty1, ty2) => emitError(ctx, [], "unification failed: not match (" ^ USyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty ty2 ^ ")")
-         | UnaryConstraint(recordTy, HasField{label = label, fieldTy = fieldTy}) =>
+               emitError(ctx, [span1, span2, span3], "unification failed: type constructor mismatch (" ^ USyntax.PrettyPrint.print_Ty t1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty t2 ^ ")") (* ??? *)
+         | EqConstr(span, ty1, ty2) => emitError(ctx, [span], "unification failed: not match (" ^ USyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ USyntax.PrettyPrint.print_Ty ty2 ^ ")")
+         | UnaryConstraint(span1, recordTy, HasField{sourceSpan = span3, label = label, fieldTy = fieldTy}) =>
            (case recordTy of
-                RecordType(span, fields) =>
+                RecordType(span2, fields) =>
                 (case List.find (fn (label', _) => label = label') fields of
-                     NONE => emitError(ctx, [span], "unification failed: no field")
-                   | SOME(_, ty') => unify(ctx, EqConstr(fieldTy, ty') :: ctrs)
+                     NONE => emitError(ctx, [span1, span2, span3], "unification failed: no field")
+                   | SOME(_, ty') => unify(ctx, EqConstr(span1, fieldTy, ty') :: ctrs)
                 )
-              | TyCon(span, _, _) => emitError(ctx, [span], "record field for a non-record type")
-              | FnType(span, _, _) => emitError(ctx, [span], "record field for a function type")
-              | TyVar(span, tv) =>
+              | TyCon(span2, _, _) => emitError(ctx, [span1, span2, span3], "record field for a non-record type")
+              | FnType(span2, _, _) => emitError(ctx, [span1, span2, span3], "record field for a function type")
+              | TyVar(span2, tv) =>
                 (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                     SOME replacement => unify(ctx, UnaryConstraint(replacement, HasField{label = label, fieldTy = fieldTy}) :: ctrs)
-                   | NONE => ( addTyVarConstraint(ctx, tv, HasField{ label = label, fieldTy = fieldTy })
+                     SOME replacement => unify(ctx, UnaryConstraint(span1, replacement, HasField{sourceSpan = span3, label = label, fieldTy = fieldTy}) :: ctrs)
+                   | NONE => ( addTyVarConstraint(ctx, tv, HasField{ sourceSpan = span3, label = label, fieldTy = fieldTy })
                              ; unify(ctx, ctrs)
                              )
                 )
            )
-         | UnaryConstraint(RecordType(span, fields), IsEqType) => unify(ctx, List.map (fn (label, ty) => UnaryConstraint(ty, IsEqType)) fields @ ctrs)
-         | UnaryConstraint(RecordType(span, _), IsIntegral) => emitError(ctx, [span], "cannot apply arithmetic operator on record type")
-         | UnaryConstraint(RecordType(span, _), IsSignedReal) => emitError(ctx, [span], "cannot apply arithmetic operator on record type")
-         | UnaryConstraint(RecordType(span, _), IsRing) => emitError(ctx, [span], "cannot apply arithmetic operator on record type")
-         | UnaryConstraint(RecordType(span, _), IsField) => emitError(ctx, [span], "cannot apply arithmetic operator on record type")
-         | UnaryConstraint(RecordType(span, _), IsSigned) => emitError(ctx, [span], "cannot apply arithmetic operator on record type")
-         | UnaryConstraint(RecordType(span, _), IsOrdered) => emitError(ctx, [span], "cannot compare records")
-         | UnaryConstraint(FnType(span, _, _), IsEqType) => emitError(ctx, [span], "function type does not admit equality")
-         | UnaryConstraint(FnType(span, _, _), IsIntegral) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
-         | UnaryConstraint(FnType(span, _, _), IsSignedReal) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
-         | UnaryConstraint(FnType(span, _, _), IsRing) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
-         | UnaryConstraint(FnType(span, _, _), IsField) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
-         | UnaryConstraint(FnType(span, _, _), IsSigned) => emitError(ctx, [span], "cannot apply arithmetic operator on function type")
-         | UnaryConstraint(FnType(span, _, _), IsOrdered) => emitError(ctx, [span], "cannot compare functions")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsEqType) =>
+         | UnaryConstraint(span1, RecordType(span2, fields), IsEqType span3) => unify(ctx, List.map (fn (label, ty) => UnaryConstraint(span1, ty, IsEqType span3)) fields @ ctrs)
+         | UnaryConstraint(span1, RecordType(span2, _), IsIntegral span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
+         | UnaryConstraint(span1, RecordType(span2, _), IsSignedReal span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
+         | UnaryConstraint(span1, RecordType(span2, _), IsRing span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
+         | UnaryConstraint(span1, RecordType(span2, _), IsField span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
+         | UnaryConstraint(span1, RecordType(span2, _), IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
+         | UnaryConstraint(span1, RecordType(span2, _), IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare records")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsEqType span3) => emitError(ctx, [span1, span2, span3], "function type does not admit equality")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsIntegral span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsSignedReal span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsRing span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsField span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
+         | UnaryConstraint(span1, FnType(span2, _, _), IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare functions")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsEqType span3) =>
            if List.exists (fn x => eqUTyCon(tycon, x)) [primTyCon_int, primTyCon_word, primTyCon_string, primTyCon_char, primTyCon_bool, primTyCon_ref, primTyCon_array] then
                (* TODO: check tyargs? *)
                unify(ctx, ctrs) (* do nothing *)
            else if eqUTyCon(tycon, primTyCon_list) then
                case tyargs of
-                   [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
-                 | _ => emitError(ctx, [span], "bad type arguments to list")
+                   [tyarg] => unify(ctx, [UnaryConstraint(span1, tyarg, IsEqType span3)])
+                 | _ => emitError(ctx, [span2], "bad type arguments to list")
            else if eqUTyCon(tycon, primTyCon_vector) then
                case tyargs of
-                   [tyarg] => unify(ctx, [UnaryConstraint(tyarg, IsEqType)])
-                 | _ => emitError(ctx, [span], "bad type arguments to vector")
+                   [tyarg] => unify(ctx, [UnaryConstraint(span1, tyarg, IsEqType span3)])
+                 | _ => emitError(ctx, [span2], "bad type arguments to vector")
            else
                (* (tycon???) : List.map IsEqType tyargs @ ctrs *)
-               emitError(ctx, [span], "IsEqType TyCon: not impl")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsIntegral) =>
+               emitError(ctx, [span1, span2, span3], "IsEqType TyCon: not impl")
+               (* TODO: implement *)
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsIntegral span3) =>
            if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsSignedReal) =>
+               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsSignedReal span3) =>
            if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsRing) =>
+               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsRing span3) =>
            if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsField) =>
+               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsField span3) =>
            if eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsSigned) =>
+               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsSigned span3) =>
            if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_real) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "arithmetic operator on unsupported type")
-         | UnaryConstraint(TyCon(span, tyargs, tycon), IsOrdered) =>
+               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+         | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsOrdered span3) =>
            if eqUTyCon(tycon, primTyCon_int) orelse eqUTyCon(tycon, primTyCon_word) orelse eqUTyCon(tycon, primTyCon_real) orelse eqUTyCon(tycon, primTyCon_string) orelse eqUTyCon(tycon, primTyCon_char) then
                unify(ctx, ctrs) (* do nothing *)
            else
-               emitError(ctx, [span], "comparison operator on unsupported type")
+               emitError(ctx, [span1, span2, span3], "comparison operator on unsupported type")
          (* TODO: Equality type variables *)
-         | UnaryConstraint(TyVar(span, tv), pred) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                                                          SOME replacement => unify(ctx, UnaryConstraint(replacement, pred) :: ctrs)
-                                                        | NONE => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, ctrs))
-                                                     )
+         | UnaryConstraint(span1, TyVar(span2, tv), pred) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                                                                  SOME replacement => unify(ctx, UnaryConstraint(span1, replacement, pred) :: ctrs)
+                                                                | NONE => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, ctrs))
+                                                             )
       )
-and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
+and unifyTyVarAndTy(ctx : Context, span : SourcePos.span, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = let val subst = !(#tyVarSubst ctx)
       in case USyntax.TyVarMap.find(subst, tv) of
-             SOME replacement => unify(ctx, EqConstr(replacement, ty) :: ctrs)
+             SOME replacement => unify(ctx, EqConstr(span, replacement, ty) :: ctrs)
            | NONE =>
              let val ty = applySubstTy subst ty
              in if (case ty of TyVar(_, tv') => eqUTyVar(tv, tv') | _ => false) then (* ty = TyVar tv *)
                     unify(ctx, ctrs) (* do nothing *)
                 else if occurCheck tv ty then
-                    emitError(ctx, [getSourceSpanOfTy ty], "unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ((case ty of TyVar(_, tv') => if eqUTyVar(tv, tv') then "eqtyvar" else ", not eqtyvar" | _ => ", not tyvar")) ^ ")")
+                    emitError(ctx, [span, getSourceSpanOfTy ty], "unification failed: occurrence check (" ^ USyntax.print_TyVar tv ^ " in " ^ USyntax.print_Ty ty ^ ((case ty of TyVar(_, tv') => if eqUTyVar(tv, tv') then "eqtyvar" else ", not eqtyvar" | _ => ", not tyvar")) ^ ")")
                 else
                     let val tvc = !(#tyVarConstraints ctx)
                         val xs = case USyntax.TyVarMap.find(tvc, tv) of
@@ -371,7 +372,7 @@ and unifyTyVarAndTy(ctx : Context, tv : TyVar, ty : Ty, ctrs : Constraint list) 
                                                 ; xs
                                                 )
                                    | NONE => []
-                        fun toConstraint predicate = UnaryConstraint(ty, predicate)
+                        fun toConstraint predicate = UnaryConstraint(span, ty, predicate)
                         val subst' = USyntax.TyVarMap.map (substituteTy (tv, ty)) subst
                     in #tyVarSubst ctx := USyntax.TyVarMap.insert(subst', tv, ty)
                      ; unify(ctx, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
@@ -401,7 +402,7 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
     = let val ty = case lookupLongVIdInEnv(ctx, env, span, longvid) of
                        SOME (TypeScheme(vars, ty), ids) =>
                        let val subst = ListPair.foldlEq (fn ((var, constraints), (tyarg, _), set) =>
-                                                            ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
+                                                            ( List.app (fn c => addConstraint(ctx, UnaryConstraint(span, tyarg, c))) constraints
                                                             ; USyntax.TyVarMap.insert(set, var, tyarg)
                                                             )
                                                         ) USyntax.TyVarMap.empty (vars, tyargs)
@@ -424,40 +425,40 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
     = let val (funcTy, f') = typeCheckExp(ctx, env, f)
           val (argTy, x') = typeCheckExp(ctx, env, x)
           val retTy = TyVar(span, freshTyVar(ctx))
-      in addConstraint(ctx, EqConstr(funcTy, FnType(span, argTy, retTy))) (* funcTy = (argTy -> retTy) *)
+      in addConstraint(ctx, EqConstr(span, funcTy, FnType(span, argTy, retTy))) (* funcTy = (argTy -> retTy) *)
        ; (retTy, AppExp(span, f', x'))
       end
   | typeCheckExp(ctx, env, TypedExp(span, exp, ty))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
-      in addConstraint(ctx, EqConstr(expTy, ty)) (* ety = ty *)
+      in addConstraint(ctx, EqConstr(span, expTy, ty)) (* ety = ty *)
        ; (ty, TypedExp(span, exp', ty))
       end
   | typeCheckExp(ctx, env, HandleExp(span, exp, matches))
           (* exp: t, matches: exn -> t *)
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
-          val (patTy, retTy, matches') = typeCheckMatch(ctx, env, matches)
-      in addConstraint(ctx, EqConstr(patTy, primTy_exn)) (* patTy = exn *)
-       ; addConstraint(ctx, EqConstr(expTy, retTy))
+          val (patTy, retTy, matches') = typeCheckMatch(ctx, env, span, matches)
+      in addConstraint(ctx, EqConstr(span, patTy, primTy_exn)) (* patTy = exn *)
+       ; addConstraint(ctx, EqConstr(span, expTy, retTy))
        ; (expTy, HandleExp(span, exp', matches'))
       end
   | typeCheckExp(ctx, env, RaiseExp(span, exp))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
-      in addConstraint(ctx, EqConstr(expTy, primTy_exn)) (* expTy = exn *)
+      in addConstraint(ctx, EqConstr(span, expTy, primTy_exn)) (* expTy = exn *)
        ; (TyVar(span, freshTyVar(ctx)), RaiseExp(span, exp'))
       end
   | typeCheckExp(ctx, env, IfThenElseExp(span, cond, thenPart, elsePart))
     = let val (condTy, cond') = typeCheckExp(ctx, env, cond)
           val (thenTy, thenPart') = typeCheckExp(ctx, env, thenPart)
           val (elseTy, elsePart') = typeCheckExp(ctx, env, elsePart)
-      in addConstraint(ctx, EqConstr(condTy, primTy_bool)) (* condTy = bool *)
-       ; addConstraint(ctx, EqConstr(thenTy, elseTy)) (* thenTy = elseTy *)
+      in addConstraint(ctx, EqConstr(span, condTy, primTy_bool)) (* condTy = bool *)
+       ; addConstraint(ctx, EqConstr(span, thenTy, elseTy)) (* thenTy = elseTy *)
        ; (thenTy, IfThenElseExp(span, cond', thenPart', elsePart'))
       end
   | typeCheckExp(ctx, env, CaseExp(span, exp, ty, matches))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
-          val (patTy, retTy, matches') = typeCheckMatch(ctx, env, matches)
-      in addConstraint(ctx, EqConstr(expTy, ty))
-       ; addConstraint(ctx, EqConstr(expTy, patTy))
+          val (patTy, retTy, matches') = typeCheckMatch(ctx, env, span, matches)
+      in addConstraint(ctx, EqConstr(span, expTy, ty))
+       ; addConstraint(ctx, EqConstr(span, expTy, patTy))
        ; (retTy, CaseExp(span, exp', ty, matches'))
       end
   | typeCheckExp(ctx, env, FnExp(span, vid, argTy, body))
@@ -471,12 +472,12 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
       in (USyntax.FnType(span, argTy, retTy), FnExp(span, vid, argTy, body'))
       end
   | typeCheckExp(ctx, env, exp as ProjectionExp { sourceSpan, label, recordTy, fieldTy })
-    = ( addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = fieldTy }))
+    = ( addConstraint(ctx, UnaryConstraint(sourceSpan, recordTy, HasField { sourceSpan = sourceSpan, label = label, fieldTy = fieldTy }))
       ; (USyntax.FnType(sourceSpan, recordTy, fieldTy), exp)
       )
   | typeCheckExp(ctx, env, ListExp(span, xs, ty))
     = let val xs' = Vector.map (fn exp => let val (expTy, exp') = typeCheckExp(ctx, env, exp)
-                                          in addConstraint(ctx, EqConstr(expTy, ty))
+                                          in addConstraint(ctx, EqConstr(span, expTy, ty))
                                            ; exp'
                                           end) xs
       in (USyntax.TyCon(span, [ty], primTyCon_list), ListExp(span, xs', ty))
@@ -530,7 +531,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
               = let fun doVal (vid,ty)
                         = let val ty' = applySubstTy subst ty
                               val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                              fun isEqualityType USyntax.IsEqType = true
+                              fun isEqualityType (USyntax.IsEqType _) = true
                                 | isEqualityType _ = false
                               fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
                                                                    NONE => true
@@ -539,7 +540,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                               fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
                                                    NONE => (tv, [])
                                                  | SOME tvs => if List.exists isEqualityType tvs then
-                                                                   (tv, [USyntax.IsEqType])
+                                                                   (tv, [USyntax.IsEqType span])
                                                                else (* should not reach here *)
                                                                    (tv, [])
                               val tysc = TypeScheme(List.map doTyVar (TyVarSet.listItems tyVars), ty')
@@ -603,7 +604,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
           val localEnv = { valMap = USyntax.VIdMap.unionWith #2 (valMap, localValMap), tyMap = tyMap, strMap = strMap, boundTyVars = USyntax.TyVarSet.addList (boundTyVars, tyvarseq) }
           val valbinds'' = List.map (fn (span, (patTy, newValEnv, pat), exp) =>
                                         let val (expTy, exp') = typeCheckExp(ctx, localEnv, exp)
-                                            val () = addConstraint(ctx, EqConstr(patTy, expTy))
+                                            val () = addConstraint(ctx, EqConstr(span, patTy, expTy))
                                             val generalizable = isExhaustive(ctx, env, pat) andalso isNonexpansive(env, exp)
                                         in if generalizable then
                                                (span, (pat, exp'), expTy, newValEnv)
@@ -619,7 +620,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
               = let fun doVal (vid, ty)
                         = let val ty' = applySubstTy subst ty
                               val tyVars_ty = freeTyVarsInTy(TyVarSet.empty, ty')
-                              fun isEqualityType USyntax.IsEqType = true
+                              fun isEqualityType (USyntax.IsEqType _) = true
                                 | isEqualityType _ = false
                               fun isGeneralizable(tv: TyVar) = case USyntax.TyVarMap.find(tvc, tv) of
                                                                    NONE => true
@@ -628,7 +629,7 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                               fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
                                                    NONE => (tv, [])
                                                  | SOME tvs => if List.exists isEqualityType tvs then
-                                                                   (tv, [USyntax.IsEqType])
+                                                                   (tv, [USyntax.IsEqType span])
                                                                else (* should not reach here *)
                                                                    (tv, [])
                               val tysc = TypeScheme(List.map doTyVar (TyVarSet.listItems tyVars), ty')
@@ -673,7 +674,7 @@ and typeCheckDecs(ctx, env, []) : Env * Dec list = (emptyEnv, [])
 and typeCheckValBind(ctx, env, PatBind(span, pat, exp))
     = let val (patTy, newValEnv, pat') = typeCheckPat(ctx, env, pat)
           val (expTy, exp') = typeCheckExp(ctx, env, exp)
-          val () = addConstraint(ctx, EqConstr(patTy, expTy))
+          val () = addConstraint(ctx, EqConstr(span, patTy, expTy))
           val generalizable = isExhaustive(ctx, env, pat) andalso isNonexpansive(env, exp)
       in (PatBind(span, pat', exp'), expTy, newValEnv, generalizable)
       end
@@ -705,19 +706,19 @@ and typeCheckExpRow(ctx, env, xs) : (Syntax.Label * USyntax.Ty) list * (Syntax.L
                                          (ty, exp') => ((label, ty), (label, exp'))
       in ListPair.unzip (List.map oneField xs)
       end
- (* typeCheckMatch : Context * Env * (Pat * Exp) list -> (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty * (Pat * Exp) list *)
-and typeCheckMatch(ctx, env, (pat0, exp0) :: rest) : USyntax.Ty * USyntax.Ty * (Pat * Exp) list
+ (* typeCheckMatch : Context * Env * SourcePos.span * (Pat * Exp) list -> (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty * (Pat * Exp) list *)
+and typeCheckMatch(ctx, env, span, (pat0, exp0) :: rest) : USyntax.Ty * USyntax.Ty * (Pat * Exp) list
     = let val (patTy, expTy, pat0', exp0') = typeCheckMatchBranch(ctx, env, pat0, exp0)
           fun oneBranch(pat, exp)
               = let val (patTy', expTy', pat', exp') = typeCheckMatchBranch(ctx, env, pat, exp)
-                in addConstraint(ctx, EqConstr(patTy, patTy'))
-                 ; addConstraint(ctx, EqConstr(expTy, expTy'))
+                in addConstraint(ctx, EqConstr(span, patTy, patTy'))
+                 ; addConstraint(ctx, EqConstr(span, expTy, expTy'))
                  ; (pat', exp')
                 end
           val rest' = List.map oneBranch rest
       in (patTy, expTy, (pat0', exp0') :: rest')
       end
-  | typeCheckMatch(ctx, env, nil) = emitError(ctx, [], "invalid syntax tree: match is empty")
+  | typeCheckMatch(ctx, env, span, nil) = emitError(ctx, [span], "invalid syntax tree: match is empty")
 and typeCheckMatchBranch(ctx : Context, env : Env, pat : Pat, exp : Exp) : USyntax.Ty * USyntax.Ty * Pat * Exp
     = let val (patTy, vars, pat') = typeCheckPat(ctx, env, pat)
           val env' = { tyMap = #tyMap env
@@ -752,7 +753,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
     = let val (rowTy, vars, row') = typeCheckPatRow(ctx, env, fields)
       in if wildcard then
              let val recordTy = TyVar(sourceSpan, freshTyVar(ctx))
-                 fun oneField(label, ty) = addConstraint(ctx, UnaryConstraint(recordTy, HasField { label = label, fieldTy = ty }))
+                 fun oneField(label, ty) = addConstraint(ctx, UnaryConstraint(sourceSpan, recordTy, HasField { sourceSpan = sourceSpan, label = label, fieldTy = ty }))
              in List.app oneField rowTy
               ; (recordTy, vars, RecordPat{sourceSpan=sourceSpan, fields=row', wildcard=wildcard})
              end
@@ -770,7 +771,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
                        (case ty of
                             USyntax.FnType(span', argTy, resultTy) =>
                             let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
-                            in addConstraint(ctx, EqConstr(argTy, argTy'))
+                            in addConstraint(ctx, EqConstr(span, argTy, argTy'))
                              ; (resultTy, innerVars, InstantiatedConPat(span, longvid, SOME innerPat', List.map #1 tyargs))
                             end
                           | _ => emitError(ctx, [span], "invalid pattern")
@@ -786,7 +787,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
            SOME (TypeScheme(vars, ty), idstatus) =>
            (if idstatus = Syntax.ValueConstructor orelse idstatus = Syntax.ExceptionConstructor then
                 let val subst = ListPair.foldlEq (fn ((var, constraints), tyarg, set) =>
-                                                     ( List.app (fn c => addConstraint(ctx, UnaryConstraint(tyarg, c))) constraints
+                                                     ( List.app (fn c => addConstraint(ctx, UnaryConstraint(span, tyarg, c))) constraints
                                                      ; USyntax.TyVarMap.insert(set, var, tyarg)
                                                      )
                                                  ) USyntax.TyVarMap.empty (vars, tyargs)
@@ -795,7 +796,7 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
                        NONE => (ty', USyntax.VIdMap.empty, pat)
                      | SOME innerPat => (case ty' of
                                              USyntax.FnType(span', argTy, resultTy) => let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
-                                                                                       in addConstraint(ctx, EqConstr(argTy, argTy'))
+                                                                                       in addConstraint(ctx, EqConstr(span, argTy, argTy'))
                                                                                         ; (resultTy, innerVars, InstantiatedConPat(span, longvid, SOME innerPat', tyargs))
                                                                                        end
                                            | _ => emitError(ctx, [span], "invalid pattern")
@@ -810,13 +811,13 @@ and typeCheckPat(ctx, env, pat as WildcardPat span) : USyntax.Ty * USyntax.Ty US
     = (ty, USyntax.VIdMap.empty, pat)
   | typeCheckPat(ctx, env, TypedPat(span, pat, ty))
     = let val (inferredTy, vars, pat') = typeCheckPat(ctx, env, pat)
-      in addConstraint(ctx, EqConstr(ty, inferredTy))
+      in addConstraint(ctx, EqConstr(span, ty, inferredTy))
        ; (ty, vars, TypedPat(span, pat', ty))
       end
   | typeCheckPat(ctx, env, LayeredPat(span, vid, ty, pat))
     = let val (inferredTy, vars, pat') = typeCheckPat(ctx, env, pat)
       in case USyntax.VIdMap.find(vars, vid) of
-             NONE => ( addConstraint(ctx, EqConstr(ty, inferredTy))
+             NONE => ( addConstraint(ctx, EqConstr(span, ty, inferredTy))
                      ; (ty, USyntax.VIdMap.insert(vars, vid, ty), LayeredPat(span, vid, ty, pat'))
                      )
            | SOME _ => emitError(ctx, [span], "trying to bind the same identifier twice")
@@ -840,40 +841,40 @@ open PrettyPrint
 fun applyDefaultTypes(ctx, tvc, decs) =
     let fun doInt [] = primTy_int
           | doInt (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
-          | doInt (USyntax.IsEqType :: xs) = doInt xs
-          | doInt (USyntax.IsIntegral :: xs) = doInt xs
-          | doInt (USyntax.IsSignedReal :: xs) = doInt xs
-          | doInt (USyntax.IsRing :: xs) = doInt xs
-          | doInt (USyntax.IsField :: xs) = emitError(ctx, [], "cannot apply / operator for int")
-          | doInt (USyntax.IsSigned :: xs) = doInt xs
-          | doInt (USyntax.IsOrdered :: xs) = doInt xs
+          | doInt (USyntax.IsEqType _ :: xs) = doInt xs
+          | doInt (USyntax.IsIntegral _ :: xs) = doInt xs
+          | doInt (USyntax.IsSignedReal _ :: xs) = doInt xs
+          | doInt (USyntax.IsRing _ :: xs) = doInt xs
+          | doInt (USyntax.IsField _ :: xs) = emitError(ctx, [], "cannot apply / operator for int")
+          | doInt (USyntax.IsSigned _ :: xs) = doInt xs
+          | doInt (USyntax.IsOrdered _ :: xs) = doInt xs
         fun doReal [] = primTy_real
           | doReal (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for real")
-          | doReal (USyntax.IsEqType :: xs) = emitError(ctx, [], "real does not admit equality")
-          | doReal (USyntax.IsIntegral :: xs) = emitError(ctx, [], "div, mod is invalid for real")
-          | doReal (USyntax.IsSignedReal :: xs) = doReal xs
-          | doReal (USyntax.IsRing :: xs) = doReal xs
-          | doReal (USyntax.IsField :: xs) = doReal xs
-          | doReal (USyntax.IsSigned :: xs) = doReal xs
-          | doReal (USyntax.IsOrdered :: xs) = doReal xs
+          | doReal (USyntax.IsEqType _ :: xs) = emitError(ctx, [], "real does not admit equality")
+          | doReal (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "div, mod is invalid for real")
+          | doReal (USyntax.IsSignedReal _ :: xs) = doReal xs
+          | doReal (USyntax.IsRing _ :: xs) = doReal xs
+          | doReal (USyntax.IsField _ :: xs) = doReal xs
+          | doReal (USyntax.IsSigned _ :: xs) = doReal xs
+          | doReal (USyntax.IsOrdered _ :: xs) = doReal xs
         fun doIntOrReal [] = primTy_int
           | doIntOrReal (USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
-          | doIntOrReal (USyntax.IsEqType :: xs) = doInt xs
-          | doIntOrReal (USyntax.IsIntegral :: xs) = doInt xs
-          | doIntOrReal (USyntax.IsSignedReal :: xs) = doIntOrReal xs
-          | doIntOrReal (USyntax.IsRing :: xs) = doIntOrReal xs
-          | doIntOrReal (USyntax.IsField :: xs) = doReal xs
-          | doIntOrReal (USyntax.IsSigned :: xs) = doIntOrReal xs
-          | doIntOrReal (USyntax.IsOrdered :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsEqType _ :: xs) = doInt xs
+          | doIntOrReal (USyntax.IsIntegral _ :: xs) = doInt xs
+          | doIntOrReal (USyntax.IsSignedReal _ :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsRing _ :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsField _ :: xs) = doReal xs
+          | doIntOrReal (USyntax.IsSigned _ :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsOrdered _ :: xs) = doIntOrReal xs
         fun defaultTyForConstraints(eq, []) = primTy_unit
           | defaultTyForConstraints(eq, USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
-          | defaultTyForConstraints(eq, USyntax.IsEqType :: xs) = defaultTyForConstraints(true, xs)
-          | defaultTyForConstraints(eq, USyntax.IsIntegral :: xs) = doInt xs
-          | defaultTyForConstraints(eq, USyntax.IsSignedReal :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints(eq, USyntax.IsRing :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints(eq, USyntax.IsField :: xs) = if eq then emitError(ctx, [], "real does not admit equality") else doReal xs
-          | defaultTyForConstraints(eq, USyntax.IsSigned :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints(eq, USyntax.IsOrdered :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsEqType _ :: xs) = defaultTyForConstraints(true, xs)
+          | defaultTyForConstraints(eq, USyntax.IsIntegral _ :: xs) = doInt xs
+          | defaultTyForConstraints(eq, USyntax.IsSignedReal _ :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsRing _ :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsField _ :: xs) = if eq then emitError(ctx, [], "real does not admit equality") else doReal xs
+          | defaultTyForConstraints(eq, USyntax.IsSigned _ :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsOrdered _ :: xs) = if eq then doInt xs else doIntOrReal xs
         fun doTyVar tv = case TyVarMap.find(tvc, tv) of
                              NONE => primTy_unit
                            | SOME constraints => defaultTyForConstraints(false, constraints)
@@ -897,7 +898,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                 else
                     emitError(ctx, [span], "type constructor scope violation")
             | goTy (U.FnType(span, ty1, ty2)) = ( goTy ty1; goTy ty2 )
-          fun goUnaryConstraint (HasField { label, fieldTy }) = goTy fieldTy
+          fun goUnaryConstraint (HasField { sourceSpan, label, fieldTy }) = goTy fieldTy
             | goUnaryConstraint _ = ()
           fun goTypeScheme (U.TypeScheme (typarams, ty)) = ( List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
                                                            ; #goTy (checkTyScope (ctx, U.TyVarSet.addList (tvset, List.map #1 typarams), tyconset)) ty

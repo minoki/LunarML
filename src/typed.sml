@@ -59,20 +59,21 @@ structure TyVarSet = BinarySetFn(TyVarKey)
 structure TyVarMap = BinaryMapFn(TyVarKey)
 
 datatype UnaryConstraint
-  = HasField of { label : Syntax.Label
+  = HasField of { sourceSpan : SourcePos.span
+                , label : Syntax.Label
                 , fieldTy : Ty
                 }
-  | IsEqType
-  | IsIntegral (* Int, Word; div, mod; defaults to int *)
-  | IsSignedReal (* Int, Real; abs; defaults to int *)
-  | IsRing (* Int, Word, Real; *, +, -; defaults to int *)
-  | IsField (* Real; /; defaults to real *)
-  | IsSigned (* Int, Real; ~; defaults to int *)
-  | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
+  | IsEqType of SourcePos.span
+  | IsIntegral of SourcePos.span (* Int, Word; div, mod; defaults to int *)
+  | IsSignedReal of SourcePos.span (* Int, Real; abs; defaults to int *)
+  | IsRing of SourcePos.span (* Int, Word, Real; *, +, -, ~; defaults to int *)
+  | IsField of SourcePos.span (* Real; /; defaults to real *)
+  | IsSigned of SourcePos.span (* Int, Real; defaults to int *)
+  | IsOrdered of SourcePos.span (* NumTxt; <, >, <=, >=; defaults to int *)
 
 datatype Constraint
-  = EqConstr of Ty * Ty (* ty1 = ty2 *)
-  | UnaryConstraint of Ty * UnaryConstraint
+  = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
+  | UnaryConstraint of SourcePos.span * Ty * UnaryConstraint
 
 datatype TypeFcn = TypeFcn of TyVar list * Ty
 datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
@@ -221,14 +222,14 @@ and print_ValBind (PatBind (_, pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ p
   | print_ValBind (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
-and print_UnaryConstraint (HasField { label = label, fieldTy = fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
-  | print_UnaryConstraint IsEqType = "IsEqType"
-  | print_UnaryConstraint IsIntegral = "IsIntegral"
-  | print_UnaryConstraint IsSignedReal = "IsSignedReal"
-  | print_UnaryConstraint IsRing = "IsRing"
-  | print_UnaryConstraint IsField = "IsField"
-  | print_UnaryConstraint IsSigned = "IsSigned"
-  | print_UnaryConstraint IsOrdered = "IsOrdered"
+and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_UnaryConstraint (IsEqType _) = "IsEqType"
+  | print_UnaryConstraint (IsIntegral _) = "IsIntegral"
+  | print_UnaryConstraint (IsSignedReal _) = "IsSignedReal"
+  | print_UnaryConstraint (IsRing _) = "IsRing"
+  | print_UnaryConstraint (IsField _) = "IsField"
+  | print_UnaryConstraint (IsSigned _) = "IsSigned"
+  | print_UnaryConstraint (IsOrdered _) = "IsOrdered"
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
@@ -278,7 +279,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
                                                                                     else
                                                                                         (subst, tv :: tyvars))
                                                        (subst, []) tyvars
-        fun doUnaryConstraint(HasField{label, fieldTy}) = HasField{label=label, fieldTy=doTy fieldTy}
+        fun doUnaryConstraint(HasField{sourceSpan, label, fieldTy}) = HasField{sourceSpan=sourceSpan, label=label, fieldTy=doTy fieldTy}
           | doUnaryConstraint ct = ct
         fun doTypeScheme(TypeScheme (tyvarsWithConstraints, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
                                                                        val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
@@ -394,13 +395,13 @@ and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
            HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)
-         | IsEqType     => TyVarSet.empty
-         | IsIntegral   => TyVarSet.empty
-         | IsSignedReal => TyVarSet.empty
-         | IsRing       => TyVarSet.empty
-         | IsField      => TyVarSet.empty
-         | IsSigned     => TyVarSet.empty
-         | IsOrdered    => TyVarSet.empty
+         | IsEqType _    => TyVarSet.empty
+         | IsIntegral _   => TyVarSet.empty
+         | IsSignedReal _ => TyVarSet.empty
+         | IsRing _       => TyVarSet.empty
+         | IsField _      => TyVarSet.empty
+         | IsSigned _     => TyVarSet.empty
+         | IsOrdered _    => TyVarSet.empty
       )
 
 (* filterVarsInPat : (VId -> bool) -> Pat -> Pat *)

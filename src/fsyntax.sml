@@ -376,14 +376,14 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                                                         )
                              | _ => raise Fail ("invalid use of " ^ vidname)
                           )
-             | NONE => if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
+             | NONE => if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
                            F.AppExp(F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
                        else
                            F.TyAppExp(F.VarExp(longvid), toFTy(ctx, env, tyarg))
           )
   | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
-                     if List.exists (fn USyntax.IsEqType => true | _ => false) cts then
+                     if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
                          F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
                      else
                          F.TyAppExp(e, toFTy(ctx, env, ty))
@@ -439,7 +439,7 @@ and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
                                        [] => F.ForallType (tv, ty1)
-                                     | [U.IsEqType] => F.ForallType (tv, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool)), ty1))
+                                     | [U.IsEqType _] => F.ForallType (tv, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool)), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
@@ -447,11 +447,11 @@ and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot
             | doExp (env', (tv,cts) :: rest)
               = (case cts of
                      [] => F.TyAbsExp (tv, doExp (env', rest))
-                   | [U.IsEqType] => let val vid = freshVId(ctx, "eq")
-                                         val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
-                                         val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
-                                     in F.TyAbsExp (tv, F.FnExp(vid, eqTy, doExp(env'', rest)))
-                                     end
+                   | [U.IsEqType _] => let val vid = freshVId(ctx, "eq")
+                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
+                                           val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
+                                       in F.TyAbsExp (tv, F.FnExp(vid, eqTy, doExp(env'', rest)))
+                                       end
                    | _ => raise Fail "invalid type constraint"
                 )
       in F.SimpleBind (vid, ty', doExp(env, tvs))
@@ -461,10 +461,10 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
             | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
                                         in F.ForallType(tv, go env' xs)
                                         end
-            | go env ((tv, [U.IsEqType]) :: xs) = let val env' = env (* TODO *)
-                                                      val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
-                                                  in F.ForallType(tv, F.FnType(eqTy, go env' xs))
-                                                  end
+            | go env ((tv, [U.IsEqType _]) :: xs) = let val env' = env (* TODO *)
+                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
+                                                    in F.ForallType(tv, F.FnType(eqTy, go env' xs))
+                                                    end
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
