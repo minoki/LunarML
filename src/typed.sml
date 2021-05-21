@@ -91,7 +91,7 @@ datatype Pat = WildcardPat of SourcePos.span
 
 datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
-datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
+datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list * (* admits equality? (after type check) *) bool
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
@@ -110,7 +110,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector * Ty
      and Dec = ValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* non-recursive *)
              | RecValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* recursive (val rec) *)
-             | TypeDec of SourcePos.span * TypBind list
+             | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
      and ValBind = PatBind of SourcePos.span * Pat * Exp
@@ -214,7 +214,7 @@ and print_Dec (ValDec (_,bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list 
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
 and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
-and print_DatBind (DatBind(_, tyvars, tycon, conbinds)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
+and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
 and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
   | print_ConBind (ConBind(_, vid, SOME ty)) = "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
 and print_ValBind (PatBind (_, pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
@@ -324,10 +324,10 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
         and doTypBind(TypBind(span, tyvars, tycon, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                                           in TypBind(span, tyvars, tycon, applySubstTy subst ty)
                                                           end
-        and doDatBind(DatBind(span, tyvars, tycon, conbinds)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                                    fun doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map (applySubstTy subst) optTy)
-                                                                in DatBind(span, tyvars, tycon, List.map doConBind conbinds)
-                                                                end
+        and doDatBind(DatBind(span, tyvars, tycon, conbinds, eq)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                                        fun doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map (applySubstTy subst) optTy)
+                                                                    in DatBind(span, tyvars, tycon, List.map doConBind conbinds, eq)
+                                                                    end
         and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
     in { doExp = doExp
        , doDec = doDec
@@ -385,9 +385,9 @@ and freeTyVarsInValBinds(bound, nil, acc) = acc
   | freeTyVarsInValBinds(bound, TupleBind(_, xs, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) (* TODO *)
   | freeTyVarsInValBinds(bound, PolyVarBind(_, vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
 and freeTyVarsInTypBind(bound, TypBind(_, tyvars, tycon, ty)) = freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty)
-and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds)) = let val bound' = TyVarSet.addList(bound, tyvars)
-                                                                      in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound, conbind))) TyVarSet.empty conbinds
-                                                                      end
+and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds, _)) = let val bound' = TyVarSet.addList(bound, tyvars)
+                                                                         in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound, conbind))) TyVarSet.empty conbinds
+                                                                         end
 and freeTyVarsInConBind(bound, ConBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInConBind(bound, ConBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
@@ -819,7 +819,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                                in U.ConBind(span, vid', optPayloadTy')
                                end
                          val conbinds' = List.map doConBind conbinds
-                     in (Syntax.VIdMap.unionWith #2 (valConMap, valEnv), USyntax.DatBind(span, tyvars, tycon, conbinds') :: datbinds)
+                     in (Syntax.VIdMap.unionWith #2 (valConMap, valEnv), USyntax.DatBind(span, tyvars, tycon, conbinds', false) :: datbinds)
                      end
                val (valEnv, datbinds'') = List.foldr doDatBind2 (Syntax.VIdMap.empty, []) datbinds'
                val datbindEnv = mergeEnv(tyConEnv', envWithValEnv valEnv)

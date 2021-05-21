@@ -110,7 +110,7 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixity
                        , toTypedSyntaxEnv = InitialEnv.initialEnv_ToTypedSyntax
                        , typingEnv = InitialEnv.initialEnv
                        , tyconset = InitialEnv.initialTyConSet
-                       , toFEnv = ToFSyntax.emptyEnv
+                       , toFEnv = ToFSyntax.initialEnv
                        , fTransEnv = FTransform.initialEnv
                        }
 
@@ -121,13 +121,13 @@ fun compile({ typingContext, toFContext } : Context, { fixity, toTypedSyntaxEnv,
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
            val tyconset = Typing.checkTyScopeOfProgram(typingContext, tyconset, decs)
-           val fdecs = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
+           val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
                              , tyconset = tyconset
-                             , toFEnv = toFEnv (* not really used *)
+                             , toFEnv = toFEnv
                              , fTransEnv = fTransEnv'
                              }
        in (modifiedEnv, fdecs')

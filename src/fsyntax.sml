@@ -47,6 +47,10 @@ datatype Exp = SConExp of Syntax.SCon
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+fun TuplePat xs = let fun doFields i nil = nil
+                        | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+                  in RecordPat (doFields 1 xs, false)
+                  end
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
@@ -225,34 +229,33 @@ end (* structure FSyntax *)
 structure ToFSyntax = struct
 type Context = { nextVId : int ref
                }
-datatype Env' = MkEnv of Env
-withtype Env = { valMap : {} USyntax.VIdMap.map
-               , tyConMap : FSyntax.TyCon USyntax.TyConMap.map
-               , equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
-               , strMap : Env' Syntax.StrIdMap.map
-               }
-val emptyEnv = { valMap = USyntax.VIdMap.empty
-               , tyConMap = USyntax.TyConMap.empty
-               , equalityForTyVarMap = USyntax.TyVarMap.empty
-               , strMap = Syntax.StrIdMap.empty
-               }
+type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
+           , equalityForTyConMap : USyntax.VId USyntax.TyConMap.map
+           }
+val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
+                       , equalityForTyConMap = let open Typing InitialEnv
+                                               in List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty
+                                                             [(primTyCon_int, VId_EQUAL_int)
+                                                             ,(primTyCon_word, VId_EQUAL_word)
+                                                             ,(primTyCon_string, VId_EQUAL_string)
+                                                             ,(primTyCon_char, VId_EQUAL_char)
+                                                             ,(primTyCon_bool, VId_EQUAL_bool)
+                                                             ,(primTyCon_list, VId_EQUAL_list)
+                                                             ,(primTyCon_vector, VId_EQUAL_vector)
+                                                             ]
+                                               end
+                       }
 fun mergeEnv(env1 : Env, env2 : Env)
-    = { valMap = USyntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
-      , tyConMap = USyntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
-      , equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
-      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
+    = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
+      , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env1, #equalityForTyConMap env2)
       }
 
-fun updateEqualityForTyVarMap(f, env : Env) = { valMap = #valMap env
-                                              , tyConMap = #tyConMap env
-                                              , equalityForTyVarMap = f (#equalityForTyVarMap env)
-                                              , strMap = #strMap env
+fun updateEqualityForTyVarMap(f, env : Env) = { equalityForTyVarMap = f (#equalityForTyVarMap env)
+                                              , equalityForTyConMap = #equalityForTyConMap env
                                               }
 
-fun envWithValEnv valEnv : Env = { valMap = valEnv
-                                 , tyConMap = USyntax.TyConMap.empty
-                                 , equalityForTyVarMap = USyntax.TyVarMap.empty
-                                 , strMap = Syntax.StrIdMap.empty
+fun envWithValEnv valEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
+                                 , equalityForTyConMap = USyntax.TyConMap.empty
                                  }
 
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
@@ -392,7 +395,9 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                                                   in F.RecordExp (List.map doField fields)
                                                   end
   | toFExp(ctx, env, U.LetInExp(span, decs, e))
-    = List.foldr F.LetExp (toFExp(ctx, env, e)) (toFDecs(ctx, env, decs)) (* new environment? *)
+    = let val (env, decs) = toFDecs(ctx, env, decs)
+      in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
+      end
   | toFExp(ctx, env, U.AppExp(span, e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
   | toFExp(ctx, env, U.TypedExp(span, exp, _)) = toFExp(ctx, env, exp)
   | toFExp(ctx, env, U.IfThenElseExp(span, e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
@@ -468,37 +473,22 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
-and getEquality(ctx, env, U.TyCon(span, [], tycon))
-    = let open InitialEnv
-      in if U.eqUTyCon(tycon, Typing.primTyCon_int) then
-             F.VarExp(Syntax.MkQualified([], VId_EQUAL_int))
-         else if U.eqUTyCon(tycon, Typing.primTyCon_word) then
-             F.VarExp(Syntax.MkQualified([], VId_EQUAL_word))
-         else if U.eqUTyCon(tycon, Typing.primTyCon_string) then
-             F.VarExp(Syntax.MkQualified([], VId_EQUAL_string))
-         else if U.eqUTyCon(tycon, Typing.primTyCon_char) then
-             F.VarExp(Syntax.MkQualified([], VId_EQUAL_char))
-         else if U.eqUTyCon(tycon, Typing.primTyCon_bool) then
-             F.VarExp(Syntax.MkQualified([], VId_EQUAL_bool))
-         else if U.eqUTyCon(tycon, Typing.primTyCon_real) then
-             raise Fail "'real' does not admit equality; this should have been a type error"
-         else if U.eqUTyCon(tycon, Typing.primTyCon_exn) then
-             raise Fail "'exn' does not admit equality; this should have been a type error"
-         else
-             raise Fail "equality for user-defined data types are not implemented yet"
-      end
-  | getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
+and getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
     = if U.eqUTyCon(tycon, Typing.primTyCon_ref) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_ref)), toFTy(ctx, env, tyarg))
-      else if U.eqUTyCon(tycon, Typing.primTyCon_list) then
-          F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_list)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
       else if U.eqUTyCon(tycon, Typing.primTyCon_array) then
           F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_array)), toFTy(ctx, env, tyarg))
-      else if U.eqUTyCon(tycon, Typing.primTyCon_vector) then
-          F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_vector)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
       else
-          raise Fail "equality for user-defined data types are not implemented yet"
-  | getEquality (ctx, env, U.TyCon(span, tyargs, longtycon)) = raise Fail "equality for used-defined data types are not implemented yet"
+          (case USyntax.TyConMap.find(#equalityForTyConMap env, tycon) of
+               NONE => raise Fail (USyntax.PrettyPrint.print_TyCon tycon ^ " does not admit equality")
+             | SOME vid => F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
+          )
+  | getEquality (ctx, env, U.TyCon(span, tyargs, tycon)) = (case USyntax.TyConMap.find(#equalityForTyConMap env, tycon) of
+                                                                NONE => raise Fail (USyntax.PrettyPrint.print_TyCon tycon ^ " does not admit equality")
+                                                              | SOME vid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp(exp, toFTy(ctx, env, tyarg))) (F.VarExp(Syntax.MkQualified([], vid))) tyargs
+                                                                            in List.foldl (fn (tyarg, exp) => F.AppExp(exp, getEquality(ctx, env, tyarg))) typesApplied tyargs
+                                                                            end
+                                                           )
   | getEquality (ctx, env, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap env, tv) of
                                                      NONE => raise Fail "equality for the type variable not found"
                                                    | SOME vid => F.VarExp(Syntax.MkQualified([], vid))
@@ -507,18 +497,91 @@ and getEquality(ctx, env, U.TyCon(span, [], tycon))
                                                          in F.RecordEqualityExp (List.map doField fields)
                                                          end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
-and toFDecs(ctx, env, []) = []
+and toFDecs(ctx, env, []) = (env, [])
   | toFDecs(ctx, env, U.ValDec(span, tvs, valbinds, valenv) :: decs)
-    = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds @ toFDecs (ctx, env, decs)
+    = let val dec = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds
+          val (env, decs) = toFDecs (ctx, env, decs)
+      in (env, dec @ decs)
+      end
   | toFDecs(ctx, env, U.RecValDec(span, tvs, valbinds, valenv) :: decs)
-    = F.RecValDec (List.map (doValBind ctx env) valbinds) :: toFDecs (ctx, env, decs)
+    = let val dec = F.RecValDec (List.map (doValBind ctx env) valbinds)
+          val (env, decs) = toFDecs (ctx, env, decs)
+      in (env, dec :: decs)
+      end
   | toFDecs(ctx, env, U.TypeDec(span, typbinds) :: decs) = toFDecs(ctx, env, decs)
   | toFDecs(ctx, env, U.DatatypeDec(span, datbinds) :: decs)
-    = F.DatatypeDec (List.map (fn datbind => doDatBind(ctx, env, datbind)) datbinds) :: toFDecs(ctx, env, decs)
-  | toFDecs(ctx, env, U.ExceptionDec(span, exbinds) :: decs) = List.map (fn exbind => doExBind(ctx, env, exbind)) exbinds @ toFDecs(ctx, env, decs)
-and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
+    = let val dec = F.DatatypeDec (List.map (fn datbind => doDatBind(ctx, env, datbind)) datbinds)
+          val (env, valbinds) = genEqualitiesForDatatypes(ctx, env, datbinds)
+          val (env, decs) = toFDecs(ctx, env, decs)
+      in (env, dec :: (if List.null valbinds then decs else F.RecValDec valbinds :: decs))
+      end
+  | toFDecs(ctx, env, U.ExceptionDec(span, exbinds) :: decs)
+    = let val exbinds = List.map (fn exbind => doExBind(ctx, env, exbind)) exbinds
+          val (env, decs) = toFDecs(ctx, env, decs)
+      in (env, exbinds @ decs)
+      end
+and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
+and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
+    = let val nameMap = List.foldl (fn (U.DatBind(span, tyvars, tycon as USyntax.MkTyCon(name, _), conbinds, true), map) => USyntax.TyConMap.insert(map, tycon, freshVId(ctx, "EQUAL" ^ name))
+                                   | (_, map) => map) USyntax.TyConMap.empty datbinds
+          val env' = { equalityForTyVarMap = #equalityForTyVarMap env
+                     , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env, nameMap)
+                     }
+          fun doDatBind(U.DatBind(span, tyvars, tycon, conbinds, true), valbinds)
+              = let val vid = USyntax.TyConMap.lookup(nameMap, tycon)
+                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyCon([], Typing.primTyCon_bool))
+                    val tyvars'' = List.map F.TyVar tyvars
+                    val ty = List.foldr (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (eqTy (F.TyCon(tyvars'', tycon))) tyvars
+                    val ty = List.foldr F.ForallType ty tyvars
+                    val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
+                    val eqForTyVars = List.foldl USyntax.TyVarMap.insert' USyntax.TyVarMap.empty tyvars'
+                    val env'' = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env', eqForTyVars)
+                                , equalityForTyConMap = #equalityForTyConMap env'
+                                }
+                    val body = let val param = freshVId(ctx, "p")
+                                   val paramTy = let val ty = F.TyCon(tyvars'', tycon)
+                                                 in F.PairType(ty, ty)
+                                                 end
+                               in F.FnExp ( param
+                                          , paramTy
+                                          , F.CaseExp ( SourcePos.nullSpan
+                                                      , F.VarExp(Syntax.MkQualified([], param))
+                                                      , paramTy
+                                                      , List.foldr (fn (U.ConBind (span, conName, NONE), rest) =>
+                                                                       let val conPat = F.InstantiatedConPat(Syntax.MkQualified([], conName), NONE, tyvars'')
+                                                                       in ( F.TuplePat [conPat, conPat]
+                                                                          , F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true))
+                                                                          ) :: rest
+                                                                       end
+                                                                   | (U.ConBind (span, conName, SOME payloadTy), rest) =>
+                                                                     let val payload1 = freshVId(ctx, "a")
+                                                                         val payload2 = freshVId(ctx, "b")
+                                                                         val payloadEq = getEquality(ctx, env'', payloadTy)
+                                                                         val payloadTy = toFTy(ctx, env, payloadTy)
+                                                                     in ( F.TuplePat [F.InstantiatedConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload1, payloadTy)), tyvars''), F.InstantiatedConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload2, payloadTy)), tyvars'')]
+                                                                        , F.AppExp(payloadEq, F.TupleExp [F.VarExp(Syntax.MkQualified([], payload1)), F.VarExp(Syntax.MkQualified([], payload2))])
+                                                                        ) :: rest
+                                                                     end
+                                                                   )
+                                                                   [(F.WildcardPat, F.VarExp(Syntax.MkQualified([], InitialEnv.VId_false)))]
+                                                                   conbinds
+                                                      )
+                                          )
+                               end
+                    val body = List.foldr (fn ((tv, eqParam), ty) => let val paramTy = eqTy (F.TyVar tv)
+                                                                     in F.FnExp ( eqParam
+                                                                                , paramTy
+                                                                                , body
+                                                                                )
+                                                                     end) body tyvars'
+                    val body = List.foldr F.TyAbsExp body tyvars
+                in F.SimpleBind (vid, ty, body) :: valbinds
+                end
+            | doDatBind(_, valbinds) = valbinds
+      in (env', List.foldr doDatBind [] datbinds)
+      end
 and doExBind(ctx, env, U.ExBind(span, vid as USyntax.MkVId(name, _), optTy)) = let val tag = freshVId(ctx, name)
                                                                                in F.ExceptionDec { conName = vid
                                                                                                  , tagName = tag
@@ -527,7 +590,10 @@ and doExBind(ctx, env, U.ExBind(span, vid as USyntax.MkVId(name, _), optTy)) = l
                                                                                                                  | SOME ty => SOME (toFTy(ctx, env, ty))
                                                                                                  }
                                                                                end
-fun programToFDecs(ctx, env, []) = []
-  | programToFDecs(ctx, env, USyntax.StrDec decs :: topdecs) = toFDecs(ctx, env, decs) @ programToFDecs(ctx, env, topdecs)
+fun programToFDecs(ctx, env, []) = (env, [])
+  | programToFDecs(ctx, env, USyntax.StrDec decs :: topdecs) = let val (env, decs) = toFDecs(ctx, env, decs)
+                                                                   val (env, decs') = programToFDecs(ctx, env, topdecs)
+                                                               in (env, decs @ decs')
+                                                               end
 end (* local *)
 end (* structure ToFSyntax *)

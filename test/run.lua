@@ -57,6 +57,7 @@ local should_run = {
   "exception.sml",
   "local_exception.sml",
   "local_datatype.sml",
+  "equality.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
