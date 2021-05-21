@@ -364,10 +364,6 @@ local function _read(t)
   return t.payload
 end
 
-local function _Int_toString(x)
-  return string.gsub(tostring(x), "-", "~")
-end
-
 -- Array
 local function _Array_array(t)
   local n, init = t[1], t[2]

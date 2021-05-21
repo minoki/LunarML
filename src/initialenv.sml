@@ -101,18 +101,17 @@ val VId_EQUAL_vector = newVId "=@vector"
 val VId_EQUAL_exntag = newVId "=@exntag"
 
 (* Int *)
-val VId_Int_PLUS     = newVId "Int.+"
-val VId_Int_MINUS    = newVId "Int.-"
-val VId_Int_TIMES    = newVId "Int.*"
-val VId_Int_div      = newVId "Int.div"
-val VId_Int_mod      = newVId "Int.mod"
-val VId_Int_TILDE    = newVId "Int.~"
-val VId_Int_abs      = newVId "Int.abs"
-val VId_Int_LT       = newVId "Int.<"
-val VId_Int_LE       = newVId "Int.<="
-val VId_Int_GT       = newVId "Int.>"
-val VId_Int_GE       = newVId "Int.>="
-val VId_Int_toString = newVId "Int.toString"
+val VId_Int_PLUS = newVId "Int.+"
+val VId_Int_MINUS = newVId "Int.-"
+val VId_Int_TIMES = newVId "Int.*"
+val VId_Int_div = newVId "Int.div"
+val VId_Int_mod = newVId "Int.mod"
+val VId_Int_TILDE = newVId "Int.~"
+val VId_Int_abs = newVId "Int.abs"
+val VId_Int_LT = newVId "Int.<"
+val VId_Int_LE = newVId "Int.<="
+val VId_Int_GT = newVId "Int.>"
+val VId_Int_GE = newVId "Int.>="
 
 (* Word *)
 val VId_Word_PLUS  = newVId "Word.+"
@@ -231,7 +230,6 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                                           ,(">", VId_Int_GT)
                                           ,(">=", VId_Int_GE)
                                            (* min, max, sign, sameSign, fmt *)
-                                          ,("toString", VId_Int_toString)
                                            (* scan, fromString *)
                                           ]
                            , tyConMap = mkTyConMap []
@@ -478,8 +476,6 @@ val initialEnv : Typing.Env
                                           ,(VId_Int_GE, TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
                                           ,(VId_Int_TILDE, TypeScheme ([], primTy_int --> primTy_int))
                                           ,(VId_Int_abs, TypeScheme ([], primTy_int --> primTy_int))
-                                          ,(VId_Int_toString, TypeScheme ([], primTy_int --> primTy_string))
-                                          (* ,(VId_Int_fromString, TypeScheme ([], primTy_string --> optionOf primTy_int)) *)
                                           ]
                            , strMap = mkStrMap []
                            , boundTyVars = USyntax.TyVarSet.empty

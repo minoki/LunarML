@@ -4,6 +4,7 @@ structure Lua = struct
 open LunarML.Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
 val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
+val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
 fun field (t : value, name : string) = sub (t, fromString name)
@@ -34,13 +35,13 @@ type unit = unit
 type exn = exn
 exception Bind = Bind
 exception Match = Match
-(* exception Chr = Chr *)
+exception Chr
 exception Div = Div
-(* exception Domain = Domain *)
+exception Domain
 exception Fail = Fail
 exception Overflow = Overflow
 exception Size = Size
-(* exception Span = Span *)
+exception Span
 exception Subscript = Subscript
 (*
 val exnName : exn -> string
@@ -72,12 +73,59 @@ end;
 
 structure Int = struct
 type int = int
-open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, toString *)
+open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
 local
     val stringlib = Lua.global "string"
     val string_match = Lua.field (stringlib, "match")
+    val string_gsub = Lua.field (stringlib, "gsub")
+    val tostring = Lua.global "tostring"
     val tonumber = Lua.global "tonumber"
+    val mathlib = Lua.global "math"
+    val math_maxinteger = Lua.field (mathlib, "maxinteger")
+    val math_mininteger = Lua.field (mathlib, "mininteger")
 in
+(* toLarge, fromLarge *)
+val toInt : int -> int = fn x => x
+val fromInt : int -> int = fn x => x
+val precision : int option = let fun computeWordSize (x : int, n) = if x = 0 then
+                                                                        n
+                                                                    else
+                                                                        computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
+                             in SOME (computeWordSize (Lua.unsafeFromValue math_maxinteger, 1))
+                             end
+val minInt : int option = SOME (Lua.unsafeFromValue math_mininteger)
+val maxInt : int option = SOME (Lua.unsafeFromValue math_maxinteger)
+(*
+val quot : int * int -> int
+val rem : int * int -> int
+*)
+val compare : int * int -> order = fn (x, y) => if x = y then
+                                                    EQUAL
+                                                else if x < y then
+                                                    LESS
+                                                else
+                                                    GREATER
+val min : int * int -> int = fn (x, y) => if x < y then
+                                              x
+                                          else
+                                              y
+val max : int * int -> int = fn (x, y) => if x < y then
+                                              y
+                                          else
+                                              x
+val sign : int -> int = fn x => if x > 0 then
+                                    1
+                                else if x < 0 then
+                                    ~1
+                                else
+                                    0
+val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
+(* fmt *)
+fun toString (x : int) : string = let val result = Lua.call tostring (vector [Lua.fromInt x])
+                                      val result = Lua.call string_gsub (vector [Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"])
+                                  in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                  end
+(* scan *)
 fun fromString (s : string) : int option = let val result = Lua.call string_match (vector [Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"])
                                            in if Lua.isNil (Vector.sub (result, 0)) then
                                                   NONE
@@ -95,13 +143,98 @@ end
 end;
 
 structure Word = struct
+local
+    val mathlib = Lua.global "math"
+    val math_maxinteger = Lua.field (mathlib, "maxinteger")
+    val stringlib = Lua.global "string"
+    val string_format = Lua.field (mathlib, "format")
+in
 type word = word
 open LunarML.Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
+val wordSize : int = let fun computeWordSize (x : int, n : int) = if x = 0 then
+                                                                      n
+                                                                  else
+                                                                      computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
+                     in computeWordSize (Lua.unsafeFromValue math_maxinteger, 1)
+                     end
+(* toLarge, toLargeX, toLargeWord, toLargeWordX, fromLarge, fromLargeWord, toLargeInt, toLargeIntX, fromLargeInt *)
+val toInt : word -> int = fn x => if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
+                                      raise Overflow
+                                  else
+                                      Lua.unsafeFromValue (Lua.fromWord x)
+val toIntX : word -> int = fn x => Lua.unsafeFromValue (Lua.fromWord x)
+val fromInt : int -> word = fn x => Lua.unsafeFromValue (Lua.fromInt x)
+val andb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.andb (Lua.fromWord x, Lua.fromWord y))
+val orb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.orb (Lua.fromWord x, Lua.fromWord y))
+val xorb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.xorb (Lua.fromWord x, Lua.fromWord y))
+val notb : word -> word = fn x => Lua.unsafeFromValue (Lua.notb (Lua.fromWord x))
+val << : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
+                                                0w0
+                                            else
+                                                Lua.unsafeFromValue (Lua.<< (Lua.fromWord x, Lua.fromWord y))
+val >> : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
+                                                0w0
+                                            else
+                                                Lua.unsafeFromValue (Lua.>> (Lua.fromWord x, Lua.fromWord y))
+val ~>> : word * word -> word = fn (x, y) => if y >= fromInt (Int.- (wordSize, 1)) then
+                                                 if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
+                                                     ~(0w1)
+                                                 else
+                                                     0w0
+                                             else
+                                                 Lua.unsafeFromValue (Lua.// (Lua.fromWord x, Lua.fromWord (<< (0w1, y))))
+val compare : word * word -> order = fn (x, y) => if x = y then
+                                                      EQUAL
+                                                  else if x < y then
+                                                      LESS
+                                                  else
+                                                      GREATER
+val min : word * word -> word = fn (x, y) => if x < y then
+                                                 x
+                                             else
+                                                 y
+val max : word * word -> word = fn (x, y) => if x < y then
+                                                 y
+                                             else
+                                                 x
+(* fmt *)
+val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call string_format (vector [Lua.fromString "%X", Lua.fromWord x]), 0))
+(* scan, fromString *)
+end
 end;
 
 structure Real = struct
 type real = real
-open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >=, toString *)
+open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
+end;
+
+structure Math = struct
+type real = real
+local
+    val mathlib = Lua.global "math"
+    val math_atan = Lua.field (mathlib, "atan")
+    val math_log = Lua.field (mathlib, "log")
+in
+val pi : real = Lua.unsafeFromValue (Lua.field (mathlib, "pi"))
+(* val e : real *)
+val sqrt : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "sqrt"))
+val sin : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "sin"))
+val cos : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "cos"))
+val tan : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "tan"))
+val asin : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "asin"))
+val acos : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "acos"))
+val atan : real -> real = Lua.unsafeFromValue math_atan
+val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call math_atan (vector [Lua.fromReal y, Lua.fromReal x]), 0))
+val exp : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "exp"))
+val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
+val ln : real -> real = Lua.unsafeFromValue math_log
+val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call math_log (vector [Lua.fromReal x, Lua.fromInt 10]), 0))
+(*
+val sinh : real -> real
+val cosh : real -> real
+val tanh : real -> real
+*)
+end
 end;
 
 structure Char = struct

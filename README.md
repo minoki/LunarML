@@ -40,10 +40,13 @@ structure General : sig
   type exn = exn
   exception Bind
   exception Match
+  exception Chr
   exception Div
+  exception Domain
   exception Fail of string
   exception Overflow
   exception Size
+  exception Span
   exception Subscript
   datatype order = LESS | EQUAL | GREATER
   val ! : 'a ref -> 'a
@@ -76,33 +79,58 @@ val not = Bool.not
 
 structure Int : sig
   type int = int
+  val toInt : int -> int
+  val fromInt : int -> int
+  val precision : int option
+  val minInt : int option
+  val maxInt : int option
   val + : int * int -> int
   val - : int * int -> int
   val * : int * int -> int
   val div : int * int -> int
   val mod : int * int -> int
-  val ~ : int -> int
-  val abs : int -> int
+  val compare : int * int -> order
   val < : int * int -> bool
   val <= : int * int -> bool
   val > : int * int -> bool
   val >= : int * int -> bool
+  val ~ : int -> int
+  val abs : int -> int
+  val min : int * int -> int
+  val max : int * int -> int
+  val sign : int -> int
+  val sameSign : int * int -> bool
   val toString : int -> string
   val fromString : string -> int option
 end
 
 structure Word : sig
   type word = word
+  val wordSize : int
+  val toInt : word -> int
+  val toIntX : word -> int
+  val fromInt : int -> word
+  val andb : word * word -> word
+  val orb : word * word -> word
+  val xorb : word * word -> word
+  val notb : word -> word
+  val << : word * word -> word
+  val >> : word * word -> word
+  val ~>> : word * word -> word
   val + : word * word -> word
   val - : word * word -> word
   val * : word * word -> word
   val div : word * word -> word
   val mod : word * word -> word
   val ~ : word -> word
+  val compare : word * word -> order
   val < : word * word -> bool
   val <= : word * word -> bool
   val > : word * word -> bool
   val >= : word * word -> bool
+  val min : word * word -> word
+  val max : word * word -> word
+  val toString : word -> string
 end
 
 structure Real : sig
@@ -117,6 +145,23 @@ structure Real : sig
   val <= : real * real -> bool
   val > : real * real -> bool
   val >= : real * real -> bool
+end
+
+structure Math : sig
+  type real = real
+  val pi : real
+  val sqrt : real -> real
+  val sin : real -> real
+  val cos : real -> real
+  val tan : real -> real
+  val asin : real -> real
+  val acos : real -> real
+  val atan : real -> real
+  val atan2 : real * real -> real
+  val exp : real -> real
+  val pow : real * real -> real
+  val ln : real -> real
+  val log10 : real -> real
 end
 
 structure Char : sig
@@ -258,6 +303,7 @@ structure Lua : sig
   val isFalsy : value -> bool  (* not x *)
   val fromBool : bool -> value
   val fromInt : int -> value
+  val fromWord : word -> value
   val fromReal : real -> value
   val fromString : string -> value
   val unsafeToValue : 'a -> value

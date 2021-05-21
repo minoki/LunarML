@@ -116,7 +116,6 @@ val builtins
                     ,(VId_Int_TILDE, "_negate_int") (* may raise Overflow *)
                     ,(VId_Int_div, "_div_int") (* may raise Overflow/Div *)
                     ,(VId_Int_mod, "_mod_int") (* may raise Div *)
-                    ,(VId_Int_toString, "_Int_toString")
                     ,(VId_Int_LT, "_LT")
                     ,(VId_Int_GT, "_GT")
                     ,(VId_Int_LE, "_LE")
