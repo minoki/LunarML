@@ -54,7 +54,7 @@ fun isWildcardPat F.WildcardPat = true
   | isWildcardPat (F.SConPat _) = false
   | isWildcardPat (F.VarPat _) = false
   | isWildcardPat (F.RecordPat (fields, _)) = List.all (fn (label, pat) => isWildcardPat pat) fields
-  | isWildcardPat (F.InstantiatedConPat (longvid, optPat, tyargs)) = false (* TODO *)
+  | isWildcardPat (F.ConPat (longvid, optPat, tyargs)) = false (* TODO *)
   | isWildcardPat (F.LayeredPat _) = false
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
@@ -162,7 +162,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                            (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
                            fields
             | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
-            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
+            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.ConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
               = (case USyntax.VIdMap.find(dataConMap, vid) of
                      SOME dataConTy => let val payloadTy = getPayloadTy(tyargs, dataConTy)
                                        in if ty = FSyntax.TyCon([], Typing.primTyCon_exn) then
@@ -176,7 +176,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                        end
                   | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
                 )
-            | genMatcher (env as { exnConMap, ... }) exp ty (F.InstantiatedConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
+            | genMatcher (env as { exnConMap, ... }) exp ty (F.ConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
               = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                     exp
                 else if USyntax.eqVId(vid, InitialEnv.VId_false) then
@@ -192,19 +192,19 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
             | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) innerPat) fields)
-            | genBinders env exp (F.InstantiatedConPat(longvid, SOME innerPat, tyargs)) = if USyntax.eqULongVId(longvid, Syntax.MkQualified([], InitialEnv.VId_ref)) then
-                                                                                              case tyargs of
-                                                                                                  [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EXCLAM)), tyarg), exp)) innerPat
-                                                                                                | _ => raise Fail "invalid type arguments to 'ref'"
-                                                                                          else
-                                                                                              genBinders env (F.DataPayloadExp exp) innerPat
-            | genBinders env exp (F.InstantiatedConPat(longvid, NONE, tyargs)) = []
+            | genBinders env exp (F.ConPat(longvid, SOME innerPat, tyargs)) = if USyntax.eqULongVId(longvid, Syntax.MkQualified([], InitialEnv.VId_ref)) then
+                                                                                  case tyargs of
+                                                                                      [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EXCLAM)), tyarg), exp)) innerPat
+                                                                                    | _ => raise Fail "invalid type arguments to 'ref'"
+                                                                              else
+                                                                                  genBinders env (F.DataPayloadExp exp) innerPat
+            | genBinders env exp (F.ConPat(longvid, NONE, tyargs)) = []
             | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
           and isExhaustive env F.WildcardPat = true
             | isExhaustive env (F.SConPat _) = false
             | isExhaustive env (F.VarPat _) = true
             | isExhaustive env (F.RecordPat (row, _)) = List.all (fn (_, e) => isExhaustive env e) row
-            | isExhaustive env (F.InstantiatedConPat (longvid, pat, _)) = false (* TODO *)
+            | isExhaustive env (F.ConPat (longvid, pat, _)) = false (* TODO *)
             | isExhaustive env (F.LayeredPat (_, _, innerPat)) = isExhaustive env innerPat
           fun doDecs env [] = (env, [])
             | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
@@ -228,10 +228,10 @@ fun freeVarsInPat F.WildcardPat = USyntax.VIdSet.empty
   | freeVarsInPat (F.SConPat _) = USyntax.VIdSet.empty
   | freeVarsInPat (F.VarPat (vid, _)) = USyntax.VIdSet.singleton vid
   | freeVarsInPat (F.RecordPat (fields, wildcard)) = List.foldl (fn ((_, pat), acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) USyntax.VIdSet.empty fields
-  | freeVarsInPat (F.InstantiatedConPat (longvid, optPat, tyargs)) = (case optPat of
-                                                                          NONE => USyntax.VIdSet.empty
-                                                                        | SOME pat => freeVarsInPat pat
-                                                                     )
+  | freeVarsInPat (F.ConPat (longvid, optPat, tyargs)) = (case optPat of
+                                                              NONE => USyntax.VIdSet.empty
+                                                            | SOME pat => freeVarsInPat pat
+                                                         )
   | freeVarsInPat (F.LayeredPat (vid, ty, pat)) = USyntax.VIdSet.add (freeVarsInPat pat, vid)
 fun removeFromEnv (vid, env as { vidMap } : Env) = if USyntax.VIdMap.inDomain (vidMap, vid) then
                                                        { vidMap = #1 (USyntax.VIdMap.remove (vidMap, vid)) }
@@ -436,8 +436,8 @@ fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.SConPat _) = USyntax.VIdSet.empty
   | doPat (F.VarPat _) = USyntax.VIdSet.empty
   | doPat (F.RecordPat (fields, wildcard)) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty fields
-  | doPat (F.InstantiatedConPat (Syntax.MkQualified (_, vid), NONE, tyargs)) = USyntax.VIdSet.singleton vid
-  | doPat (F.InstantiatedConPat (Syntax.MkQualified (_, vid), SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
+  | doPat (F.ConPat (Syntax.MkQualified (_, vid), NONE, tyargs)) = USyntax.VIdSet.singleton vid
+  | doPat (F.ConPat (Syntax.MkQualified (_, vid), SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
   | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
 (* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
 fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.VIdSet.empty, exp)

@@ -14,7 +14,7 @@ datatype Pat = WildcardPat
              | SConPat of Syntax.SCon
              | VarPat of USyntax.VId * Ty
              | RecordPat of (Syntax.Label * Pat) list * bool
-             | InstantiatedConPat of USyntax.LongVId * Pat option * Ty list
+             | ConPat of USyntax.LongVId * Pat option * Ty list
              | LayeredPat of USyntax.VId * Ty * Pat
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
@@ -120,7 +120,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doPat (pat as SConPat _) = pat
           | doPat (VarPat (vid, ty)) = VarPat (vid, doTy ty)
           | doPat (RecordPat (fields, wildcard)) = RecordPat (List.map (fn (label, pat) => (label, doPat pat)) fields, wildcard)
-          | doPat (InstantiatedConPat (longvid, optPat, tyargs)) = InstantiatedConPat (longvid, Option.map doPat optPat, List.map doTy tyargs)
+          | doPat (ConPat (longvid, optPat, tyargs)) = ConPat (longvid, Option.map doPat optPat, List.map doTy tyargs)
           | doPat (LayeredPat (vid, ty, pat)) = LayeredPat (vid, doTy ty, doPat pat)
         fun doConBind (ConBind (vid, optTy)) = ConBind (vid, Option.map doTy optTy)
         fun doDatBind (DatBind (tyvars, tycon, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
@@ -187,7 +187,7 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
   | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (InstantiatedConPat(longvid, pat, tyargs)) = "InstantiatedConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (ConPat(longvid, pat, tyargs)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -268,7 +268,7 @@ local structure U = USyntax
       (* toFTy : Context * Env * USyntax.Ty -> FSyntax.Ty *)
       (* toFPat : Context * Env * USyntax.Pat -> unit USyntax.VIdMap.map * FSyntax.Pat *)
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
-      (* toFDecs : Context * Env * USyntax.Dec list -> FSyntax.Dec list *)
+      (* toFDecs : Context * Env * USyntax.Dec list -> Env * FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
       val overloads = let open Typing InitialEnv
                       in List.foldl (fn ((vid, xs), m) => USyntax.VIdMap.insert (m, vid, List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty xs)) USyntax.VIdMap.empty
@@ -357,9 +357,9 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                                        in (USyntax.VIdMap.empty, F.RecordPat(List.map doField fields, wildcard)) (* TODO *)
                                                                        end
   | toFPat(ctx, env, U.ConPat(span, longvid, optpat)) = toFPat(ctx, env, U.InstantiatedConPat(span, longvid, optpat, [])) (* should not reach here *)
-  | toFPat(ctx, env, U.InstantiatedConPat(span, longvid, NONE, tyargs)) = (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+  | toFPat(ctx, env, U.InstantiatedConPat(span, longvid, NONE, tyargs)) = (USyntax.VIdMap.empty, F.ConPat(longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
   | toFPat(ctx, env, U.InstantiatedConPat(span, longvid, SOME payloadPat, tyargs)) = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
-                                                                                     in (USyntax.VIdMap.empty, F.InstantiatedConPat(longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+                                                                                     in (USyntax.VIdMap.empty, F.ConPat(longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
                                                                                      end
   | toFPat(ctx, env, U.TypedPat(_, pat, _)) = toFPat(ctx, env, pat)
   | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
@@ -423,7 +423,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
             | isExhaustive (F.SConPat _) = false
             | isExhaustive (F.VarPat _) = true
             | isExhaustive (F.RecordPat _) = false (* exn is not a record *)
-            | isExhaustive (F.InstantiatedConPat _) = false (* exn is open *)
+            | isExhaustive (F.ConPat _) = false (* exn is open *)
             | isExhaustive (F.LayeredPat (_, _, pat)) = isExhaustive pat
           val matches' = List.map doMatch matches
           val matches'' = if List.exists (fn (pat, _) => isExhaustive pat) matches' then
@@ -550,7 +550,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                       , F.VarExp(Syntax.MkQualified([], param))
                                                       , paramTy
                                                       , List.foldr (fn (U.ConBind (span, conName, NONE), rest) =>
-                                                                       let val conPat = F.InstantiatedConPat(Syntax.MkQualified([], conName), NONE, tyvars'')
+                                                                       let val conPat = F.ConPat(Syntax.MkQualified([], conName), NONE, tyvars'')
                                                                        in ( F.TuplePat [conPat, conPat]
                                                                           , F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true))
                                                                           ) :: rest
@@ -560,7 +560,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                                          val payload2 = freshVId(ctx, "b")
                                                                          val payloadEq = getEquality(ctx, env'', payloadTy)
                                                                          val payloadTy = toFTy(ctx, env, payloadTy)
-                                                                     in ( F.TuplePat [F.InstantiatedConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload1, payloadTy)), tyvars''), F.InstantiatedConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload2, payloadTy)), tyvars'')]
+                                                                     in ( F.TuplePat [F.ConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload1, payloadTy)), tyvars''), F.ConPat(Syntax.MkQualified([], conName), SOME (F.VarPat(payload2, payloadTy)), tyvars'')]
                                                                         , F.AppExp(payloadEq, F.TupleExp [F.VarExp(Syntax.MkQualified([], payload1)), F.VarExp(Syntax.MkQualified([], payload2))])
                                                                         ) :: rest
                                                                      end
