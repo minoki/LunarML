@@ -347,7 +347,7 @@ fun putPureTo ctx env Return (stmts, exp : string) = String.concat stmts ^ inden
 and putImpureTo ctx env Return (stmts, exp : string) = String.concat stmts ^ indent env ^ "return " ^ exp ^ "\n"
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ exp ^ "\n"
   | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
-  | putImpureTo ctx env Discard (stmts, exp) = String.concat stmts ^ indent env ^ "local _ = " ^ exp ^ "\n"
+  | putImpureTo ctx env Discard (stmts, exp) = String.concat stmts ^ indent env ^ "type((" ^ exp ^ "))\n"
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
                                                        in cont (stmts @ [indent env ^ "local " ^ dest ^ " = " ^ exp ^ "\n"], dest)
                                                        end
