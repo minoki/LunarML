@@ -253,10 +253,13 @@ fun mergeEnv(env1, env2) = { tyMap = USyntax.TyConMap.unionWith #2 (#tyMap env1,
 fun unify(ctx : Context, env : Env, nil : Constraint list) : unit = ()
   | unify(ctx, env, ct :: ctrs)
     = (case ct of
-           (* TODO: Disallow unifying NamedTyVar *)
            EqConstr(span1, TyVar(span2, tv as AnonymousTyVar _), ty) => unifyTyVarAndTy(ctx, env, span1, tv, ty, ctrs)
          | EqConstr(span1, ty, TyVar(span2, tv as AnonymousTyVar _)) => unifyTyVarAndTy(ctx, env, span1, tv, ty, ctrs)
-         | EqConstr(span1, TyVar(span2, tv as NamedTyVar (name, eq, x)), TyVar(span3, tv' as NamedTyVar (name', eq', x'))) => if USyntax.eqUTyVar (tv, tv') then () else emitError(ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
+         | EqConstr(span1, TyVar(span2, tv as NamedTyVar (name, eq, x)), TyVar(span3, tv' as NamedTyVar (name', eq', x'))) =>
+           if USyntax.eqUTyVar (tv, tv') then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               emitError(ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
          | EqConstr(span1, TyVar(span2, NamedTyVar (name, eq, _)), ty) => emitError(ctx, [span1, span2], "cannot unify named type variable: " ^ name)
          | EqConstr(span1, ty, TyVar(span2, NamedTyVar (name, eq, _))) => emitError(ctx, [span1, span2], "cannot unify named type variable: " ^ name)
          | EqConstr(span, FnType(_, s0, s1), FnType(_, t0, t1)) => unify(ctx, env, EqConstr(span, s0, t0) :: EqConstr(span, s1, t1) :: ctrs)
@@ -941,7 +944,7 @@ fun applyDefaultTypes(ctx, tvc, decs) =
                            | SOME constraints => defaultTyForConstraints(false, constraints)
         val freeTyVars = USyntax.freeTyVarsInDecs(USyntax.TyVarSet.empty, decs)
         val subst = USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
-    in #doDecs (USyntax.mapTy (ctx, subst)) decs
+    in #doDecs (USyntax.mapTy (ctx, subst, false)) decs
     end
 
 local structure U = USyntax
@@ -1060,7 +1063,7 @@ fun typeCheckTopDec(ctx, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
     let val (env', decs') = typeCheckDecs(ctx, env, decs)
         val subst = !(#tyVarSubst ctx)
         val tvc = !(#tyVarConstraints ctx)
-        val decs'' = #doDecs (USyntax.mapTy (ctx, subst)) decs'
+        val decs'' = #doDecs (USyntax.mapTy (ctx, subst, false)) decs'
         val decs''' = applyDefaultTypes(ctx, tvc, decs'')
     in (env', USyntax.StrDec decs''')
     end

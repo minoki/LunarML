@@ -269,11 +269,11 @@ fun applySubstTy subst =
     in substTy
     end
 
-(* mapTy : Context * Ty TyVarMap.map -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doValBind : ValBind -> ValBind } *)
-fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConstraints : 'c, tyVarSubst : 'd }, subst) =
+(* mapTy : Context * Ty TyVarMap.map * bool -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doValBind : ValBind -> ValBind } *)
+fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConstraints : 'c, tyVarSubst : 'd }, subst, avoidCollision) =
     let val doTy = applySubstTy subst
         val range = TyVarMap.foldl (fn (ty, tyvarset) => TyVarSet.union(freeTyVarsInTy(TyVarSet.empty, ty), tyvarset)) TyVarSet.empty subst
-        fun genFreshTyVars(subst, tyvars) = List.foldr (fn (tv, (subst, tyvars)) => if TyVarSet.member (range, tv) then
+        fun genFreshTyVars(subst, tyvars) = List.foldr (fn (tv, (subst, tyvars)) => if avoidCollision andalso TyVarSet.member (range, tv) then
                                                                                         let val nextTyVar = #nextTyVar ctx
                                                                                             val x = !nextTyVar
                                                                                             val () = nextTyVar := x + 1
@@ -307,10 +307,10 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
           | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
           | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
         and doDec(ValDec(span, tyvars, valbind)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                   in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind)
+                                                   in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst, avoidCollision))) valbind)
                                                    end
           | doDec(RecValDec(span, tyvars, valbind)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                      in RecValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind)
+                                                      in RecValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst, avoidCollision))) valbind)
                                                       end
           | doDec(ValDec'(span, valbind)) = ValDec'(span, List.map doValBind' valbind)
           | doDec(RecValDec'(span, valbind)) = RecValDec'(span, List.map doValBind' valbind)
@@ -321,7 +321,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
         and doValBind'(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
           | doValBind'(PolyVarBind(span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
                                                                                                           val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
-                                                                                                      in PolyVarBind(span, vid, TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty), #doExp (mapTy (ctx, subst)) exp)
+                                                                                                      in PolyVarBind(span, vid, TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty), #doExp (mapTy (ctx, subst, avoidCollision)) exp)
                                                                                                       end
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat(pat as WildcardPat _) = pat
@@ -344,6 +344,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
        , doDec = doDec
        , doDecs = List.map doDec
        , doValBind = doValBind
+       , doUnaryConstraint = doUnaryConstraint
        }
     end
 
