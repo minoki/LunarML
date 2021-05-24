@@ -346,11 +346,18 @@ fun unify(ctx : Context, env : Env, nil : Constraint list) : unit = ()
                unify(ctx, env, ctrs) (* do nothing *)
            else
                emitError(ctx, [span1, span2, span3], "comparison operator on unsupported type")
-         (* TODO: Equality type variables *)
-         | UnaryConstraint(span1, TyVar(span2, tv), pred) => (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
-                                                                  SOME replacement => unify(ctx, env, UnaryConstraint(span1, replacement, pred) :: ctrs)
-                                                                | NONE => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, env, ctrs))
-                                                             )
+         | UnaryConstraint(span1, TyVar(span2, tv), pred) =>
+           (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
+                SOME replacement => unify(ctx, env, UnaryConstraint(span1, replacement, pred) :: ctrs)
+              | NONE => case (tv, pred) of
+                            (USyntax.NamedTyVar (name, eq, _), USyntax.IsEqType span3) =>
+                            if eq then
+                                unify(ctx, env, ctrs)
+                            else
+                                emitError(ctx, [span1, span2, span3], "the type variable " ^ name ^ " does not admit equality")
+                          | (USyntax.NamedTyVar(name, _, _), _) => emitError(ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
+                          | _ => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, env, ctrs))
+           )
       )
 and unifyTyVarAndTy(ctx : Context, env : Env, span : SourcePos.span, tv : TyVar, ty : Ty, ctrs : Constraint list) : unit
     = let val subst = !(#tyVarSubst ctx)
