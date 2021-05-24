@@ -108,14 +108,16 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | FnExp of SourcePos.span * VId * Ty * Exp (* parameter name, parameter type, body *)
              | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of SourcePos.span * Exp vector * Ty
-     and Dec = ValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* non-recursive *)
-             | RecValDec of SourcePos.span * TyVar list * ValBind list * ValEnv (* recursive (val rec) *)
+     and Dec = ValDec of SourcePos.span * TyVar list * ValBind list (* non-recursive *)
+             | RecValDec of SourcePos.span * TyVar list * ValBind list (* recursive (val rec) *)
+             | ValDec' of SourcePos.span * ValBind' list (* non-recursive; produced during type-check *)
+             | RecValDec' of SourcePos.span * ValBind' list (* recursive (val rec); produced during type-check *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
      and ValBind = PatBind of SourcePos.span * Pat * Exp
-                 | TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
-                 | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
+     and ValBind' = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
+                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 datatype TopDec = StrDec of Dec list
 type Program = TopDec list
 
@@ -208,8 +210,10 @@ fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (FnExp(_,pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy, ... }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
-and print_Dec (ValDec (_,bound,valbind,valenv)) = "ValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
-  | print_Dec (RecValDec (_,bound,valbind,valenv)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ "," ^ print_ValEnv valenv ^ ")"
+and print_Dec (ValDec (_,bound,valbind)) = "ValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ ")"
+  | print_Dec (RecValDec (_,bound,valbind)) = "RecValDec(" ^ Syntax.print_list print_TyVar bound ^ "," ^ Syntax.print_list print_ValBind valbind ^ ")"
+  | print_Dec (ValDec'(_,valbinds)) = "ValDec'(" ^ Syntax.print_list print_ValBind' valbinds ^ ")"
+  | print_Dec (RecValDec'(_,valbinds)) = "RecValDec'(" ^ Syntax.print_list print_ValBind' valbinds ^ ")"
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
@@ -218,8 +222,8 @@ and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax
 and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
   | print_ConBind (ConBind(_, vid, SOME ty)) = "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
 and print_ValBind (PatBind (_, pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-  | print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
-  | print_ValBind (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
+and print_ValBind' (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
+  | print_ValBind' (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
@@ -235,6 +239,8 @@ and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
 fun print_TyConMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 val print_Decs = Syntax.print_list print_Dec
+fun print_TopDec (StrDec decs) = "StrDec(" ^ Syntax.print_list print_Dec decs ^ ")"
+val print_Program = Syntax.print_list print_TopDec
 end (* structure PrettyPrint *)
 open PrettyPrint
 
@@ -255,7 +261,7 @@ fun applySubstTy subst =
     let fun substTy (ty as TyVar(_, tv'))
             = (case TyVarMap.find(subst, tv') of
                    NONE => ty
-                 | SOME replacement => replacement (* TODO: single replacement is sufficient? *)
+                 | SOME replacement => replacement
               )
           | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
           | substTy (TyCon(span, tyargs, tycon)) = TyCon(span, List.map substTy tyargs, tycon)
@@ -300,18 +306,23 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, nextTyCon : 'b, tyVarConst
           | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
           | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
           | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
-        and doDec(ValDec(span, tyvars, valbind, valenv)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                           in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind, doValEnv valenv)
-                                                           end
-          | doDec(RecValDec(span, tyvars, valbind, valenv)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                              in RecValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind, doValEnv valenv)
-                                                              end
+        and doDec(ValDec(span, tyvars, valbind)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                   in ValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind)
+                                                   end
+          | doDec(RecValDec(span, tyvars, valbind)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
+                                                      in RecValDec(span, tyvars, List.map (#doValBind (mapTy (ctx, subst))) valbind)
+                                                      end
+          | doDec(ValDec'(span, valbind)) = ValDec'(span, List.map doValBind' valbind)
+          | doDec(RecValDec'(span, valbind)) = RecValDec'(span, List.map doValBind' valbind)
           | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
           | doDec(DatatypeDec(span, datbinds)) = DatatypeDec(span, List.map doDatBind datbinds)
           | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
         and doValBind(PatBind(span, pat, exp)) = PatBind(span, doPat pat, doExp exp)
-          | doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
-          | doValBind(PolyVarBind(span, vid, tysc, exp)) = PolyVarBind(span, vid, doTypeScheme tysc, doExp exp)
+        and doValBind'(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
+          | doValBind'(PolyVarBind(span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
+                                                                                                          val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
+                                                                                                      in PolyVarBind(span, vid, TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty), #doExp (mapTy (ctx, subst)) exp)
+                                                                                                      end
         and doMatch(pat, exp) = (doPat pat, doExp exp)
         and doPat(pat as WildcardPat _) = pat
           | doPat(s as SConPat _) = s
@@ -374,19 +385,23 @@ and freeTyVarsInMatches(bound, nil, acc) = acc
 and freeTyVarsInDecs(bound, decls) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInDec(bound, dec))) TyVarSet.empty decls
 and freeTyVarsInDec(bound, dec)
     = (case dec of
-           ValDec(_, tyvarseq, valbinds, valenv) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
-         | RecValDec(_, tyvarseq, valbinds, valenv) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
+           ValDec(_, tyvarseq, valbinds) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
+         | RecValDec(_, tyvarseq, valbinds) => freeTyVarsInValBinds(TyVarSet.addList(bound, tyvarseq), valbinds, TyVarSet.empty)
+         | ValDec'(_, valbinds) => List.foldl (fn (valbind, acc) => TyVarSet.union(acc, freeTyVarsInValBind'(bound, valbind))) TyVarSet.empty valbinds
+         | RecValDec'(_, valbinds) => List.foldl (fn (valbind, acc) => TyVarSet.union(acc, freeTyVarsInValBind'(bound, valbind))) TyVarSet.empty valbinds
          | TypeDec(_, typbinds) => List.foldl (fn (typbind, acc) => TyVarSet.union(acc, freeTyVarsInTypBind(bound, typbind))) TyVarSet.empty typbinds
          | DatatypeDec(_, datbinds) => List.foldl (fn (datbind, acc) => TyVarSet.union(acc, freeTyVarsInDatBind(bound, datbind))) TyVarSet.empty datbinds
          | ExceptionDec(_, exbinds) => List.foldl (fn (exbind, acc) => TyVarSet.union(acc, freeTyVarsInExBind(bound, exbind))) TyVarSet.empty exbinds
       )
-and freeTyVarsInValBinds(bound, nil, acc) = acc
-  | freeTyVarsInValBinds(bound, PatBind(_, pat, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
-  | freeTyVarsInValBinds(bound, TupleBind(_, xs, exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) (* TODO *)
-  | freeTyVarsInValBinds(bound, PolyVarBind(_, vid, TypeScheme(tyvars, _), exp) :: rest, acc) = freeTyVarsInValBinds(bound, rest, TyVarSet.union(acc, freeTyVarsInExp(TyVarSet.addList(bound, List.map #1 tyvars), exp))) (* TODO *)
+and freeTyVarsInValBinds(bound, valbinds, acc) = List.foldl (fn (valbind, acc) => TyVarSet.union(acc, freeTyVarsInValBind(bound, valbind))) acc valbinds
+and freeTyVarsInValBind(bound, PatBind(_, pat, exp)) = TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))
+and freeTyVarsInValBind'(bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => TyVarSet.union(acc, freeTyVarsInTy(bound, ty))) (freeTyVarsInExp(bound, exp)) xs
+  | freeTyVarsInValBind'(bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = let val bound' = TyVarSet.addList(bound, List.map #1 tyvars)
+                                                                                    in TyVarSet.union(freeTyVarsInTy(bound', ty), freeTyVarsInExp(bound', exp))
+                                                                                    end
 and freeTyVarsInTypBind(bound, TypBind(_, tyvars, tycon, ty)) = freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty)
 and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds, _)) = let val bound' = TyVarSet.addList(bound, tyvars)
-                                                                         in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound, conbind))) TyVarSet.empty conbinds
+                                                                         in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound', conbind))) TyVarSet.empty conbinds
                                                                          end
 and freeTyVarsInConBind(bound, ConBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInConBind(bound, ConBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
@@ -662,8 +677,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
                                                                     U.LetInExp(span,
                                                                                [U.ValDec(span,
                                                                                          [(* TODO: tyvar *)],
-                                                                                         [U.PatBind(span, U.WildcardPat span, toUExp(ctx, tvenv, env, exp2))],
-                                                                                         U.VIdMap.empty
+                                                                                         [U.PatBind(span, U.WildcardPat span, toUExp(ctx, tvenv, env, exp2))]
                                                                                         )
                                                                                ],
                                                                                fnCall
@@ -672,8 +686,7 @@ fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon
                                                                    )
                                                    )
                                            )
-                                 ],
-                                 U.VIdMap.insert (U.VIdMap.empty, fnName, (U.TypeScheme([], U.FnType(span, unitTy, unitTy)), Syntax.ValueVariable))
+                                 ]
                                 )
                     ],
                     fnCall
@@ -731,7 +744,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                                                                         in (vidmap, U.PatBind(span, pat', toUExp(ctx, tvenv', env, exp)))
                                                                         end
                                        ) valbind
-               val decl' = U.ValDec(span, List.map #2 tyvars', List.map #2 valbind', USyntax.VIdMap.empty)
+               val decl' = U.ValDec(span, List.map #2 tyvars', List.map #2 valbind')
                val vidmap = List.foldl (Syntax.VIdMap.unionWith #2) Syntax.VIdMap.empty (List.map #1 valbind')
                val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val (env', decls') = toUDecs(ctx, tvenv, mergeEnv(env, venv), decls)
@@ -745,7 +758,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val env' = mergeEnv(env, venv)
                val valbind'' = List.map (fn (span, (_, pat'), exp) => U.PatBind(span, pat', toUExp(ctx, tvenv', env', exp))) valbind'
-               val decl' = U.RecValDec(span, List.map #2 tyvars', valbind'', U.VIdMap.empty)
+               val decl' = U.RecValDec(span, List.map #2 tyvars', valbind'')
                val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
            in (mergeEnv(venv, env''), decl' :: decls')
            end
@@ -778,7 +791,7 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                      in U.PatBind(sourceSpan, U.VarPat(sourceSpan, vid', USyntax.TyVar(sourceSpan, freshTyVar(ctx))), buildExp(arity, []))
                      end
                val valbind'' = List.map doFValBind fvalbind
-               val decl' = U.RecValDec(span, List.map #2 tyvars', valbind'', U.VIdMap.empty)
+               val decl' = U.RecValDec(span, List.map #2 tyvars', valbind'')
                val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
            in (mergeEnv(venv, env''), decl' :: decls')
            end

@@ -437,8 +437,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
       end
   | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
-and doValBind ctx env (U.PatBind _) = raise Fail "internal error: PatBind cannot occur here"
-  | doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
+and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
   | doValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))
     = let val ty0 = toFTy (ctx, env, ty)
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
@@ -498,12 +497,14 @@ and getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
                                                          end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs(ctx, env, []) = (env, [])
-  | toFDecs(ctx, env, U.ValDec(span, tvs, valbinds, valenv) :: decs)
+  | toFDecs(ctx, env, U.ValDec(span, tvs, valbinds) :: decs) = raise Fail "internal error: ValDec cannot occur here"
+  | toFDecs(ctx, env, U.RecValDec(span, tvs, valbinds) :: decs) = raise Fail "internal error: RecValDec cannot occur here"
+  | toFDecs(ctx, env, U.ValDec'(span, valbinds) :: decs)
     = let val dec = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec @ decs)
       end
-  | toFDecs(ctx, env, U.RecValDec(span, tvs, valbinds, valenv) :: decs)
+  | toFDecs(ctx, env, U.RecValDec'(span, valbinds) :: decs)
     = let val dec = F.RecValDec (List.map (doValBind ctx env) valbinds)
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec :: decs)

@@ -480,7 +480,7 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
       in (USyntax.TyCon(span, [ty], primTyCon_list), ListExp(span, xs', ty))
       end
 (* typeCheckDec : Context * Env * Dec -> (* created environment *) Env * Dec *)
-and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
+and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds))
     = let val valbinds' = let val innerEnv = { valMap = #valMap env, tyMap = #tyMap env, strMap = #strMap env, boundTyVars = USyntax.TyVarSet.addList (#boundTyVars env, tyvarseq) }
                           in List.map (fn valbind => typeCheckValBind(ctx, innerEnv, valbind)) valbinds
                           end
@@ -578,23 +578,17 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                                        end
                 in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                 end
-            | generalize((TupleBind(span, _, _), _, valEnv, _), (valbinds, valEnvRest)) = emitError(ctx, [span], "unexpected TupleBind")
-            | generalize((PolyVarBind(span, _, _, _), _, valEnv, _), (valbinds, valEnvRest)) = emitError(ctx, [span], "unexpected PolyVarBind")
           val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds'
-          val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
-          val env' = { valMap = valEnv'''
+          val env' = { valMap = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
                      , tyMap = #tyMap emptyEnv
                      , strMap = #strMap emptyEnv
                      , boundTyVars = #boundTyVars emptyEnv
                      }
-      in (env', ValDec(span, [], valbinds'', valEnv'''))
+      in (env', ValDec'(span, valbinds''))
       end
-  | typeCheckDec(ctx, env, RecValDec(span, tyvarseq, valbinds : ValBind list, _))
+  | typeCheckDec(ctx, env, RecValDec(span, tyvarseq, valbinds : ValBind list))
     = let val valbinds' : (SourcePos.span * (USyntax.Ty * USyntax.Ty USyntax.VIdMap.map * USyntax.Pat) * USyntax.Exp) list
-              = List.map (fn valbind => case valbind of
-                                            PatBind (span, pat, exp) => (span, typeCheckPat(ctx, env, pat), exp)
-                                          | TupleBind (span, _, _) => emitError(ctx, [span], "unexpected TupleBind")
-                                          | PolyVarBind (span, _, _, _) => emitError(ctx, [span], "unexpected PolyVarBind")) valbinds
+              = List.map (fn PatBind (span, pat, exp) => (span, typeCheckPat(ctx, env, pat), exp)) valbinds
           val localValEnv = List.foldl (fn ((_, (_, ve, _), _), acc) => USyntax.VIdMap.unionWith #1 (acc, ve)) USyntax.VIdMap.empty valbinds'
           val localValMap = USyntax.VIdMap.map (fn ty => (USyntax.TypeScheme ([], ty), Syntax.ValueVariable)) localValEnv
           val { valMap, tyMap, strMap, boundTyVars } = env
@@ -633,19 +627,19 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds, _))
                           in tysc
                           end
                     val valEnv' = USyntax.VIdMap.mapi doVal valEnv
-                    val valEnv'L = USyntax.VIdMap.listItemsi valEnv'
-                    val valbind' = List.map (fn (vid, tysc) => PolyVarBind(span, vid, tysc, exp)) valEnv'L
+                    val valbind' = USyntax.VIdMap.foldri (fn (vid, tysc, rest) => PolyVarBind(span, vid, tysc, exp) :: rest) [] valEnv'
                 in (valbind' @ valbinds, USyntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                 end
           val (valbinds'', valEnv'') = List.foldr generalize ([], USyntax.VIdMap.empty) valbinds''
-          val valEnv''' = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
-          val env' = { valMap = valEnv'''
+          val env' = { valMap = USyntax.VIdMap.map (fn tysc => (tysc, Syntax.ValueVariable)) valEnv''
                      , tyMap = #tyMap emptyEnv
                      , strMap = #strMap emptyEnv
                      , boundTyVars = #boundTyVars emptyEnv
                      }
-      in (env', RecValDec(span, [], valbinds'', valEnv'''))
+      in (env', RecValDec'(span, valbinds''))
       end
+  | typeCheckDec(ctx, env, ValDec'(span, _)) = emitError (ctx, [span], "internal error: unexpected ValDec'")
+  | typeCheckDec(ctx, env, RecValDec'(span, _)) = emitError (ctx, [span], "internal error: unexpected RecValDec'")
   | typeCheckDec(ctx, env, dec as TypeDec(span, typbinds))
     = (emptyEnv, dec)
   | typeCheckDec(ctx, env, DatatypeDec(span, datbinds))
@@ -675,10 +669,6 @@ and typeCheckValBind(ctx, env, PatBind(span, pat, exp))
           val generalizable = isExhaustive(ctx, env, pat) andalso isNonexpansive(env, exp)
       in (PatBind(span, pat', exp'), expTy, newValEnv, generalizable)
       end
-  | typeCheckValBind(ctx, env, TupleBind(span, xs, exp))
-    = emitError(ctx, [span], "unexpected TupleBind")
-  | typeCheckValBind(ctx, env, PolyVarBind(span, vid, tysc, exp))
-    = emitError(ctx, [span], "unexpected PolyVarBind")
 and determineDatatypeEquality(ctx, env, datbinds) : bool USyntax.TyConMap.map
     = let val localTyCons = List.foldl (fn (USyntax.DatBind (span, tyvars, tycon, conbinds, _), set) => USyntax.TyConSet.add(set, tycon)) USyntax.TyConSet.empty datbinds
           val graph : (USyntax.TyConSet.set ref) USyntax.TyConMap.map = USyntax.TyConSet.foldl (fn (tycon, map) => USyntax.TyConMap.insert(map, tycon, ref USyntax.TyConSet.empty)) USyntax.TyConMap.empty localTyCons
@@ -992,16 +982,20 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
             | goExp (U.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (U.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
             | goExp (U.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
-          and goDec (U.ValDec (span, tyvars, valbinds, valenv)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
-                                                                  in List.app goValBind valbinds
-                                                                   ; U.VIdMap.app (fn (tysc, ids) => goTypeScheme tysc) valenv
-                                                                   ; tyconset
-                                                                  end
-            | goDec (U.RecValDec (span, tyvars, valbinds, valenv)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
-                                                                     in List.app goValBind valbinds
-                                                                      ; U.VIdMap.app (fn (tysc, ids) => goTypeScheme tysc) valenv
-                                                                      ; tyconset
-                                                                     end
+          and goDec (U.ValDec (span, tyvars, valbinds)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                          in List.app goValBind valbinds
+                                                           ; tyconset
+                                                          end
+            | goDec (U.RecValDec (span, tyvars, valbinds)) = let val { goTypeScheme, goValBind, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
+                                                             in List.app goValBind valbinds
+                                                              ; tyconset
+                                                             end
+            | goDec (U.ValDec' (span, valbinds)) = ( List.app goValBind' valbinds
+                                                   ; tyconset
+                                                   )
+            | goDec (U.RecValDec' (span, valbinds)) = ( List.app goValBind' valbinds
+                                                      ; tyconset
+                                                      )
             | goDec (U.TypeDec (span, typbinds)) = let fun goTypBind (U.TypBind (span, tyvars, tycon, ty), acc) = let val { goTy, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
                                                                                                                   in goTy ty
                                                                                                                    ; U.TyConSet.add (acc, tycon)
@@ -1024,16 +1018,16 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                                                               in goDec dec
                                                               end)
                                        tyconset decs
-          fun goValBind (U.PatBind (span, pat, exp)) = ( goPat pat; goExp exp )
-            | goValBind (U.TupleBind (span, binds, exp)) = ( List.app (fn (vid, ty) => goTy ty) binds
-                                                           ; goExp exp
-                                                           )
-            | goValBind (U.PolyVarBind (span, vid, U.TypeScheme (typarams, ty), exp))
+          and goValBind' (U.TupleBind (span, binds, exp)) = ( List.app (fn (vid, ty) => goTy ty) binds
+                                                            ; goExp exp
+                                                            )
+            | goValBind' (U.PolyVarBind (span, vid, U.TypeScheme (typarams, ty), exp))
               = let val { goTy, goExp, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, List.map #1 typarams), tyconset)
                 in List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
                  ; goTy ty
                  ; goExp exp
                 end
+          fun goValBind (U.PatBind (span, pat, exp)) = ( goPat pat; goExp exp )
           fun goTopDec (U.StrDec decs) = goDecs decs
       in { goTy = goTy
          , goTypeScheme = goTypeScheme
