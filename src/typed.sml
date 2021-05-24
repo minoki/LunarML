@@ -481,14 +481,12 @@ end (* structure USyntax *)
 
 structure ToTypedSyntax = struct
 
-type ('a,'b) Context = { nextTyVar : int ref
-                       , nextVId : int ref
-                       , nextTyCon : int ref
-                       , tyVarConstraints : 'a
-                       , tyVarSubst : 'b
-                       }
+type Context = { nextTyVar : int ref
+               , nextVId : int ref
+               , nextTyCon : int ref
+               }
 
-fun emitError(ctx : ('a,'b) Context, spans, message) = raise Syntax.SyntaxError (spans, message)
+fun emitError(ctx : Context, spans, message) = raise Syntax.SyntaxError (spans, message)
 
 datatype BoundTyCon = BTyAlias of USyntax.TyVar list * USyntax.Ty
                     | BTyCon of { tyCon : USyntax.TyCon
@@ -526,21 +524,21 @@ type TVEnv = USyntax.TyVar Syntax.TyVarMap.map
 local structure S = Syntax
       structure U = USyntax
 
-      fun genTyVarId(ctx : ('a,'b) Context)
+      fun genTyVarId(ctx : Context)
           = let val id = !(#nextTyVar ctx)
             in #nextTyVar ctx := id + 1 ; id end
       fun genTyVar(ctx, Syntax.MkTyVar tvname) = if String.isPrefix "''" tvname then
                                                      USyntax.NamedTyVar(tvname, true, genTyVarId(ctx))
                                                  else
                                                      USyntax.NamedTyVar(tvname, false, genTyVarId(ctx))
-      fun freshTyVar(ctx : ('a,'b) Context) = USyntax.AnonymousTyVar(genTyVarId(ctx))
+      fun freshTyVar(ctx : Context) = USyntax.AnonymousTyVar(genTyVarId(ctx))
 
-      fun newVId(ctx : ('a,'b) Context, Syntax.MkVId name) = let val n = !(#nextVId ctx)
-                                                             in #nextVId ctx := n + 1
-                                                              ; USyntax.MkVId(name, n)
-                                                             end
+      fun newVId(ctx : Context, Syntax.MkVId name) = let val n = !(#nextVId ctx)
+                                                     in #nextVId ctx := n + 1
+                                                      ; USyntax.MkVId(name, n)
+                                                     end
 
-      fun genTyConId(ctx : ('a,'b) Context)
+      fun genTyConId(ctx : Context)
           = let val id = !(#nextTyCon ctx)
             in #nextTyCon ctx := id + 1 ; id end
       fun newTyCon(ctx, Syntax.MkTyCon name) = USyntax.MkTyCon(name, genTyConId(ctx))
@@ -569,7 +567,7 @@ in
 (* toUExp : Context * TVEnv * Env * Syntax.Exp -> USyntax.Exp *)
 (* toUMatch : Context * TVEnv * Env * (Syntax.Pat * Syntax.Exp) list -> (USyntax.Pat * USyntax.Exp) list *)
 (* toUDecs : Context * TVEnv * Env * Syntax.Dec list -> (* created environment *) Env * USyntax.Dec list *)
-fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
+fun toUTy(ctx : Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
     = (case Syntax.TyVarMap.find(tvenv, tv) of
            NONE => emitError(ctx, [span], "unknown type variable `" ^ Syntax.print_TyVar tv ^ "`")
          | SOME tv => U.TyVar(span, tv)
@@ -583,7 +581,7 @@ fun toUTy(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.TyVar(span, tv))
                                     end
       )
   | toUTy(ctx, tvenv, env, S.FnType(span, ty1, ty2)) = U.FnType(span, toUTy(ctx, tvenv, env, ty1), toUTy(ctx, tvenv, env, ty2))
-fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) = (Syntax.VIdMap.empty, U.WildcardPat span) (* TODO: should generate a type id? *)
+fun toUPat(ctx : Context, tvenv : TVEnv, env : Env, S.WildcardPat span) = (Syntax.VIdMap.empty, U.WildcardPat span) (* TODO: should generate a type id? *)
   | toUPat(ctx, tvenv, env, S.SConPat(span, Syntax.RealConstant _)) = emitError(ctx, [span], "no real constant may occur in a pattern")
   | toUPat(ctx, tvenv, env, S.SConPat(span, sc)) = (Syntax.VIdMap.empty, U.SConPat(span, sc))
   | toUPat(ctx, tvenv, env, S.ConOrVarPat(span, vid))
@@ -642,7 +640,7 @@ fun toUPat(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.WildcardPat span) 
           val (vidmap, pat' ) = toUPat(ctx, tvenv, env, pat)
       in (Syntax.VIdMap.insert(vidmap, vid, vid'), U.LayeredPat(span, vid', USyntax.TyVar(span, freshTyVar(ctx)), pat'))
       end
-fun toUExp(ctx : ('a,'b) Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon)) = U.SConExp(span, scon)
+fun toUExp(ctx : Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon)) = U.SConExp(span, scon)
   | toUExp(ctx, tvenv, env, S.VarExp(span, longvid))
     = (case lookupLongVId(ctx, env, span, longvid) of
            SOME (longvid', idstatus) => U.VarExp(span, longvid', idstatus)

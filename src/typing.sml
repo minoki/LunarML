@@ -37,6 +37,11 @@ fun freeTyVarsInConstraint(bound, USyntax.EqConstr(span, ty1, ty2)) = USyntax.Ty
          | USyntax.IsOrdered _    => USyntax.freeTyVarsInTy(bound, ty)
       )
 
+type ProgramContext = { nextTyVar : int ref
+                      , nextVId : int ref
+                      , nextTyCon : int ref
+                      }
+
 type Context = { nextTyVar : int ref
                , nextVId : int ref
                , nextTyCon : int ref
@@ -46,6 +51,7 @@ type Context = { nextTyVar : int ref
 
 exception TypeError of SourcePos.span list * string
 
+fun emitErrorP(ctx : ProgramContext, spans, message) = raise TypeError (spans, message)
 fun emitError(ctx : Context, spans, message) = raise TypeError (spans, message)
 
 (* lookupStr : Context * Env * SourcePos.span * Syntax.StrId list -> Env *)
@@ -149,12 +155,10 @@ val emptyEnv : Env
       , boundTyVars = USyntax.TyVarSet.empty
       }
 
-fun newContext() : Context
+fun newContext() : ProgramContext
     = { nextTyVar = ref 100
       , nextVId = ref 100
       , nextTyCon = ref 100
-      , tyVarConstraints = ref USyntax.TyVarMap.empty
-      , tyVarSubst = ref USyntax.TyVarMap.empty
       }
 
 fun addTyVarConstraint(ctx : Context, tv : USyntax.TyVar, ct : USyntax.UnaryConstraint)
@@ -954,13 +958,13 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
               = if U.TyVarSet.member(tvset, tv) then
                     ()
                 else
-                    emitError(ctx, [span], "type variable scope violation " ^ USyntax.PrettyPrint.print_TyVar tv)
+                    emitErrorP(ctx, [span], "type variable scope violation " ^ USyntax.PrettyPrint.print_TyVar tv)
             | goTy (U.RecordType(span, fields)) = List.app (fn (label, ty) => goTy ty) fields
             | goTy (U.TyCon(span, tyargs, tycon))
               = if U.TyConSet.member(tyconset, tycon) then
                     List.app goTy tyargs
                 else
-                    emitError(ctx, [span], "type constructor scope violation")
+                    emitErrorP(ctx, [span], "type constructor scope violation")
             | goTy (U.FnType(span, ty1, ty2)) = ( goTy ty1; goTy ty2 )
           fun goUnaryConstraint (HasField { sourceSpan, label, fieldTy }) = goTy fieldTy
             | goUnaryConstraint _ = ()
@@ -1058,16 +1062,22 @@ fun checkTyScopeOfProgram (ctx, tyconset : U.TyConSet.set, program : U.Program)
                  tyconset program
 end
 
-(* typeCheckTopDec : Context * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
-fun typeCheckTopDec(ctx, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
-    let val (env', decs') = typeCheckDecs(ctx, env, decs)
+(* typeCheckTopDec : ProgramContext * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
+fun typeCheckTopDec(pctx : ProgramContext, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
+    let val ctx = { nextTyVar = #nextTyVar pctx
+                  , nextVId = #nextVId pctx
+                  , nextTyCon = #nextTyCon pctx
+                  , tyVarConstraints = ref USyntax.TyVarMap.empty
+                  , tyVarSubst = ref USyntax.TyVarMap.empty
+                  }
+        val (env', decs') = typeCheckDecs(ctx, env, decs)
         val subst = !(#tyVarSubst ctx)
         val tvc = !(#tyVarConstraints ctx)
         val decs'' = #doDecs (USyntax.mapTy (ctx, subst, false)) decs'
         val decs''' = applyDefaultTypes(ctx, tvc, decs'')
     in (env', USyntax.StrDec decs''')
     end
-(* typeCheckProgram : Context * Env * USyntax.TopDec list -> Env * USyntax.TopDec list *)
+(* typeCheckProgram : ProgramContext * Env * USyntax.TopDec list -> Env * USyntax.TopDec list *)
 fun typeCheckProgram(ctx, env, [] : USyntax.TopDec list) : Env * USyntax.TopDec list = (emptyEnv, [])
   | typeCheckProgram(ctx, env, topdec :: topdecs) = let val (env', topdec') = typeCheckTopDec(ctx, env, topdec)
                                                         val (env'', topdecs') = typeCheckProgram(ctx, mergeEnv(env, env'), topdecs)

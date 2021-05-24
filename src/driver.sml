@@ -90,7 +90,7 @@ fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,li
                                                )
                               end
 
-type Context = { typingContext : Typing.Context
+type Context = { typingContext : Typing.ProgramContext
                , toFContext : ToFSyntax.Context
                }
 fun newContext() : Context = let val typingContext = Typing.newContext()
