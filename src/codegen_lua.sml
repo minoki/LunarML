@@ -251,7 +251,7 @@ fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
                                               else
                                                   smlNameToLua name ^ "_" ^ Int.toString n
 
-structure StringSet = BinarySetFn(struct open String; type ord_key = string end)
+structure StringSet = RedBlackSetFn(struct open String; type ord_key = string end)
 val LuaKeywords = StringSet.fromList
                       ["and", "break", "do", "else", "elseif", "end",
                        "false", "for", "function", "goto", "if", "in",

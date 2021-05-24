@@ -33,8 +33,8 @@ fun compare(MkVId(x,a), MkVId(y,b)) = case String.compare (x,y) of
                                           EQUAL => Int.compare(a,b)
                                         | ord => ord
 end : ORD_KEY
-structure VIdSet = BinarySetFn(VIdKey)
-structure VIdMap = BinaryMapFn(VIdKey)
+structure VIdSet = RedBlackSetFn(VIdKey)
+structure VIdMap = RedBlackMapFn(VIdKey)
 
 structure TyConKey = struct
 type ord_key = TyCon
@@ -42,8 +42,8 @@ fun compare(MkTyCon(x,a), MkTyCon(y,b)) = case String.compare (x,y) of
                                               EQUAL => Int.compare(a,b)
                                             | ord => ord
 end : ORD_KEY
-structure TyConSet = BinarySetFn(TyConKey)
-structure TyConMap = BinaryMapFn(TyConKey)
+structure TyConSet = RedBlackSetFn(TyConKey)
+structure TyConMap = RedBlackMapFn(TyConKey)
 
 structure TyVarKey = struct
 type ord_key = TyVar
@@ -55,8 +55,8 @@ fun compare(NamedTyVar(x,_,a), NamedTyVar(y,_,b)) = (case String.compare (x,y) o
   | compare(NamedTyVar _, AnonymousTyVar _) = LESS
   | compare(AnonymousTyVar _, NamedTyVar _) = GREATER
 end : ORD_KEY
-structure TyVarSet = BinarySetFn(TyVarKey)
-structure TyVarMap = BinaryMapFn(TyVarKey)
+structure TyVarSet = RedBlackSetFn(TyVarKey)
+structure TyVarMap = RedBlackMapFn(TyVarKey)
 
 datatype UnaryConstraint
   = HasField of { sourceSpan : SourcePos.span

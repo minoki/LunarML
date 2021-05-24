@@ -33,27 +33,27 @@ datatype IdStatus = ValueVariable
                   | ValueConstructor
                   | ExceptionConstructor
 
-(* BinaryMapFn, BinarySetFn: from smlnj-lib *)
+(* RedBlackMapFn, RedBlackSetFn: from smlnj-lib *)
 structure VIdKey = struct
 type ord_key = VId
 fun compare (MkVId x, MkVId y) = String.compare (x,y)
 end : ORD_KEY
-structure VIdSet = BinarySetFn(VIdKey)
-structure VIdMap = BinaryMapFn(VIdKey)
-structure TyConMap = BinaryMapFn(struct
-                                  type ord_key = TyCon
-                                  fun compare (MkTyCon x, MkTyCon y) = String.compare (x,y)
-                                  end)
-structure StrIdMap = BinaryMapFn(struct
-                                  type ord_key = StrId
-                                  fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
-                                  end)
+structure VIdSet = RedBlackSetFn(VIdKey)
+structure VIdMap = RedBlackMapFn(VIdKey)
+structure TyConMap = RedBlackMapFn(struct
+                                    type ord_key = TyCon
+                                    fun compare (MkTyCon x, MkTyCon y) = String.compare (x,y)
+                                    end)
+structure StrIdMap = RedBlackMapFn(struct
+                                    type ord_key = StrId
+                                    fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
+                                    end)
 structure TyVarKey = struct
 type ord_key = TyVar
 fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
 end : ORD_KEY
-structure TyVarMap = BinaryMapFn(TyVarKey)
-structure TyVarSet = BinarySetFn(TyVarKey)
+structure TyVarMap = RedBlackMapFn(TyVarKey)
+structure TyVarSet = RedBlackSetFn(TyVarKey)
 structure LabelKey = struct
 type ord_key = Label
 (* NumericLabel _ < IdentifierLabel _ *)
@@ -62,7 +62,7 @@ fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
   | compare (IdentifierLabel _, NumericLabel _) = GREATER
   | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
 end
-structure LabelSet = BinarySetFn(LabelKey)
+structure LabelSet = RedBlackSetFn(LabelKey)
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Label * Ty) list (* record type expression *)
