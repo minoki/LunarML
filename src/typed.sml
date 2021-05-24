@@ -241,6 +241,8 @@ fun print_TyConMap print_elem x = Syntax.print_list (Syntax.print_pair (print_Ty
 val print_Decs = Syntax.print_list print_Dec
 fun print_TopDec (StrDec decs) = "StrDec(" ^ Syntax.print_list print_Dec decs ^ ")"
 val print_Program = Syntax.print_list print_TopDec
+fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
+  | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")"
 end (* structure PrettyPrint *)
 open PrettyPrint
 
