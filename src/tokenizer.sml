@@ -344,9 +344,9 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | readStringLit (l0, c0, l, c, accum, x :: xs) = readStringLit (l0, c0, l, c+1, x :: accum, xs)
             and digitToInt x = ord x - ord #"0"
             and hexDigitToInt x = if ord #"A" <= ord x andalso ord x <= ord #"F" then
-                                      ord x - ord #"A"
+                                      ord x - ord #"A" + 10
                                   else if ord #"a" <= ord x andalso ord x <= ord #"f" then
-                                      ord x - ord #"a"
+                                      ord x - ord #"a" + 10
                                   else
                                       ord x - ord #"0"
             and skipFormattingCharacters (l0, c0, l, c, accum, nil) = ( emitError (l0, c0, "unterminated string literal")
