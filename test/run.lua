@@ -93,6 +93,11 @@ local should_not_compile = {
   "local_datatype_2.sml",
   "local_datatype_3.sml",
   "ref.sml",
+  "equality_real.sml",
+  "equality_fn.sml",
+  "equality_exn.sml",
+  "equality_tyvar.sml",
+  "nonfree_tyvar.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
