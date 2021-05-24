@@ -534,7 +534,8 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds))
                                                                    NONE => true
                                                                  | SOME tvs => List.all isEqualityType tvs
                               val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env) (* TODO: Allow equality constraint *)
-                              fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
+                              fun doTyVar (tv as USyntax.NamedTyVar (_, true, _)) = (tv, [USyntax.IsEqType span])
+                                | doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
                                                    NONE => (tv, [])
                                                  | SOME tvs => if List.exists isEqualityType tvs then
                                                                    (tv, [USyntax.IsEqType span])
@@ -617,7 +618,8 @@ and typeCheckDec(ctx, env, ValDec(span, tyvarseq, valbinds))
                                                                    NONE => true
                                                                  | SOME tvs => List.all isEqualityType tvs
                               val tyVars = TyVarSet.difference(TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
-                              fun doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
+                              fun doTyVar (tv as USyntax.NamedTyVar (_, true, _)) = (tv, [USyntax.IsEqType span])
+                                | doTyVar tv = case USyntax.TyVarMap.find(tvc, tv) of
                                                    NONE => (tv, [])
                                                  | SOME tvs => if List.exists isEqualityType tvs then
                                                                    (tv, [USyntax.IsEqType span])
