@@ -7,8 +7,29 @@ val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
+val fromChar : char -> value = unsafeToValue
 fun field (t : value, name : string) = sub (t, fromString name)
 end;
+
+local
+    val tonumber = LunarML.assumeDiscardable (Lua.global "tonumber")
+    val tostring = LunarML.assumeDiscardable (Lua.global "tostring")
+    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
+    val math_atan = LunarML.assumeDiscardable (Lua.field (mathlib, "atan"))
+    val math_log = LunarML.assumeDiscardable (Lua.field (mathlib, "log"))
+    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
+    val math_mininteger = LunarML.assumeDiscardable (Lua.field (mathlib, "mininteger"))
+    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
+    val string_byte = LunarML.assumeDiscardable (Lua.field (stringlib, "byte"))
+    val string_char = LunarML.assumeDiscardable (Lua.field (stringlib, "char"))
+    val string_find = LunarML.assumeDiscardable (Lua.field (mathlib, "find"))
+    val string_format = LunarML.assumeDiscardable (Lua.field (mathlib, "format"))
+    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
+    val string_match = LunarML.assumeDiscardable (Lua.field (stringlib, "match"))
+    val string_sub = LunarML.assumeDiscardable (Lua.field (stringlib, "sub"))
+    val tablelib = LunarML.assumeDiscardable (Lua.global "table")
+    val table_concat = LunarML.assumeDiscardable (Lua.field (tablelib, "concat"))
+in
 
 structure Vector = struct
 datatype vector = datatype vector
@@ -26,8 +47,8 @@ in
 fun foldl (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldl' (f, init, vec, 0)
 fun foldr (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldr' (f, init, vec, length vec - 1)
 end
-end;
-val vector : 'a list -> 'a vector = Vector.fromList;
+end
+val vector : 'a list -> 'a vector = Vector.fromList
 
 (* General *)
 structure General = struct
@@ -53,15 +74,15 @@ val op := : 'a ref * 'a -> unit = op :=
 fun x before () = x
 fun ignore _ = ()
 fun (f o g) x = f (g x)
-end;
-open General;
+end (* structure General *)
+open General
 (*
 val op before : 'a * unit -> 'a = General.before;
 val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
-datatype 'a option = NONE | SOME of 'a;
+datatype 'a option = NONE | SOME of 'a
 
 structure Bool = struct
 datatype bool = datatype bool
@@ -69,21 +90,11 @@ val not = not
 fun toString true = "true"
   | toString false = "false"
 (* scan, fromString *)
-end;
+end (* structure Bool *)
 
 structure Int = struct
 type int = int
 open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
-local
-    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
-    val string_match = LunarML.assumeDiscardable (Lua.field (stringlib, "match"))
-    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
-    val tostring = LunarML.assumeDiscardable (Lua.global "tostring")
-    val tonumber = LunarML.assumeDiscardable (Lua.global "tonumber")
-    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
-    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
-    val math_mininteger = LunarML.assumeDiscardable (Lua.field (mathlib, "mininteger"))
-in
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
 val fromInt : int -> int = fn x => x
@@ -141,16 +152,9 @@ fun fromString (s : string) : int option = let val result = Lua.call string_matc
                                                   in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
                                                   end
                                            end
-end
-end;
+end (* structure Int *)
 
 structure Word = struct
-local
-    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
-    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
-    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
-    val string_format = LunarML.assumeDiscardable (Lua.field (mathlib, "format"))
-in
 type word = word
 open LunarML.Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 val wordSize : int = LunarML.assumeDiscardable
@@ -204,21 +208,15 @@ val max : word * word -> word = fn (x, y) => if x < y then
 (* fmt *)
 val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call string_format (vector [Lua.fromString "%X", Lua.fromWord x]), 0))
 (* scan, fromString *)
-end
-end;
+end (* structure Word *)
 
 structure Real = struct
 type real = real
 open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
-end;
+end (* structure Real *)
 
 structure Math = struct
 type real = real
-local
-    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
-    val math_atan = LunarML.assumeDiscardable (Lua.field (mathlib, "atan"))
-    val math_log = LunarML.assumeDiscardable (Lua.field (mathlib, "log"))
-in
 val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "pi")))
 (* val e : real *)
 val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "sqrt")))
@@ -238,15 +236,63 @@ val sinh : real -> real
 val cosh : real -> real
 val tanh : real -> real
 *)
-end
-end;
+end (* structure Math *)
 
 structure Char = struct
 type char = char
 type string = string
+val minChar = #"\000"
+val maxChar = #"\255"
+val maxOrd = 255
+val ord : char -> int = Lua.unsafeFromValue string_byte
+val chr : int -> char = fn x => if x < 0 orelse x > 255 then
+                                    raise Chr
+                                else
+                                    Lua.unsafeFromValue (Vector.sub (Lua.call string_char (vector [Lua.fromInt x]), 0))
+fun succ c = chr (ord c + 1)
+fun pred c = chr (ord c - 1)
+fun compare (x : char, y : char) = if x = y then
+                                       EQUAL
+                                   else if x < y then
+                                       LESS
+                                   else
+                                       GREATER
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call string_find (vector [Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true])
+                                                 in Lua.isNil (Vector.sub (result, 0))
+                                                 end
+fun contains s c = not (notContains s c)
+local
+    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call string_match (vector [Lua.fromChar c, Lua.fromString pattern]), 0)))
+in
+val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
+val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
+val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
+val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
+val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
+val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
+val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
+val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
+val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
+val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
+val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
+val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
+end
+(* string.lower and string.upper depends on the locale *)
+val toLower = fn (c : char) => let val x = ord c
+                               in if ord #"A" <= x andalso x <= ord #"Z" then
+                                      chr (x - ord #"A" + ord #"a")
+                                  else
+                                      c
+                               end
+val toUpper = fn (c : char) => let val x = ord c
+                               in if ord #"a" <= x andalso x <= ord #"z" then
+                                      chr (x - ord #"a" + ord #"A")
+                                  else
+                                      c
+                               end
 open LunarML.Char (* <, <=, >, >= *)
 (* minChar, maxChar, maxOrd, ord, chr, succ, pred, compare, contains, notContains, isAscii, toLower, toUpper, isAlpha, isAlphaNum, isCntrl, isDigit, isGraph, isHexDigit, isLower, isPrint, isSpace, isPunct, isUpper, toString, scan, fromString, toCString, fromCString *)
-end;
+end (* structure Char *)
 
 structure String = struct
 type string = string
@@ -254,13 +300,6 @@ type char = char
 val size = LunarML.String.size
 val str = LunarML.String.str
 val op ^ = LunarML.String.^
-local
-    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
-    val string_sub = LunarML.assumeDiscardable (Lua.field (stringlib, "sub"))
-    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
-    val tablelib = LunarML.assumeDiscardable (Lua.global "table")
-    val table_concat = LunarML.assumeDiscardable (Lua.field (tablelib, "concat"))
-in
 fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
@@ -299,53 +338,106 @@ fun translate (f : char -> string) (s : string) : string = let val result = Lua.
                                                            end
 (* tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate, toString, scan, fromString, toCString, fromCString *)
 open LunarML.String (* size, ^, str, <, <=, >, >= *)
-end
-end;
-val op ^ : string * string -> string = String.^;
-val size : string -> int = String.size;
-val str : char -> string = String.str;
+end (* structure String *)
+val op ^ : string * string -> string = String.^
+val size : string -> int = String.size
+val str : char -> string = String.str
 
-(* List *)
 structure List = struct
 datatype list = datatype list
 exception Empty
-fun [] @ ys = ys
-  | (x :: xs) @ ys = x :: (xs @ ys)
-fun app f [] = ()
-  | app f (x :: xs) = (f x; app f xs)
-fun foldl f init [] = init
-  | foldl f init (x :: xs) = foldl f (f (x, init)) xs
-fun foldr f init [] = init
-  | foldr f init (x :: xs) = f (x, foldr f init xs)
-fun hd [] = raise Empty
-  | hd (x :: _) = x
+fun null [] = true
+  | null _ = false
 local
     fun doLength (acc, []) = acc : int
       | doLength (acc, x :: xs) = doLength (acc + 1, xs)
 in 
 fun length xs = doLength (0, xs)
 end
-fun map f [] = []
-  | map f (x :: xs) = f x :: map f xs
-fun null [] = true
-  | null _ = false
-fun rev [] = []
-  | rev (x :: xs) = rev xs @ [x]
+fun [] @ ys = ys
+  | (x :: xs) @ ys = x :: (xs @ ys)
+fun hd [] = raise Empty
+  | hd (x :: _) = x
 fun tl [] = raise Empty
   | tl (_ :: xs) = xs
-end;
-val op @ : ('a list * 'a list) -> 'a list = List.@;
-val app : ('a -> unit) -> 'a list -> unit = List.app;
-val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl;
-val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr;
-val hd : 'a list -> 'a = List.hd;
-val length : 'a list -> int = List.length;
-val map : ('a -> 'b) -> 'a list -> 'b list = List.map;
-val null : 'a list -> bool = List.null;
-val rev : 'a list -> 'a list = List.rev;
-val tl : 'a list -> 'a list = List.tl;
+fun last [x] = x
+  | last (_ :: xs) = last xs
+  | last [] = raise Empty
+fun getItem [] = NONE
+  | getItem (x :: xs) = SOME (x, xs)
+fun nth (x :: _, 0) = x
+  | nth (_ :: xs, n) = nth (xs, n - 1)
+  | nth ([], _) = raise Subscript
+fun take (_, 0) = []
+  | take (x :: xs, n) = x :: take (xs, n - 1)
+  | take ([], _) = raise Subscript
+fun drop (xs, 0) = xs
+  | drop (_ :: xs, n) = drop (xs, n - 1)
+  | drop ([], _) = raise Subscript
+fun rev [] = []
+  | rev (x :: xs) = rev xs @ [x]
+fun revAppend ([], ys) = ys
+  | revAppend (x :: xs, ys) = revAppend (xs, x :: ys)
+fun app f [] = ()
+  | app f (x :: xs) = (f x; app f xs)
+fun map f [] = []
+  | map f (x :: xs) = f x :: map f xs
+fun mapPartial f [] = []
+  | mapPartial f (x :: xs) = case f x of
+                                 NONE => mapPartial f xs
+                               | SOME y => y :: mapPartial f xs
+fun find f [] = NONE
+  | find f (x :: xs) = if f x then
+                           SOME x
+                       else
+                           find f xs
+fun filter f [] = []
+  | filter f (x :: xs) = if f x then
+                             x :: filter f xs
+                         else
+                             filter f xs
+fun partition f [] = ([], [])
+  | partition f (x :: xs) = if f x then
+                                let val (l, r) = partition f xs
+                                in (x :: l, r)
+                                end
+                            else
+                                let val (l, r) = partition f xs
+                                in (l, x :: r)
+                                end
+fun foldl f init [] = init
+  | foldl f init (x :: xs) = foldl f (f (x, init)) xs
+fun foldr f init [] = init
+  | foldr f init (x :: xs) = f (x, foldr f init xs)
+fun concat xs = foldr (op @) [] xs
+fun exists f [] = false
+  | exists f (x :: xs) = f x orelse exists f xs
+fun all f [] = true
+  | all f (x :: xs) = f x andalso all f xs
+fun tabulate (n, f) = let fun go i = if i >= n then
+                                         []
+                                     else
+                                         f i :: go (i + 1)
+                      in go 0
+                      end
+fun collate compare ([], []) = EQUAL
+  | collate compare (_ :: _, []) = GREATER
+  | collate compare ([], _ :: _) = LESS
+  | collate compare (x :: xs, y :: ys) = case compare x y of
+                                             EQUAL => collate compare (xs, ys)
+                                           | c => c
+end (* structure List *)
+val op @ : ('a list * 'a list) -> 'a list = List.@
+val app : ('a -> unit) -> 'a list -> unit = List.app
+val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
+val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
+val hd : 'a list -> 'a = List.hd
+val length : 'a list -> int = List.length
+val map : ('a -> 'b) -> 'a list -> 'b list = List.map
+val null : 'a list -> bool = List.null
+val rev : 'a list -> 'a list = List.rev
+val tl : 'a list -> 'a list = List.tl
 
-(* Option *)
 structure Option = struct
 datatype option = datatype option
 exception Option
@@ -373,23 +465,23 @@ fun compose (f, g) x = case g x of
 fun composePartial (f, g) x = case g x of
                                   SOME y => f y
                                 | NONE => NONE
-end;
-val getOpt : 'a option * 'a -> 'a = Option.getOpt;
-val isSome : 'a option -> bool = Option.isSome;
-val valOf : 'a option -> 'a = Option.valOf;
+end (* structure Option *)
+val getOpt : 'a option * 'a -> 'a = Option.getOpt
+val isSome : 'a option -> bool = Option.isSome
+val valOf : 'a option -> 'a = Option.valOf
 
 structure Array = struct
 datatype array = datatype array
 datatype vector = datatype vector
 open LunarML.Array (* array, fromList, tabulate, length, sub, update *)
-end;
+end (* structure Array *)
 
 structure IO = struct
 exception Io of { name : string
                 , function : string
                 , cause : exn
                 }
-end;
+end (* structure IO *)
 
 structure TextIO = struct
 local
@@ -460,6 +552,74 @@ val stdOut = LunarML.assumeDiscardable (Outstream (Lua.field (io, "stdout")))
 val stdErr = LunarML.assumeDiscardable (Outstream (Lua.field (io, "stderr")))
 fun print s = (Lua.call io_write (vector [Lua.fromString s]); ())
 (* scanStream *)
+end (* local *)
+end (* structure TextIO *)
+val print : string -> unit = TextIO.print
+
+structure OS = struct
+local
+    val oslib = LunarML.assumeDiscardable (Lua.global "os")
+    val os_execute = LunarML.assumeDiscardable (Lua.field (oslib, "execute"))
+    val os_exit = LunarML.assumeDiscardable (Lua.field (oslib, "exit"))
+    val os_getenv = LunarML.assumeDiscardable (Lua.field (oslib, "getenv"))
+    val os_remove = LunarML.assumeDiscardable (Lua.field (oslib, "remove"))
+    val os_rename = LunarML.assumeDiscardable (Lua.field (oslib, "rename"))
+in
+structure FileSys = struct
+val remove : string -> unit = fn filename => ( Lua.call os_remove (vector [Lua.fromString filename])
+                                             ; ()
+                                             )
+val rename : {old : string, new : string} -> unit = fn {old, new} => ( Lua.call os_rename (vector [Lua.fromString old, Lua.fromString new])
+                                                                     ; ()
+                                                                     )
+end (* structure FileSys *)
+structure IO = struct end
+structure Path = struct end
+structure Process = struct
+type status = int
+val success : status = 0
+val failure : status = 1
+val isSuccess : status -> bool = fn 0 => true | _ => false
+val system : string -> status = fn command => let val result = Lua.call os_execute (vector [Lua.fromString command])
+                                              in failure (* TODO *)
+                                              end
+(* val atExit : (unit -> unit) -> unit *)
+val exit : status -> 'a = fn status => let val result = Lua.call os_exit (vector [Lua.fromInt status, Lua.fromBool true])
+                                       in raise Fail "os.exit not available"
+                                       end
+val terminate : status -> 'a = fn status => let val result = Lua.call os_exit (vector [Lua.fromInt status, Lua.fromBool false])
+                                            in raise Fail "os.exit not available"
+                                            end
+val getEnv : string -> string option = fn name => let val result = Lua.call os_getenv (vector [Lua.fromString name])
+                                                  in if Lua.isNil (Vector.sub (result, 0)) then
+                                                         NONE
+                                                     else
+                                                         SOME (Lua.unsafeFromValue (Vector.sub (result, 0)))
+                                                  end
+(* val sleep : Time.time -> unit *)
+end (* structure Process *)
+end (* local *)
+(*
+eqtype syserror
+exception SysErr of string * syserror option
+val errorMsg : syserror -> string
+val errorName : syserror -> string
+val syserror : string -> syserror option
+*)
+end (* structure OS *)
+
+structure CommandLine = struct
+local
+    val luaarg = LunarML.assumeDiscardable (Lua.global "arg")
+in
+val name : unit -> string = fn () => let val s = Lua.sub (luaarg, Lua.fromInt 0)
+                                     in if Lua.isNil s then
+                                            raise Fail "CommandLine.name: arg is not available"
+                                        else
+                                            Lua.unsafeFromValue s
+                                     end
+val arguments : unit -> string list = fn () => List.tabulate (Lua.unsafeFromValue (Lua.length luaarg), fn i => Lua.unsafeFromValue (Lua.sub (luaarg, Lua.fromInt (i + 1))) : string)
 end
-end;
-val print : string -> unit = TextIO.print;
+end (* structure CommandLine *)
+
+end; (* local *)
