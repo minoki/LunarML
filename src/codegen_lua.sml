@@ -195,6 +195,9 @@ val builtins
                     ,(VId_Lua_RSHIFT, "_RSHIFT")
                     ,(VId_Lua_concat, "_concat")
                     ,(VId_Lua_length, "_length")
+                    (* extra *)
+                    ,(VId_assumePure, "_id") (* no-op *)
+                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
 datatype BinaryOp = InfixOp of (* prec *) int * string
@@ -479,7 +482,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                               | _ => NONE
           val isNoop = case exp1 of
                            F.VarExp(Syntax.MkQualified([], vid)) => USyntax.eqVId(vid, InitialEnv.VId_String_str)
-                         | F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) 
+                         | F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse USyntax.eqVId(vid, InitialEnv.VId_assumePure) orelse USyntax.eqVId(vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
       in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doLuaCall, doLuaMethod] of
              f :: _ => f ()

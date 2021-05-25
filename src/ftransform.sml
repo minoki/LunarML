@@ -417,6 +417,7 @@ fun isDiscardable (F.SConExp _) = true
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
+  | isDiscardable (F.AppExp (F.TyAppExp (F.VarExp(Syntax.MkQualified(_, vid)), _), exp2)) = USyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse USyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.RaiseExp (span, exp)) = false

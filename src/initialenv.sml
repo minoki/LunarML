@@ -204,6 +204,10 @@ val VId_Lua_GE = newVId "Lua.>="
 val VId_Lua_concat = newVId "Lua.concat" (* .. *)
 val VId_Lua_length = newVId "Lua.length" (* # *)
 
+(* Other primitives *)
+val VId_assumePure = newVId "LunarML.assumePure"
+val VId_assumeDiscardable = newVId "LunarML.assumeDiscardable"
+
 val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
     = let val ValueConstructor = Syntax.ValueConstructor
           val ExceptionConstructor = Syntax.ExceptionConstructor
@@ -353,7 +357,10 @@ val initialEnv_ToTypedSyntax : ToTypedSyntax.Env
                            , tyConMap = mkTyConMap [(Syntax.MkTyCon "value", OpaqueBTyCon primTyCon_Lua_value)]
                            , strMap = Syntax.StrIdMap.empty
                            }
-          val module_LunarML = { valMap = mkValMap []
+          val module_LunarML = { valMap = mkValMap
+                                              [("assumePure", VId_assumePure)
+                                              ,("assumeDiscardable", VId_assumeDiscardable)
+                                              ]
                                , tyConMap = mkTyConMap []
                                , strMap = mkStrMap
                                               [("Int", module_Int)
@@ -600,6 +607,14 @@ val initialEnv : Typing.Env
                            , strMap = mkStrMap []
                            , boundTyVars = USyntax.TyVarSet.empty
                            }
+          val module_LunarML = { tyMap = mkTyMap []
+                               , valMap = mkValMap
+                                              [(VId_assumePure, TypeScheme ([(tyVarA, [])], tyA --> tyA))
+                                              ,(VId_assumeDiscardable, TypeScheme ([(tyVarA, [])], tyA --> tyA))
+                                              ]
+                               , strMap = mkStrMap []
+                               , boundTyVars = USyntax.TyVarSet.empty
+                               }
       in List.foldl Typing.mergeEnv
                     { tyMap = mkTyMap
                                   [(primTyCon_bool, TyStr { typeFunction = TypeFcn([], primTy_bool)
@@ -708,6 +723,7 @@ val initialEnv : Typing.Env
                     ,module_Array
                     ,module_Vector
                     ,module_Lua
+                    ,module_LunarML
                     ]
       end
 

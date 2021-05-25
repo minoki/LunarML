@@ -75,26 +75,28 @@ structure Int = struct
 type int = int
 open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
 local
-    val stringlib = Lua.global "string"
-    val string_match = Lua.field (stringlib, "match")
-    val string_gsub = Lua.field (stringlib, "gsub")
-    val tostring = Lua.global "tostring"
-    val tonumber = Lua.global "tonumber"
-    val mathlib = Lua.global "math"
-    val math_maxinteger = Lua.field (mathlib, "maxinteger")
-    val math_mininteger = Lua.field (mathlib, "mininteger")
+    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
+    val string_match = LunarML.assumeDiscardable (Lua.field (stringlib, "match"))
+    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
+    val tostring = LunarML.assumeDiscardable (Lua.global "tostring")
+    val tonumber = LunarML.assumeDiscardable (Lua.global "tonumber")
+    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
+    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
+    val math_mininteger = LunarML.assumeDiscardable (Lua.field (mathlib, "mininteger"))
 in
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
 val fromInt : int -> int = fn x => x
-val precision : int option = let fun computeWordSize (x : int, n) = if x = 0 then
-                                                                        n
-                                                                    else
-                                                                        computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
-                             in SOME (computeWordSize (Lua.unsafeFromValue math_maxinteger, 1))
-                             end
-val minInt : int option = SOME (Lua.unsafeFromValue math_mininteger)
-val maxInt : int option = SOME (Lua.unsafeFromValue math_maxinteger)
+val precision : int option = LunarML.assumeDiscardable
+                                 (let fun computeWordSize (x : int, n) = if x = 0 then
+                                                                             n
+                                                                         else
+                                                                             computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
+                                  in SOME (computeWordSize (Lua.unsafeFromValue math_maxinteger, 1))
+                                  end
+                                 )
+val minInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue math_mininteger))
+val maxInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue math_maxinteger))
 (*
 val quot : int * int -> int
 val rem : int * int -> int
@@ -144,19 +146,21 @@ end;
 
 structure Word = struct
 local
-    val mathlib = Lua.global "math"
-    val math_maxinteger = Lua.field (mathlib, "maxinteger")
-    val stringlib = Lua.global "string"
-    val string_format = Lua.field (mathlib, "format")
+    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
+    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
+    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
+    val string_format = LunarML.assumeDiscardable (Lua.field (mathlib, "format"))
 in
 type word = word
 open LunarML.Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
-val wordSize : int = let fun computeWordSize (x : int, n : int) = if x = 0 then
-                                                                      n
-                                                                  else
-                                                                      computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
-                     in computeWordSize (Lua.unsafeFromValue math_maxinteger, 1)
-                     end
+val wordSize : int = LunarML.assumeDiscardable
+                         (let fun computeWordSize (x : int, n : int) = if x = 0 then
+                                                                           n
+                                                                       else
+                                                                           computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
+                          in computeWordSize (Lua.unsafeFromValue math_maxinteger, 1)
+                          end
+                         )
 (* toLarge, toLargeX, toLargeWord, toLargeWordX, fromLarge, fromLargeWord, toLargeInt, toLargeIntX, fromLargeInt *)
 val toInt : word -> int = fn x => if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
                                       raise Overflow
@@ -211,23 +215,23 @@ end;
 structure Math = struct
 type real = real
 local
-    val mathlib = Lua.global "math"
-    val math_atan = Lua.field (mathlib, "atan")
-    val math_log = Lua.field (mathlib, "log")
+    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
+    val math_atan = LunarML.assumeDiscardable (Lua.field (mathlib, "atan"))
+    val math_log = LunarML.assumeDiscardable (Lua.field (mathlib, "log"))
 in
-val pi : real = Lua.unsafeFromValue (Lua.field (mathlib, "pi"))
+val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "pi")))
 (* val e : real *)
-val sqrt : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "sqrt"))
-val sin : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "sin"))
-val cos : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "cos"))
-val tan : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "tan"))
-val asin : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "asin"))
-val acos : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "acos"))
-val atan : real -> real = Lua.unsafeFromValue math_atan
+val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "sqrt")))
+val sin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "sin")))
+val cos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "cos")))
+val tan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "tan")))
+val asin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "asin")))
+val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "acos")))
+val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue math_atan)
 val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call math_atan (vector [Lua.fromReal y, Lua.fromReal x]), 0))
-val exp : real -> real = Lua.unsafeFromValue (Lua.field (mathlib, "exp"))
+val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "exp")))
 val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
-val ln : real -> real = Lua.unsafeFromValue math_log
+val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue math_log)
 val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call math_log (vector [Lua.fromReal x, Lua.fromInt 10]), 0))
 (*
 val sinh : real -> real
@@ -251,11 +255,11 @@ val size = LunarML.String.size
 val str = LunarML.String.str
 val op ^ = LunarML.String.^
 local
-    val stringlib = Lua.global "string"
-    val string_sub = Lua.field (stringlib, "sub")
-    val string_gsub = Lua.field (stringlib, "gsub")
-    val tablelib = Lua.global "table"
-    val table_concat = Lua.field (tablelib, "concat")
+    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
+    val string_sub = LunarML.assumeDiscardable (Lua.field (stringlib, "sub"))
+    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
+    val tablelib = LunarML.assumeDiscardable (Lua.global "table")
+    val table_concat = LunarML.assumeDiscardable (Lua.field (tablelib, "concat"))
 in
 fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
@@ -391,9 +395,9 @@ structure TextIO = struct
 local
     datatype instream = Instream of Lua.value
     datatype outstream = Outstream of Lua.value
-    val io = Lua.global "io"
-    val io_open = Lua.field (io, "open")
-    val io_write = Lua.field (io, "write")
+    val io = LunarML.assumeDiscardable (Lua.global "io")
+    val io_open = LunarML.assumeDiscardable (Lua.field (io, "open"))
+    val io_write = LunarML.assumeDiscardable (Lua.field (io, "write"))
 in
 (* IMPERATIVE_IO *)
 type vector = string
@@ -451,9 +455,9 @@ fun openAppend f = let val result = Lua.call io_open (vector [Lua.fromString f, 
                           Outstream (Vector.sub (result, 0))
                    end
 (* fun openString f *)
-val stdIn = Instream (Lua.field (io, "stdin"))
-val stdOut = Outstream (Lua.field (io, "stdout"))
-val stdErr = Outstream (Lua.field (io, "stderr"))
+val stdIn = LunarML.assumeDiscardable (Instream (Lua.field (io, "stdin")))
+val stdOut = LunarML.assumeDiscardable (Outstream (Lua.field (io, "stdout")))
+val stdErr = LunarML.assumeDiscardable (Outstream (Lua.field (io, "stderr")))
 fun print s = (Lua.call io_write (vector [Lua.fromString s]); ())
 (* scanStream *)
 end
