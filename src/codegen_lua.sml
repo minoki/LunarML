@@ -332,6 +332,8 @@ fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                                      in
                                                                          if x > 255 then
                                                                              raise Fail ("this string cannot be expressed in Lua: " ^ String.toString s)
+                                                                         else if x < 0x10 then
+                                                                             "\\x0" ^ Int.fmt StringCvt.HEX x
                                                                          else
                                                                              "\\x" ^ Int.fmt StringCvt.HEX x
                                                                      end
