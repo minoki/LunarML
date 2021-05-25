@@ -771,7 +771,16 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
                val env' = mergeEnv(env, venv)
                fun doFValBind (S.FValBind { sourceSpan, vid, arity, rules })
-                   = let fun buildExp(0, revParams) = let val params = List.rev revParams
+                   = let fun buildExp(0, [(paramId, paramTy)]) = let fun doRule ([pat], optTy, exp) = let val (vidmap', pat) = toUPat(ctx, tvenv', env', pat)
+                                                                                                          val venv' = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap')
+                                                                                                      in (pat, toUExp(ctx, tvenv', mergeEnv(env', venv'), case optTy of
+                                                                                                                                                              NONE => exp 
+                                                                                                                                                            | SOME expTy => S.TypedExp(Syntax.getSourceSpanOfExp exp, exp, expTy)))
+                                                                                                      end
+                                                                       | doRule _ = emitError(ctx, [sourceSpan], "invalid function declaration")
+                                                                 in U.CaseExp(sourceSpan, U.VarExp(sourceSpan, Syntax.MkQualified([], paramId), Syntax.ValueVariable), paramTy, List.map doRule rules)
+                                                                 end
+                           | buildExp(0, revParams) = let val params = List.rev revParams
                                                           val paramTuple = U.TupleExp (sourceSpan, List.map (fn (vid, _) => U.VarExp(sourceSpan, Syntax.MkQualified([], vid), Syntax.ValueVariable)) params)
                                                           val paramTupleTy = U.TupleType (sourceSpan, List.map #2 params)
                                                           fun doRule (pats, optTy, exp) = let val (vidmap', pat) = toUPat(ctx, tvenv', env', S.TuplePat(SourcePos.nullSpan (* TODO *), pats))
