@@ -197,51 +197,53 @@ val builtins
                     ,(VId_Lua_length, "_length")
                     ]
       end
-datatype BinaryOp = InfixOp of string | NamedBinaryFn of string
+datatype BinaryOp = InfixOp of (* prec *) int * string
+                  | InfixOpR of (* prec *) int * string
+                  | NamedBinaryFn of string
 val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
     = let open InitialEnv
       in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
-                    [(VId_EQUAL_bool,   (InfixOp "==", true))
-                    ,(VId_EQUAL_int,    (InfixOp "==", true))
-                    ,(VId_EQUAL_word,   (InfixOp "==", true))
-                    ,(VId_EQUAL_string, (InfixOp "==", true))
-                    ,(VId_EQUAL_char,   (InfixOp "==", true))
-                    ,(VId_EQUAL_exntag, (InfixOp "==", true))
+                    [(VId_EQUAL_bool,   (InfixOp (10, "=="), true))
+                    ,(VId_EQUAL_int,    (InfixOp (10, "=="), true))
+                    ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
+                    ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
+                    ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
+                    ,(VId_EQUAL_exntag, (InfixOp (10, "=="), true))
                     ,(VId_Int_PLUS,     (NamedBinaryFn "__add_int", false))
-                    ,(VId_Word_PLUS,    (InfixOp "+", true))
-                    ,(VId_Real_PLUS,    (InfixOp "+", true))
+                    ,(VId_Word_PLUS,    (InfixOp (4, "+"), true))
+                    ,(VId_Real_PLUS,    (InfixOp (4, "+"), true))
                     ,(VId_Int_MINUS,    (NamedBinaryFn "__sub_int", false))
-                    ,(VId_Word_MINUS,   (InfixOp "-", true))
-                    ,(VId_Real_MINUS,   (InfixOp "-", true))
+                    ,(VId_Word_MINUS,   (InfixOp (4, "-"), true))
+                    ,(VId_Real_MINUS,   (InfixOp (4, "-"), true))
                     ,(VId_Int_TIMES,    (NamedBinaryFn "__mul_int", false))
-                    ,(VId_Word_TIMES,   (InfixOp "*", true))
-                    ,(VId_Real_TIMES,   (InfixOp "*", true))
-                    ,(VId_Real_DIVIDE,  (InfixOp "/", true))
+                    ,(VId_Word_TIMES,   (InfixOp (3, "*"), true))
+                    ,(VId_Real_TIMES,   (InfixOp (3, "*"), true))
+                    ,(VId_Real_DIVIDE,  (InfixOp (3, "/"), true))
                     ,(VId_Int_div,      (NamedBinaryFn "__div_int", false))
                     ,(VId_Word_div,     (NamedBinaryFn "__div_word", false))
                     ,(VId_Int_mod,      (NamedBinaryFn "__mod_int", false))
                     ,(VId_Word_mod,     (NamedBinaryFn "__mod_word", false))
-                    ,(VId_Int_LT,       (InfixOp "<", true))
-                    ,(VId_Real_LT,      (InfixOp "<", true))
-                    ,(VId_String_LT,    (InfixOp "<", true))
-                    ,(VId_Char_LT,      (InfixOp "<", true))
+                    ,(VId_Int_LT,       (InfixOp (10, "<"), true))
+                    ,(VId_Real_LT,      (InfixOp (10, "<"), true))
+                    ,(VId_String_LT,    (InfixOp (10, "<"), true))
+                    ,(VId_Char_LT,      (InfixOp (10, "<"), true))
                     ,(VId_Word_LT,      (NamedBinaryFn "__LT_word", true))
-                    ,(VId_Int_LE,       (InfixOp "<=", true))
-                    ,(VId_Real_LE,      (InfixOp "<=", true))
-                    ,(VId_String_LE,    (InfixOp "<=", true))
-                    ,(VId_Char_LE,      (InfixOp "<=", true))
+                    ,(VId_Int_LE,       (InfixOp (10, "<="), true))
+                    ,(VId_Real_LE,      (InfixOp (10, "<="), true))
+                    ,(VId_String_LE,    (InfixOp (10, "<="), true))
+                    ,(VId_Char_LE,      (InfixOp (10, "<="), true))
                     ,(VId_Word_LE,      (NamedBinaryFn "__LE_word", true))
-                    ,(VId_Int_GT,       (InfixOp ">", true))
-                    ,(VId_Real_GT,      (InfixOp ">", true))
-                    ,(VId_String_GT,    (InfixOp ">", true))
-                    ,(VId_Char_GT,      (InfixOp ">", true))
+                    ,(VId_Int_GT,       (InfixOp (10, ">"), true))
+                    ,(VId_Real_GT,      (InfixOp (10, ">"), true))
+                    ,(VId_String_GT,    (InfixOp (10, ">"), true))
+                    ,(VId_Char_GT,      (InfixOp (10, ">"), true))
                     ,(VId_Word_GT,      (NamedBinaryFn "__GT_word", true))
-                    ,(VId_Int_GE,       (InfixOp ">=", true))
-                    ,(VId_Real_GE,      (InfixOp ">=", true))
-                    ,(VId_String_GE,    (InfixOp ">=", true))
-                    ,(VId_Char_GE,      (InfixOp ">=", true))
+                    ,(VId_Int_GE,       (InfixOp (10, ">="), true))
+                    ,(VId_Real_GE,      (InfixOp (10, ">="), true))
+                    ,(VId_String_GE,    (InfixOp (10, ">="), true))
+                    ,(VId_Char_GE,      (InfixOp (10, ">="), true))
                     ,(VId_Word_GE,      (NamedBinaryFn "__GE_word", true))
-                    ,(VId_String_HAT,   (InfixOp "..", true))
+                    ,(VId_String_HAT,   (InfixOpR (5, ".."), true))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
@@ -280,8 +282,22 @@ fun LabelToLua(Syntax.NumericLabel(n)) = Int.toString n
  3: * / // %
  2: unary operators (not # - ~)
  1: ^ (right assoc)
- 0: function call
+ 0: literals
+ ~1: prefixexp
  *)
+(* exp ::= nil | false | true | Numeral | LiteralString | '...' | functiondef |
+           prefixexp | tableconstructor | exp binop exp | unop exp
+   prefixexp ::= var | functioncall | '(' exp ')'
+ *)
+
+type Exp = { prec : int
+           , exp : string
+           }
+
+fun paren allowed { prec, exp } = if allowed < prec then
+                                      "(" ^ exp ^ ")"
+                                  else
+                                      exp
 
 type Context = { nextLuaId : int ref }
 type Env = { indent : int }
@@ -318,43 +334,43 @@ fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                                      end
                                                           ) s ^ "\""
 
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then "(-" ^ Int.toString (~ x) ^ ")" else Int.toString x
-  | doLiteral (Syntax.WordConstant x) = "0x" ^ Word.toString x
+fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = "-" ^ Int.toString (~ x) } else {prec = 0, exp = Int.toString x }
+  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = "0x" ^ Word.toString x }
   | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
-                                             "(" ^ String.map (fn #"~" => #"-" | c => c) x ^ ")"
+                                             { prec = 2, exp = String.map (fn #"~" => #"-" | c => c) x }
                                          else
-                                             String.map (fn #"~" => #"-" | c => c) x
+                                             { prec = 0, exp = String.map (fn #"~" => #"-" | c => c) x }
                                         )
-  | doLiteral (Syntax.StringConstant x) = toLuaStringLit x
-  | doLiteral (Syntax.CharacterConstant x) = toLuaStringLit x
+  | doLiteral (Syntax.StringConstant x) = { prec = 0, exp = toLuaStringLit x }
+  | doLiteral (Syntax.CharacterConstant x) = { prec = 0, exp = toLuaStringLit x }
 
 datatype Destination = Return
                      | AssignTo of string
                      | UnpackingAssignTo of string list
                      | Discard
-                     | Continue of (* statements *) string list * (* pure expression *) string -> string (* the continuation should be called exactly once, and the expression should be used only once *)
+                     | Continue of (* statements *) string list * (* pure expression *) Exp -> string (* the continuation should be called exactly once, and the expression should be used only once *)
 
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
 
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> string *)
-fun putPureTo ctx env Return (stmts, exp : string) = String.concat stmts ^ indent env ^ "return " ^ exp ^ "\n"
-  | putPureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ exp ^ "\n"
-  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
+fun putPureTo ctx env Return (stmts, exp : Exp) = String.concat stmts ^ indent env ^ "return " ^ #exp exp ^ "\n"
+  | putPureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ #exp exp ^ "\n"
+  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ #exp exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
   | putPureTo ctx env Discard (stmts, exp) = String.concat stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, exp)
-and putImpureTo ctx env Return (stmts, exp : string) = String.concat stmts ^ indent env ^ "return " ^ exp ^ "\n"
-  | putImpureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ exp ^ "\n"
-  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
-  | putImpureTo ctx env Discard (stmts, exp) = String.concat stmts ^ indent env ^ "type((" ^ exp ^ "))\n"
+and putImpureTo ctx env Return (stmts, exp : Exp) = String.concat stmts ^ indent env ^ "return " ^ #exp exp ^ "\n"
+  | putImpureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ #exp exp ^ "\n"
+  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ #exp exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
+  | putImpureTo ctx env Discard (stmts, exp) = String.concat stmts ^ indent env ^ "type((" ^ #exp exp ^ "))\n"
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
-                                                       in cont (stmts @ [indent env ^ "local " ^ dest ^ " = " ^ exp ^ "\n"], dest)
+                                                       in cont (stmts @ [indent env ^ "local " ^ dest ^ " = " ^ #exp exp ^ "\n"], { prec = ~1, exp = dest })
                                                        end
 and doExpCont ctx env exp cont = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([], doLiteral scon)
-  | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], VIdToLua vid)
-  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], "_unit")
+  | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], { prec = ~1, exp = VIdToLua vid })
+  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = "_unit" })
   | doExpTo ctx env (F.RecordExp fields) Discard = String.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
@@ -362,8 +378,8 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
                                                   , case Syntax.extractTuple(1, fields) of
-                                                        SOME _ => "{" ^ String.concatWith ", " (List.map #2 fields') ^ "}"
-                                                      | NONE => "{" ^ String.concatWith ", " (List.map (fn (label, e) => "[" ^ LabelToLua label ^ "] = " ^ e) fields') ^ "}"
+                                                        SOME _ => { prec = 0, exp = "{" ^ String.concatWith ", " (List.map (#exp o #2) fields') ^ "}" }
+                                                      | NONE => { prec = 0, exp = "{" ^ String.concatWith ", " (List.map (fn (label, e) => "[" ^ LabelToLua label ^ "] = " ^ #exp e) fields') ^ "}" }
                                                   )
                         end
               )
@@ -378,7 +394,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
     = let val doProjection = case exp1 of
                                  F.ProjectionExp { label, ... } =>
-                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, "(" ^ exp2' ^ ")[" ^ LabelToLua label ^ "]")))
+                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' ^ "[" ^ LabelToLua label ^ "]" })))
                                | _ => NONE
           val doBinary = case (exp1, exp2) of
                              (F.VarExp (Syntax.MkQualified([], vid)), F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
@@ -386,8 +402,9 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                              in case USyntax.VIdMap.find(builtinBinaryOps, vid) of
                                     SOME (binop, pure) => wrap (fn (stmts, e1', e2') =>
                                                                    let val e = case binop of
-                                                                                   InfixOp luaop => "(" ^ e1' ^ ") " ^ luaop ^ " (" ^ e2' ^ ")"
-                                                                                 | NamedBinaryFn luafn => luafn ^ "(" ^ e1' ^ ", " ^ e2' ^ ")"
+                                                                                   InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' ^ " " ^ luaop ^ " " ^ paren (prec + 1) e2' }
+                                                                                 | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' ^ " " ^ luaop ^ " " ^ paren prec e2' }
+                                                                                 | NamedBinaryFn luafn => { prec = ~1, exp = luafn ^ "(" ^ #exp e1' ^ ", " ^ #exp e2' ^ ")" }
                                                                    in if pure then
                                                                           putPureTo ctx env dest (stmts, e)
                                                                       else
@@ -396,7 +413,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                )
                                   | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
                                                 wrap (fn (stmts, e1', e2') =>
-                                                         let val e = "(" ^ e1' ^ ")[" ^ e2' ^ "]"
+                                                         let val e = { prec = ~1, exp = paren ~1 e1' ^ "[" ^ #exp e2' ^ "]" }
                                                          in putImpureTo ctx env dest (stmts, e)
                                                          end
                                                      )
@@ -409,15 +426,15 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
                             in if USyntax.eqVId(vid, VId_Real_TILDE) orelse USyntax.eqVId(vid, VId_Word_TILDE) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "- (" ^ e2' ^ ")"))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "- " ^ paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "not (" ^ e2' ^ ")"))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "not " ^ paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_EXCLAM) then
-                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, "(" ^ e2' ^ ").payload"))
+                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' ^ ".payload" }))
                                else if USyntax.eqVId(vid, VId_String_size) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "#(" ^ e2' ^ ")"))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "#" ^ paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_Lua_isNil) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, "(" ^ e2' ^ ") == nil"))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' ^ " == nil" }))
                                else
                                    NONE
                             end
@@ -430,10 +447,10 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                mapCont (fn (e, cont) => doExpCont ctx env e cont)
                                                                        (Vector.foldr (op ::) [] xs)
                                                                        (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                     val zs = List.map #2 ys
+                                                                                     val zs = List.map (#exp o #2) ys
                                                                                  in case dest of
-                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ f ^ ")(" ^ String.concatWith ", " zs ^ ")")
-                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, "table.pack((" ^ f ^ ")(" ^ String.concatWith ", " zs ^ "))")
+                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 f ^ "(" ^ String.concatWith ", " zs ^ ")" })
+                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = "table.pack(" ^ paren ~1 f ^ "(" ^ String.concatWith ", " zs ^ "))" })
                                                                                  end
                                                                        )
                                                            )
@@ -449,10 +466,10 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                  mapCont (fn (e, cont) => doExpCont ctx env e cont)
                                                                          (Vector.foldr (op ::) [] xs)
                                                                          (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                       val zs = List.map #2 ys
+                                                                                       val zs = List.map (#exp o #2) ys
                                                                                    in case dest of
-                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ self ^ "):" ^ method ^ "(" ^ String.concatWith ", " zs ^ ")")
-                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, "table.pack((" ^ self ^ "):" ^ method ^ "(" ^ String.concatWith ", " zs ^ "))")
+                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 self ^ ":" ^ method ^ "(" ^ String.concatWith ", " zs ^ ")" })
+                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = "table.pack(" ^ paren ~1 self ^ ":" ^ method ^ "(" ^ String.concatWith ", " zs ^ "))" })
                                                                                    end
                                                                          )
                                                              )
@@ -473,7 +490,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                  (fn (stmts1, e1') =>
                                      doExpCont ctx env exp2
                                                (fn (stmts2, e2') =>
-                                                   putImpureTo ctx env dest (stmts1 @ stmts2, "(" ^ e1' ^ ")(" ^ e2' ^ ")")
+                                                   putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 e1' ^ "(" ^ #exp e2' ^ ")" })
                                                )
                                  )
       end
@@ -487,14 +504,14 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                       ,doExpTo ctx (nextIndentLevel env) handler (AssignTo result) ^ "\n" (* TODO: tail call *)
                       ,indent env ^ "end\n"
                       ]
-      in putPureTo ctx env dest (stmts, result)
+      in putPureTo ctx env dest (stmts, { prec = ~1, exp = result })
       end
   | doExpTo ctx env (F.RaiseExp (span as { start = { file, line, column }, ... }, exp)) dest
     = doExpCont ctx env exp
                 (fn (stmts, exp') =>
                     case dest of
-                        Continue cont => cont (stmts @ [indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"], "nil")
-                      | _ => String.concat stmts ^ indent env ^ "_raise(" ^ exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"
+                        Continue cont => cont (stmts @ [indent env ^ "_raise(" ^ #exp exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"], { prec = 0, exp = "nil" })
+                      | _ => String.concat stmts ^ indent env ^ "_raise(" ^ #exp exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"
                 )
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
@@ -504,14 +521,14 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                         (fn (s1, e1') =>
                                             String.concat
                                                 (if List.null s1 then
-                                                     [ indent env ^ "elseif " ^ e1' ^ " then\n"
+                                                     [ indent env ^ "elseif " ^ #exp e1' ^ " then\n"
                                                      , doExpTo ctx (nextIndentLevel env) e2 dest'
                                                      , doElseIf env e3 dest'
                                                      ]
                                                  else
                                                      [ indent env ^ "else\n" ]
                                                      @ s1
-                                                     @ [ indent (nextIndentLevel env) ^ "if " ^ e1' ^ " then\n"
+                                                     @ [ indent (nextIndentLevel env) ^ "if " ^ #exp e1' ^ " then\n"
                                                        , doExpTo ctx (nextIndentLevel (nextIndentLevel env)) e2 dest'
                                                        , doElseIf (nextIndentLevel env) e3 dest'
                                                        , indent (nextIndentLevel env) ^ "end\n"
@@ -525,38 +542,38 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                            Continue cont => let val result = genSym ctx
                                             in cont (stmts1
                                                      @ [ indent env ^ "local " ^ result ^ "\n"
-                                                       , indent env ^ "if " ^ exp1' ^ " then\n"
+                                                       , indent env ^ "if " ^ #exp exp1' ^ " then\n"
                                                        , doExpTo ctx (nextIndentLevel env) exp2 (AssignTo result)
                                                        , doElseIf env exp3 (AssignTo result)
                                                        , indent env ^ "end\n"
                                                        ]
-                                                    , result)
+                                                    , { prec = ~1, exp = result })
                                             end
                          | _ => String.concat stmts1
-                                ^ indent env ^ "if " ^ exp1' ^ " then\n"
+                                ^ indent env ^ "if " ^ #exp exp1' ^ " then\n"
                                 ^ doExpTo ctx (nextIndentLevel env) exp2 dest
                                 ^ doElseIf env exp3 dest
                                 ^ indent env ^ "end\n"
                     end
               )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], "function(" ^ VIdToLua vid ^ ")\n" ^ doExpTo ctx (nextIndentLevel env) exp Return ^ indent env ^ "end\n") (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], "function(x) return x[" ^ LabelToLua label ^ "] end\n")
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = "function(" ^ VIdToLua vid ^ ")\n" ^ doExpTo ctx (nextIndentLevel env) exp Return ^ indent env ^ "end\n" }) (* TODO: update environment *)
+  | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], { prec = 0, exp = "function(x) return x[" ^ LabelToLua label ^ "] end\n" })
   | doExpTo ctx env (F.ListExp (xs, _)) dest
     = if Vector.length xs = 0 then
-          putPureTo ctx env dest ([], "_nil")
+          putPureTo ctx env dest ([], { prec = ~1, exp = "_nil" })
       else
           mapCont (fn (e, cont) => doExpCont ctx env e cont)
                   (Vector.foldr (op ::) [] xs)
                   (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                            in putPureTo ctx env dest (stmts, "_list{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                            in putPureTo ctx env dest (stmts, { prec = ~1, exp = "_list{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ #exp y ^ acc) " }" ys })
                             end
                   )
   | doExpTo ctx env (F.VectorExp (xs, _)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e cont)
               (Vector.foldr (op ::) [] xs)
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                        in putPureTo ctx env dest (stmts, "{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ y ^ acc) " }" ys)
+                        in putPureTo ctx env dest (stmts, { prec = ~1, exp = "{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ #exp y ^ acc) " }" ys })
                         end
               )
   | doExpTo ctx env (F.TyAbsExp (_, exp)) dest = doExpTo ctx env exp dest
@@ -567,13 +584,13 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
                                                   , case Syntax.extractTuple(1, fields) of
-                                                        SOME xs => "_recordEqual({" ^ String.concatWith ", " (List.map #2 fields') ^ "})"
-                                                      | NONE => "_recordEqual({" ^ String.concatWith ", " (List.map (fn (label, v) => "[" ^ LabelToLua label ^ "] = " ^ v) fields') ^ "})"
+                                                        SOME xs => { prec = ~1, exp = "_recordEqual({" ^ String.concatWith ", " (List.map (#exp o #2) fields') ^ "})" }
+                                                      | NONE => { prec = ~1, exp = "_recordEqual({" ^ String.concatWith ", " (List.map (fn (label, v) => "[" ^ LabelToLua label ^ "] = " ^ #exp v) fields') ^ "})" }
                                                   )
                         end
               )
-  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, exp' ^ ".tag"))
-  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, exp' ^ ".payload"))
+  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' ^ ".tag" }))
+  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' ^ ".payload" }))
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
