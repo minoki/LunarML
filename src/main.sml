@@ -69,7 +69,7 @@ and doCompile opts fileName = let val progDir = OS.Path.dir progName;
                                   val (env, basisdecs) = Driver.compile(ctx, Driver.initialEnv, mlbasis_sml, mlbasis)
                                   val (env', programdecs) = Driver.compile(ctx, env, fileName, source)
                                   val decs = Driver.wholeProgramOptimization (basisdecs @ programdecs)
-                                  val lua = CodeGenLua.doDecs { nextLuaId = ref 0 } CodeGenLua.initialEnv decs
+                                  val lua = CodeGenLua.doProgram { nextLuaId = ref 0 } CodeGenLua.initialEnv decs
                                   val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
                                   val () = TextIO.output (outs, mlinit)
                                   val () = TextIO.output (outs, lua)

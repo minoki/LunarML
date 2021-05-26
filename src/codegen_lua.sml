@@ -287,27 +287,50 @@ fun LabelToLua(Syntax.NumericLabel(n)) = Int.toString n
  1: ^ (right assoc)
  0: literals
  ~1: prefixexp
+ ~2: functioncall : allowed to appear as statements
  *)
 (* exp ::= nil | false | true | Numeral | LiteralString | '...' | functiondef |
            prefixexp | tableconstructor | exp binop exp | unop exp
    prefixexp ::= var | functioncall | '(' exp ')'
  *)
 
+datatype Fragment = Fragment of string
+                  | IncreaseIndent
+                  | DecreaseIndent
+                  | Indent
+                  | OptSemicolon
+                  | LineTerminator
+fun findNextFragment [] = NONE
+  | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
+  | findNextFragment (Fragment s :: _) = SOME s
+  | findNextFragment (_ :: fragments) = findNextFragment fragments
+fun processIndent (indent, []) = []
+  | processIndent (indent, Fragment s :: fragments) = s :: processIndent (indent, fragments)
+  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 2, fragments)
+  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 2, fragments)
+  | processIndent (indent, Indent :: fragments) = CharVector.tabulate(indent, fn _ => #" ") :: processIndent (indent, fragments)
+  | processIndent (indent, OptSemicolon :: fragments) = (case findNextFragment fragments of
+                                                            NONE => "\n" :: processIndent (indent, fragments)
+                                                          | SOME next => if String.sub (next, 0) = #"(" then
+                                                                             ";\n" :: processIndent (indent, fragments)
+                                                                         else
+                                                                             "\n" :: processIndent (indent, fragments)
+                                                        )
+  | processIndent (indent, LineTerminator :: fragments) = "\n" :: processIndent (indent, fragments)
+fun buildProgram fragments = String.concat (processIndent (0, fragments))
+
 type Exp = { prec : int
-           , exp : string
+           , exp : Fragment list
            }
 
 fun paren allowed { prec, exp } = if allowed < prec then
-                                      "(" ^ exp ^ ")"
+                                      [ Fragment "(" ] @ exp @ [ Fragment ")" ] 
                                   else
                                       exp
 
 type Context = { nextLuaId : int ref }
-type Env = { indent : int }
-val initialEnv : Env = { indent = 0 }
-
-fun nextIndentLevel ({ indent } : Env) = { indent = indent + 2 }
-fun indent ({ indent } : Env) = CharVector.tabulate(indent, fn _ => #" ")
+type Env = {}
+val initialEnv : Env = {}
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
@@ -339,67 +362,76 @@ fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                                      end
                                                           ) s ^ "\""
 
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = "-" ^ Int.toString (~ x) } else {prec = 0, exp = Int.toString x }
-  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = "0x" ^ Word.toString x }
+fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = [ Fragment ("-" ^ Int.toString (~ x)) ] } else {prec = 0, exp = [ Fragment (Int.toString x) ] }
+  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = [ Fragment ("0x" ^ Word.toString x) ] }
   | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
-                                             { prec = 2, exp = String.map (fn #"~" => #"-" | c => c) x }
+                                             { prec = 2, exp = [ Fragment (String.map (fn #"~" => #"-" | c => c) x) ] }
                                          else
-                                             { prec = 0, exp = String.map (fn #"~" => #"-" | c => c) x }
+                                             { prec = 0, exp = [ Fragment (String.map (fn #"~" => #"-" | c => c) x) ] }
                                         )
-  | doLiteral (Syntax.StringConstant x) = { prec = 0, exp = toLuaStringLit x }
-  | doLiteral (Syntax.CharacterConstant x) = { prec = 0, exp = toLuaStringLit x }
+  | doLiteral (Syntax.StringConstant x) = { prec = 0, exp = [ Fragment (toLuaStringLit x) ] }
+  | doLiteral (Syntax.CharacterConstant x) = { prec = 0, exp = [ Fragment (toLuaStringLit x) ] }
 
 datatype Destination = Return
                      | AssignTo of string
                      | UnpackingAssignTo of string list
                      | Discard
-                     | Continue of (* statements *) string list * (* pure expression *) Exp -> string (* the continuation should be called exactly once, and the expression should be used only once *)
+                     | Continue of (* statements *) Fragment list * (* pure expression *) Exp -> Fragment list (* the continuation should be called exactly once, and the expression should be used only once *)
 
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
 
-(* doExpTo : Context -> Env -> F.Exp -> Destination -> string *)
-fun putPureTo ctx env Return (stmts, exp : Exp) = String.concat stmts ^ indent env ^ "return " ^ #exp exp ^ "\n"
-  | putPureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ #exp exp ^ "\n"
-  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ #exp exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
-  | putPureTo ctx env Discard (stmts, exp) = String.concat stmts
+fun commaSep ([] : (Fragment list) list) : Fragment list = []
+  | commaSep (x :: xs) = x @ commaSep1 xs
+and commaSep1 [] = []
+  | commaSep1 (x :: xs) = Fragment ", " :: x @ commaSep1 xs
+
+(* doExpTo : Context -> Env -> F.Exp -> Destination -> Line list *)
+fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
+  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
+  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, exp)
-and putImpureTo ctx env Return (stmts, exp : Exp) = String.concat stmts ^ indent env ^ "return " ^ #exp exp ^ "\n"
-  | putImpureTo ctx env (AssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ v ^ " = " ^ #exp exp ^ "\n"
-  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = String.concat stmts ^ indent env ^ String.concatWith ", " v ^ " = table.unpack(" ^ #exp exp ^ ", 1, " ^ Int.toString (List.length v) ^ ")\n"
-  | putImpureTo ctx env Discard (stmts, exp) = String.concat stmts ^ indent env ^ "type((" ^ #exp exp ^ "))\n"
+and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
+  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
+  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putImpureTo ctx env Discard (stmts, exp) = stmts @ (if #prec exp = ~2 then
+                                                            Indent :: #exp exp @ [ OptSemicolon ]
+                                                        else
+                                                            [ Indent, Fragment "_id(" ] @ #exp exp @ [ Fragment ")", OptSemicolon ]
+                                                       )
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
-                                                       in cont (stmts @ [indent env ^ "local " ^ dest ^ " = " ^ #exp exp ^ "\n"], { prec = ~1, exp = dest })
+                                                       in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], { prec = ~1, exp = [ Fragment dest ] })
                                                        end
 and doExpCont ctx env exp cont = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([], doLiteral scon)
-  | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], { prec = ~1, exp = VIdToLua vid })
-  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = "_unit" })
-  | doExpTo ctx env (F.RecordExp fields) Discard = String.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
+and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env dest ([], doLiteral scon)
+  | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] })
+  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_unit" ] })
+  | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
               fields
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
                                                   , case Syntax.extractTuple(1, fields) of
-                                                        SOME _ => { prec = 0, exp = "{" ^ String.concatWith ", " (List.map (#exp o #2) fields') ^ "}" }
-                                                      | NONE => { prec = 0, exp = "{" ^ String.concatWith ", " (List.map (fn (label, e) => "[" ^ LabelToLua label ^ "] = " ^ #exp e) fields') ^ "}" }
+                                                        SOME _ => { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (#exp o #2) fields') @ [ Fragment "}" ] }
+                                                      | NONE => { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (fn (label, e) => [ Fragment ("[" ^ LabelToLua label ^ "] = ") ] @ #exp e) fields') @ [ Fragment "}" ] }
                                                   )
                         end
               )
   | doExpTo ctx env (F.LetExp (dec, exp)) (Continue cont)
     = let val dec' = doDec ctx env dec
-      in doExpCont ctx env exp (fn (stmts, exp) => cont (dec' :: stmts, exp))
+      in doExpCont ctx env exp (fn (stmts, exp) => cont (dec' @ stmts, exp))
       end
   | doExpTo ctx env (F.LetExp (dec, exp)) dest
     = let val dec' = doDec ctx env dec
-      in dec' ^ doExpTo ctx env exp dest
+      in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
     = let val doProjection = case exp1 of
                                  F.ProjectionExp { label, ... } =>
-                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' ^ "[" ^ LabelToLua label ^ "]" })))
+                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] })))
                                | _ => NONE
           val doBinary = case (exp1, exp2) of
                              (F.VarExp (Syntax.MkQualified([], vid)), F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
@@ -407,9 +439,9 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                              in case USyntax.VIdMap.find(builtinBinaryOps, vid) of
                                     SOME (binop, pure) => wrap (fn (stmts, e1', e2') =>
                                                                    let val e = case binop of
-                                                                                   InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' ^ " " ^ luaop ^ " " ^ paren (prec + 1) e2' }
-                                                                                 | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' ^ " " ^ luaop ^ " " ^ paren prec e2' }
-                                                                                 | NamedBinaryFn luafn => { prec = ~1, exp = luafn ^ "(" ^ #exp e1' ^ ", " ^ #exp e2' ^ ")" }
+                                                                                   InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
+                                                                                 | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' @ Fragment (" " ^ luaop ^ " ") :: paren prec e2' }
+                                                                                 | NamedBinaryFn luafn => { prec = ~2, exp = Fragment (luafn ^ "(") :: #exp e1' @ Fragment ", " :: #exp e2' @ [ Fragment ")" ] }
                                                                    in if pure then
                                                                           putPureTo ctx env dest (stmts, e)
                                                                       else
@@ -418,7 +450,7 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                )
                                   | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
                                                 wrap (fn (stmts, e1', e2') =>
-                                                         let val e = { prec = ~1, exp = paren ~1 e1' ^ "[" ^ #exp e2' ^ "]" }
+                                                         let val e = { prec = ~1, exp = paren ~1 e1' @ Fragment "[" :: #exp e2' @ [ Fragment "]" ] }
                                                          in putImpureTo ctx env dest (stmts, e)
                                                          end
                                                      )
@@ -431,15 +463,15 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
                             in if USyntax.eqVId(vid, VId_Real_TILDE) orelse USyntax.eqVId(vid, VId_Word_TILDE) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "- " ^ paren 2 e2' }))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "not " ^ paren 2 e2' }))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_EXCLAM) then
-                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' ^ ".payload" }))
+                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
                                else if USyntax.eqVId(vid, VId_String_size) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = "#" ^ paren 2 e2' }))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
                                else if USyntax.eqVId(vid, VId_Lua_isNil) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' ^ " == nil" }))
+                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
                                else
                                    NONE
                             end
@@ -454,8 +486,8 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                        (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                      val zs = List.map (#exp o #2) ys
                                                                                  in case dest of
-                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 f ^ "(" ^ String.concatWith ", " zs ^ ")" })
-                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = "table.pack(" ^ paren ~1 f ^ "(" ^ String.concatWith ", " zs ^ "))" })
+                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment ")" ] })
+                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table.pack(" :: paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment "))" ] })
                                                                                  end
                                                                        )
                                                            )
@@ -473,8 +505,8 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                                                          (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                        val zs = List.map (#exp o #2) ys
                                                                                    in case dest of
-                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 self ^ ":" ^ method ^ "(" ^ String.concatWith ", " zs ^ ")" })
-                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = "table.pack(" ^ paren ~1 self ^ ":" ^ method ^ "(" ^ String.concatWith ", " zs ^ "))" })
+                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment ")" ] })
+                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table.pack(" :: paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment "))" ] })
                                                                                    end
                                                                          )
                                                              )
@@ -495,90 +527,91 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
                                  (fn (stmts1, e1') =>
                                      doExpCont ctx env exp2
                                                (fn (stmts2, e2') =>
-                                                   putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~1, exp = paren ~1 e1' ^ "(" ^ #exp e2' ^ ")" })
+                                                   putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 e1' @ Fragment "(" :: #exp e2' @ [ Fragment ")" ] })
                                                )
                                  )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = let val status = genSym ctx
           val result = genSym ctx
-          val stmts = [indent env ^ "local " ^ status ^ ", " ^ result ^ " = pcall(function()\n"
-                      ,doExpTo ctx (nextIndentLevel env) body Return ^ indent env ^ "end)\n"
-                      ,indent env ^ "if not " ^ status ^ " then\n"
-                      ,indent (nextIndentLevel env) ^ "local " ^ VIdToLua exnName ^ " = " ^ result ^ "\n"
-                      ,doExpTo ctx (nextIndentLevel env) handler (AssignTo result) ^ "\n" (* TODO: tail call *)
-                      ,indent env ^ "end\n"
-                      ]
-      in putPureTo ctx env dest (stmts, { prec = ~1, exp = result })
+          val stmts = [ Indent, Fragment ("local " ^ status ^ ", " ^ result ^ " = pcall(function()"), LineTerminator, IncreaseIndent ]
+                      @ doExpTo ctx env body Return
+                      @ [ DecreaseIndent, Indent, Fragment "end)", OptSemicolon
+                        , Indent, Fragment ("if not " ^ status ^ " then"), LineTerminator, IncreaseIndent
+                        , Indent, Fragment ("local " ^ VIdToLua exnName ^ " = " ^ result), OptSemicolon
+                        ]
+                      @ doExpTo ctx env handler (AssignTo result) (* TODO: tail call *)
+                      @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator
+                        ]
+      in putPureTo ctx env dest (stmts, { prec = ~1, exp = [ Fragment result ] })
       end
   | doExpTo ctx env (F.RaiseExp (span as { start = { file, line, column }, ... }, exp)) dest
     = doExpCont ctx env exp
                 (fn (stmts, exp') =>
                     case dest of
-                        Continue cont => cont (stmts @ [indent env ^ "_raise(" ^ #exp exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"], { prec = 0, exp = "nil" })
-                      | _ => String.concat stmts ^ indent env ^ "_raise(" ^ #exp exp' ^ ", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")\n"
+                        Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ], { prec = 0, exp = [ Fragment "nil" ] })
+                      | _ => stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ]
                 )
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
                 (fn (stmts1, exp1') =>
                     let fun doElseIf env (F.IfThenElseExp(e1, e2, e3)) dest'
-                            = doExpCont ctx (nextIndentLevel env) e1
+                            = doExpCont ctx env e1
                                         (fn (s1, e1') =>
-                                            String.concat
-                                                (if List.null s1 then
-                                                     [ indent env ^ "elseif " ^ #exp e1' ^ " then\n"
-                                                     , doExpTo ctx (nextIndentLevel env) e2 dest'
-                                                     , doElseIf env e3 dest'
-                                                     ]
-                                                 else
-                                                     [ indent env ^ "else\n" ]
-                                                     @ s1
-                                                     @ [ indent (nextIndentLevel env) ^ "if " ^ #exp e1' ^ " then\n"
-                                                       , doExpTo ctx (nextIndentLevel (nextIndentLevel env)) e2 dest'
-                                                       , doElseIf (nextIndentLevel env) e3 dest'
-                                                       , indent (nextIndentLevel env) ^ "end\n"
-                                                       ]
-                                                )
+                                            if List.null s1 then
+                                                [ Indent, Fragment "elseif " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                                @ doExpTo ctx env e2 dest'
+                                                @ [ DecreaseIndent ]
+                                                @ doElseIf env e3 dest'
+                                            else
+                                                [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
+                                                @ s1
+                                                @ [ Indent, Fragment "if " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                                @ doExpTo ctx env e2 dest'
+                                                @ [ DecreaseIndent ]
+                                                @ doElseIf env e3 dest'
+                                                @ [ Indent, Fragment "end", LineTerminator, DecreaseIndent ]
                                         )
-                          | doElseIf env e dest' = String.concat [ indent env ^ "else\n"
-                                                                 , doExpTo ctx (nextIndentLevel env) e dest'
-                                                                 ]
+                          | doElseIf env e dest' = [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
+                                                   @ doExpTo ctx env e dest'
+                                                   @ [ DecreaseIndent ]
                     in case dest of
                            Continue cont => let val result = genSym ctx
                                             in cont (stmts1
-                                                     @ [ indent env ^ "local " ^ result ^ "\n"
-                                                       , indent env ^ "if " ^ #exp exp1' ^ " then\n"
-                                                       , doExpTo ctx (nextIndentLevel env) exp2 (AssignTo result)
-                                                       , doElseIf env exp3 (AssignTo result)
-                                                       , indent env ^ "end\n"
-                                                       ]
-                                                    , { prec = ~1, exp = result })
+                                                     @ [ Indent, Fragment ("local " ^ result), LineTerminator
+                                                       , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                                     @ doExpTo ctx env exp2 (AssignTo result)
+                                                     @ [ DecreaseIndent ]
+                                                     @ doElseIf env exp3 (AssignTo result)
+                                                     @ [ Indent, Fragment "end", LineTerminator ]
+                                                    , { prec = ~1, exp = [ Fragment result ] })
                                             end
-                         | _ => String.concat stmts1
-                                ^ indent env ^ "if " ^ #exp exp1' ^ " then\n"
-                                ^ doExpTo ctx (nextIndentLevel env) exp2 dest
-                                ^ doElseIf env exp3 dest
-                                ^ indent env ^ "end\n"
+                         | _ => stmts1
+                                @ [ Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                @ doExpTo ctx env exp2 dest
+                                @ [ DecreaseIndent ]
+                                @ doElseIf env exp3 dest
+                                @ [ Indent, Fragment "end", LineTerminator ]
                     end
               )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = "function(" ^ VIdToLua vid ^ ")\n" ^ doExpTo ctx (nextIndentLevel env) exp Return ^ indent env ^ "end\n" }) (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], { prec = 0, exp = "function(x) return x[" ^ LabelToLua label ^ "] end\n" })
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx env exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
+  | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(x) return x[" ^ LabelToLua label ^ "] end") ] })
   | doExpTo ctx env (F.ListExp (xs, _)) dest
     = if Vector.length xs = 0 then
-          putPureTo ctx env dest ([], { prec = ~1, exp = "_nil" })
+          putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_nil" ] })
       else
           mapCont (fn (e, cont) => doExpCont ctx env e cont)
                   (Vector.foldr (op ::) [] xs)
                   (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                            in putPureTo ctx env dest (stmts, { prec = ~1, exp = "_list{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ #exp y ^ acc) " }" ys })
+                            in putPureTo ctx env dest (stmts, { prec = ~2, exp = Fragment ("_list{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
                             end
                   )
   | doExpTo ctx env (F.VectorExp (xs, _)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e cont)
               (Vector.foldr (op ::) [] xs)
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                        in putPureTo ctx env dest (stmts, { prec = ~1, exp = "{ n = " ^ Int.toString (Vector.length xs) ^ List.foldr (fn ((_, y), acc) => ", " ^ #exp y ^ acc) " }" ys })
+                        in putPureTo ctx env dest (stmts, { prec = ~1, exp = Fragment ("{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
                         end
               )
   | doExpTo ctx env (F.TyAbsExp (_, exp)) dest = doExpTo ctx env exp dest
@@ -589,54 +622,60 @@ and doExpTo ctx env (F.SConExp scon) dest : string = putPureTo ctx env dest ([],
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
                                                   , case Syntax.extractTuple(1, fields) of
-                                                        SOME xs => { prec = ~1, exp = "_recordEqual({" ^ String.concatWith ", " (List.map (#exp o #2) fields') ^ "})" }
-                                                      | NONE => { prec = ~1, exp = "_recordEqual({" ^ String.concatWith ", " (List.map (fn (label, v) => "[" ^ LabelToLua label ^ "] = " ^ #exp v) fields') ^ "})" }
+                                                        SOME xs => { prec = ~2, exp = Fragment "_recordEqual({" :: commaSep (List.map (#exp o #2) fields') @ [ Fragment "})" ] }
+                                                      | NONE => { prec = ~2, exp = Fragment "_recordEqual({" :: commaSep (List.map (fn (label, v) => Fragment ("[" ^ LabelToLua label ^ "] = ") :: #exp v) fields') @ [ Fragment "})" ] }
                                                   )
                         end
               )
-  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' ^ ".tag" }))
-  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' ^ ".payload" }))
+  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
+  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
     = let val luavid = VIdToLua v
-      in indent env ^ "local " ^ luavid ^ "\n" ^ doExpTo ctx env exp (AssignTo luavid)
+      in [ Indent, Fragment ("local " ^ luavid), LineTerminator ] @ doExpTo ctx env exp (AssignTo luavid)
       end
   | doDec ctx env (F.ValDec (F.TupleBind([], exp)))
     = doExpTo ctx env exp Discard
   | doDec ctx env (F.ValDec (F.TupleBind(vars, exp)))
     = let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-          val decl = indent env ^ "local " ^ String.concatWith ", " vars' ^ "\n"
-      in decl ^ doExpTo ctx env exp (UnpackingAssignTo vars')
+          val decs = [ Indent, Fragment ("local " ^ String.concatWith ", " vars'), LineTerminator ]
+      in decs @ doExpTo ctx env exp (UnpackingAssignTo vars')
       end
   | doDec ctx env (F.RecValDec valbinds)
-    = let val (decls, assignments) = ListPair.unzip (List.map (fn F.SimpleBind (v,_,exp) => let val v' = VIdToLua v
-                                                                                            in (indent env ^ "local " ^ v' ^ "\n", doExpTo ctx env exp (AssignTo v'))
-                                                                                            end
-                                                              | F.TupleBind ([], exp) => ("", doExpTo ctx env exp Discard)
-                                                              | F.TupleBind (vars, exp) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-                                                                                           in (indent env ^ "local " ^ String.concatWith ", " vars' ^ "\n", doExpTo ctx env exp (UnpackingAssignTo vars'))
+    = let val (decs, assignments) = ListPair.unzip (List.map (fn F.SimpleBind (v,_,exp) => let val v' = VIdToLua v
+                                                                                           in ([ Indent, Fragment ("local " ^ v'), LineTerminator ], doExpTo ctx env exp (AssignTo v'))
                                                                                            end
-                                                              ) valbinds)
-      in String.concat decls ^ String.concat assignments
+                                                             | F.TupleBind ([], exp) => ([], doExpTo ctx env exp Discard)
+                                                             | F.TupleBind (vars, exp) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
+                                                                                          in ([ Indent, Fragment ("local " ^ String.concatWith ", " vars'), LineTerminator ], doExpTo ctx env exp (UnpackingAssignTo vars'))
+                                                                                          end
+                                                             ) valbinds)
+      in List.foldr (op @) (List.concat assignments) decs
       end
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
-  | doDec ctx env (F.DatatypeDec datbinds) = String.concat (List.map (doDatBind ctx env) datbinds)
+  | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
   | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
     = let val conName' = VIdToLua conName
           val tagName' = VIdToLua tagName
-      in indent env ^ "local " ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }\n"
-         ^ (case payloadTy of
-                NONE => indent env ^ "local " ^ conName' ^ " = { tag = " ^ tagName' ^ " }\n"
-              | SOME _ => indent env ^ "local function " ^ conName' ^ "(payload)\n"
-                          ^ indent (nextIndentLevel env) ^ "return { tag = " ^ tagName' ^ ", payload = payload }\n"
-                          ^ indent env ^ "end\n"
+      in [ Indent, Fragment ("local " ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
+         @ (case payloadTy of
+                NONE => [ Indent, Fragment ("local " ^ conName' ^ " = { tag = " ^ tagName' ^ " }"), LineTerminator ]
+              | SOME _ => [ Indent, Fragment ("local function " ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
+                          , Indent, Fragment ("return { tag = " ^ tagName' ^ ", payload = payload }"), LineTerminator
+                          , DecreaseIndent, Indent, Fragment "end", LineTerminator
+                          ]
            )
       end
-and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = String.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
-and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = "local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }\n"
-  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = "local function " ^ VIdToLua vid ^ "(x)\n  return { tag = " ^ toLuaStringLit name ^ ", payload = x }\nend\n"
+and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
+and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Indent, Fragment ("local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }"), LineTerminator ]
+  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = [ Indent, Fragment ("local function " ^ VIdToLua vid ^ "(x)"), LineTerminator, IncreaseIndent
+                                                                            , Indent, Fragment ("return { tag = " ^ toLuaStringLit name ^ ", payload = x }"), LineTerminator
+                                                                            , DecreaseIndent, Indent, Fragment "end", LineTerminator
+                                                                            ]
 
-fun doDecs ctx env decs = String.concat (List.map (doDec ctx env) decs)
+fun doDecs ctx env decs = List.concat (List.map (doDec ctx env) decs)
+
+fun doProgram ctx env decs = buildProgram (doDecs ctx env decs)
 
 end (* structure CodeGenLua *)
