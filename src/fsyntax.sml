@@ -46,6 +46,8 @@ datatype Exp = SConExp of Syntax.SCon
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
+             | ExportValue of Exp
+             | ExportModule of (string * Exp) vector
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 fun TuplePat xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -152,6 +154,8 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
+          | doDec (ExportValue exp) = ExportValue (doExp exp)
+          | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
         and doValBind (SimpleBind (vid, ty, exp)) = SimpleBind (vid, doTy ty, doExp exp)
           | doValBind (TupleBind (binds, exp)) = TupleBind (List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
     in { doTy = doTy
@@ -222,6 +226,8 @@ and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
+  | print_Dec (ExportValue _) = "ExportValue"
+  | print_Dec (ExportModule _) = "ExportModule"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -596,5 +602,29 @@ fun programToFDecs(ctx, env, []) = (env, [])
                                                                    val (env, decs') = programToFDecs(ctx, env, topdecs)
                                                                in (env, decs @ decs')
                                                                end
+fun isAlphaNumName name = List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
+fun libraryToFDecs(ctx, tenv: ToTypedSyntax.Env, env, decs)
+    = case (Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export"), Syntax.StrIdMap.find (#strMap tenv, Syntax.MkStrId "export")) of
+          (NONE, NONE) => raise Fail "No value to export was found."
+        | (SOME (vid, _), NONE) => let val (env, decs) = programToFDecs(ctx, env, decs)
+                                   in (env, decs @ [ F.ExportValue (F.VarExp (Syntax.MkQualified ([], vid))) ])
+                                   end
+        | (NONE, SOME (ToTypedSyntax.MkEnv { valMap, ... })) =>
+          let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (Syntax.MkVId name, (vid, _)) => if isAlphaNumName name then
+                                                                                                                       SOME (name, F.VarExp (Syntax.MkQualified ([], vid)))
+                                                                                                                   else if String.isSuffix "'" name then
+                                                                                                                       let val name' = String.substring (name, 0, String.size name - 1)
+                                                                                                                       in if isAlphaNumName name' andalso not (Syntax.VIdMap.inDomain (valMap, Syntax.MkVId name')) then
+                                                                                                                              SOME (name', F.VarExp (Syntax.MkQualified ([], vid)))
+                                                                                                                          else
+                                                                                                                              NONE
+                                                                                                                       end
+                                                                                                                   else
+                                                                                                                       NONE
+                                                                              ) valMap)
+              val (env, decs) = programToFDecs(ctx, env, decs)
+          in (env, decs @ [ F.ExportModule (Vector.fromList fields) ])
+          end
+        | (SOME _, SOME _) => raise Fail "The value to export is ambiguous."
 end (* local *)
 end (* structure ToFSyntax *)

@@ -3,6 +3,9 @@
  * This file is part of LunarML.
  *)
 structure Driver = struct
+
+datatype OutputMode = ExecutableMode | LibraryMode
+
 fun rep(c, n) = CharVector.tabulate(n, fn _ => c)
 fun printPos(name, lines, p) =
     if #file p = name then
@@ -114,14 +117,16 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixity
                        , fTransEnv = FTransform.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, { fixity, toTypedSyntaxEnv, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, toTypedSyntaxEnv, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse(fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInStrDecs(ast1)
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
            val tyconset = Typing.checkTyScopeOfProgram(typingContext, tyconset, decs)
-           val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
+           val (toFEnv, fdecs) = case outputMode of
+                                     ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
+                                   | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, toTypedSyntaxEnv', toFEnv, decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')

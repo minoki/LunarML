@@ -667,6 +667,8 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
                           ]
            )
       end
+  | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
+  | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
 and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
 and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Indent, Fragment ("local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }"), LineTerminator ]
   | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = [ Indent, Fragment ("local function " ^ VIdToLua vid ^ "(x)"), LineTerminator, IncreaseIndent
@@ -674,7 +676,21 @@ and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Inden
                                                                             , DecreaseIndent, Indent, Fragment "end", LineTerminator
                                                                             ]
 
-fun doDecs ctx env decs = List.concat (List.map (doDec ctx env) decs)
+fun doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
+  | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                                                     (Vector.foldr (op ::) [] fields)
+                                                     (fn ys => let val (stmts, fields') = ListPair.unzip ys
+                                                               in putPureTo ctx env Return ( List.concat stmts
+                                                                                           , { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (fn (label, e) => [ Fragment (if isLuaIdentifier label then
+                                                                                                                                                                                       label ^ " = "
+                                                                                                                                                                                   else
+                                                                                                                                                                                       "[" ^ toLuaStringLit label ^ "] = "
+                                                                                                                                                                       ) ] @ #exp e) fields') @ [ Fragment "}" ] }
+                                                                                           )
+                                                               end
+                                                     )
+  | doDecs ctx env (dec :: decs) = doDec ctx env dec @ doDecs ctx env decs
+  | doDecs ctx env [] = []
 
 fun doProgram ctx env decs = buildProgram (doDecs ctx env decs)
 

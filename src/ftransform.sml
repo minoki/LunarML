@@ -128,6 +128,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                }
                 in (env', dec)
                 end
+            | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
+            | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           and doDatBind (F.DatBind (tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })
@@ -301,6 +303,8 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (F.IgnoreDec exp) = (env, SOME (F.IgnoreDec (doExp env exp)))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, SOME dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
+            | doDec env (F.ExportValue exp) = (env, SOME (F.ExportValue (doExp env exp)))
+            | doDec env (F.ExportModule fields) = (env, SOME (F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields)))
           and doValBind env (F.SimpleBind (vid, ty, exp)) = let val exp' = doExp env exp
                                                             in if isSimpleExp exp' then
                                                                    ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, exp') }, NONE)
@@ -380,6 +384,8 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
             | doDec env (dec as F.ExceptionDec datbinds) = (env, dec)
+            | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
+            | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           fun doDecs env [] = (env, [])
@@ -618,6 +624,12 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
                                                                               (used, [dec])
                                                                           else
                                                                               (used, [])
+  | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp
+                                      in (USyntax.VIdSet.union (used, used'), [F.ExportValue exp])
+                                      end
+  | doDec (used, F.ExportModule fields) = let val fields' = Vector.map (fn (label, exp) => (label, doExp exp)) fields
+                                          in (Vector.foldl (fn ((_, (used', _)), acc) => USyntax.VIdSet.union (used', acc)) used fields', [F.ExportModule (Vector.map (fn (label, (_, exp)) => (label, exp)) fields')])
+                                          end
 (* doDecs : USyntax.VIdSet.set * F.Dec list -> USyntax.VIdSet.set * F.Dec list *)
 fun doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
