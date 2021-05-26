@@ -1,4 +1,4 @@
-local function _recordEqual(fields)
+local function _Record_EQUAL(fields)
   return function(t)
     local a, b = t[1], t[2]
     for k,eq in pairs(fields) do
@@ -79,8 +79,6 @@ local function _not(x)
   return not x
 end
 
-local _unit = {}
-
 local function _id(x)
   return x
 end
@@ -112,7 +110,7 @@ local function _raise(x, file, line, column)
 end
 
 -- Int
-local function __add_int(x, y)
+local function __Int_add(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   local z = x + y
@@ -124,10 +122,10 @@ local function __add_int(x, y)
     return z
   end
 end
-local function _add_int(t)
-  return __add_int(t[1], t[2])
+local function _Int_add(t)
+  return __Int_add(t[1], t[2])
 end
-local function __sub_int(x, y)
+local function __Int_sub(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   local z = x - y
@@ -139,10 +137,10 @@ local function __sub_int(x, y)
     return z
   end
 end
-local function _sub_int(t)
-  return __sub_int(t[1], t[2])
+local function _Int_sub(t)
+  return __Int_sub(t[1], t[2])
 end
-local function __mul_int(x, y)
+local function __Int_mul(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   local z = x * y
@@ -152,10 +150,10 @@ local function __mul_int(x, y)
     return z
   end
 end
-local function _mul_int(t)
-  return __mul_int(t[1], t[2])
+local function _Int_mul(t)
+  return __Int_mul(t[1], t[2])
 end
-local function __div_int(x, y)
+local function __Int_div(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   if y == 0 then
@@ -165,10 +163,10 @@ local function __div_int(x, y)
   end
   return x // y
 end
-local function _div_int(t)
-  return __div_int(t[1], t[2])
+local function _Int_div(t)
+  return __Int_div(t[1], t[2])
 end
-local function __mod_int(x, y)
+local function __Int_mod(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   if y == 0 then
@@ -176,17 +174,17 @@ local function __mod_int(x, y)
   end
   return x % y
 end
-local function _mod_int(t)
-  return __mod_int(t[1], t[2])
+local function _Int_mod(t)
+  return __Int_mod(t[1], t[2])
 end
-local function _negate_int(x)
+local function _Int_negate(x)
   assert(math.type(x) == "integer")
   if x == math.mininteger then
     error(_Overflow)
   end
   return - x
 end
-local function _abs_int(x)
+local function _Int_abs(x)
   assert(math.type(x) == "integer")
   if x == math.mininteger then
     error(_Overflow)
@@ -195,7 +193,7 @@ local function _abs_int(x)
 end
 
 -- Word
-local function __div_word(x, y)
+local function __Word_div(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   if y == 0 then
@@ -233,10 +231,10 @@ local function __div_word(x, y)
     end
   end
 end
-local function _div_word(t)
-  return __div_word(t[1], t[2])
+local function _Word_div(t)
+  return __Word_div(t[1], t[2])
 end
-local function __mod_word(x, y)
+local function __Word_mod(x, y)
   assert(math.type(x) == "integer")
   assert(math.type(y) == "integer")
   if y == 0 then
@@ -294,41 +292,32 @@ local function __mod_word(x, y)
     end
   end
 end
-local function _mod_word(t)
-  return __mod_word(t[1], t[2])
+local function _Word_mod(t)
+  return __Word_mod(t[1], t[2])
 end
-local __LT_word = math.ult
-local function _LT_word(t)
-  return __LT_word(t[1], t[2])
+local __Word_LT = math.ult
+local function _Word_LT(t)
+  return __Word_LT(t[1], t[2])
 end
-local function __GT_word(x, y)
-  return __LT_word(y, x)
+local function _Word_GT(t)
+  return __Word_LT(t[2], t[1])
 end
-local function _GT_word(t)
-  return __LT_word(t[2], t[1])
+local function _Word_LE(t)
+  return not __Word_LT(t[2], t[1])
 end
-local function __LE_word(x, y)
-  return x == y or __LT_word(x, y)
-end
-local function _LE_word(t)
-  return __LE_word(t[1], t[2])
-end
-local function __GE_word(x, y)
-  return __LE_word(y, x)
-end
-local function _GE_word(t)
-  return __LE_word(t[2], t[1])
+local function _Word_GE(t)
+  return not __Word_LT(t[1], t[2])
 end
 
 -- Real
-local _abs_real = math.abs
+local _Real_abs = math.abs
 
 -- List
 local _nil = { tag = "nil" }
 local function _cons(t)
   return { tag = "::", payload = t }
 end
-local function _EQUAL_list(eq)
+local function _List_EQUAL(eq)
   local function go(a, b)
     local at, bt = a.tag, b.tag
     if at ~= bt then
@@ -414,11 +403,11 @@ local function _Array_update(t)
     error(_Subscript)
   end
   a[i+1] = x
-  return _unit
+  return nil
 end
 
 -- Vector
-local function _EQUAL_vector(eq)
+local function _Vector_EQUAL(eq)
   local function go(a, b)
     local n = a.n
     if n ~= b.n then
@@ -437,34 +426,34 @@ local function _EQUAL_vector(eq)
 end
 
 -- Lua interface
-local function _lua_sub(t)
+local function _Lua_sub(t)
   return t[1][t[2]]
 end
-local function _lua_set(t)
+local function _Lua_set(t)
   t[1][t[2]] = t[3]
-  return _unit
+  return nil
 end
-local function _lua_global(name)
+local function _Lua_global(name)
   return _ENV[name]
 end
-local function _lua_call(f)
+local function _Lua_call(f)
   return function(v)
     return table.pack(f(table.unpack(v, 1, v.n)))
   end
 end
-local function _lua_method(t)
+local function _Lua_method(t)
   local self, name = t[1], t[2]
   return function(v)
     return table.pack(self[name](self, table.unpack(v, 1, v.n)))
   end
 end
-local function _lua_isNil(x)
+local function _Lua_isNil(x)
   return x == nil
 end
-local function _lua_newTable()
+local function _Lua_newTable()
   return {}
 end
-local function _lua_function(f)
+local function _Lua_function(f)
   return function(...)
     local r = f(table.pack(...))
     return table.unpack(r, 1, r.n)

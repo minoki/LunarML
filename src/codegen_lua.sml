@@ -103,19 +103,19 @@ val builtins
                     ,(VId_EQUAL_word, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_string, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_char, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_list, "_EQUAL_list")
+                    ,(VId_EQUAL_list, "_List_EQUAL")
                     ,(VId_EQUAL_ref, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_array, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_vector, "_EQUAL_vector")
+                    ,(VId_EQUAL_vector, "_Vector_EQUAL")
                     ,(VId_EQUAL_exntag, "_EQUAL_exntag") (* Lua == *)
                     (* int *)
-                    ,(VId_Int_PLUS, "_add_int") (* may raise Overflow *)
-                    ,(VId_Int_MINUS, "_sub_int") (* may raise Overflow *)
-                    ,(VId_Int_TIMES, "_mul_int") (* may raise Overflow *)
-                    ,(VId_Int_abs, "_abs_int") (* may raise Overflow *)
-                    ,(VId_Int_TILDE, "_negate_int") (* may raise Overflow *)
-                    ,(VId_Int_div, "_div_int") (* may raise Overflow/Div *)
-                    ,(VId_Int_mod, "_mod_int") (* may raise Div *)
+                    ,(VId_Int_PLUS, "_Int_add") (* may raise Overflow *)
+                    ,(VId_Int_MINUS, "_Int_sub") (* may raise Overflow *)
+                    ,(VId_Int_TIMES, "_Int_mul") (* may raise Overflow *)
+                    ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
+                    ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
+                    ,(VId_Int_div, "_Int_div") (* may raise Overflow/Div *)
+                    ,(VId_Int_mod, "_Int_mod") (* may raise Div *)
                     ,(VId_Int_LT, "_LT")
                     ,(VId_Int_GT, "_GT")
                     ,(VId_Int_LE, "_LE")
@@ -124,19 +124,19 @@ val builtins
                     ,(VId_Word_PLUS, "_PLUS") (* Lua +; does not raise Overflow *)
                     ,(VId_Word_MINUS, "_MINUS") (* Lua - (binary); does not raise Overflow *)
                     ,(VId_Word_TIMES, "_TIMES") (* Lua *; does not raise Overflow *)
-                    ,(VId_Word_div, "_div_word") (* may raise Div *)
-                    ,(VId_Word_mod, "_mod_word") (* may raise Div *)
+                    ,(VId_Word_div, "_Word_div") (* may raise Div *)
+                    ,(VId_Word_mod, "_Word_mod") (* may raise Div *)
                     ,(VId_Word_TILDE, "_unm") (* Lua - (unary) *)
-                    ,(VId_Word_LT, "_LT_word")
-                    ,(VId_Word_GT, "_GT_word")
-                    ,(VId_Word_LE, "_LE_word")
-                    ,(VId_Word_GE, "_GE_word")
+                    ,(VId_Word_LT, "_Word_LT")
+                    ,(VId_Word_GT, "_Word_GT")
+                    ,(VId_Word_LE, "_Word_LE")
+                    ,(VId_Word_GE, "_Word_GE")
                     (* real *)
                     ,(VId_Real_PLUS, "_PLUS") (* Lua + *)
                     ,(VId_Real_MINUS, "_MINUS") (* Lua - (binary) *)
                     ,(VId_Real_TIMES, "_TIMES") (* Lua * *)
                     ,(VId_Real_DIVIDE, "_DIVIDE") (* Lua / *)
-                    ,(VId_Real_abs, "_abs_real") (* Lua math.abs *)
+                    ,(VId_Real_abs, "_Real_abs") (* Lua math.abs *)
                     ,(VId_Real_TILDE, "_unm") (* Lua - (unary) *)
                     ,(VId_Real_LT, "_LT")
                     ,(VId_Real_GT, "_GT")
@@ -167,18 +167,18 @@ val builtins
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
                     (* Lua interface *)
-                    ,(VId_Lua_sub, "_lua_sub")
-                    ,(VId_Lua_set, "_lua_set")
-                    ,(VId_Lua_global, "_lua_global")
-                    ,(VId_Lua_call, "_lua_call")
-                    ,(VId_Lua_method, "_lua_method")
+                    ,(VId_Lua_sub, "_Lua_sub")
+                    ,(VId_Lua_set, "_Lua_set")
+                    ,(VId_Lua_global, "_Lua_global")
+                    ,(VId_Lua_call, "_Lua_call")
+                    ,(VId_Lua_method, "_Lua_method")
                     ,(VId_Lua_NIL, "nil") (* literal *)
-                    ,(VId_Lua_isNil, "_lua_isNil")
+                    ,(VId_Lua_isNil, "_Lua_isNil")
                     ,(VId_Lua_isFalsy, "_not")
                     ,(VId_Lua_unsafeToValue, "_id") (* no-op *)
                     ,(VId_Lua_unsafeFromValue, "_id") (* no-op *)
-                    ,(VId_Lua_newTable, "_lua_newTable")
-                    ,(VId_Lua_function, "_lua_function")
+                    ,(VId_Lua_newTable, "_Lua_newTable")
+                    ,(VId_Lua_function, "_Lua_function")
                     ,(VId_Lua_PLUS, "_PLUS")
                     ,(VId_Lua_MINUS, "_MINUS")
                     ,(VId_Lua_TIMES, "_TIMES")
@@ -203,6 +203,7 @@ val builtins
 datatype BinaryOp = InfixOp of (* prec *) int * string
                   | InfixOpR of (* prec *) int * string
                   | NamedBinaryFn of string
+                  | WordCompare of { flip : bool, negate : bool }
 val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
     = let open InitialEnv
       in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
@@ -212,40 +213,40 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
                     ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_exntag, (InfixOp (10, "=="), true))
-                    ,(VId_Int_PLUS,     (NamedBinaryFn "__add_int", false))
+                    ,(VId_Int_PLUS,     (NamedBinaryFn "__Int_add", false))
                     ,(VId_Word_PLUS,    (InfixOp (4, "+"), true))
                     ,(VId_Real_PLUS,    (InfixOp (4, "+"), true))
-                    ,(VId_Int_MINUS,    (NamedBinaryFn "__sub_int", false))
+                    ,(VId_Int_MINUS,    (NamedBinaryFn "__Int_sub", false))
                     ,(VId_Word_MINUS,   (InfixOp (4, "-"), true))
                     ,(VId_Real_MINUS,   (InfixOp (4, "-"), true))
-                    ,(VId_Int_TIMES,    (NamedBinaryFn "__mul_int", false))
+                    ,(VId_Int_TIMES,    (NamedBinaryFn "__Int_mul", false))
                     ,(VId_Word_TIMES,   (InfixOp (3, "*"), true))
                     ,(VId_Real_TIMES,   (InfixOp (3, "*"), true))
                     ,(VId_Real_DIVIDE,  (InfixOp (3, "/"), true))
-                    ,(VId_Int_div,      (NamedBinaryFn "__div_int", false))
-                    ,(VId_Word_div,     (NamedBinaryFn "__div_word", false))
-                    ,(VId_Int_mod,      (NamedBinaryFn "__mod_int", false))
-                    ,(VId_Word_mod,     (NamedBinaryFn "__mod_word", false))
+                    ,(VId_Int_div,      (NamedBinaryFn "__Int_div", false))
+                    ,(VId_Word_div,     (NamedBinaryFn "__Word_div", false))
+                    ,(VId_Int_mod,      (NamedBinaryFn "__Int_mod", false))
+                    ,(VId_Word_mod,     (NamedBinaryFn "__Word_mod", false))
                     ,(VId_Int_LT,       (InfixOp (10, "<"), true))
                     ,(VId_Real_LT,      (InfixOp (10, "<"), true))
                     ,(VId_String_LT,    (InfixOp (10, "<"), true))
                     ,(VId_Char_LT,      (InfixOp (10, "<"), true))
-                    ,(VId_Word_LT,      (NamedBinaryFn "__LT_word", true))
+                    ,(VId_Word_LT,      (WordCompare { flip = false, negate = false }, true))
                     ,(VId_Int_LE,       (InfixOp (10, "<="), true))
                     ,(VId_Real_LE,      (InfixOp (10, "<="), true))
                     ,(VId_String_LE,    (InfixOp (10, "<="), true))
                     ,(VId_Char_LE,      (InfixOp (10, "<="), true))
-                    ,(VId_Word_LE,      (NamedBinaryFn "__LE_word", true))
+                    ,(VId_Word_LE,      (WordCompare { flip = true, negate = true }, true))
                     ,(VId_Int_GT,       (InfixOp (10, ">"), true))
                     ,(VId_Real_GT,      (InfixOp (10, ">"), true))
                     ,(VId_String_GT,    (InfixOp (10, ">"), true))
                     ,(VId_Char_GT,      (InfixOp (10, ">"), true))
-                    ,(VId_Word_GT,      (NamedBinaryFn "__GT_word", true))
+                    ,(VId_Word_GT,      (WordCompare { flip = true, negate = false }, true))
                     ,(VId_Int_GE,       (InfixOp (10, ">="), true))
                     ,(VId_Real_GE,      (InfixOp (10, ">="), true))
                     ,(VId_String_GE,    (InfixOp (10, ">="), true))
                     ,(VId_Char_GE,      (InfixOp (10, ">="), true))
-                    ,(VId_Word_GE,      (NamedBinaryFn "__GE_word", true))
+                    ,(VId_Word_GE,      (WordCompare { flip = false, negate = true }, true))
                     ,(VId_String_HAT,   (InfixOpR (5, ".."), true))
                     ]
       end
@@ -407,7 +408,7 @@ and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "
 and doExpCont ctx env exp cont = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env dest ([], doLiteral scon)
   | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] })
-  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_unit" ] })
+  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "nil" ] })
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
@@ -442,6 +443,15 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                                    InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
                                                                                  | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' @ Fragment (" " ^ luaop ^ " ") :: paren prec e2' }
                                                                                  | NamedBinaryFn luafn => { prec = ~2, exp = Fragment (luafn ^ "(") :: #exp e1' @ Fragment ", " :: #exp e2' @ [ Fragment ")" ] }
+                                                                                 | WordCompare { flip, negate } => let val (x, y) = if flip then
+                                                                                                                                        (e2', e1')
+                                                                                                                                    else
+                                                                                                                                        (e1', e2')
+                                                                                                                   in if negate then
+                                                                                                                          { prec = 2, exp = Fragment "not __Word_LT(" :: #exp x @ Fragment ", " :: #exp y @ [ Fragment ")" ] }
+                                                                                                                      else
+                                                                                                                          { prec = ~2, exp = Fragment "__Word_LT(" :: #exp x @ Fragment ", " :: #exp y @ [ Fragment ")" ] }
+                                                                                                                   end
                                                                    in if pure then
                                                                           putPureTo ctx env dest (stmts, e)
                                                                       else
@@ -622,8 +632,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
                                                   , case Syntax.extractTuple(1, fields) of
-                                                        SOME xs => { prec = ~2, exp = Fragment "_recordEqual({" :: commaSep (List.map (#exp o #2) fields') @ [ Fragment "})" ] }
-                                                      | NONE => { prec = ~2, exp = Fragment "_recordEqual({" :: commaSep (List.map (fn (label, v) => Fragment ("[" ^ LabelToLua label ^ "] = ") :: #exp v) fields') @ [ Fragment "})" ] }
+                                                        SOME xs => { prec = ~2, exp = Fragment "_Record_EQUAL({" :: commaSep (List.map (#exp o #2) fields') @ [ Fragment "})" ] }
+                                                      | NONE => { prec = ~2, exp = Fragment "_Record_EQUAL({" :: commaSep (List.map (fn (label, v) => Fragment ("[" ^ LabelToLua label ^ "] = ") :: #exp v) fields') @ [ Fragment "})" ] }
                                                   )
                         end
               )
