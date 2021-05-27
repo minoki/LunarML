@@ -435,9 +435,13 @@ fun typeCheckExp(ctx : Context, env : Env, exp as SConExp(span, scon)) : USyntax
           (* f: s -> t, x: s *)
     = let val (funcTy, f') = typeCheckExp(ctx, env, f)
           val (argTy, x') = typeCheckExp(ctx, env, x)
-          val retTy = TyVar(span, freshTyVar(ctx))
-      in addConstraint(ctx, env, EqConstr(span, funcTy, FnType(span, argTy, retTy))) (* funcTy = (argTy -> retTy) *)
-       ; (retTy, AppExp(span, f', x'))
+          val retTy = case funcTy of
+                          FnType(_, argTy', retTy) => ( addConstraint(ctx, env, EqConstr(span, argTy, argTy')); retTy )
+                        | _ => let val retTy = TyVar(span, freshTyVar(ctx))
+                               in addConstraint(ctx, env, EqConstr(span, funcTy, FnType(span, argTy, retTy))) (* funcTy = (argTy -> retTy) *)
+                                ; retTy
+                               end
+      in (retTy, AppExp(span, f', x'))
       end
   | typeCheckExp(ctx, env, TypedExp(span, exp, ty))
     = let val (expTy, exp') = typeCheckExp(ctx, env, exp)
