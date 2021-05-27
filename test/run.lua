@@ -73,6 +73,7 @@ local should_run = {
   "general.sml",
   "string.sml",
   "word.sml",
+  "word_law.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/mlbasis/should_run/" .. f
