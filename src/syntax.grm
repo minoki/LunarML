@@ -57,13 +57,14 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | WITHTYPE | WHERE | WHILE
     (* other *)
     | EOF
-%nonterm START of (UnfixedSyntax.Dec Syntax.StrDec) list
+%nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
        | IntConst of int
        | SCon of Syntax.SCon
        | TyVar of Syntax.TyVar
        | VId of Syntax.VId
        | BoundVId of Syntax.VId
        | StrId of Syntax.StrId
+       | SigId of Syntax.SigId
        | Lab of Syntax.Label
        | TyCon of Syntax.TyCon
        | LongVId of Syntax.LongVId
@@ -121,10 +122,23 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | StrExp of UnfixedSyntax.Dec Syntax.StrExp
        | ProperStrDec of UnfixedSyntax.Dec Syntax.StrDec
        | StrDecs of (UnfixedSyntax.Dec Syntax.StrDec) list
-       | StrDecs_NoSemicolon of (UnfixedSyntax.Dec Syntax.StrDec) list
        | StrBind of (Syntax.StrId * UnfixedSyntax.Dec Syntax.StrExp) list
-       | TopDecs of (UnfixedSyntax.Dec Syntax.StrDec) list
-       | Program of (UnfixedSyntax.Dec Syntax.StrDec) list
+       | StrBindRest of (Syntax.StrId * UnfixedSyntax.Dec Syntax.StrExp) list
+       | Spec of Syntax.Spec
+       | ValDesc of (Syntax.VId * Syntax.Ty) list
+       | TypDesc of (Syntax.TyVar list * Syntax.TyCon) list
+       | DatDescRest of (Syntax.TyVar list * Syntax.TyCon * Syntax.ConBind list) list
+       | ConDesc of Syntax.ConBind list
+       | ConDescRest of Syntax.ConBind list
+       | ExDesc of (Syntax.VId * Syntax.Ty option) list
+       | ExDescRest of (Syntax.VId * Syntax.Ty option) list
+       | StrDesc of (Syntax.StrId * Syntax.SigExp) list
+       | Specs of Syntax.Spec list
+       | SigExp of Syntax.SigExp
+       | SigBinds of Syntax.SigBind list
+       | SigDec of Syntax.SigBind list
+       | TopDecs of (UnfixedSyntax.Dec Syntax.TopDec) list
+       | Program of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
 
 %name LunarML
 
@@ -166,6 +180,9 @@ BoundVId : AlnumIdent (Syntax.MkVId AlnumIdent)
 
 (* structure identifier *)
 StrId : AlnumIdent (Syntax.MkStrId AlnumIdent)
+
+(* signature identifier *)
+SigId : AlnumIdent (Syntax.MkSigId AlnumIdent)
 
 (* record labels *)
 Lab : AlnumIdent (Syntax.IdentifierLabel AlnumIdent)
@@ -447,6 +464,8 @@ ExBindRest : AND ExBind (ExBind)
 
 StrExp : STRUCT StrDecs END (Syntax.StructExp(span(STRUCTleft, ENDright), StrDecs))
        | LongStrId (Syntax.StrIdExp(span(LongStrIdleft, LongStrIdright), LongStrId))
+       | StrExp COLON SigExp (Syntax.TransparentConstraintExp(span(StrExpleft, SigExpright), StrExp, SigExp)) (* transparent constraint *)
+       | StrExp COLONGT SigExp (Syntax.OpaqueConstraintExp(span(StrExpleft, SigExpright), StrExp, SigExp)) (* opaque constraint *)
        | LET StrDecs IN StrExp END (Syntax.LetInStrExp(span(LETleft, ENDright), StrDecs, StrExp))
 
 ProperStrDec : STRUCTURE StrBind (Syntax.StrBindDec(span(STRUCTUREleft, StrBindright), StrBind))
@@ -457,16 +476,69 @@ StrDecs : Dec_NoLocal StrDecs (Syntax.CoreDec(span(Dec_NoLocalleft, Dec_NoLocalr
         | SEMICOLON StrDecs (StrDecs)
         | ([])
 
-StrDecs_NoSemicolon : Dec_NoLocal StrDecs_NoSemicolon (Syntax.CoreDec(span(Dec_NoLocalleft, Dec_NoLocalright), Dec_NoLocal) :: StrDecs_NoSemicolon)
-                    | ProperStrDec StrDecs_NoSemicolon (ProperStrDec :: StrDecs_NoSemicolon)
-                    | ([])
+StrBind : StrId EQUALS StrExp StrBindRest ((StrId, StrExp) :: StrBindRest)
+        | StrId COLON SigExp EQUALS StrExp StrBindRest ((StrId, Syntax.TransparentConstraintExp(span(StrIdleft, StrExpright), StrExp, SigExp)) :: StrBindRest) (* derived form *)
+        | StrId COLONGT SigExp EQUALS StrExp StrBindRest ((StrId, Syntax.OpaqueConstraintExp(span(StrIdleft, StrExpright), StrExp, SigExp)) :: StrBindRest) (* derived form *)
 
-StrBind : StrId EQUALS StrExp ([(StrId, StrExp)])
-        | StrId EQUALS StrExp AND StrBind ((StrId, StrExp) :: StrBind)
+StrBindRest : AND StrBind (StrBind)
+            | (nil)
 
-TopDecs : StrDecs_NoSemicolon (StrDecs_NoSemicolon)
-         (* TODO: sigdec, fundec *)
+Spec : VAL ValDesc (Syntax.ValDesc(span(VALleft, ValDescright), ValDesc))
+     | TYPE TypDesc (Syntax.TypeDesc(span(TYPEleft, TypDescright), TypDesc))
+     | EQTYPE TypDesc (Syntax.EqtypeDesc(span(EQTYPEleft, TypDescright), TypDesc))
+     (* | DATATYPE DatDesc (Syntax.DatDesc(span(DATATYPEleft, DatDescright), DatDesc)) *)
+     | DATATYPE TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([], TyCon, ConDesc) :: DatDescRest))
+     | DATATYPE TyVar TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([TyVar], TyCon, ConDesc) :: DatDescRest))
+     | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), (TyVar :: TyVarSeqRest, TyCon, ConDesc) :: DatDescRest))
+     | DATATYPE TyCon EQUALS DATATYPE LongTyCon (Syntax.DatatypeRepSpec(span(DATATYPEleft, LongTyConright), TyCon, LongTyCon))
+     | EXCEPTION ExDesc (Syntax.ExDesc(span(EXCEPTIONleft, ExDescright), ExDesc))
+     | STRUCTURE StrDesc (Syntax.StrDesc(span(STRUCTUREleft, StrDescright), StrDesc))
+     | INCLUDE SigExp (Syntax.Include(span(INCLUDEleft, SigExpright), SigExp))
+               (* TODO: sharing *)
 
-Program : TopDecs SEMICOLON Program (TopDecs @ Program)
-        | Exp SEMICOLON Program (Syntax.CoreDec(span(Expleft, Expright), UnfixedSyntax.ValDec(span(Expleft, Expright), nil, [UnfixedSyntax.PatBind(span(Expleft, Expright), UnfixedSyntax.NonInfixVIdPat(span(Expleft, Expleft), Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)])) :: Program) (* val it = Exp *)
+ValDesc : VId COLON Ty ((VId, Ty) :: nil)
+        | VId COLON Ty AND ValDesc ((VId, Ty) :: ValDesc)
+
+TypDesc : TyVarSeq TyCon ((TyVarSeq, TyCon) :: nil)
+        | TyVarSeq TyCon AND TypDesc ((TyVarSeq, TyCon) :: TypDesc)
+
+DatDescRest : AND TyVarSeq TyCon EQUALS ConDesc DatDescRest ((TyVarSeq, TyCon, ConDesc) :: DatDescRest)
+            | (nil)
+
+ConDesc : VId ConDescRest (Syntax.ConBind(span(VIdleft, VIdright), VId, NONE) :: ConDescRest)
+        | VId OF Ty ConDescRest (Syntax.ConBind(span(VIdleft, Tyright), VId, SOME Ty) :: ConDescRest)
+
+ConDescRest : BAR ConDesc (ConDesc)
+            | (nil)
+
+ExDesc : VId ExDescRest ((VId, NONE) :: ExDescRest)
+       | VId OF Ty ExDescRest ((VId, SOME Ty) :: ExDescRest)
+
+ExDescRest : AND ExDesc (ExDesc)
+           | (nil)
+
+StrDesc : StrId COLON SigExp ((StrId, SigExp) :: nil)
+        | StrId COLON SigExp AND StrDesc ((StrId, SigExp) :: StrDesc)
+
+Specs : ([])
+      | Spec Specs (Spec :: Specs)
+      | Spec SEMICOLON Specs (Spec :: Specs)
+
+SigExp : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
+       | SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
+       | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty (Syntax.TypeRealisationExp(span(SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty))
+
+SigBinds : SigId EQUALS SigExp (Syntax.SigBind(SigId, SigExp) :: nil)
+         | SigId EQUALS SigExp AND SigBinds (Syntax.SigBind(SigId, SigExp) :: SigBinds)
+
+SigDec : SIGNATURE SigBinds (SigBinds)
+
+TopDecs : Dec_NoLocal TopDecs (Syntax.StrDec(Syntax.CoreDec(span(Dec_NoLocalleft, Dec_NoLocalright), Dec_NoLocal)) :: TopDecs) (* strdec *)
+        | ProperStrDec TopDecs (Syntax.StrDec(ProperStrDec) :: TopDecs) (* strdec *)
+        | SigDec TopDecs (Syntax.SigDec(SigDec) :: TopDecs)
+        | (nil)
+         (* TODO: fundec *)
+
+Program : TopDecs SEMICOLON Program (TopDecs :: Program)
+        | Exp SEMICOLON Program ([Syntax.StrDec(Syntax.CoreDec(span(Expleft, Expright), UnfixedSyntax.ValDec(span(Expleft, Expright), nil, [UnfixedSyntax.PatBind(span(Expleft, Expright), UnfixedSyntax.NonInfixVIdPat(span(Expleft, Expleft), Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)])))] :: Program) (* val it = Exp *)
         | (nil)

@@ -118,8 +118,35 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
      and ValBind = PatBind of SourcePos.span * Pat * Exp
      and ValBind' = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                   | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
-datatype TopDec = StrDec of Dec list
-type Program = TopDec list
+
+datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
+              | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
+              | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
+              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list
+              | DatatypeRepSpec of SourcePos.span * TyCon * (* Long *) TyCon
+              | ExDesc of SourcePos.span * (VId * Ty option) list
+              | StrDesc of SourcePos.span * (Syntax.StrId * SigExp) list
+              | Include of SourcePos.span * SigExp
+     and SigExp = BasicSigExp of SourcePos.span * Spec list
+                | SigIdExp of SourcePos.span * Syntax.SigId
+                | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * (* Long *) TyCon * Ty
+
+datatype StrExp = StructExp of { sourceSpan : SourcePos.span
+                               , vidMap : Exp Syntax.VIdMap.map
+                               , tyConMap : Ty Syntax.TyConMap.map
+                               , strMap : Exp Syntax.StrIdMap.map
+                               }
+                | StrIdExp of SourcePos.span * (* Long *) Syntax.StrId
+                | TransparentConstraintExp of SourcePos.span * StrExp * SigExp
+                | OpaqueConstraintExp of SourcePos.span * StrExp * SigExp
+                (* TODO: functor application *)
+                | LetInStrExp of SourcePos.span * StrDec list * StrExp
+     and StrDec = CoreDec of SourcePos.span * Dec
+                | StrBindDec of SourcePos.span * Syntax.StrId * StrExp
+
+datatype TopDec = StrDec of Dec
+                (* | SigDec of Syntax.SigId * SigExp *)
+type Program = (TopDec list) list
 
 local
     fun doFields i nil = nil
@@ -239,8 +266,9 @@ and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
 fun print_TyConMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 val print_Decs = Syntax.print_list print_Dec
-fun print_TopDec (StrDec decs) = "StrDec(" ^ Syntax.print_list print_Dec decs ^ ")"
-val print_Program = Syntax.print_list print_TopDec
+fun print_TopDec (StrDec dec) = "StrDec(" ^ print_Dec dec ^ ")"
+  (* | print_TopDec (SigDec sigbinds) = "SigDec" *)
+val print_Program = Syntax.print_list (Syntax.print_list print_TopDec)
 fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
   | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")"
 end (* structure PrettyPrint *)
@@ -925,6 +953,8 @@ fun doUStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = let val (env', decs')
              NONE => emitError(ctx, [span], "unknown structure name '" ^ name ^ "'") (* TODO: print full name *)
            | SOME (MkEnv innerEnv) => (innerEnv, [])
       end
+  | doUStrExp(ctx, env, Syntax.TransparentConstraintExp(span, strexp, sigexp)) = raise Fail "TransparentConstraintExp: not implemented yet"
+  | doUStrExp(ctx, env, Syntax.OpaqueConstraintExp(span, strexp, sigexp)) = raise Fail "TransparentConstraintExp: not implemented yet"
   | doUStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs') = doUStrDecs(ctx, env, strdecs)
                                                                          val (env'', decs') = doUStrExp(ctx, mergeEnv(env, env'), strexp)
                                                                      in (env'', strdecs' @ decs')
@@ -950,14 +980,20 @@ and doUStrDecs(ctx, env, [] : (Syntax.Dec Syntax.StrDec) list) : Env * USyntax.D
 and doStrBind (ctx, env) ((strid, strexp), (acc, decs0)) = let val (strenv, decs) = doUStrExp(ctx, env, strexp)
                                                            in (Syntax.StrIdMap.insert (acc, strid, MkEnv strenv), decs0 @ decs)
                                                            end
-(* toUTopDec : Context * Env * Syntax.Dec Syntax.StrDec -> Env * USyntax.TopDec *)
-fun toUTopDec(ctx, env, strdec : Syntax.Dec Syntax.StrDec) = let val (env', decs) = doUStrDecs(ctx, env, [strdec])
-                                                             in (env', USyntax.StrDec decs)
-                                                             end
-(* toUProgram : Context * Env * (Syntax.Dec Syntax.StrDec) list -> Env * USyntax.TopDec list *)
-fun toUProgram(ctx, env, [] : (Syntax.Dec Syntax.StrDec) list) : Env * USyntax.TopDec list = (emptyEnv, [])
-  | toUProgram(ctx, env, strdec :: strdecs) = let val (env', topdec) = toUTopDec(ctx, env, strdec)
-                                                  val (env'', topdecs) = toUProgram(ctx, mergeEnv(env, env'), strdecs)
+(* toUTopDec : Context * Env * Syntax.Dec Syntax.StrDec -> Env * USyntax.TopDec list *)
+fun toUTopDec(ctx, env, Syntax.StrDec strdec) = let val (env', decs) = doUStrDecs(ctx, env, [strdec])
+                                                in (env', List.map USyntax.StrDec decs)
+                                                end
+  | toUTopDec(ctx, env, Syntax.SigDec sigbinds) = raise Fail "not implemented yet"
+fun toUTopDecs(ctx, env, topdec :: topdecs) = let val (env', topdec) = toUTopDec(ctx, env, topdec)
+                                                  val (env'', topdecs) = toUTopDecs(ctx, mergeEnv(env, env'), topdecs)
+                                              in (mergeEnv(env', env''), topdec @ topdecs)
+                                              end
+  | toUTopDecs(ctx, env, []) = (emptyEnv, [])
+(* toUProgram : Context * Env * (Syntax.Dec Syntax.StrDec) list -> Env * (USyntax.TopDec list) list *)
+fun toUProgram(ctx, env, [] : ((Syntax.Dec Syntax.TopDec) list) list) : Env * (USyntax.TopDec list) list = (emptyEnv, [])
+  | toUProgram(ctx, env, topdec :: topdecs) = let val (env', topdec) = toUTopDecs(ctx, env, topdec)
+                                                  val (env'', topdecs) = toUProgram(ctx, mergeEnv(env, env'), topdecs)
                                               in (mergeEnv(env', env''), topdec :: topdecs)
                                               end
 end (* local *)

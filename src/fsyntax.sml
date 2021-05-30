@@ -598,7 +598,7 @@ and doExBind(ctx, env, U.ExBind(span, vid as USyntax.MkVId(name, _), optTy)) = l
                                                                                                  }
                                                                                end
 fun programToFDecs(ctx, env, []) = (env, [])
-  | programToFDecs(ctx, env, USyntax.StrDec decs :: topdecs) = let val (env, decs) = toFDecs(ctx, env, decs)
+  | programToFDecs(ctx, env, USyntax.StrDec dec :: topdecs) = let val (env, decs) = toFDecs(ctx, env, [dec])
                                                                    val (env, decs') = programToFDecs(ctx, env, topdecs)
                                                                in (env, decs @ decs')
                                                                end

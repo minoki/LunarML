@@ -14,6 +14,7 @@ datatype TyCon = MkTyCon of string
 datatype Label = NumericLabel of int
                | IdentifierLabel of string
 datatype StrId = MkStrId of string
+datatype SigId = MkSigId of string
 datatype 'a Qualified = MkQualified of StrId list * 'a
 type LongVId = VId Qualified
 type LongTyCon = TyCon Qualified
@@ -119,15 +120,34 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
                                 , rules : (Pat list * Ty option * Exp) list
                                 }
 
+datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
+              | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
+              | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
+              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list
+              | DatatypeRepSpec of SourcePos.span * TyCon * LongTyCon
+              | ExDesc of SourcePos.span * (VId * Ty option) list
+              | StrDesc of SourcePos.span * (StrId * SigExp) list
+              | Include of SourcePos.span * SigExp
+     and SigExp = BasicSigExp of SourcePos.span * Spec list
+                | SigIdExp of SourcePos.span * SigId
+                | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty
+
+datatype SigBind = SigBind of SigId * SigExp
+
 datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
                          | StrIdExp of SourcePos.span * LongStrId
-                         (* TODO: transparent constraint, opaque constraint, functor application *)
+                         | TransparentConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
+                         | OpaqueConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
+                         (* TODO: functor application *)
                          | LetInStrExp of SourcePos.span * ('coreDec StrDec) list * 'coreDec StrExp
      and 'coreDec StrDec = CoreDec of SourcePos.span * 'coreDec
                          | StrBindDec of SourcePos.span * (StrId * 'coreDec StrExp) list
                          | LocalStrDec of SourcePos.span * ('coreDec StrDec) list * ('coreDec StrDec) list
 
-type Program = (Dec StrDec) list
+datatype 'coreDec TopDec = StrDec of 'coreDec StrDec
+                         | SigDec of SigBind list
+
+type Program = ((Dec TopDec) list) list
 
 fun SimpleVarExp(span, vid) = VarExp (span, MkLongVId ([], vid))
 local

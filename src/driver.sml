@@ -80,7 +80,7 @@ fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,li
                                   val lexErrors = ref []
                                   val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
                               in case !lexErrors of
-                                     [] => Fixity.doStrDecs({}, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
+                                     [] => Fixity.doProgram({}, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
                                    | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
                                                                                                     ; printPos (name, lines, pos)
                                                                                                     )
@@ -120,13 +120,13 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixity
 fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, toTypedSyntaxEnv, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse(fixity, name, lines, source)
-           val ast1' = PostParsing.scopeTyVarsInStrDecs(ast1)
+           val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)
            val tyconset = Typing.checkTyScopeOfProgram(typingContext, tyconset, decs)
            val (toFEnv, fdecs) = case outputMode of
-                                     ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, decs)
-                                   | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, toTypedSyntaxEnv', toFEnv, decs)
+                                     ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
+                                   | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, toTypedSyntaxEnv', toFEnv, List.concat decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')

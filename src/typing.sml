@@ -1048,7 +1048,12 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                  ; goExp exp
                 end
           fun goValBind (U.PatBind (span, pat, exp)) = ( goPat pat; goExp exp )
-          fun goTopDec (U.StrDec decs) = goDecs decs
+          fun goTopDec (U.StrDec dec) = goDec dec
+                                              (* | goTopDec (U.SigDec _) =  *)
+          fun goTopDecs decs = List.foldl (fn (dec, tyconset) => let val { goTopDec, ... } = checkTyScope (ctx, tvset, tyconset)
+                                                                 in goTopDec dec
+                                                                 end)
+                                          tyconset decs
       in { goTy = goTy
          , goTypeScheme = goTypeScheme
          , goPat = goPat
@@ -1057,32 +1062,34 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
          , goDecs = goDecs
          , goValBind = goValBind
          , goTopDec = goTopDec
+         , goTopDecs = goTopDecs
          }
       end
 fun checkTyScopeOfProgram (ctx, tyconset : U.TyConSet.set, program : U.Program)
-    = List.foldl (fn (topdec, tyconset) => let val { goTopDec, ... } = checkTyScope (ctx, U.TyVarSet.empty, tyconset)
-                                           in goTopDec topdec
+    = List.foldl (fn (topdec, tyconset) => let val { goTopDecs, ... } = checkTyScope (ctx, U.TyVarSet.empty, tyconset)
+                                           in goTopDecs topdec
                                            end)
                  tyconset program
 end
 
 (* typeCheckTopDec : ProgramContext * Env * USyntax.TopDec -> (* created environment *) Env * USyntax.TopDec *)
-fun typeCheckTopDec(pctx : ProgramContext, env, USyntax.StrDec decs) : Env * USyntax.TopDec =
+fun typeCheckTopDec(pctx : ProgramContext, env, topdecs) : Env * USyntax.TopDec list =
     let val ctx = { nextTyVar = #nextTyVar pctx
                   , nextVId = #nextVId pctx
                   , nextTyCon = #nextTyCon pctx
                   , tyVarConstraints = ref USyntax.TyVarMap.empty
                   , tyVarSubst = ref USyntax.TyVarMap.empty
                   }
-        val (env', decs') = typeCheckDecs(ctx, env, decs)
+        val (env', decs) = typeCheckDecs(ctx, env, List.map (fn USyntax.StrDec dec => dec) topdecs)
         val subst = !(#tyVarSubst ctx)
         val tvc = !(#tyVarConstraints ctx)
-        val decs'' = #doDecs (USyntax.mapTy (ctx, subst, false)) decs'
-        val decs''' = applyDefaultTypes(ctx, tvc, decs'')
-    in (env', USyntax.StrDec decs''')
+        val mapTyInDec = #doDec (USyntax.mapTy (ctx, subst, false))
+        val decs = List.map mapTyInDec decs
+        val decs = applyDefaultTypes(ctx, tvc, decs)
+    in (env', List.map USyntax.StrDec decs)
     end
-(* typeCheckProgram : ProgramContext * Env * USyntax.TopDec list -> Env * USyntax.TopDec list *)
-fun typeCheckProgram(ctx, env, [] : USyntax.TopDec list) : Env * USyntax.TopDec list = (emptyEnv, [])
+(* typeCheckProgram : ProgramContext * Env * (USyntax.TopDec list) list -> Env * USyntax.TopDec list *)
+fun typeCheckProgram(ctx, env, [] : (USyntax.TopDec list) list) : Env * (USyntax.TopDec list) list = (emptyEnv, [])
   | typeCheckProgram(ctx, env, topdec :: topdecs) = let val (env', topdec') = typeCheckTopDec(ctx, env, topdec)
                                                         val (env'', topdecs') = typeCheckProgram(ctx, mergeEnv(env, env'), topdecs)
                                                     in (mergeEnv(env', env''), topdec' :: topdecs')
