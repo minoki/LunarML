@@ -102,14 +102,14 @@ fun newContext() : Context = let val typingContext = Typing.newContext()
                                 }
                              end
 
-type Env = { fixity : Fixity.FixityStatusMap
+type Env = { fixity : Fixity.Env
            , toTypedSyntaxEnv : ToTypedSyntax.Env
            , typingEnv : Typing.Env
            , tyconset : USyntax.TyConSet.set
            , toFEnv : ToFSyntax.Env
            , fTransEnv : FTransform.Env
            }
-val initialEnv : Env = { fixity = InitialEnv.initialFixity
+val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , toTypedSyntaxEnv = InitialEnv.initialEnv_ToTypedSyntax
                        , typingEnv = InitialEnv.initialEnv
                        , tyconset = InitialEnv.initialTyConSet
@@ -128,7 +128,7 @@ fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, toTyp
                                      ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
                                    | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, toTypedSyntaxEnv', toFEnv, List.concat decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
-           val modifiedEnv = { fixity = Syntax.VIdMap.unionWith #2 (fixity, fixity')
+           val modifiedEnv = { fixity = Fixity.mergeEnv (fixity, fixity')
                              , toTypedSyntaxEnv = ToTypedSyntax.mergeEnv (toTypedSyntaxEnv, toTypedSyntaxEnv')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
                              , tyconset = tyconset

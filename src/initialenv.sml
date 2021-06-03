@@ -36,6 +36,37 @@ val initialFixity = let open Syntax
                                   ,(MkVId "before",InfixL 3)
                                   ]
                     end
+val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ValueConstructor)) Syntax.VIdMap.empty xs
+                                        fun mkExConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty xs
+                                        fun mkTyConMap xs = List.foldl (fn ((n, y), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon n, y)) Syntax.TyConMap.empty xs
+                                        fun mkStrMap xs = List.foldl (fn ((n, y), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId n, Fixity.MkIdStatusMap y)) Syntax.StrIdMap.empty xs
+                                        fun mkSubstrMap xs = { valMap = Syntax.VIdMap.empty
+                                                             , tyConMap = Syntax.TyConMap.empty
+                                                             , strMap = mkStrMap xs
+                                                             }
+                                    in { fixityMap = initialFixity
+                                       , idStatusMap = { valMap = Syntax.VIdMap.unionWith #2 (mkValConMap ["ref", "true", "false", "nil", "::"]
+                                                                                             ,mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail"]
+                                                                                             )
+                                                       , tyConMap = mkTyConMap [("bool", mkValConMap ["true", "false"])
+                                                                               ,("ref", mkValConMap ["ref"])
+                                                                               ,("list", mkValConMap ["nil", "::"])
+                                                                               ]
+                                                       , strMap = mkStrMap [("LunarML", mkSubstrMap [("Int", mkSubstrMap [])
+                                                                                                    ,("Word", mkSubstrMap [])
+                                                                                                    ,("Real", mkSubstrMap [])
+                                                                                                    ,("String", mkSubstrMap [])
+                                                                                                    ,("Char", mkSubstrMap [])
+                                                                                                    ,("Array", mkSubstrMap [])
+                                                                                                    ,("Vector", mkSubstrMap [])
+                                                                                                    ,("Lua", mkSubstrMap [])
+                                                                                                    ]
+                                                                            )
+                                                                           ]
+                                                       }
+                                       , sigMap = Syntax.SigIdMap.empty
+                                       }
+                                    end
 
 val vidCounter = ref ~3
 fun newVId name = let val n = !vidCounter

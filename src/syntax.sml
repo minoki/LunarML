@@ -49,6 +49,10 @@ structure StrIdMap = RedBlackMapFn(struct
                                     type ord_key = StrId
                                     fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
                                     end)
+structure SigIdMap = RedBlackMapFn(struct
+                                    type ord_key = SigId
+                                    fun compare (MkSigId x, MkSigId y) = String.compare (x,y)
+                                    end)
 structure TyVarKey = struct
 type ord_key = TyVar
 fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
@@ -72,7 +76,6 @@ datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
 
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * SCon (* special constant *)
-             | ConOrVarPat of SourcePos.span * VId (* constructor or variable *)
              | VarPat of SourcePos.span * VId (* variable *)
              | RecordPat of { sourceSpan : SourcePos.span
                             , fields : (Label * Pat) list
@@ -112,7 +115,6 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | ExceptionDec of SourcePos.span * ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
-             | FixityDec of SourcePos.span * FixityStatus * VId list
      and ValBind = PatBind of SourcePos.span * Pat * Exp
      and FValBind = FValBind of { sourceSpan : SourcePos.span
                                 , vid : VId
@@ -160,7 +162,6 @@ end
 
 fun getSourceSpanOfPat(WildcardPat span) = span
   | getSourceSpanOfPat(SConPat(span, _)) = span
-  | getSourceSpanOfPat(ConOrVarPat(span, _)) = span
   | getSourceSpanOfPat(VarPat(span, _)) = span
   | getSourceSpanOfPat(RecordPat{sourceSpan, ...}) = sourceSpan
   | getSourceSpanOfPat(ConPat(span, _, _)) = span
@@ -220,6 +221,7 @@ fun print_TyCon (MkTyCon x) = "MkTyCon \"" ^ String.toString x ^ "\""
 fun print_Label (NumericLabel x) = "NumericLabel " ^ Int.toString x
   | print_Label (IdentifierLabel x) = "IdentifierLabel \"" ^ String.toString x ^ "\""
 fun print_StrId (MkStrId x) = "MkStrId \"" ^ String.toString x ^ "\""
+fun print_SigId (MkSigId x) = "MkSigId \"" ^ String.toString x ^ "\""
 fun print_LongVId (MkQualified(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^ "," ^ print_VId y ^ ")"
 fun print_LongTyCon (MkQualified(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkQualified(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"
@@ -234,7 +236,6 @@ fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (FnType(_,x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat(_, x)) = "SConPat(" ^ print_SCon x ^ ")"
-  | print_Pat (ConOrVarPat(_, vid)) = "ConOrVarPat(" ^ print_VId vid ^ ")"
   | print_Pat (VarPat(_, vid)) = "VarPat(" ^ print_VId vid ^ ")"
   | print_Pat (TypedPat (_, pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"

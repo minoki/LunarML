@@ -10,9 +10,89 @@ fun emitError(ctx : Context, spans, message) = raise Syntax.SyntaxError (spans, 
 
 type FixityStatusMap = Syntax.FixityStatus Syntax.VIdMap.map
 
-fun getFixityStatus (map, vid) = case Syntax.VIdMap.find (map, vid) of
-                                     SOME a => a
-                                   | NONE => Syntax.Nonfix
+datatype IdStatusMap' = MkIdStatusMap of IdStatusMap
+withtype IdStatusMap = { valMap : Syntax.IdStatus Syntax.VIdMap.map
+                       , tyConMap : (Syntax.IdStatus Syntax.VIdMap.map) Syntax.TyConMap.map
+                       , strMap : IdStatusMap' Syntax.StrIdMap.map
+                       }
+type Env = { fixityMap : FixityStatusMap
+           , idStatusMap : IdStatusMap
+           , sigMap : IdStatusMap Syntax.SigIdMap.map
+           }
+
+val emptyIdStatusMap : IdStatusMap = { valMap = Syntax.VIdMap.empty
+                                     , tyConMap = Syntax.TyConMap.empty
+                                     , strMap = Syntax.StrIdMap.empty
+                                     }
+
+val emptyEnv : Env = { fixityMap = Syntax.VIdMap.empty
+                     , idStatusMap = emptyIdStatusMap
+                     , sigMap = Syntax.SigIdMap.empty
+                     }
+
+(* used by fixity declaration *)
+fun envWithFixityMap fixityMap : Env = { fixityMap = fixityMap
+                                       , idStatusMap = emptyIdStatusMap
+                                       , sigMap = Syntax.SigIdMap.empty
+                                       }
+
+fun envWithIdStatusMap idStatusMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                           , idStatusMap = idStatusMap
+                                           , sigMap = Syntax.SigIdMap.empty
+                                           }
+
+(* used by signature binding *)
+fun envWithSigMap sigMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , idStatusMap = emptyIdStatusMap
+                                 , sigMap = sigMap
+                                 }
+
+fun mergeIdStatusMap(env1 : IdStatusMap, env2 : IdStatusMap) : IdStatusMap
+    = { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
+      , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
+      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env1, #strMap env2)
+      }
+
+fun mergeEnv(env1 : Env, env2 : Env) : Env
+    = { fixityMap = Syntax.VIdMap.unionWith #2 (#fixityMap env1, #fixityMap env2)
+      , idStatusMap = mergeIdStatusMap(#idStatusMap env1, #idStatusMap env2)
+      , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env1, #sigMap env2)
+      }
+
+fun getFixityStatus ({ fixityMap, ... } : Env, vid)
+    = case Syntax.VIdMap.find (fixityMap, vid) of
+          SOME a => a
+        | NONE => Syntax.Nonfix
+
+fun isConstructor ({ idStatusMap = { valMap, ... }, ... } : Env, vid)
+    = case Syntax.VIdMap.find (valMap, vid) of
+          SOME Syntax.ValueConstructor => true
+        | SOME Syntax.ExceptionConstructor => true
+        | _ => false
+
+fun ConOrVarPat(env, span, vid) = if isConstructor(env, vid) then
+                                      Syntax.ConPat(span, Syntax.MkQualified([], vid), NONE)
+                                  else
+                                      Syntax.VarPat(span, vid)
+
+(* used by datatype replication *)
+fun lookupLongTyConInIdStatusMap(env : IdStatusMap, [], tycon)
+    = Syntax.TyConMap.find(#tyConMap env, tycon)
+  | lookupLongTyConInIdStatusMap(env, strid :: strids, tycon)
+    = case Syntax.StrIdMap.find(#strMap env, strid) of
+          SOME (MkIdStatusMap env) => lookupLongTyConInIdStatusMap(env, strids, tycon)
+        | NONE => NONE
+fun lookupLongTyCon(env : Env, Syntax.MkQualified(strids, tycon)) : (Syntax.IdStatus Syntax.VIdMap.map) option
+    = lookupLongTyConInIdStatusMap(#idStatusMap env, strids, tycon)
+
+(* used by open declaration *)
+fun lookupLongStrIdInIdStatusMap(env : IdStatusMap, []) = SOME env
+  | lookupLongStrIdInIdStatusMap(env, strid :: strids)
+    = case Syntax.StrIdMap.find(#strMap env, strid) of
+          SOME (MkIdStatusMap env) => lookupLongStrIdInIdStatusMap(env, strids)
+        | NONE => NONE
+fun lookupLongStrId({ idStatusMap, ... } : Env, Syntax.MkQualified(strids, strid)) : IdStatusMap option
+    = lookupLongStrIdInIdStatusMap(idStatusMap, strids @ [ strid ])
 
 datatype ('op, 'a) InfixList = Leaf of 'a
                              | Tree of 'a * Syntax.InfixAssociativity * SourcePos.span * 'op * ('op, 'a) InfixList
@@ -64,26 +144,26 @@ fun resolveFixity (ctx, f)
       end
 (* let open Fixity in resolveFixity (fn (a,f,b) => f(a,b)) (Tree(3,Syntax.LeftAssoc 5,op +,Tree(2,Syntax.LeftAssoc 6,op *,Leaf 7))) end; should yield 17 *)
 
-(* doPat : Context * FixityStatusMap * UnfixedSyntax.Pat -> Syntax.Pat *)
-(* doExp : Context * FixityStatusMap * UnfixedSyntax.Exp -> Syntax.Exp *)
-(* doDec : Context * FixityStatusMap * UnfixedSyntax.Dec -> FixityStatusMap * Syntax.Dec *)
-(* doDecs : Context * FixityStatusMap * UnfixedSyntax.Dec list -> FixityStatusMap * Syntax.Dec list *)
-(* doValBind : Context * FixityStatusMap * UnfixedSyntax.ValBind -> Syntax.ValBind *)
-fun doPat(ctx, env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
+(* doPat : Context * Env * UnfixedSyntax.Pat -> Syntax.Pat *)
+(* doExp : Context * Env * UnfixedSyntax.Exp -> Syntax.Exp *)
+(* doDec : Context * Env * UnfixedSyntax.Dec -> Env * Syntax.Dec list *)
+(* doDecs : Context * Env * UnfixedSyntax.Dec list -> Env * Syntax.Dec list *)
+(* doValBind : Context * Env * UnfixedSyntax.ValBind -> Syntax.ValBind *)
+fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
   | doPat(ctx, env, UnfixedSyntax.SConPat(span, scon)) = Syntax.SConPat(span, scon)
   | doPat(ctx, env, UnfixedSyntax.InfixOrVIdPat(span, vid)) = (case getFixityStatus(env, vid) of
-                                                                   Syntax.Nonfix => Syntax.ConOrVarPat(span, vid)
+                                                                   Syntax.Nonfix => ConOrVarPat(env, span, vid)
                                                                  | _ => emitError(ctx, [span], "infix operator used in non-infix position")
                                                               )
-  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = Syntax.ConOrVarPat(span, vid)
-  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE)
+  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = ConOrVarPat(env, span, vid)
+  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE) (* TODO: Check idstatus? *)
   | doPat(ctx, env, UnfixedSyntax.RecordPat{sourceSpan, fields, wildcard}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(ctx, env, pat))) fields, wildcard = wildcard }
   | doPat(ctx, env, UnfixedSyntax.JuxtapositionPat(jspan, patterns)) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid) of
                      Syntax.Nonfix => (case getFixityStatus(env, vid') of
-                                           Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), Syntax.MkLongVId([], vid), SOME(Syntax.ConOrVarPat(span2, vid'))), pats)
-                                         | Syntax.Infix assoc => Tree(Syntax.ConOrVarPat(span1, vid), assoc, span2, vid', doPrefix(pats))
+                                           Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), Syntax.MkLongVId([], vid), SOME(ConOrVarPat(env, span2, vid'))), pats)
+                                         | Syntax.Infix assoc => Tree(ConOrVarPat(env, span1, vid), assoc, span2, vid', doPrefix(pats))
                                       )
                    | Syntax.Infix assoc => emitError(ctx, [span1], "infix operator used in prefix position")
                 )
@@ -94,9 +174,9 @@ fun doPat(ctx, env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(span1, longvid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid') of
-                     Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, SOME(Syntax.ConOrVarPat(span2, vid'))), pats)
+                     Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, SOME(ConOrVarPat(env, span2, vid'))), pats)
                    | Syntax.Infix assoc => case longvid of
-                                               Syntax.MkQualified([], vid) => Tree(Syntax.ConOrVarPat(span1, vid), assoc, span2, vid', doPrefix(pats))
+                                               Syntax.MkQualified([], vid) => Tree(ConOrVarPat(env, span1, vid), assoc, span2, vid', doPrefix(pats))
                                              | _ => Tree(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), longvid, NONE), assoc, span2, vid', doPrefix(pats))
                 )
             | doPrefix(UnfixedSyntax.NonInfixVIdPat(span1, longvid) :: atpat :: pats)
@@ -141,7 +221,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
   | doExp(ctx, env, UnfixedSyntax.RecordExp(span, fields)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(ctx, env, exp))) fields)
   | doExp(ctx, env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(ctx, env, decls)
-                                                                in Syntax.LetInExp(span, decls', doExp(ctx, Syntax.VIdMap.unionWith #2 (env, env'), exp))
+                                                                in Syntax.LetInExp(span, decls', doExp(ctx, mergeEnv(env, env'), exp))
                                                                 end
   | doExp(ctx, env, UnfixedSyntax.JuxtapositionExp(span, expressions)) (* application or infix application *)
     = let fun doPrefix(exp1 :: rest) = doInfix(doExp(ctx, env, exp1), rest)
@@ -167,27 +247,61 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.FnExp(span, matches)) = Syntax.FnExp(span, List.map (fn (pat, exp) => (doPat(ctx, env, pat), doExp(ctx, env, exp))) matches)
   | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
   | doExp(ctx, env, UnfixedSyntax.ListExp(span, xs)) = Syntax.ListExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
-and doDecs(ctx, env, nil) = (Syntax.VIdMap.empty, nil)
+and doDecs(ctx, env, nil) = (emptyEnv, nil)
   | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
-                                        val (env'', decs') = doDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
-                                    in (Syntax.VIdMap.unionWith #2 (env', env''), dec' :: decs')
+                                        val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
+                                    in (mergeEnv(env', env''), dec' @ decs')
                                     end
-and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.ValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind))
-  | doDec(ctx, env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (Syntax.VIdMap.empty, Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind))
-  | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (Syntax.VIdMap.empty, Syntax.FunDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind))
-  | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (Syntax.VIdMap.empty, Syntax.TypeDec(span, typbinds))
-  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds)) = (Syntax.VIdMap.empty, Syntax.DatatypeDec(span, datbinds))
-  | doDec(ctx, env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = (Syntax.VIdMap.empty, Syntax.DatatypeRepDec(span, tycon, longtycon))
-  | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, decs)) = let val (_, decs') = doDecs(ctx, env, decs)
-                                                                      in (Syntax.VIdMap.empty, Syntax.AbstypeDec(span, datbinds, decs'))
+and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [Syntax.ValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind)])
+  | doDec(ctx, env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (emptyEnv, [Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind)])
+  | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (emptyEnv, [Syntax.FunDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind)])
+  | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
+  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds)) = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
+                                                                         = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
+                                                                                          (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
+                                                                                          Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
+                                                                     val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
+                                                                     val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
+                                                                     val idStatusMap = { valMap = valMap
+                                                                                       , tyConMap = tyConMap
+                                                                                       , strMap = Syntax.StrIdMap.empty
+                                                                                       }
+                                                                 in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeDec(span, datbinds)])
+                                                                 end
+  | doDec(ctx, env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
+                                                                                                 SOME valMap => valMap
+                                                                                               | NONE => Syntax.VIdMap.empty
+                                                                                val idStatusMap = { valMap = valMap
+                                                                                                  , tyConMap = Syntax.TyConMap.singleton(tycon, valMap)
+                                                                                                  , strMap = Syntax.StrIdMap.empty
+                                                                                                  }
+                                                                            in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeRepDec(span, tycon, longtycon)]) (* copy tyConMap's ValEnv into valMap *)
+                                                                            end
+  | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, decs)) = let val (_, decs') = doDecs(ctx, env, decs) (* not really implemented yet *)
+                                                                      in (emptyEnv, [Syntax.AbstypeDec(span, datbinds, decs')])
                                                                       end
-  | doDec(ctx, env, UnfixedSyntax.ExceptionDec(span, exbinds)) = (Syntax.VIdMap.empty, Syntax.ExceptionDec(span, exbinds))
+  | doDec(ctx, env, UnfixedSyntax.ExceptionDec(span, exbinds)) = let val valMap = List.foldl (fn (Syntax.ExBind(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor)
+                                                                                             | (Syntax.ExReplication(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor) (* RHS should be an exception constructor *)
+                                                                                             ) Syntax.VIdMap.empty exbinds
+                                                                     val idStatusMap = { valMap = valMap
+                                                                                       , tyConMap = Syntax.TyConMap.empty
+                                                                                       , strMap = Syntax.StrIdMap.empty
+                                                                                       }
+                                                                 in (envWithIdStatusMap idStatusMap, [Syntax.ExceptionDec(span, exbinds)])
+                                                                 end
   | doDec(ctx, env, UnfixedSyntax.LocalDec(span, decs1, decs2)) = let val (env', decs1') = doDecs(ctx, env, decs1)
-                                                                      val (env'', decs2') = doDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs2)
-                                                                  in (env'', Syntax.LocalDec(span, decs1', decs2'))
+                                                                      val (env'', decs2') = doDecs(ctx, mergeEnv(env, env'), decs2)
+                                                                  in (env'', [Syntax.LocalDec(span, decs1', decs2')])
                                                                   end
-  | doDec(ctx, env, UnfixedSyntax.OpenDec(span, strid)) = (Syntax.VIdMap.empty, Syntax.OpenDec(span, strid))
-  | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = (List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids, Syntax.FixityDec(span, fixity, vids))
+  | doDec(ctx, env, UnfixedSyntax.OpenDec(span, strids)) = let val idStatusMap = List.foldl (fn (strid, m) => case lookupLongStrId(env, strid) of
+                                                                                                                    SOME m' => mergeIdStatusMap(m, m')
+                                                                                                                  | NONE => emitError(ctx, [span], "structure not found: " ^ Syntax.print_LongStrId strid)
+                                                                                            ) emptyIdStatusMap strids
+                                                           in (envWithIdStatusMap idStatusMap, [Syntax.OpenDec(span, strids)])
+                                                           end
+  | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = let val fixityMap = List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids
+                                                                   in (envWithFixityMap fixityMap, [])
+                                                                   end
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
 and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
                                                                     val rules' = List.map doFMRule rules
@@ -251,42 +365,99 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
     = emitError(ctx, [span], "invalid function declaration")
 and doInfixFPat(ctx, env, span, vidspan, vid, patL, patR, pats) = (vidspan, vid, Syntax.TuplePat(span, [doPat(ctx, env, patL), doPat(ctx, env, patR)]) :: List.map (fn p => doPat(ctx, env, p)) pats)
 and doPrefixFPat(ctx, env, span, vid, pats) = (span, vid, List.map (fn p => doPat(ctx, env, p)) pats)
-(* doStrExp : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrExp -> Syntax.Exp *)
-(* doDec : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrDec -> FixityStatusMap * Syntax.Dec *)
-(* doDecs : Context * FixityStatusMap * UnfixedSyntax.Dec Syntax.StrDec list -> FixityStatusMap * Syntax.Dec list *)
-fun doStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = Syntax.StructExp(span, #2 (doStrDecs(ctx, env, strdecs)))
-  | doStrExp(ctx, env, Syntax.StrIdExp(span, longstrid)) = Syntax.StrIdExp(span, longstrid)
-  | doStrExp(ctx, env, Syntax.TransparentConstraintExp(span, strexp, sigexp)) = Syntax.TransparentConstraintExp(span, doStrExp(ctx, env, strexp), sigexp)
-  | doStrExp(ctx, env, Syntax.OpaqueConstraintExp(span, strexp, sigexp)) = Syntax.OpaqueConstraintExp(span, doStrExp(ctx, env, strexp), sigexp)
-  | doStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs') = doStrDecs(ctx, env, strdecs)
-                                                                    in Syntax.LetInStrExp(span, strdecs', doStrExp(ctx, env', strexp))
+(* doStrExp : Context * Env * UnfixedSyntax.Dec Syntax.StrExp -> IdStatusMap * Syntax.Dec Syntax.StrExp *)
+(* doStrDec : Context * Env * UnfixedSyntax.Dec Syntax.StrDec -> Env * Syntax.Dec Syntax.StrDec *)
+(* doStrDecs : Context * Env * (UnfixedSyntax.Dec Syntax.StrDec) list -> Env * (Syntax.Dec Syntax.StrDec) list *)
+fun doStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = let val (env', strdecs) = doStrDecs(ctx, env, strdecs)
+                                                          in (#idStatusMap env', Syntax.StructExp(span, strdecs))
+                                                          end
+  | doStrExp(ctx, env, Syntax.StrIdExp(span, longstrid)) = let val env' = case lookupLongStrId(env, longstrid) of
+                                                                              SOME env => env
+                                                                            | NONE => emitError(ctx, [span], "structure not found: " ^ Syntax.print_LongStrId longstrid)
+                                                           in (env', Syntax.StrIdExp(span, longstrid))
+                                                           end
+  | doStrExp(ctx, env, Syntax.TransparentConstraintExp(span, strexp, sigexp)) = let val env' = emptyIdStatusMap (* TODO: signature *)
+                                                                                in (env', Syntax.TransparentConstraintExp(span, #2 (doStrExp(ctx, env, strexp)), sigexp)) 
+                                                                                end
+  | doStrExp(ctx, env, Syntax.OpaqueConstraintExp(span, strexp, sigexp)) = let val env' = emptyIdStatusMap (* TODO: signature *)
+                                                                           in (env', Syntax.OpaqueConstraintExp(span, #2 (doStrExp(ctx, env, strexp)), sigexp))
+                                                                           end
+  | doStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs) = doStrDecs(ctx, env, strdecs)
+                                                                        val (env'', strexp) = doStrExp(ctx, mergeEnv(env, env'), strexp)
+                                                                    in (env'', Syntax.LetInStrExp(span, strdecs, strexp))
                                                                     end
-and doStrDec(ctx, env, Syntax.CoreDec(span, dec)) = let val (env', dec') = doDec(ctx, env, dec)
-                                                    in (env', Syntax.CoreDec(span, dec'))
+and doStrDec(ctx, env, Syntax.CoreDec(span, dec)) = let val (env', decs) = doDec(ctx, env, dec)
+                                                    in (env', List.map (fn dec => Syntax.CoreDec(span, dec)) decs)
                                                     end
-  | doStrDec(ctx, env, Syntax.StrBindDec(span, binds)) = (Syntax.VIdMap.empty, Syntax.StrBindDec(span, List.map (fn (strid, strexp) => (strid, doStrExp(ctx, env, strexp))) binds))
+  | doStrDec(ctx, env, Syntax.StrBindDec(span, binds)) = let val (strMap, binds) = List.foldr (fn ((strid, strexp), (m, xs)) => let val (inner, strexp) = doStrExp(ctx, env, strexp)
+                                                                                                                                in (Syntax.StrIdMap.insert(m, strid, MkIdStatusMap inner), (strid, strexp) :: xs)
+                                                                                                                                end
+                                                                                              ) (Syntax.StrIdMap.empty, []) binds
+                                                             val idStatusMap = { valMap = Syntax.VIdMap.empty
+                                                                               , tyConMap = Syntax.TyConMap.empty
+                                                                               , strMap = strMap
+                                                                               }
+                                                         in (envWithIdStatusMap idStatusMap, [Syntax.StrBindDec(span, binds)])
+                                                         end
   | doStrDec(ctx, env, Syntax.LocalStrDec(span, decs, decs')) = let val (env', decs) = doStrDecs(ctx, env, decs)
-                                                                    val (env'', decs') = doStrDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs')
-                                                                in (env'', Syntax.LocalStrDec(span, decs, decs'))
+                                                                    val (env'', decs') = doStrDecs(ctx, mergeEnv(env, env'), decs')
+                                                                in (env'', [Syntax.LocalStrDec(span, decs, decs')])
                                                                 end
-and doStrDecs(ctx, env, []) = (Syntax.VIdMap.empty, [])
+and doStrDecs(ctx, env, []) = (emptyEnv, [])
   | doStrDecs(ctx, env, dec :: decs) = let val (env', dec) = doStrDec(ctx, env, dec)
-                                           val (env'', decs) = doStrDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
-                                       in (Syntax.VIdMap.unionWith #2 (env', env''), dec :: decs)
+                                           val (env'', decs) = doStrDecs(ctx, mergeEnv(env, env'), decs)
+                                       in (mergeEnv(env', env''), dec @ decs)
                                        end
-fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdec) = doStrDec(ctx, env, strdec)
-                                                in (env, Syntax.StrDec(strdec))
+fun doSigExp(ctx, env, Syntax.BasicSigExp(span, specs)) : IdStatusMap = List.foldl (fn (spec, m) => mergeIdStatusMap(m, doSpec(ctx, mergeEnv(env, envWithIdStatusMap m), spec))) emptyIdStatusMap specs
+  | doSigExp(ctx, env, Syntax.SigIdExp(span, sigid)) = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
+                                                            SOME m => m
+                                                          | NONE => emitError(ctx, [span], "signature not found: " ^ Syntax.print_SigId sigid)
+                                                       )
+  | doSigExp(ctx, env, Syntax.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty)) = doSigExp(ctx, env, sigexp) (* does not affect idstatus *)
+and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
+  | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
+  | doSpec(ctx, env, Syntax.EqtypeDesc(span, descs)) = emptyIdStatusMap
+  | doSpec(ctx, env, Syntax.DatDesc(span, descs)) = List.foldl (fn ((tyvars, tycon, condescs), { valMap, tyConMap, strMap }) =>
+                                                                   let val valMap' = List.foldl (fn (Syntax.ConBind(_, vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty condescs
+                                                                   in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
+                                                                      , tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, valMap')
+                                                                      , strMap = strMap }
+                                                                   end
+                                                               ) emptyIdStatusMap descs
+  | doSpec(ctx, env, Syntax.DatatypeRepSpec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
+                                                                            SOME m => m
+                                                                          | NONE => Syntax.VIdMap.empty
+                                                                       in { valMap = valMap
+                                                                          , tyConMap = Syntax.TyConMap.singleton(tycon, valMap)
+                                                                          , strMap = Syntax.StrIdMap.empty
+                                                                          }
+                                                                       end
+  | doSpec(ctx, env, Syntax.ExDesc(span, descs)) = { valMap = List.foldl (fn ((vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty descs
+                                                   , tyConMap = Syntax.TyConMap.empty
+                                                   , strMap = Syntax.StrIdMap.empty
+                                                   }
+  | doSpec(ctx, env, Syntax.StrDesc(span, descs)) = let val strMap = List.foldl (fn ((strid, sigexp), strMap) => Syntax.StrIdMap.insert(strMap, strid, MkIdStatusMap (doSigExp(ctx, env, sigexp)))) Syntax.StrIdMap.empty descs
+                                                    in { valMap = Syntax.VIdMap.empty
+                                                       , tyConMap = Syntax.TyConMap.empty
+                                                       , strMap = strMap
+                                                       }
+                                                    end
+  | doSpec(ctx, env, Syntax.Include(span, sigexp)) = doSigExp(ctx, env, sigexp)
+fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdecs) = doStrDec(ctx, env, strdec)
+                                                in (env, List.map Syntax.StrDec strdecs)
                                                 end
-  | doTopDec(ctx, env, Syntax.SigDec(sigbinds)) = (Syntax.VIdMap.empty, Syntax.SigDec(sigbinds))
-fun doTopDecs(ctx, env, []) = (Syntax.VIdMap.empty, [])
+  | doTopDec(ctx, env, Syntax.SigDec(sigbinds)) = let val sigMap = List.foldl (fn (Syntax.SigBind (sigid, sigexp), m) => Syntax.SigIdMap.insert(m, sigid, doSigExp(ctx, env, sigexp))) Syntax.SigIdMap.empty sigbinds
+                                                  in (envWithSigMap sigMap, [Syntax.SigDec(sigbinds)])
+                                                  end
+fun doTopDecs(ctx, env, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])
   | doTopDecs(ctx, env, dec :: decs) = let val (env', dec) = doTopDec(ctx, env, dec)
-                                           val (env'', decs) = doTopDecs(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
-                                       in (Syntax.VIdMap.unionWith #2 (env', env''), dec :: decs)
+                                           val (env'', decs) = doTopDecs(ctx, mergeEnv(env, env'), decs)
+                                       in (mergeEnv(env', env''), dec @ decs)
                                        end
-fun doProgram(ctx, env, []) = (Syntax.VIdMap.empty, [])
+fun doProgram(ctx, env, []) : Env * ((Syntax.Dec Syntax.TopDec) list) list = (emptyEnv, [])
   | doProgram(ctx, env, dec :: decs) = let val (env', dec) = doTopDecs(ctx, env, dec)
-                                           val (env'', decs) = doProgram(ctx, Syntax.VIdMap.unionWith #2 (env, env'), decs)
-                                       in (Syntax.VIdMap.unionWith #2 (env', env''), dec :: decs)
+                                           val (env'', decs) = doProgram(ctx, mergeEnv(env, env'), decs)
+                                       in (mergeEnv(env', env''), dec :: decs)
                                        end
 end (* structure Fixity *)
 
@@ -307,7 +478,6 @@ fun freeTyVarsInTy(bound, TyVar(_, tv)) = if TyVarSet.member(bound, tv) then
 (* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
 fun freeTyVarsInPat(_, WildcardPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, SConPat _) = TyVarSet.empty
-  | freeTyVarsInPat(_, ConOrVarPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, VarPat _) = TyVarSet.empty
   | freeTyVarsInPat(bound, RecordPat{fields=xs, ...}) = List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
   | freeTyVarsInPat(_, ConPat(_, _, NONE)) = TyVarSet.empty
@@ -354,7 +524,6 @@ local
                                                                     | (ExReplication(_, _, _), acc) => acc) TyVarSet.empty exbinds
       | collectDec(bound, LocalDec(_, decs1, decs2)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) TyVarSet.empty decs1) decs2
       | collectDec(bound, OpenDec _) = TyVarSet.empty
-      | collectDec(bound, FixityDec _) = TyVarSet.empty
     and collectDatBind(bound, DatBind (_, tyvars, _, conbinds)) = let val bound = TyVarSet.addList(bound, tyvars)
                                                                       fun doConBind(ConBind(_, _, NONE)) = TyVarSet.empty
                                                                         | doConBind(ConBind(_, _, SOME ty)) = freeTyVarsInTy(bound, ty)
@@ -394,7 +563,6 @@ local
       | doDec(bound, dec as ExceptionDec _) = dec
       | doDec(bound, LocalDec(span, xs, ys)) = LocalDec(span, doDecList(bound, xs), doDecList(bound, ys))
       | doDec(bound, dec as OpenDec _) = dec
-      | doDec(bound, dec as FixityDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
     and doFValBind(bound, FValBind { sourceSpan, vid, arity, rules }) = let fun doFRule(pats, optTy, exp) = (pats, optTy, doExp(bound, exp))
@@ -469,7 +637,6 @@ local
     fun doPat(S.WildcardPat _) = ()
       | doPat(S.SConPat(_, S.RealConstant _)) = raise S.SyntaxError ([], "No real constant may occur in a pattern")
       | doPat(S.SConPat _) = ()
-      | doPat(S.ConOrVarPat _) = ()
       | doPat(S.VarPat _) = ()
       | doPat(S.RecordPat{fields = row, wildcard = ellip, ...}) = if checkRow row then
                                                                       raise S.SyntaxError ([], "No pattern row may bind the same label twice")
