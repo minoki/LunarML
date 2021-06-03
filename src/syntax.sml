@@ -114,7 +114,6 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector
      and Dec = ValDec of SourcePos.span * TyVar list * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * TyVar list * ValBind list (* recursive (val rec) *)
-             | FunDec of SourcePos.span * TyVar list * FValBind list (* fun; desugaring is done in ToTypedSyntax *)
              | TypeDec of SourcePos.span * TypBind list
              | DatatypeDec of SourcePos.span * DatBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
@@ -123,11 +122,6 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
      and ValBind = PatBind of SourcePos.span * Pat * Exp
-     and FValBind = FValBind of { sourceSpan : SourcePos.span
-                                , vid : VId
-                                , arity : int
-                                , rules : (Pat list * Ty option * Exp) list
-                                }
 
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
               | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
@@ -272,10 +266,8 @@ fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (ListExp _) = "ListExp"
 and print_Dec (ValDec (_,bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec (RecValDec (_,bound,valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
-  | print_Dec (FunDec (_,bound,fvalbind)) = "FunDec(" ^ print_list print_TyVar bound ^ ", " ^ print_list print_FValBind fvalbind ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (_,pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-and print_FValBind (FValBind { vid, arity, rules, ... }) = "FValBind{vid=" ^ print_VId vid ^ ",arity=" ^ Int.toString arity ^ ",rules=" ^ print_list (fn (pats,optTy,exp) => "(" ^ print_list print_Pat pats ^ "," ^ print_option print_Ty optTy ^ "," ^ print_Exp exp ^ ")") rules ^ "}"
 val print_Decs = print_list print_Dec
 fun print_VIdMap print_elem x = print_list (print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 fun print_TyConMap print_elem x = print_list (print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)

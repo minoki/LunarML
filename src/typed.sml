@@ -734,48 +734,6 @@ and toUDecs(ctx, tvenv, env, nil) = (emptyEnv, nil)
                val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
            in (mergeEnv(venv, env''), decl' :: decls')
            end
-         | S.FunDec(span, tyvars, fvalbind) =>
-           let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
-               val tvenv' = List.foldl Syntax.TyVarMap.insert' tvenv tyvars'
-               (* TODO: Check id status *)
-               val vidmap = List.foldl Syntax.VIdMap.insert' Syntax.VIdMap.empty (List.map (fn S.FValBind { vid = vid, ... } => (vid, newVId(ctx, vid))) fvalbind)
-               val venv = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap)
-               val env' = mergeEnv(env, venv)
-               fun doFValBind (S.FValBind { sourceSpan, vid, arity, rules })
-                   = let fun buildExp(0, [(paramId, paramTy)]) = let fun doRule ([pat], optTy, exp) = let val (vidmap', pat) = toUPat(ctx, tvenv', env', pat)
-                                                                                                          val venv' = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap')
-                                                                                                      in (pat, toUExp(ctx, tvenv', mergeEnv(env', venv'), case optTy of
-                                                                                                                                                              NONE => exp 
-                                                                                                                                                            | SOME expTy => S.TypedExp(Syntax.getSourceSpanOfExp exp, exp, expTy)))
-                                                                                                      end
-                                                                       | doRule _ = emitError(ctx, [sourceSpan], "invalid function declaration")
-                                                                 in U.CaseExp(sourceSpan, U.VarExp(sourceSpan, Syntax.MkQualified([], paramId), Syntax.ValueVariable), paramTy, List.map doRule rules)
-                                                                 end
-                           | buildExp(0, revParams) = let val params = List.rev revParams
-                                                          val paramTuple = U.TupleExp (sourceSpan, List.map (fn (vid, _) => U.VarExp(sourceSpan, Syntax.MkQualified([], vid), Syntax.ValueVariable)) params)
-                                                          val paramTupleTy = U.TupleType (sourceSpan, List.map #2 params)
-                                                          fun doRule (pats, optTy, exp) = let val (vidmap', pat) = toUPat(ctx, tvenv', env', S.TuplePat(SourcePos.nullSpan (* TODO *), pats))
-                                                                                              val venv' = envWithValEnv (Syntax.VIdMap.map (fn vid => (vid, Syntax.ValueVariable)) vidmap')
-                                                                                          in (pat, toUExp(ctx, tvenv', mergeEnv(env', venv'), case optTy of
-                                                                                                                                                  NONE => exp 
-                                                                                                                                                | SOME expTy => S.TypedExp(Syntax.getSourceSpanOfExp exp, exp, expTy)))
-                                                                                          end
-                                                      in U.CaseExp(sourceSpan, paramTuple, paramTupleTy, List.map doRule rules)
-                                                      end
-                           | buildExp(n, revParams) = let val paramId = newVId(ctx, Syntax.MkVId "a")
-                                                          val paramTy = USyntax.TyVar(sourceSpan, freshTyVar(ctx))
-                                                      in U.FnExp(sourceSpan, paramId, paramTy, buildExp(n - 1, (paramId, paramTy) :: revParams))
-                                                      end
-                         val vid' = case Syntax.VIdMap.find(vidmap, vid) of
-                                        SOME v => v
-                                      | NONE => emitError(ctx, [sourceSpan], "internal error")
-                     in U.PatBind(sourceSpan, U.VarPat(sourceSpan, vid', USyntax.TyVar(sourceSpan, freshTyVar(ctx))), buildExp(arity, []))
-                     end
-               val valbind'' = List.map doFValBind fvalbind
-               val decl' = U.RecValDec(span, List.map #2 tyvars', valbind'')
-               val (env'', decls') = toUDecs(ctx, tvenv, env', decls)
-           in (mergeEnv(venv, env''), decl' :: decls')
-           end
          | S.TypeDec(span, typbinds) =>
            let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))
                    = let val tyvars' = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars

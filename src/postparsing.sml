@@ -291,7 +291,7 @@ and doDecs(ctx, env, nil) = (emptyEnv, nil)
                                     end
 and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [Syntax.ValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind)])
   | doDec(ctx, env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (emptyEnv, [Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind)])
-  | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (emptyEnv, [Syntax.FunDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind)])
+  | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (emptyEnv, [Syntax.RecValDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind)])
   | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
   | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds)) = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
                                                                          = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
@@ -340,25 +340,47 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                                                    in (envWithFixityMap fixityMap, [])
                                                                    end
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
-and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
-                                                                    val rules' = List.map doFMRule rules
-                                                                    fun getVIdAndArity (((span, vid, []), _, _) :: xs) = emitError(ctx, [span], "function declaration with no arguments")
-                                                                      | getVIdAndArity (((span, vid, pats), _, _) :: xs) = checkVIdAndArity(span, vid, length pats, xs)
-                                                                      | getVIdAndArity [] = emitError(ctx, [span], "internal error: empty 'fun' rule")
-                                                                    and checkVIdAndArity(span, vid, arity, []) = (vid, arity)
-                                                                      | checkVIdAndArity(span, vid, arity, ((span', vid', pats), _, _) :: xs)
-                                                                        = if vid = vid' then
-                                                                              if arity = length pats then
-                                                                                  checkVIdAndArity(span, vid, arity, xs)
-                                                                              else
-                                                                                  emitError(ctx, [span], "invalid function declaration: arity mismatch")
-                                                                          else
-                                                                              emitError(ctx, [span, span'], "invalid function declaration: name mismatch")
-                                                                    val (vid, arity) = getVIdAndArity rules'
-                                                                in Syntax.FValBind { sourceSpan = span, vid = vid, arity = arity, rules = List.map (fn ((_, _, pats), optTy, exp) => (pats, optTy, exp)) rules' }
-                                                                end
-  (* (<pat1> <vid> <pat3>) -> <vid> is infix function name *)
-and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(span2, [pat1, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat3])]))
+and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
+    = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
+          val rules' = List.map doFMRule rules
+          fun getVIdAndArity (((span, vid, []), _, _) :: xs) = emitError(ctx, [span], "function declaration with no arguments")
+            | getVIdAndArity (((span, vid, pats), _, _) :: xs) = checkVIdAndArity(span, vid, length pats, xs)
+            | getVIdAndArity [] = emitError(ctx, [span], "internal error: empty 'fun' rule")
+          and checkVIdAndArity(span, vid, arity, []) = (vid, arity)
+            | checkVIdAndArity(span, vid, arity, ((span', vid', pats), _, _) :: xs)
+              = if vid = vid' then
+                    if arity = length pats then
+                        checkVIdAndArity(span, vid, arity, xs)
+                    else
+                        emitError(ctx, [span], "invalid function declaration: arity mismatch")
+                else
+                    emitError(ctx, [span, span'], "invalid function declaration: name mismatch")
+          val (vid, arity) = getVIdAndArity rules'
+          fun buildExp(0, [paramId]) = let fun doRule ((_, _, [pat]), optTy, exp) = let val exp = case optTy of
+                                                                                                      NONE => exp 
+                                                                                                    | SOME expTy => Syntax.TypedExp(Syntax.getSourceSpanOfExp exp, exp, expTy)
+                                                                                    in (pat, exp)
+                                                                                    end
+                                             | doRule _ = emitError(ctx, [span], "invalid function declaration")
+                                       in Syntax.CaseExp(span, Syntax.VarExp(span, Syntax.MkQualified([], paramId)), List.map doRule rules')
+                                       end
+            | buildExp(0, revParams) = let val params = List.rev revParams
+                                           val paramTuple = Syntax.TupleExp(span, List.map (fn vid => Syntax.VarExp(span, Syntax.MkQualified([], vid))) params)
+                                           fun doRule ((_, _, pats), optTy, exp) = let val pat = Syntax.TuplePat(span, pats)
+                                                                                       val exp = case optTy of
+                                                                                                     NONE => exp 
+                                                                                                   | SOME expTy => Syntax.TypedExp(Syntax.getSourceSpanOfExp exp, exp, expTy)
+                                                                                   in (pat, exp)
+                                                                                   end
+                                       in Syntax.CaseExp(span, paramTuple, List.map doRule rules')
+                                       end
+            | buildExp(n, revParams) = let val paramId = freshVId(ctx, "a")
+                                       in Syntax.FnExp(span, [(Syntax.VarPat(span, paramId), buildExp(n - 1, paramId :: revParams))])
+                                       end
+      in Syntax.PatBind(span, Syntax.VarPat(span, vid), buildExp(arity, []))
+      end
+(* (<pat1> <vid> <pat3>) -> <vid> is infix function name *)
+and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(span2, [pat1, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat3])])) : SourcePos.span * Syntax.VId * Syntax.Pat list
     = (case getFixityStatus(env, vid) of
            Syntax.Nonfix => emitError(ctx, [span3], "invalid function declaration: '" ^ Syntax.getVIdName vid ^ "' must be an infix identifier")
          | Syntax.Infix _ => doInfixFPat(ctx, env, span1, span3, vid, pat1, pat3, [])
@@ -541,7 +563,6 @@ local
       | collectExp(bound, ListExp(_, xs)) = Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(_, pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
-    and collectFValBind(bound, FValBind { rules = rules, ... }) = List.foldl (fn (rule, set) => TyVarSet.union(set, collectFRule(bound, rule))) TyVarSet.empty rules
     and collectFRule(bound, (pats, optTy, exp)) = let val tyVarsInPats = List.foldl TyVarSet.union TyVarSet.empty (List.map (fn pat => freeTyVarsInPat(bound, pat)) pats)
                                                       val tyVarsInOptTy = case optTy of
                                                                               NONE => TyVarSet.empty
@@ -550,7 +571,6 @@ local
                                                   end
     and collectDec(bound, ValDec _) = TyVarSet.empty
       | collectDec(bound, RecValDec _) = TyVarSet.empty
-      | collectDec(bound, FunDec _) = TyVarSet.empty
       | collectDec(bound, TypeDec(_, typbinds)) = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
       | collectDec(bound, DatatypeDec(_, datbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) TyVarSet.empty datbinds
       | collectDec(bound, DatatypeRepDec(_, _, _)) = TyVarSet.empty
@@ -568,7 +588,6 @@ local
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds
-val unguardedTyVarsInFValBind : TyVarSet.set * FValBind list -> TyVarSet.set = fn (bound, fvalbinds) => List.foldl (fn (fvalbind, set) => TyVarSet.union(set, collectFValBind(bound, fvalbind))) TyVarSet.empty fvalbinds
 end (* local *)
 
 (* The Definition 4.6 *)
@@ -586,12 +605,6 @@ local
                                                                val bound'' = TyVarSet.union(bound', unguarded)
                                                            in RecValDec(span, expbound', List.map (fn vb => doValBind(bound'', vb)) valbind)
                                                            end
-      | doDec(bound, FunDec(span, expbound, fvalbind)) = let val bound' = TyVarSet.addList(bound, expbound)
-                                                             val unguarded = unguardedTyVarsInFValBind(bound', fvalbind)
-                                                             val expbound' = expbound @ TyVarSet.listItems(unguarded)
-                                                             val bound'' = TyVarSet.union(bound', unguarded)
-                                                         in FunDec(span, expbound', List.map (fn fvb => doFValBind(bound'', fvb)) fvalbind)
-                                                         end
       | doDec(bound, dec as TypeDec _) = dec
       | doDec(bound, dec as DatatypeDec _) = dec
       | doDec(bound, dec as DatatypeRepDec _) = dec
@@ -601,9 +614,6 @@ local
       | doDec(bound, dec as OpenDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
-    and doFValBind(bound, FValBind { sourceSpan, vid, arity, rules }) = let fun doFRule(pats, optTy, exp) = (pats, optTy, doExp(bound, exp))
-                                                                        in FValBind { sourceSpan = sourceSpan, vid = vid, arity = arity, rules = List.map doFRule rules }
-                                                                        end
     and doExp(bound, exp as SConExp _) = exp
       | doExp(bound, exp as VarExp _) = exp
       | doExp(bound, exp as RecordExp _) = exp
