@@ -4,13 +4,13 @@
  *)
 structure Typing = struct
 
-datatype TyStr = TyStr of { typeFunction : USyntax.TypeFcn
-                          , valEnv : USyntax.ValEnv
-                          , admitsEquality : bool
-                          }
+type TypeStructure = { typeFunction : USyntax.TypeFunction
+                     , valEnv : USyntax.ValEnv
+                     , admitsEquality : bool
+                     }
 
 datatype Env' = MkEnv of Env
-withtype Env = { tyMap : TyStr USyntax.TyConMap.map
+withtype Env = { tyMap : TypeStructure USyntax.TyConMap.map
                , valMap : (USyntax.TypeScheme * Syntax.IdStatus) USyntax.VIdMap.map
                , strMap : Env' Syntax.StrIdMap.map
                , boundTyVars : USyntax.TyVarSet.set (* type variables bound by outer declarations *)
@@ -84,7 +84,7 @@ fun isSoleConstructor(ctx : Context, env : Env, span : SourcePos.span, longvid: 
          NONE => false (* probably an error *)
        | SOME (USyntax.TypeScheme(_, ty), Syntax.ValueConstructor) =>
          let val tycon = getConstructedType(ctx, span, ty)
-             val TyStr { valEnv = valenv, ... } = lookupTyConInEnv(ctx, env, span, tycon)
+             val { valEnv = valenv, ... } = lookupTyConInEnv(ctx, env, span, tycon)
          in USyntax.VIdMap.numItems valenv = 1
          end
        | SOME (_, Syntax.ValueVariable) => false
@@ -315,7 +315,7 @@ fun unify(ctx : Context, env : Env, nil : Constraint list) : unit = ()
          | UnaryConstraint(span1, FnType(span2, _, _), IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
          | UnaryConstraint(span1, FnType(span2, _, _), IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare functions")
          | UnaryConstraint(span1, TyCon(span2, tyargs, tycon), IsEqType span3) =>
-           let val TyStr { admitsEquality, ... } = lookupTyConInEnv(ctx, env, span2, tycon)
+           let val { admitsEquality, ... } = lookupTyConInEnv(ctx, env, span2, tycon)
            in if admitsEquality then
                   unify(ctx, env, List.map (fn tyarg => UnaryConstraint(span1, tyarg, IsEqType span3)) tyargs @ ctrs)
               else if eqUTyCon(tycon, primTyCon_ref) orelse eqUTyCon(tycon, primTyCon_array) then
@@ -713,10 +713,10 @@ and determineDatatypeEquality(ctx, env, datbinds) : bool USyntax.TyConMap.map
                                                                          SOME [tycon]
                                                                      else
                                                                          (case lookupTyConInEnv(ctx, env, span, tycon) of
-                                                                              TyStr { admitsEquality = e, ... } => if e then
-                                                                                                                       doTypes tyargs
-                                                                                                                   else
-                                                                                                                       NONE
+                                                                              { admitsEquality = e, ... } => if e then
+                                                                                                                 doTypes tyargs
+                                                                                                             else
+                                                                                                                 NONE
                                                                          )
                       | doTy (USyntax.FnType _) = NONE
                     and doTypes types = let fun go (acc, ty :: types) = (case doTy ty of
@@ -762,10 +762,10 @@ and addDatBind(ctx, { tyMap, valMap, strMap, boundTyVars }, USyntax.DatBind(span
                 in USyntax.VIdMap.insert(valMap, vid, (typeScheme, Syntax.ValueConstructor))
                 end
           val valEnv = List.foldl doConBind USyntax.VIdMap.empty conbinds
-          val tyStr = TyStr { typeFunction = USyntax.TypeFcn(tyvars, ty)
-                            , valEnv = valEnv
-                            , admitsEquality = equality
-                            }
+          val tyStr = { typeFunction = USyntax.TypeFunction(tyvars, ty)
+                      , valEnv = valEnv
+                      , admitsEquality = equality
+                      }
       in { tyMap = USyntax.TyConMap.insert(tyMap, tycon, tyStr)
          , valMap = USyntax.VIdMap.unionWith (fn _ => emitError(ctx, [span], "internal error: duplicate identifier")) (valMap, valEnv)
          , strMap = strMap
@@ -905,7 +905,7 @@ and typeCheckPatRow(ctx, env, row)
 
 (* pretty printing *)
 structure PrettyPrint = struct
-fun print_Env ({ tyMap, valMap, strMap, boundTyVars } : Env) = "Env{tyMap=" ^ USyntax.print_TyConMap (fn (TyStr _) => "TyStr _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap (fn MkEnv env => print_Env env) strMap ^ ",boundTyVars=...}"
+fun print_Env ({ tyMap, valMap, strMap, boundTyVars } : Env) = "Env{tyMap=" ^ USyntax.print_TyConMap (fn _ => "TypeStructure _") tyMap ^ ",valMap=" ^ USyntax.print_VIdMap (Syntax.print_pair (USyntax.print_TypeScheme, Syntax.print_IdStatus)) valMap ^ ",strMap=" ^ Syntax.print_StrIdMap (fn MkEnv env => print_Env env) strMap ^ ",boundTyVars=...}"
 end (* structure PrettyPrint *)
 open PrettyPrint
 

@@ -75,7 +75,7 @@ datatype Constraint
   = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
   | UnaryConstraint of SourcePos.span * Ty * UnaryConstraint
 
-datatype TypeFcn = TypeFcn of TyVar list * Ty
+datatype TypeFunction = TypeFunction of TyVar list * Ty
 datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
 type ValEnv = (TypeScheme * Syntax.IdStatus) VIdMap.map
 val emptyValEnv = VIdMap.empty

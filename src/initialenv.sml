@@ -479,7 +479,7 @@ val initialEnv : Typing.Env
           val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, Typing.MkEnv str)) Syntax.StrIdMap.empty
           val union = List.foldl (USyntax.VIdMap.unionWith (fn (_, _) => raise Fail "InitialEnv: name conflict")) USyntax.VIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
-          val TypeFcn = USyntax.TypeFcn
+          val TypeFunction = USyntax.TypeFunction
           val TypeScheme = USyntax.TypeScheme
           val IsEqType = USyntax.IsEqType
           val IsIntegral = USyntax.IsIntegral
@@ -598,7 +598,7 @@ val initialEnv : Typing.Env
                               , strMap = mkStrMap []
                               , boundTyVars = USyntax.TyVarSet.empty
                               }
-          val module_Lua = { tyMap = mkTyMap [(primTyCon_Lua_value, TyStr { typeFunction = TypeFcn([], primTy_Lua_value), valEnv = emptyValEnv, admitsEquality = false })]
+          val module_Lua = { tyMap = mkTyMap [(primTyCon_Lua_value, { typeFunction = TypeFunction([], primTy_Lua_value), valEnv = emptyValEnv, admitsEquality = false })]
                            , valMap = mkValMap
                                           [(VId_Lua_sub, TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
                                           ,(VId_Lua_set, TypeScheme ([], mkTupleType[primTy_Lua_value, primTy_Lua_value, primTy_Lua_value] --> primTy_unit))
@@ -648,65 +648,65 @@ val initialEnv : Typing.Env
                                }
       in List.foldl Typing.mergeEnv
                     { tyMap = mkTyMap
-                                  [(primTyCon_bool, TyStr { typeFunction = TypeFcn([], primTy_bool)
-                                                          , valEnv = mkValConMap [(VId_true, TypeScheme ([], primTy_bool))
-                                                                                 ,(VId_false, TypeScheme ([], primTy_bool))
-                                                                                 ]
-                                                          , admitsEquality = true
-                                                          }
+                                  [(primTyCon_bool, { typeFunction = TypeFunction([], primTy_bool)
+                                                    , valEnv = mkValConMap [(VId_true, TypeScheme ([], primTy_bool))
+                                                                           ,(VId_false, TypeScheme ([], primTy_bool))
+                                                                           ]
+                                                    , admitsEquality = true
+                                                    }
                                    )
-                                  ,(primTyCon_int, TyStr { typeFunction = TypeFcn([], primTy_int)
-                                                         , valEnv = emptyValEnv
-                                                         , admitsEquality = true
-                                                         }
+                                  ,(primTyCon_int, { typeFunction = TypeFunction([], primTy_int)
+                                                   , valEnv = emptyValEnv
+                                                   , admitsEquality = true
+                                                   }
                                    )
-                                  ,(primTyCon_word, TyStr { typeFunction = TypeFcn([], primTy_word)
-                                                          , valEnv = emptyValEnv
-                                                          , admitsEquality = true
-                                                          }
+                                  ,(primTyCon_word, { typeFunction = TypeFunction([], primTy_word)
+                                                    , valEnv = emptyValEnv
+                                                    , admitsEquality = true
+                                                    }
                                    )
-                                  ,(primTyCon_real, TyStr { typeFunction = TypeFcn([], primTy_real)
-                                                          , valEnv = emptyValEnv
-                                                          , admitsEquality = false
-                                                          }
+                                  ,(primTyCon_real, { typeFunction = TypeFunction([], primTy_real)
+                                                    , valEnv = emptyValEnv
+                                                    , admitsEquality = false
+                                                    }
                                    )
-                                  ,(primTyCon_string, TyStr { typeFunction = TypeFcn([], primTy_string)
-                                                            , valEnv = emptyValEnv
-                                                            , admitsEquality = true
-                                                            }
+                                  ,(primTyCon_string, { typeFunction = TypeFunction([], primTy_string)
+                                                      , valEnv = emptyValEnv
+                                                      , admitsEquality = true
+                                                      }
                                    )
-                                  ,(primTyCon_char, TyStr { typeFunction = TypeFcn([], primTy_char)
-                                                          , valEnv = emptyValEnv
-                                                          , admitsEquality = true
-                                                          }
+                                  ,(primTyCon_char, { typeFunction = TypeFunction([], primTy_char)
+                                                    , valEnv = emptyValEnv
+                                                    , admitsEquality = true
+                                                    }
                                    )
-                                  ,(primTyCon_list, TyStr { typeFunction = TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
-                                                          , valEnv = mkValConMap [(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA))
-                                                                                 ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
-                                                                                 ]
-                                                          , admitsEquality = true
-                                                          }
+                                  ,(primTyCon_list, { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
+                                                    , valEnv = mkValConMap [(VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA))
+                                                                           ,(VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
+                                                                           ]
+                                                    , admitsEquality = true
+                                                    }
                                    )
-                                  ,(primTyCon_ref, TyStr { typeFunction = TypeFcn([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
-                                                         , valEnv = mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
-                                                                                ]
-                                                         , admitsEquality = false (* must be handled specially *)
-                                                         }
+                                  ,(primTyCon_ref, { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
+                                                   , valEnv = mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
+                                                                          ]
+                                                   , admitsEquality = false (* must be handled specially *)
+                                                   }
                                    )
-                                  ,(primTyCon_exn, TyStr { typeFunction = TypeFcn([], primTy_exn)
-                                                         , valEnv = emptyValEnv
-                                                         , admitsEquality = false
-                                                         }
+                                  ,(primTyCon_exn, { typeFunction = TypeFunction([], primTy_exn)
+                                                   , valEnv = emptyValEnv
+                                                   , admitsEquality = false
+                                                   }
                                    )
-                                  ,(primTyCon_array, TyStr { typeFunction = TypeFcn([tyVarA], arrayOf tyA)
-                                                           , valEnv = emptyValEnv
-                                                           , admitsEquality = false (* must be handled specially *)
-                                                           }
+                                  ,(primTyCon_array, { typeFunction = TypeFunction([tyVarA], arrayOf tyA)
+                                                     , valEnv = emptyValEnv
+                                                     , admitsEquality = false (* must be handled specially *)
+                                                     }
                                    )
-                                  ,(primTyCon_vector, TyStr { typeFunction = TypeFcn([tyVarA], vectorOf tyA)
-                                                            , valEnv = emptyValEnv
-                                                            , admitsEquality = true
-                                                            }
+                                  ,(primTyCon_vector, { typeFunction = TypeFunction([tyVarA], vectorOf tyA)
+                                                      , valEnv = emptyValEnv
+                                                      , admitsEquality = true
+                                                      }
                                    )
                                   ]
                     , valMap = union [mkValConMap [(VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
