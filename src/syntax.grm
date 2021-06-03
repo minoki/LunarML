@@ -249,8 +249,8 @@ Pat : TypedPat (TypedPat)
 *)
     | TypedPat AS Pat (UnfixedSyntax.ConjunctivePat(span(TypedPatleft,Patright), TypedPat, Pat)) (* layered or [Successor ML] conjunctive (R) *)
 
-TypedPatPun : BoundVId ((case BoundVId of Syntax.MkVId vid => Syntax.IdentifierLabel vid, UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId))))
-            | BoundVId COLON Ty ((case BoundVId of Syntax.MkVId vid => Syntax.IdentifierLabel vid, UnfixedSyntax.TypedPat(span(BoundVIdleft,Tyright),UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId)),Ty)))
+TypedPatPun : BoundVId ((Syntax.IdentifierLabel(Syntax.getVIdName BoundVId), UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId))))
+            | BoundVId COLON Ty ((Syntax.IdentifierLabel(Syntax.getVIdName BoundVId), UnfixedSyntax.TypedPat(span(BoundVIdleft,Tyright),UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId)),Ty)))
 
 PatPun : TypedPatPun (TypedPatPun)
        | TypedPatPun AS Pat ((#1 TypedPatPun, UnfixedSyntax.ConjunctivePat(span(TypedPatPunleft,Patright), #2 TypedPatPun, Pat)))

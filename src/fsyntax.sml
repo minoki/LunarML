@@ -610,17 +610,19 @@ fun libraryToFDecs(ctx, tenv: ToTypedSyntax.Env, env, decs)
                                    in (env, decs @ [ F.ExportValue (F.VarExp (Syntax.MkQualified ([], vid))) ])
                                    end
         | (NONE, SOME (ToTypedSyntax.MkEnv { valMap, ... })) =>
-          let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (Syntax.MkVId name, (vid, _)) => if isAlphaNumName name then
-                                                                                                                       SOME (name, F.VarExp (Syntax.MkQualified ([], vid)))
-                                                                                                                   else if String.isSuffix "'" name then
-                                                                                                                       let val name' = String.substring (name, 0, String.size name - 1)
-                                                                                                                       in if isAlphaNumName name' andalso not (Syntax.VIdMap.inDomain (valMap, Syntax.MkVId name')) then
-                                                                                                                              SOME (name', F.VarExp (Syntax.MkQualified ([], vid)))
-                                                                                                                          else
-                                                                                                                              NONE
-                                                                                                                       end
-                                                                                                                   else
-                                                                                                                       NONE
+          let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (key, (vid, _)) => let val name = Syntax.getVIdName key
+                                                                                                     in if isAlphaNumName name then
+                                                                                                            SOME (name, F.VarExp (Syntax.MkQualified ([], vid)))
+                                                                                                        else if String.isSuffix "'" name then
+                                                                                                            let val name' = String.substring (name, 0, String.size name - 1)
+                                                                                                            in if isAlphaNumName name' andalso not (Syntax.VIdMap.inDomain (valMap, Syntax.MkVId name')) then
+                                                                                                                   SOME (name', F.VarExp (Syntax.MkQualified ([], vid)))
+                                                                                                               else
+                                                                                                                   NONE
+                                                                                                            end
+                                                                                                        else
+                                                                                                            NONE
+                                                                                                     end
                                                                               ) valMap)
               val (env, decs) = programToFDecs(ctx, env, decs)
           in (env, decs @ [ F.ExportModule (Vector.fromList fields) ])

@@ -9,6 +9,7 @@ datatype SCon = IntegerConstant of int (* decimal / hexadecimal *)
               | StringConstant of string
               | CharacterConstant of string
 datatype VId = MkVId of string
+             | GeneratedVId of string * int
 datatype TyVar = MkTyVar of string
 datatype TyCon = MkTyCon of string
 datatype Label = NumericLabel of int
@@ -24,6 +25,7 @@ fun MkLongTyCon(strids, tycon: TyCon) = MkQualified(strids, tycon)
 fun MkLongStrId(strids, strid: StrId) = MkQualified(strids, strid)
 
 fun getVIdName(MkVId name) = name
+  | getVIdName(GeneratedVId (name, i)) = name ^ "@" ^ Int.toString i
 
 datatype InfixAssociativity = LeftAssoc of int
                             | RightAssoc of int
@@ -38,6 +40,12 @@ datatype IdStatus = ValueVariable
 structure VIdKey = struct
 type ord_key = VId
 fun compare (MkVId x, MkVId y) = String.compare (x,y)
+  | compare (MkVId _, GeneratedVId _) = LESS
+  | compare (GeneratedVId _, MkVId _) = GREATER
+  | compare (GeneratedVId (x, i), GeneratedVId (y, j)) = (case Int.compare (i, j) of
+                                                              EQUAL => String.compare (x, y)
+                                                            | t => t
+                                                         )
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
 structure VIdMap = RedBlackMapFn(VIdKey)
@@ -100,7 +108,6 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | HandleExp of SourcePos.span * Exp * (Pat * Exp) list
              | RaiseExp of SourcePos.span * Exp
              | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
-             | WhileDoExp of SourcePos.span * Exp * Exp
              | CaseExp of SourcePos.span * Exp * (Pat * Exp) list
              | FnExp of SourcePos.span * (Pat * Exp) list
              | ProjectionExp of SourcePos.span * Label
@@ -177,7 +184,6 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(HandleExp(span, _, _)) = span
   | getSourceSpanOfExp(RaiseExp(span, _)) = span
   | getSourceSpanOfExp(IfThenElseExp(span, _, _, _)) = span
-  | getSourceSpanOfExp(WhileDoExp(span, _, _)) = span
   | getSourceSpanOfExp(CaseExp(span, _, _)) = span
   | getSourceSpanOfExp(FnExp(span, _)) = span
   | getSourceSpanOfExp(ProjectionExp(span, _)) = span
@@ -216,6 +222,7 @@ fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ Int.toString x
   | print_SCon (StringConstant x) = "StringConstant \"" ^ String.toString x ^ "\""
   | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ String.toString x ^ "\""
 fun print_VId (MkVId x) = "MkVId \"" ^ String.toString x ^ "\""
+  | print_VId (GeneratedVId (x,i)) = "GeneratedVId(\"" ^ String.toString x ^ "\", " ^ Int.toString i ^ ")"
 fun print_TyVar (MkTyVar x) = "MkTyVar \"" ^ String.toString x ^ "\""
 fun print_TyCon (MkTyCon x) = "MkTyCon \"" ^ String.toString x ^ "\""
 fun print_Label (NumericLabel x) = "NumericLabel " ^ Int.toString x
@@ -259,7 +266,6 @@ fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (HandleExp(_,x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat, print_Exp)) y ^ ")"
   | print_Exp (RaiseExp(_,x)) = "RaiseExp(" ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(_,x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
-  | print_Exp (WhileDoExp(_,x,y)) = "WhileDoExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (CaseExp(_,x,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_list (print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(_,x)) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
   | print_Exp (ProjectionExp(_,label)) = "ProjectionExp(" ^ print_Label label ^ ")"

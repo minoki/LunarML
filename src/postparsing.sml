@@ -4,7 +4,8 @@
  *)
 structure Fixity = struct
 
-type Context = {}
+type Context = { nextVId : int ref
+               }
 
 fun emitError(ctx : Context, spans, message) = raise Syntax.SyntaxError (spans, message)
 
@@ -93,6 +94,11 @@ fun lookupLongStrIdInIdStatusMap(env : IdStatusMap, []) = SOME env
         | NONE => NONE
 fun lookupLongStrId({ idStatusMap, ... } : Env, Syntax.MkQualified(strids, strid)) : IdStatusMap option
     = lookupLongStrIdInIdStatusMap(idStatusMap, strids @ [ strid ])
+
+fun freshVId(ctx : Context, name) = let val n = !(#nextVId ctx)
+                                    in #nextVId ctx := n + 1
+                                     ; Syntax.GeneratedVId(name, n)
+                                    end
 
 datatype ('op, 'a) InfixList = Leaf of 'a
                              | Tree of 'a * Syntax.InfixAssociativity * SourcePos.span * 'op * ('op, 'a) InfixList
@@ -242,7 +248,38 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.HandleExp(span, exp, matches)) = Syntax.HandleExp(span, doExp(ctx, env, exp), List.map (fn (pat, exp') => (doPat(ctx, env, pat), doExp(ctx, env, exp'))) matches)
   | doExp(ctx, env, UnfixedSyntax.RaiseExp(span, exp)) = Syntax.RaiseExp(span, doExp(ctx, env, exp))
   | doExp(ctx, env, UnfixedSyntax.IfThenElseExp(span, e1, e2, e3)) = Syntax.IfThenElseExp(span, doExp(ctx, env, e1), doExp(ctx, env, e2), doExp(ctx, env, e3))
-  | doExp(ctx, env, UnfixedSyntax.WhileDoExp(span, e1, e2)) = Syntax.WhileDoExp(span, doExp(ctx, env, e1), doExp(ctx, env, e2))
+  | doExp(ctx, env, UnfixedSyntax.WhileDoExp(span, e1, e2))
+    = let val fnName = freshVId(ctx, "loop")
+          val fnCall = Syntax.AppExp(span, Syntax.VarExp(span, Syntax.MkQualified([], fnName)), Syntax.RecordExp(span, []))
+      in Syntax.LetInExp( span
+                        , [ Syntax.RecValDec( span
+                                            , [] (* tyvars *)
+                                            , [Syntax.PatBind( span
+                                                             , Syntax.VarPat(span, fnName)
+                                                             , Syntax.FnExp( span
+                                                                           , [ ( Syntax.RecordPat { sourceSpan = span, fields = [], wildcard = false }
+                                                                               , Syntax.IfThenElseExp( span
+                                                                                                     , doExp(ctx, env, e1)
+                                                                                                     , Syntax.LetInExp( span
+                                                                                                                      , [ Syntax.ValDec( span
+                                                                                                                                       , [] (* tyvars *)
+                                                                                                                                       , [ Syntax.PatBind(span, Syntax.WildcardPat span, doExp(ctx, env, e2)) ]
+                                                                                                                                       )
+                                                                                                                        ]
+                                                                                                                      , fnCall
+                                                                                                                      )
+                                                                                                     , Syntax.RecordExp(span, [])
+                                                                                                     )
+                                                                               )
+                                                                             ]
+                                                                           )
+                                                             )
+                                              ]
+                                            )
+                          ]
+                        , fnCall
+                        )
+      end
   | doExp(ctx, env, UnfixedSyntax.CaseExp(span, exp, matches)) = Syntax.CaseExp(span, doExp(ctx, env, exp), List.map (fn (pat, exp') => (doPat(ctx, env, pat), doExp(ctx, env, exp'))) matches)
   | doExp(ctx, env, UnfixedSyntax.FnExp(span, matches)) = Syntax.FnExp(span, List.map (fn (pat, exp) => (doPat(ctx, env, pat), doExp(ctx, env, exp))) matches)
   | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
@@ -498,7 +535,6 @@ local
       | collectExp(bound, HandleExp(_, x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, RaiseExp(_, x)) = collectExp(bound, x)
       | collectExp(bound, IfThenElseExp(_, x, y, z)) = union3(collectExp(bound, x), collectExp(bound, y), collectExp(bound, z))
-      | collectExp(bound, WhileDoExp(_, x, y)) = TyVarSet.union(collectExp(bound, x), collectExp(bound, y))
       | collectExp(bound, CaseExp(_, x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, FnExp(_, match)) = collectMatch(bound, match)
       | collectExp(bound, ProjectionExp(_, lab)) = TyVarSet.empty
@@ -577,7 +613,6 @@ local
       | doExp(bound, HandleExp(span, x, match)) = HandleExp(span, doExp(bound, x), doMatch(bound, match))
       | doExp(bound, RaiseExp(span, x)) = RaiseExp(span, doExp(bound, x))
       | doExp(bound, IfThenElseExp(span, x, y, z)) = IfThenElseExp(span, doExp(bound, x), doExp(bound, y), doExp(bound, z))
-      | doExp(bound, WhileDoExp(span, x, y)) = WhileDoExp(span, doExp(bound, x), doExp(bound, y))
       | doExp(bound, CaseExp(span, x, match)) = CaseExp(span, doExp(bound, x), doMatch(bound, match))
       | doExp(bound, FnExp(span, match)) = FnExp(span, doMatch(bound, match))
       | doExp(bound, exp as ProjectionExp _) = exp

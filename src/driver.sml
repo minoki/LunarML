@@ -70,7 +70,7 @@ fun printSpan(name, lines, {start=p1, end_=p2}) =
 
 exception Abort
 
-fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
+fun parse({ nextVId }, fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
                                       ( if p1 = p2 then
                                             print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
                                         else
@@ -80,7 +80,7 @@ fun parse(fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,li
                                   val lexErrors = ref []
                                   val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
                               in case !lexErrors of
-                                     [] => Fixity.doProgram({}, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
+                                     [] => Fixity.doProgram({ nextVId = nextVId }, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
                                    | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
                                                                                                     ; printPos (name, lines, pos)
                                                                                                     )
@@ -119,7 +119,7 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
 
 fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, toTypedSyntaxEnv, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
-    in let val (fixity', ast1) = parse(fixity, name, lines, source)
+    in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (toTypedSyntaxEnv', ast2) = ToTypedSyntax.toUProgram(typingContext, toTypedSyntaxEnv, ast1')
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast2)

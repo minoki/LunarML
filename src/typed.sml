@@ -567,6 +567,10 @@ local structure S = Syntax
                                                      in #nextVId ctx := n + 1
                                                       ; USyntax.MkVId(name, n)
                                                      end
+        | newVId(ctx, Syntax.GeneratedVId(name, _)) = let val n = !(#nextVId ctx)
+                                                      in #nextVId ctx := n + 1
+                                                       ; USyntax.MkVId(name, n)
+                                                      end
 
       fun genTyConId(ctx : Context)
           = let val id = !(#nextTyCon ctx)
@@ -670,41 +674,6 @@ fun toUExp(ctx : Context, tvenv : TVEnv, env : Env, S.SConExp(span, scon)) = U.S
   | toUExp(ctx, tvenv, env, S.HandleExp(span, exp, match)) = U.HandleExp(span, toUExp(ctx, tvenv, env, exp), toUMatch(ctx, tvenv, env, match))
   | toUExp(ctx, tvenv, env, S.RaiseExp(span, exp)) = U.RaiseExp(span, toUExp(ctx, tvenv, env, exp))
   | toUExp(ctx, tvenv, env, S.IfThenElseExp(span, exp1, exp2, exp3)) = U.IfThenElseExp(span, toUExp(ctx, tvenv, env, exp1), toUExp(ctx, tvenv, env, exp2), toUExp(ctx, tvenv, env, exp3))
-  | toUExp(ctx, tvenv, env, S.WhileDoExp(span, exp1, exp2))
-    = let val fnName = newVId(ctx, S.MkVId "loop")
-          val fnCall = U.AppExp(span, U.VarExp(span, Syntax.MkQualified([], fnName), Syntax.ValueVariable), U.RecordExp(span, [])) (* loop () *)
-          val unitTy = U.RecordType(span, [])
-      in U.LetInExp(span,
-                    [U.RecValDec(span,
-                                 [(* TODO: tyvar *)],
-                                 [U.PatBind(span,
-                                            U.VarPat(span,
-                                                     fnName,
-                                                     U.FnType(span, unitTy, unitTy)
-                                                    ),
-                                            U.FnExp(span,
-                                                    newVId(ctx, S.MkVId "a"),
-                                                    unitTy,
-                                                    U.IfThenElseExp(span,
-                                                                    toUExp(ctx, tvenv, env, exp1),
-                                                                    U.LetInExp(span,
-                                                                               [U.ValDec(span,
-                                                                                         [(* TODO: tyvar *)],
-                                                                                         [U.PatBind(span, U.WildcardPat span, toUExp(ctx, tvenv, env, exp2))]
-                                                                                        )
-                                                                               ],
-                                                                               fnCall
-                                                                              ),
-                                                                    U.RecordExp(span, [])
-                                                                   )
-                                                   )
-                                           )
-                                 ]
-                                )
-                    ],
-                    fnCall
-                   )
-      end
   | toUExp(ctx, tvenv, env, S.CaseExp(span, exp, match)) = U.CaseExp(span, toUExp(ctx, tvenv, env, exp), USyntax.TyVar(span, freshTyVar(ctx)), toUMatch(ctx, tvenv, env, match))
   | toUExp(ctx, tvenv, env, S.FnExp(span, [(pat, body)]))
     = (case pat of
