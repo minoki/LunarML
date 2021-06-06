@@ -1,7 +1,7 @@
-fun x <> y = not (x = y);
+fun x <> y = Bool.not (x = y);
 
 structure Lua = struct
-open LunarML.Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
+open Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
 val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue
@@ -33,7 +33,7 @@ in
 
 structure Vector = struct
 datatype vector = datatype vector
-open LunarML.Vector (* fromList, tabulate, length, sub *)
+open Vector (* fromList, tabulate, length, sub *)
 local
     fun foldl' (f, acc, vec, i) = if i >= length vec then
                                       acc
@@ -52,7 +52,8 @@ val vector : 'a list -> 'a vector = Vector.fromList
 
 (* General *)
 structure General = struct
-type unit = unit
+open General (* !, := *)
+type unit = {}
 type exn = exn
 exception Bind = Bind
 exception Match = Match
@@ -69,8 +70,6 @@ val exnName : exn -> string
 val exnMessage : exn -> string
 *)
 datatype order = LESS | EQUAL | GREATER
-val ! : 'a ref -> 'a = !
-val op := : 'a ref * 'a -> unit = op :=
 fun x before () = x
 fun ignore _ = ()
 fun (f o g) x = f (g x)
@@ -86,15 +85,16 @@ datatype 'a option = NONE | SOME of 'a
 
 structure Bool = struct
 datatype bool = datatype bool
-val not = not
+open Bool
 fun toString true = "true"
   | toString false = "false"
 (* scan, fromString *)
 end (* structure Bool *)
+val not : bool -> bool = Bool.not
 
 structure Int = struct
 type int = int
-open LunarML.Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
+open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
 val fromInt : int -> int = fn x => x
@@ -146,7 +146,7 @@ fun fromString (s : string) : int option = let val result = Lua.call string_matc
                                                   let val sign = Lua.unsafeFromValue (Vector.sub (result, 0)) : string
                                                       val digits = Lua.unsafeFromValue (Vector.sub (result, 1)) : string
                                                       val result' = if sign = "~" orelse sign = "-" then
-                                                                        Lua.call tonumber (vector [Lua.fromString (LunarML.String.^ ("-", digits))])
+                                                                        Lua.call tonumber (vector [Lua.fromString (String.^ ("-", digits))])
                                                                     else
                                                                         Lua.call tonumber (vector [Lua.fromString digits])
                                                   in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
@@ -156,7 +156,7 @@ end (* structure Int *)
 
 structure Word = struct
 type word = word
-open LunarML.Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
+open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 val wordSize : int = LunarML.assumeDiscardable
                          (let fun computeWordSize (x : int, n : int) = if x = 0 then
                                                                            n
@@ -212,7 +212,7 @@ end (* structure Word *)
 
 structure Real = struct
 type real = real
-open LunarML.Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
+open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
 end (* structure Real *)
 
 structure Math = struct
@@ -290,16 +290,16 @@ val toUpper = fn (c : char) => let val x = ord c
                                   else
                                       c
                                end
-open LunarML.Char (* <, <=, >, >= *)
+open Char (* <, <=, >, >= *)
 (* minChar, maxChar, maxOrd, ord, chr, succ, pred, compare, contains, notContains, isAscii, toLower, toUpper, isAlpha, isAlphaNum, isCntrl, isDigit, isGraph, isHexDigit, isLower, isPrint, isSpace, isPunct, isUpper, toString, scan, fromString, toCString, fromCString *)
 end (* structure Char *)
 
 structure String = struct
 type string = string
 type char = char
-val size = LunarML.String.size
-val str = LunarML.String.str
-val op ^ = LunarML.String.^
+val size = String.size
+val str = String.str
+val op ^ = String.^
 fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
@@ -337,7 +337,7 @@ fun translate (f : char -> string) (s : string) : string = let val result = Lua.
                                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                            end
 (* tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate, toString, scan, fromString, toCString, fromCString *)
-open LunarML.String (* size, ^, str, <, <=, >, >= *)
+open String (* size, ^, str, <, <=, >, >= *)
 end (* structure String *)
 val op ^ : string * string -> string = String.^
 val size : string -> int = String.size
@@ -473,7 +473,7 @@ val valOf : 'a option -> 'a = Option.valOf
 structure Array = struct
 datatype array = datatype array
 datatype vector = datatype vector
-open LunarML.Array (* array, fromList, tabulate, length, sub, update *)
+open Array (* array, fromList, tabulate, length, sub, update *)
 end (* structure Array *)
 
 structure IO = struct

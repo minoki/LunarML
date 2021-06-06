@@ -69,26 +69,26 @@ fun smlNameToLuaChar #"_" = "__"
 fun smlNameToLua(name) = String.translate smlNameToLuaChar name
 val builtins
     = let open InitialEnv
-      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
                     [(* ref *)
-                     (VId_ref, "_ref")
+                     (LongVId_ref, "_ref")
                     ,(VId_COLONEQUAL, "_set")
                     ,(VId_EXCLAM, "_read")
                     (* boolean *)
-                    ,(VId_true, "true") (* boolean literal *)
-                    ,(VId_false, "false") (* boolean literal *)
+                    ,(LongVId_true, "true") (* boolean literal *)
+                    ,(LongVId_false, "false") (* boolean literal *)
                     ,(VId_Bool_not, "_not") (* Lua not *)
                     (* list *)
-                    ,(VId_nil, "_nil")
-                    ,(VId_DCOLON, "_cons")
+                    ,(LongVId_nil, "_nil")
+                    ,(LongVId_DCOLON, "_cons")
                     (* exn *)
-                    ,(VId_Match, "_Match")
-                    ,(VId_Bind, "_Bind")
-                    ,(VId_Div, "_Div")
-                    ,(VId_Overflow, "_Overflow")
-                    ,(VId_Size, "_Size")
-                    ,(VId_Subscript, "_Subscript")
-                    ,(VId_Fail, "_Fail")
+                    ,(LongVId_Match, "_Match")
+                    ,(LongVId_Bind, "_Bind")
+                    ,(LongVId_Div, "_Div")
+                    ,(LongVId_Overflow, "_Overflow")
+                    ,(LongVId_Size, "_Size")
+                    ,(LongVId_Subscript, "_Subscript")
+                    ,(LongVId_Fail, "_Fail")
                     ,(VId_Match_tag, "_Match_tag")
                     ,(VId_Bind_tag, "_Bind_tag")
                     ,(VId_Div_tag, "_Div_tag")
@@ -198,15 +198,26 @@ val builtins
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_General), "_General")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Bool), "_Bool")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), "_Int")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Word), "_Word")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), "_Real")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), "_String")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Char), "_Char")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), "_Vector")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), "_Array")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), "_Lua")
+                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), "_LunarML")
                     ]
       end
 datatype BinaryOp = InfixOp of (* prec *) int * string
                   | InfixOpR of (* prec *) int * string
                   | NamedBinaryFn of string
                   | WordCompare of { flip : bool, negate : bool }
-val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
+val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
     = let open InitialEnv
-      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
                     [(VId_EQUAL_bool,   (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_int,    (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
@@ -270,7 +281,7 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.VIdMap.map
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
-                                                  case USyntax.VIdMap.find (builtins, vid) of
+                                                  case USyntax.LongVIdMap.find (builtins, USyntax.MkShortVId vid) of
                                                       NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
                                                     | SOME luaExpr => luaExpr
                                               else
@@ -407,6 +418,19 @@ fun commaSep ([] : (Fragment list) list) : Fragment list = []
 and commaSep1 [] = []
   | commaSep1 (x :: xs) = Fragment ", " :: x @ commaSep1 xs
 
+local
+fun extractStrId(F.VarExp(USyntax.MkVId(name, n))) = SOME (USyntax.MkStrId(name, n), [])
+  | extractStrId(F.StructureProjectionExp(exp, strid)) = (case extractStrId exp of
+                                                              SOME (strid0, revStrids) => SOME (strid0, strid :: revStrids)
+                                                            | NONE => NONE
+                                                         )
+  | extractStrId _ = NONE
+in
+fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
+  | extractLongVId(F.ValueProjectionExp(exp, vid)) = Option.map (fn (strid0, revStrids) => USyntax.MkLongVId(strid0, List.rev revStrids, vid)) (extractStrId exp)
+  | extractLongVId _ = NONE
+end
+
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> Line list *)
 fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
@@ -426,7 +450,7 @@ and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "
                                                        end
 and doExpCont ctx env exp cont = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env dest ([], doLiteral scon)
-  | doExpTo ctx env (F.VarExp (Syntax.MkQualified (_, vid))) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] })
+  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] }) (* TODO: prec for true, false, nil *)
   | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "nil" ] })
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
@@ -453,10 +477,10 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                  F.ProjectionExp { label, ... } =>
                                  SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] })))
                                | _ => NONE
-          val doBinary = case (exp1, exp2) of
-                             (F.VarExp (Syntax.MkQualified([], vid)), F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
+          val doBinary = case (extractLongVId exp1, exp2) of
+                             (SOME longvid, F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
                              let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, e1') => doExpCont ctx env e2 (fn (stmts2, e2') => f (stmts1 @ stmts2, e1', e2'))))
-                             in case USyntax.VIdMap.find(builtinBinaryOps, vid) of
+                             in case USyntax.LongVIdMap.find(builtinBinaryOps, longvid) of
                                     SOME (binop, pure) => wrap (fn (stmts, e1', e2') =>
                                                                    let val e = case binop of
                                                                                    InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
@@ -477,7 +501,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                           putImpureTo ctx env dest (stmts, e)
                                                                    end
                                                                )
-                                  | NONE => if USyntax.eqVId(vid, InitialEnv.VId_Lua_sub) then
+                                  | NONE => if USyntax.eqULongVId(longvid, InitialEnv.VId_Lua_sub) then
                                                 wrap (fn (stmts, e1', e2') =>
                                                          let val e = { prec = ~1, exp = paren ~1 e1' @ Fragment "[" :: #exp e2' @ [ Fragment "]" ] }
                                                          in putImpureTo ctx env dest (stmts, e)
@@ -487,29 +511,29 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                 NONE
                              end
                            | _ => NONE
-          val doUnary = case exp1 of
-                            F.VarExp(Syntax.MkQualified([], vid)) =>
+          val doUnary = case extractLongVId exp1 of
+                            SOME vid =>
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
-                            in if USyntax.eqVId(vid, VId_Real_TILDE) orelse USyntax.eqVId(vid, VId_Word_TILDE) orelse USyntax.eqVId(vid, VId_Lua_unm) then
+                            in if USyntax.eqULongVId(vid, VId_Real_TILDE) orelse USyntax.eqULongVId(vid, VId_Word_TILDE) orelse USyntax.eqULongVId(vid, VId_Lua_unm) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
-                               else if USyntax.eqVId(vid, VId_Bool_not) orelse USyntax.eqVId(vid, VId_Lua_isFalsy) then
+                               else if USyntax.eqULongVId(vid, VId_Bool_not) orelse USyntax.eqULongVId(vid, VId_Lua_isFalsy) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
-                               else if USyntax.eqVId(vid, VId_EXCLAM) then
+                               else if USyntax.eqULongVId(vid, VId_EXCLAM) then
                                    wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
-                               else if USyntax.eqVId(vid, VId_String_size) orelse USyntax.eqVId(vid, VId_Lua_length) then
+                               else if USyntax.eqULongVId(vid, VId_String_size) orelse USyntax.eqULongVId(vid, VId_Lua_length) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
-                               else if USyntax.eqVId(vid, VId_Lua_isNil) then
+                               else if USyntax.eqULongVId(vid, VId_Lua_isNil) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
-                               else if USyntax.eqVId(vid, VId_Lua_notb) then
+                               else if USyntax.eqULongVId(vid, VId_Lua_notb) then
                                    wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
                                else
                                    NONE
                             end
                           | _ => NONE
           val doLuaCall = case (exp1, exp2) of
-                              (F.AppExp(F.VarExp(Syntax.MkQualified([], vid_luacall)), f), F.VectorExp(xs, _)) =>
-                              if USyntax.eqVId(vid_luacall, InitialEnv.VId_Lua_call) then
+                              (F.AppExp(vid_luacall, f), F.VectorExp(xs, _)) =>
+                              if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
                                   SOME (fn () => doExpCont ctx env f
                                                            (fn (stmts1, f) =>
                                                                mapCont (fn (e, cont) => doExpCont ctx env e cont)
@@ -527,8 +551,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                   NONE
                             | _ => NONE
           val doLuaMethod = case (exp1, exp2) of
-                                (F.AppExp(F.VarExp(Syntax.MkQualified([], vid_luamethod)), F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.SConExp(Syntax.StringConstant method))]), F.VectorExp(xs, _)) =>
-                                if USyntax.eqVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
+                                (F.AppExp(vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.SConExp(Syntax.StringConstant method))]), F.VectorExp(xs, _)) =>
+                                if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
                                     SOME (fn () => doExpCont ctx env self
                                                              (fn (stmts1, self) =>
                                                                  mapCont (fn (e, cont) => doExpCont ctx env e cont)
@@ -545,10 +569,11 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                 else
                                     NONE
                               | _ => NONE
+          (* doTernary = if USyntax.eqVId(vid, VId_Lua_set) then ... *)
+          (* doLuaGlobal: VId_Lua_global *)
           val isNoop = case exp1 of
-                           F.VarExp(Syntax.MkQualified([], vid)) => USyntax.eqVId(vid, InitialEnv.VId_String_str)
-                         | F.TyAppExp(F.VarExp(Syntax.MkQualified([], vid)), _) => USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse USyntax.eqVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse USyntax.eqVId(vid, InitialEnv.VId_assumePure) orelse USyntax.eqVId(vid, InitialEnv.VId_assumeDiscardable)
-                         | _ => false
+                           F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse F.isLongVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
+                         | exp1 => F.isLongVId(exp1, InitialEnv.VId_String_str)
       in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
@@ -660,6 +685,47 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
               )
   | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
   | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
+  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
+    = let val valMap' = Syntax.VIdMap.listItemsi valMap
+          val strMap' = Syntax.StrIdMap.listItemsi strMap
+          val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
+      in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                 valMap'
+                 (fn valMap' => let val (stmts, valFields) = ListPair.unzip valMap'
+                                in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                                           strMap'
+                                           (fn strMap' =>
+                                               let val (stmts', strFields) = ListPair.unzip strMap'
+                                               in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                                                          exnTagMap'
+                                                          (fn exnTagMap' => let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
+                                                                                val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
+                                                                                val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
+                                                                                val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
+                                                                            in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts'
+                                                                                                      , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields) @ [ Fragment "}" ] }
+                                                                                                      )
+                                                                            end
+                                                          )
+                                               end
+                                           )
+                                end
+                 )
+      end
+  | doExpTo ctx env (exp as F.ValueProjectionExp (exp', vid)) dest = let val builtin = case extractLongVId exp of
+                                                                                           SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
+                                                                                                                SOME luaExpr => SOME luaExpr
+                                                                                                              | NONE => NONE
+                                                                                                           )
+                                                                                         | NONE => NONE
+                                                                     in case builtin of
+                                                                            SOME luaExpr => putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment luaExpr ] }) (* TODO: prec for true, false, nil *)
+                                                                          | NONE => doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "]") ] }))
+                                                                     end
+  | doExpTo ctx env (exp as F.StructureProjectionExp (exp', Syntax.MkStrId name)) dest = doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "]") ] }))
+  | doExpTo ctx env (exp as F.ExTagProjectionExp (exp', vid)) dest = let val name = Syntax.getVIdName vid
+                                                                     in doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (name ^ ".tag") ^ "]") ] }))
+                                                                     end
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))

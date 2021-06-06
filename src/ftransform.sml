@@ -10,42 +10,39 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
                                              ; USyntax.MkVId(name, n)
                                             end
-datatype Env' = MkEnv of Env
-withtype Env = { strMap : Env' Syntax.StrIdMap.map
-               , dataConMap : FSyntax.Ty USyntax.VIdMap.map
-               , exnConMap : USyntax.VId USyntax.VIdMap.map (* exception constructor -> exception tag *)
-               }
-val emptyEnv : Env = { strMap = Syntax.StrIdMap.empty, dataConMap = USyntax.VIdMap.empty, exnConMap = USyntax.VIdMap.empty }
+type Env = { dataConMap : FSyntax.Ty USyntax.LongVIdMap.map
+           , exnConMap : FSyntax.Exp USyntax.LongVIdMap.map (* exception constructor -> exception tag *)
+           }
+val emptyEnv : Env = { dataConMap = USyntax.LongVIdMap.empty, exnConMap = USyntax.LongVIdMap.empty }
 (* true, false, nil, ::, ref *)
-val initialEnv : Env = { strMap = Syntax.StrIdMap.empty
-                       , dataConMap = let open InitialEnv
+val initialEnv : Env = { dataConMap = let open InitialEnv
                                           val tyVarA = USyntax.AnonymousTyVar(0)
                                           val primTyCon_list = Typing.primTyCon_list
                                           val primTyCon_ref = Typing.primTyCon_ref
-                                      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
-                                                    [(VId_true, FSyntax.TyCon([], Typing.primTyCon_bool))
-                                                    ,(VId_false, FSyntax.TyCon([], Typing.primTyCon_bool))
-                                                    ,(VId_nil, FSyntax.ForallType(tyVarA, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)))
-                                                    ,(VId_DCOLON, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.PairType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list))))
-                                                    ,(VId_ref, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_ref))))
-                                                    ,(VId_Match, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Bind, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Div, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Overflow, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Size, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Subscript, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                    ,(VId_Fail, FSyntax.FnType(FSyntax.TyCon([], Typing.primTyCon_string), FSyntax.TyCon([], Typing.primTyCon_exn)))
+                                      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
+                                                    [(LongVId_true, FSyntax.TyCon([], Typing.primTyCon_bool))
+                                                    ,(LongVId_false, FSyntax.TyCon([], Typing.primTyCon_bool))
+                                                    ,(LongVId_nil, FSyntax.ForallType(tyVarA, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)))
+                                                    ,(LongVId_DCOLON, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.PairType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list))))
+                                                    ,(LongVId_ref, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_ref))))
+                                                    ,(LongVId_Match, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Bind, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Div, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Overflow, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Size, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Subscript, FSyntax.TyCon([], Typing.primTyCon_exn))
+                                                    ,(LongVId_Fail, FSyntax.FnType(FSyntax.TyCon([], Typing.primTyCon_string), FSyntax.TyCon([], Typing.primTyCon_exn)))
                                                     ]
                                       end
                        , exnConMap = let open InitialEnv
-                                     in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
-                                                   [(VId_Match, VId_Match_tag)
-                                                   ,(VId_Bind, VId_Bind_tag)
-                                                   ,(VId_Div, VId_Div_tag)
-                                                   ,(VId_Overflow, VId_Overflow_tag)
-                                                   ,(VId_Size, VId_Size_tag)
-                                                   ,(VId_Subscript, VId_Subscript_tag)
-                                                   ,(VId_Fail, VId_Fail_tag)
+                                     in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
+                                                   [(LongVId_Match, F.LongVarExp VId_Match_tag)
+                                                   ,(LongVId_Bind, F.LongVarExp VId_Bind_tag)
+                                                   ,(LongVId_Div, F.LongVarExp VId_Div_tag)
+                                                   ,(LongVId_Overflow, F.LongVarExp VId_Overflow_tag)
+                                                   ,(LongVId_Size, F.LongVarExp VId_Size_tag)
+                                                   ,(LongVId_Subscript, F.LongVarExp VId_Subscript_tag)
+                                                   ,(LongVId_Fail, F.LongVarExp VId_Fail_tag)
                                                    ]
                                      end
                        }
@@ -59,6 +56,8 @@ fun isWildcardPat F.WildcardPat = true
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
+fun isExnType (F.TyCon ([], tycon)) = tycon = Typing.primTyCon_exn
+  | isExnType _ = false
 fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValBind: Env -> F.ValBind -> F.ValBind, doDec : Env -> F.Dec -> Env * F.Dec, doDecs : Env -> F.Dec list -> Env * F.Dec list }
     = let fun doExp (env: Env) exp0
               = (case exp0 of
@@ -84,7 +83,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.DataPayloadExp _ => raise Fail "DataPayloadExp should not occur here"
                    | F.ListExp(xs, ty) => F.ListExp(Vector.map (doExp env) xs, ty)
                    | F.VectorExp(xs, ty) => F.VectorExp(Vector.map (doExp env) xs, ty)
-                   | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (Syntax.MkQualified ([], vid')))]) =>
+                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                              }
+                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
+                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
+                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
+                   | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (vid'))]) =>
                                               if USyntax.eqVId(vid, vid') then
                                                   doExp env exp
                                               else
@@ -96,8 +102,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                      in case canIgnore of
                             SOME innerExp => F.LetExp(F.IgnoreDec(doExp env exp), doExp env innerExp)
                           | NONE => let val examinedVId = freshVId(ctx, "exp")
-                                        val examinedExp = F.VarExp(Syntax.MkQualified([], examinedVId))
-                                        fun go [] = F.RaiseExp(span, F.VarExp(Syntax.MkQualified([], InitialEnv.VId_Match)))
+                                        val examinedExp = F.VarExp(examinedVId)
+                                        fun go [] = F.RaiseExp(span, F.VarExp(InitialEnv.VId_Match))
                                           | go ((pat, innerExp) :: rest)
                                             = let val binders = genBinders env examinedExp pat
                                               in if isExhaustive env pat then
@@ -120,11 +126,10 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
             | doDec env (dec as F.ExceptionDec { conName, tagName, payloadTy })
               = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
-                    val env' = { strMap = #strMap env
-                               , dataConMap = USyntax.VIdMap.insert (#dataConMap env, conName, case payloadTy of
-                                                                                                   NONE => exnTy
-                                                                                                 | SOME ty => FSyntax.FnType(ty, exnTy))
-                               , exnConMap = USyntax.VIdMap.insert (#exnConMap env, conName, tagName)
+                    val env' = { dataConMap = USyntax.LongVIdMap.insert (#dataConMap env, USyntax.MkShortVId conName, case payloadTy of
+                                                                                                       NONE => exnTy
+                                                                                                     | SOME ty => FSyntax.FnType(ty, exnTy))
+                               , exnConMap = USyntax.LongVIdMap.insert (#exnConMap env, USyntax.MkShortVId conName, F.VarExp(tagName))
                                }
                 in (env', dec)
                 end
@@ -132,71 +137,94 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
-          and doDatBind (F.DatBind (tyvars, tycon, conbinds), { strMap, dataConMap, exnConMap })
+          and doDatBind (F.DatBind (tyvars, tycon, conbinds), { dataConMap, exnConMap })
               = let fun quantify [] ty = ty
                       | quantify (tv :: tyvars) ty = F.ForallType(tv, quantify tyvars ty)
                     fun doConBind (F.ConBind (vid, NONE), dataConMap)
                         = let val typeScheme = quantify tyvars (F.TyCon(List.map FSyntax.TyVar tyvars, tycon))
-                          in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                          in USyntax.LongVIdMap.insert(dataConMap, USyntax.MkShortVId vid, typeScheme)
                           end
                       | doConBind(F.ConBind (vid, SOME payloadTy), dataConMap)
                         = let val typeScheme = quantify tyvars (F.FnType(payloadTy, F.TyCon(List.map FSyntax.TyVar tyvars, tycon)))
-                          in USyntax.VIdMap.insert(dataConMap, vid, typeScheme)
+                          in USyntax.LongVIdMap.insert(dataConMap, USyntax.MkShortVId vid, typeScheme)
                           end
-                in { strMap = strMap
-                   , dataConMap = List.foldl doConBind dataConMap conbinds
+                in { dataConMap = List.foldl doConBind dataConMap conbinds
                    , exnConMap = exnConMap
                    }
                 end
-          and genMatcher env exp _ F.WildcardPat = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
-            | genMatcher env exp ty (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_int)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp ty (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_word)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp ty (F.SConPat(scon as Syntax.StringConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [exp, F.SConExp scon])
-            | genMatcher env exp ty (F.SConPat(scon as Syntax.CharacterConstant _)) = F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_char)), F.TupleExp [exp, F.SConExp scon])
+          and genMatcher env exp _ F.WildcardPat = F.VarExp(InitialEnv.VId_true) (* always match *)
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.IntegerConstant _)) = F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.WordConstant _)) = F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_word), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.StringConstant _)) = F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [exp, F.SConExp scon])
+            | genMatcher env exp ty (F.SConPat(scon as Syntax.CharacterConstant _)) = F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_char), F.TupleExp [exp, F.SConExp scon])
             | genMatcher env exp ty (F.SConPat(Syntax.RealConstant _)) = raise Fail "genMatcher: cannot match a real constant"
-            | genMatcher env exp ty (F.VarPat _) = F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)) (* always match *)
+            | genMatcher env exp ty (F.VarPat _) = F.VarExp(InitialEnv.VId_true) (* always match *)
             | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat (fields, _))
               = List.foldr (fn ((label, pat), e) =>
                                case List.find (fn (label', _) => label = label') fieldTypes of
                                    SOME (_, fieldTy) => F.SimplifyingAndalsoExp(genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }, exp)) fieldTy pat, e)
                                  | NONE => raise Fail ("internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
                            )
-                           (F.VarExp(Syntax.MkQualified([], InitialEnv.VId_true)))
+                           (F.VarExp(InitialEnv.VId_true))
                            fields
             | genMatcher env exp _ (F.RecordPat (fields, _)) = raise Fail "internal error: record pattern against non-record type"
-            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.ConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
-              = (case USyntax.VIdMap.find(dataConMap, vid) of
+            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.ConPat (longvid as USyntax.MkShortVId(vid as USyntax.MkVId(name, _)), SOME innerPat, tyargs))
+              = (case USyntax.LongVIdMap.find(dataConMap, longvid) of
                      SOME dataConTy => let val payloadTy = getPayloadTy(tyargs, dataConTy)
-                                       in if ty = FSyntax.TyCon([], Typing.primTyCon_exn) then
-                                              case USyntax.VIdMap.find(exnConMap, vid) of
-                                                  SOME exntag => F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_exntag)), F.TupleExp [F.DataTagExp exp, F.VarExp(Syntax.MkQualified([], exntag))]),
+                                       in if isExnType ty then
+                                              case USyntax.LongVIdMap.find(exnConMap, longvid) of
+                                                  SOME exntag => F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, exntag]),
                                                                                          genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
                                                 | NONE => raise Fail ("internal error: exception constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
                                           else
-                                              F.SimplifyingAndalsoExp(F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
+                                              F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
                                                                       genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
                                        end
-                  | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
+                   | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
                 )
-            | genMatcher (env as { exnConMap, ... }) exp ty (F.ConPat (longvid as Syntax.MkQualified(_, vid as USyntax.MkVId(name, _)), NONE, tyargs))
+            | genMatcher (env as { exnConMap, ... }) exp ty (F.ConPat (longvid as USyntax.MkShortVId(vid as USyntax.MkVId(name, _)), NONE, tyargs))
               = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                     exp
                 else if USyntax.eqVId(vid, InitialEnv.VId_false) then
-                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_Bool_not)), exp)
-                else if ty = FSyntax.TyCon([], Typing.primTyCon_exn) then
-                    case USyntax.VIdMap.find(exnConMap, vid) of
-                        SOME exntag => F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_exntag)), F.TupleExp [F.DataTagExp exp, F.VarExp(Syntax.MkQualified([], exntag))])
+                    F.AppExp(F.LongVarExp(InitialEnv.VId_Bool_not), exp)
+                else if isExnType ty then
+                    case USyntax.LongVIdMap.find(exnConMap, longvid) of
+                        SOME exntag => F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, exntag])
                       | NONE => raise Fail ("internal error: exception constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
                 else
-                    F.AppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EQUAL_string)), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
+                    F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
+            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.ConPat (longvid as USyntax.MkLongVId(_, _, vid), SOME innerPat, tyargs))
+              = let val name = Syntax.getVIdName vid
+                in case USyntax.LongVIdMap.find(dataConMap, longvid) of
+                       SOME dataConTy => let val payloadTy = getPayloadTy(tyargs, dataConTy)
+                                         in if isExnType ty then
+                                                case USyntax.LongVIdMap.find(exnConMap, longvid) of
+                                                    SOME exntag => F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, exntag]),
+                                                                                           genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
+                                                  | NONE => raise Fail ("internal error: exception constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
+                                            else
+                                                F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)]),
+                                                                        genMatcher env (F.DataPayloadExp exp) payloadTy innerPat)
+                                         end
+                     | NONE => raise Fail ("internal error: data constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
+                end
+            | genMatcher (env as { dataConMap, exnConMap, ... }) exp ty (F.ConPat (longvid as USyntax.MkLongVId(_, _, vid), NONE, tyargs))
+              = let val name = Syntax.getVIdName vid
+                in if isExnType ty then
+                       case USyntax.LongVIdMap.find(exnConMap, longvid) of
+                           SOME exntag => F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, exntag])
+                         | NONE => raise Fail ("internal error: exception constructor not found (" ^ USyntax.PrettyPrint.print_LongVId longvid ^ ")")
+                   else
+                       F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant name)])
+                end
             | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = genMatcher env exp ty0 innerPat
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
             | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) innerPat) fields)
-            | genBinders env exp (F.ConPat(longvid, SOME innerPat, tyargs)) = if USyntax.eqULongVId(longvid, Syntax.MkQualified([], InitialEnv.VId_ref)) then
+            | genBinders env exp (F.ConPat(longvid, SOME innerPat, tyargs)) = if USyntax.eqULongVId(longvid, InitialEnv.LongVId_ref) then
                                                                                   case tyargs of
-                                                                                      [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.VarExp(Syntax.MkQualified([], InitialEnv.VId_EXCLAM)), tyarg), exp)) innerPat
+                                                                                      [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_EXCLAM), tyarg), exp)) innerPat
                                                                                     | _ => raise Fail "invalid type arguments to 'ref'"
                                                                               else
                                                                                   genBinders env (F.DataPayloadExp exp) innerPat
@@ -251,10 +279,10 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
     = let fun doExp (env : Env) exp0
               = (case exp0 of
                      F.SConExp _ => exp0
-                   | F.VarExp (Syntax.MkQualified (_, vid)) => (case USyntax.VIdMap.find (#vidMap env, vid) of
-                                                                    NONE => exp0
-                                                                  | SOME exp => exp
-                                                               )
+                   | F.VarExp vid => (case USyntax.VIdMap.find (#vidMap env, vid) of
+                                          NONE => exp0
+                                        | SOME exp => exp
+                                     )
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.LetExp (dec, exp) => (case doDec env dec of
                                                  (env', NONE) => doExp env' exp
@@ -286,6 +314,13 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.DataTagExp exp => F.DataTagExp (doExp env exp)
                    | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
+                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                              }
+                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
+                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
+                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
                 )
           and doDec (env : Env) (F.ValDec valbind) = (case doValBind env valbind of
                                                           (env', NONE) => (env', NONE)
@@ -348,8 +383,8 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                             in F.LetExp (dec', doExp env' exp)
                                             end
                    | F.AppExp (exp1, exp2) => (case (doExp env exp1, doExp env exp2) of
-                                                   (exp1 as F.TyAppExp (F.VarExp (Syntax.MkQualified (_, vid)), ty1), exp2 as F.ListExp (xs, ty2)) =>
-                                                   if USyntax.eqVId(vid, InitialEnv.VId_Vector_fromList) then
+                                                   (exp1 as F.TyAppExp (exp1', ty1), exp2 as F.ListExp (xs, ty2)) =>
+                                                   if F.isLongVId(exp1', InitialEnv.VId_Vector_fromList) then
                                                        F.VectorExp (xs, ty2)
                                                    else
                                                        F.AppExp (exp1, exp2)
@@ -378,6 +413,13 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.DataTagExp exp => F.DataTagExp (doExp env exp)
                    | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
+                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                              }
+                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
+                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
+                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
                 )
           and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
@@ -423,7 +465,7 @@ fun isDiscardable (F.SConExp _) = true
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
-  | isDiscardable (F.AppExp (F.TyAppExp (F.VarExp(Syntax.MkQualified(_, vid)), _), exp2)) = USyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse USyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
+  | isDiscardable (F.AppExp (F.TyAppExp (exp1', _), exp2)) = F.isLongVId (exp1', InitialEnv.VId_assumePure) orelse F.isLongVId (exp1', InitialEnv.VId_assumeDiscardable)
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.RaiseExp (span, exp)) = false
@@ -438,17 +480,22 @@ fun isDiscardable (F.SConExp _) = true
   | isDiscardable (F.RecordEqualityExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.DataTagExp exp) = isDiscardable exp
   | isDiscardable (F.DataPayloadExp exp) = isDiscardable exp
+  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap }) = Syntax.VIdMap.all isDiscardable valMap andalso Syntax.StrIdMap.all isDiscardable strMap andalso Syntax.VIdMap.all isDiscardable exnTagMap
+  | isDiscardable (F.ValueProjectionExp (exp, label)) = isDiscardable exp
+  | isDiscardable (F.StructureProjectionExp (exp, label)) = isDiscardable exp
+  | isDiscardable (F.ExTagProjectionExp (exp, label)) = isDiscardable exp
 (* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
 fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.SConPat _) = USyntax.VIdSet.empty
   | doPat (F.VarPat _) = USyntax.VIdSet.empty
   | doPat (F.RecordPat (fields, wildcard)) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty fields
-  | doPat (F.ConPat (Syntax.MkQualified (_, vid), NONE, tyargs)) = USyntax.VIdSet.singleton vid
-  | doPat (F.ConPat (Syntax.MkQualified (_, vid), SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
+  | doPat (F.ConPat (USyntax.MkShortVId vid, NONE, tyargs)) = USyntax.VIdSet.singleton vid
+  | doPat (F.ConPat (USyntax.MkShortVId vid, SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
+  | doPat (F.ConPat (USyntax.MkLongVId _, _, tyargs)) = raise Fail "not implemented yet"
   | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
 (* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
 fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.VIdSet.empty, exp)
-  | doExp (exp as F.VarExp (Syntax.MkQualified (_, vid))) = (USyntax.VIdSet.singleton vid, exp)
+  | doExp (exp as F.VarExp vid) = (USyntax.VIdSet.singleton vid, exp)
   | doExp (F.RecordExp fields) = let val fields = List.map (fn (label, exp) => (label, doExp exp)) fields
                                  in (List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (List.map (#1 o #2) fields), F.RecordExp (List.map (fn (label, (_, exp)) => (label, exp)) fields))
                                  end
@@ -504,6 +551,23 @@ fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.V
   | doExp (F.DataPayloadExp exp) = let val (used, exp) = doExp exp
                                    in (used, F.DataPayloadExp exp)
                                    end
+  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = let val valMap = Syntax.VIdMap.map doExp valMap
+                                                            val strMap = Syntax.StrIdMap.map doExp strMap
+                                                            val exnTagMap = Syntax.VIdMap.map doExp exnTagMap
+                                                            val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty valMap
+                                                            val used = Syntax.StrIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used strMap
+                                                            val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used exnTagMap
+                                                        in (used, F.StructExp { valMap = Syntax.VIdMap.map #2 valMap, strMap = Syntax.StrIdMap.map #2 strMap, exnTagMap = Syntax.VIdMap.map #2 exnTagMap })
+                                                        end
+  | doExp (F.ValueProjectionExp (exp, label)) = let val (used, exp) = doExp exp
+                                                in (used, F.ValueProjectionExp (exp, label))
+                                                end
+  | doExp (F.StructureProjectionExp (exp, label)) = let val (used, exp) = doExp exp
+                                                    in (used, F.StructureProjectionExp (exp, label))
+                                                    end
+  | doExp (F.ExTagProjectionExp (exp, label)) = let val (used, exp) = doExp exp
+                                                in (used, F.ExTagProjectionExp (exp, label))
+                                                end
 and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
                             in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                             end
@@ -571,6 +635,12 @@ and doIgnoredExp (F.SConExp _) = (USyntax.VIdSet.empty, [])
                                                 end
   | doIgnoredExp (F.DataTagExp exp) = doIgnoredExp exp
   | doIgnoredExp (F.DataPayloadExp exp) = doIgnoredExp exp
+  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) = let val xs = List.map doIgnoredExp (Syntax.VIdMap.listItems valMap @ Syntax.StrIdMap.listItems strMap @ Syntax.VIdMap.listItems exnTagMap)
+                                                               in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs, List.foldr (fn ((_, e), xs) => e @ xs) [] xs)
+                                                               end
+  | doIgnoredExp (F.ValueProjectionExp (exp, label)) = doIgnoredExp exp
+  | doIgnoredExp (F.StructureProjectionExp (exp, label)) = doIgnoredExp exp
+  | doIgnoredExp (F.ExTagProjectionExp (exp, label)) = doIgnoredExp exp
 (* doDec : USyntax.VIdSet.set * F.Dec -> USyntax.VIdSet.set * F.Dec *)
 and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : USyntax.VIdSet.set * F.Dec list
     = if not (USyntax.VIdSet.member (used, vid)) then

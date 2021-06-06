@@ -459,3 +459,110 @@ local function _Lua_function(f)
     return table.unpack(r, 1, r.n)
   end
 end
+local _General = {
+  [":="] = _set,
+  ["!"] = _read,
+}
+local _Bool = {
+  ["not"] = _not,
+}
+local _Int = {
+  ["+"] = _Int_add,
+  ["-"] = _Int_sub,
+  ["*"] = _Int_mul,
+  ["div"] = _Int_div,
+  ["mod"] = _Int_mod,
+  ["<"] = _LT,
+  [">"] = _GT,
+  ["<="] = _LE,
+  [">="] = _GE,
+  ["~"] = _Int_negate,
+  ["abs"] = _Int_abs,
+}
+local _Word = {
+  ["+"] = _PLUS,
+  ["-"] = _MINUS,
+  ["*"] = _TIMES,
+  ["div"] = _Word_div,
+  ["mod"] = _Word_mod,
+  ["<"] = _Word_LT,
+  [">"] = _Word_GT,
+  ["<="] = _Word_LE,
+  [">="] = _Word_GE,
+  ["~"] = _unm,
+}
+local _Real = {
+  ["+"] = _PLUS,
+  ["-"] = _MINUS,
+  ["*"] = _TIMES,
+  ["/"] = _DIVIDE,
+  ["abs"] = _Real_abs,
+  ["~"] = _unm,
+  ["<"] = _LT,
+  [">"] = _GT,
+  ["<="] = _LE,
+  [">="] = _GE,
+}
+local _String = {
+  ["size"] = _length,
+  ["^"] = _concat,
+  ["str"] = _id,
+  ["<"] = _LT,
+  [">"] = _GT,
+  ["<="] = _LE,
+  [">="] = _GE,
+}
+local _Char = {
+  ["<"] = _LT,
+  [">"] = _GT,
+  ["<="] = _LE,
+  [">="] = _GE,
+}
+local _Array = {
+  array = _Array_array,
+  fromList = _VectorOrArray_fromList,
+  tabulate = _VectorOrArray_tabulate,
+  length = _VectorOrArray_length,
+  sub = _VectorOrArray_sub,
+  update = _Array_update,
+}
+local _Vector = {
+  fromList = _VectorOrArray_fromList,
+  tabulate = _VectorOrArray_tabulate,
+  length = _VectorOrArray_length,
+  sub = _VectorOrArray_sub,
+}
+local _Lua = {
+  sub = _Lua_sub,
+  set = _Lua_set,
+  global = _Lua_global,
+  call = _Lua_call,
+  method = _Lua_method,
+  NIL = nil,
+  isNil = _Lua_isNil,
+  isFalsy = _not,
+  unsafeToValue = _id,
+  unsafeFromValue = _id,
+  newTable = _Lua_newTable,
+  ["function"] = _Lua_function,
+  ["+"] = _PLUS,
+  ["-"] = _MINUS,
+  ["*"] = _TIMES,
+  ["/"] = _DIVIDE,
+  ["//"] = _INTDIV,
+  ["%"] = _MOD,
+  ["^"] = _pow,
+  unm = _unm,
+  andb = _andb,
+  orb = _orb,
+  xorb = _xorb,
+  notb = _notb,
+  ["<<"] = _LSHIFT,
+  [">>"] = _RSHIFT,
+  concat = _concat,
+  length = _length,
+}
+local _LunarML = {
+  assumePure = _id,
+  assumeDiscardable = _id,
+}

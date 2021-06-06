@@ -53,10 +53,11 @@ structure TyConMap = RedBlackMapFn(struct
                                     type ord_key = TyCon
                                     fun compare (MkTyCon x, MkTyCon y) = String.compare (x,y)
                                     end)
-structure StrIdMap = RedBlackMapFn(struct
-                                    type ord_key = StrId
-                                    fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
-                                    end)
+structure StrIdKey = struct
+type ord_key = StrId
+fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
+end : ORD_KEY
+structure StrIdMap = RedBlackMapFn(StrIdKey)
 structure SigIdMap = RedBlackMapFn(struct
                                     type ord_key = SigId
                                     fun compare (MkSigId x, MkSigId y) = String.compare (x,y)
@@ -117,7 +118,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | TypeDec of SourcePos.span * TypBind list
              | DatatypeDec of SourcePos.span * DatBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
-             | AbstypeDec of SourcePos.span * DatBind list * Dec list
+             | AbstypeDec of SourcePos.span * DatBind list * Dec list (* not implemented yet *)
              | ExceptionDec of SourcePos.span * ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
