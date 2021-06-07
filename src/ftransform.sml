@@ -456,6 +456,64 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
 end (* local *)
 end (* structure Fuse *)
 
+structure FlattenLet = struct
+local structure F = FSyntax in
+fun extractLet (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet exp
+                                       in (dec :: decs, exp)
+                                       end
+  | extractLet exp = ([], exp)
+fun doExp (exp as F.SConExp _) = exp
+  | doExp (exp as F.VarExp _) = exp
+  | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+  | doExp (F.LetExp (dec, exp2)) = F.LetExp (doDec dec, exp2)
+  | doExp (F.AppExp (exp1, exp2)) = F.AppExp (doExp exp1, doExp exp2)
+  | doExp (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
+  | doExp (F.RaiseExp (span, exp)) = F.RaiseExp (span, doExp exp)
+  | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
+  | doExp (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp exp, ty, List.map (fn (pat, exp) => (pat, doExp exp)) matches)
+  | doExp (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp exp)
+  | doExp (exp as F.ProjectionExp _) = exp
+  | doExp (F.ListExp (xs, ty)) = F.ListExp (Vector.map doExp xs, ty)
+  | doExp (F.VectorExp (xs, ty)) = F.VectorExp (Vector.map doExp xs, ty)
+  | doExp (F.TyAbsExp (tv, exp)) = F.TyAbsExp (tv, doExp exp)
+  | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
+  | doExp (F.RecordEqualityExp fields) = F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+  | doExp (F.DataTagExp exp) = F.DataTagExp (doExp exp)
+  | doExp (F.DataPayloadExp exp) = F.DataPayloadExp (doExp exp)
+  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = Syntax.VIdMap.map doExp valMap
+                                                                    , strMap = Syntax.StrIdMap.map doExp strMap
+                                                                    , exnTagMap = Syntax.VIdMap.map doExp exnTagMap
+                                                                    }
+  | doExp (F.ValueProjectionExp (exp, label)) = F.ValueProjectionExp (doExp exp, label)
+  | doExp (F.StructureProjectionExp (exp, label)) = F.StructureProjectionExp (doExp exp, label)
+  | doExp (F.ExTagProjectionExp (exp, label)) = F.ExTagProjectionExp (doExp exp, label)
+and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet exp1
+                                                          val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
+                                                      in if List.null decs then
+                                                             dec
+                                                         else
+                                                             F.GroupDec (NONE, decs @ [dec])
+                                                      end
+  | doDec (F.ValDec (F.TupleBind (binds, exp1))) = let val (decs, exp1) = extractLet exp1
+                                                       val dec = F.ValDec (F.TupleBind (binds, exp1))
+                                                   in if List.null decs then
+                                                          dec
+                                                      else
+                                                          F.GroupDec (NONE, decs @ [dec])
+                                                   end
+  | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn F.SimpleBind (vid, ty, exp) => F.SimpleBind (vid, ty, doExp exp)
+                                                         | F.TupleBind (binds, exp) => F.TupleBind (binds, doExp exp)
+                                                         ) valbinds)
+  | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
+  | doDec (dec as F.DatatypeDec _) = dec
+  | doDec (dec as F.ExceptionDec _) = dec
+  | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
+  | doDec (F.ExportModule xs) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp exp)) xs)
+  | doDec (F.GroupDec (e, decs)) = F.GroupDec (e, doDecs decs)
+and doDecs decs = List.map doDec decs
+end (* local *)
+end (* structure FlattenLet *)
+
 structure FTransform = struct
 type Env = { desugarPatternMatches : DesugarPatternMatches.Env
            , eliminateVariables : EliminateVariables.Env
@@ -468,6 +526,7 @@ val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEn
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
                                       val (evEnv, decs) = #doDecs (EliminateVariables.eliminateVariables ctx) (#eliminateVariables env) decs
                                       val (fuseEnv, decs) = #doDecs (Fuse.fuse ctx) (#fuse env) decs
+                                      val decs = FlattenLet.doDecs decs
                               in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv, fuse = fuseEnv}, decs)
                               end
 end (* structure FTransform *)
