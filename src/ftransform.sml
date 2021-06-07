@@ -83,13 +83,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.DataPayloadExp _ => raise Fail "DataPayloadExp should not occur here"
                    | F.ListExp(xs, ty) => F.ListExp(Vector.map (doExp env) xs, ty)
                    | F.VectorExp(xs, ty) => F.VectorExp(Vector.map (doExp env) xs, ty)
-                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
-                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
-                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
-                                                                              }
-                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
-                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
-                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
+                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                                           , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                                           , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                                           , equalityMap = Syntax.TyConMap.map (doExp env) equalityMap
+                                                                                           }
+                   | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                    | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (vid'))]) =>
                                               if USyntax.eqVId(vid, vid') then
                                                   doExp env exp
@@ -327,13 +326,12 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.DataTagExp exp => F.DataTagExp (doExp env exp)
                    | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
-                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
-                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
-                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
-                                                                              }
-                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
-                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
-                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
+                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                                           , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                                           , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                                           , equalityMap = Syntax.TyConMap.map (doExp env) equalityMap
+                                                                                           }
+                   | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                 )
           and doDec (env : Env) (F.ValDec valbind) = (case doValBind env valbind of
                                                           (env', NONE) => (env', NONE)
@@ -434,13 +432,12 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.RecordEqualityExp fields => F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.DataTagExp exp => F.DataTagExp (doExp env exp)
                    | F.DataPayloadExp exp => F.DataPayloadExp (doExp env exp)
-                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
-                                                                              , strMap = Syntax.StrIdMap.map (doExp env) strMap
-                                                                              , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
-                                                                              }
-                   | F.ValueProjectionExp (exp, label) => F.ValueProjectionExp (doExp env exp, label)
-                   | F.StructureProjectionExp (exp, label) => F.StructureProjectionExp (doExp env exp, label)
-                   | F.ExTagProjectionExp (exp, label) => F.ExTagProjectionExp (doExp env exp, label)
+                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
+                                                                                           , strMap = Syntax.StrIdMap.map (doExp env) strMap
+                                                                                           , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
+                                                                                           , equalityMap = Syntax.TyConMap.map (doExp env) equalityMap
+                                                                                           }
+                   | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                 )
           and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
@@ -492,13 +489,12 @@ fun doExp (exp as F.SConExp _) = exp
   | doExp (F.RecordEqualityExp fields) = F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
   | doExp (F.DataTagExp exp) = F.DataTagExp (doExp exp)
   | doExp (F.DataPayloadExp exp) = F.DataPayloadExp (doExp exp)
-  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = Syntax.VIdMap.map doExp valMap
-                                                                    , strMap = Syntax.StrIdMap.map doExp strMap
-                                                                    , exnTagMap = Syntax.VIdMap.map doExp exnTagMap
-                                                                    }
-  | doExp (F.ValueProjectionExp (exp, label)) = F.ValueProjectionExp (doExp exp, label)
-  | doExp (F.StructureProjectionExp (exp, label)) = F.StructureProjectionExp (doExp exp, label)
-  | doExp (F.ExTagProjectionExp (exp, label)) = F.ExTagProjectionExp (doExp exp, label)
+  | doExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = F.StructExp { valMap = Syntax.VIdMap.map doExp valMap
+                                                                                 , strMap = Syntax.StrIdMap.map doExp strMap
+                                                                                 , exnTagMap = Syntax.VIdMap.map doExp exnTagMap
+                                                                                 , equalityMap = Syntax.TyConMap.map doExp equalityMap
+                                                                                 }
+  | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
 and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet exp1
                                                           val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
                                                       in if List.null decs then
@@ -565,10 +561,8 @@ fun isDiscardable (F.SConExp _) = true
   | isDiscardable (F.RecordEqualityExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.DataTagExp exp) = isDiscardable exp
   | isDiscardable (F.DataPayloadExp exp) = isDiscardable exp
-  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap }) = Syntax.VIdMap.all isDiscardable valMap andalso Syntax.StrIdMap.all isDiscardable strMap andalso Syntax.VIdMap.all isDiscardable exnTagMap
-  | isDiscardable (F.ValueProjectionExp (exp, label)) = isDiscardable exp
-  | isDiscardable (F.StructureProjectionExp (exp, label)) = isDiscardable exp
-  | isDiscardable (F.ExTagProjectionExp (exp, label)) = isDiscardable exp
+  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = Syntax.VIdMap.all isDiscardable valMap andalso Syntax.StrIdMap.all isDiscardable strMap andalso Syntax.VIdMap.all isDiscardable exnTagMap andalso Syntax.TyConMap.all isDiscardable equalityMap
+  | isDiscardable (F.SProjectionExp (exp, label)) = isDiscardable exp
 (* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
 fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.SConPat _) = USyntax.VIdSet.empty
@@ -636,23 +630,24 @@ fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.V
   | doExp (F.DataPayloadExp exp) = let val (used, exp) = doExp exp
                                    in (used, F.DataPayloadExp exp)
                                    end
-  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = let val valMap = Syntax.VIdMap.map doExp valMap
-                                                            val strMap = Syntax.StrIdMap.map doExp strMap
-                                                            val exnTagMap = Syntax.VIdMap.map doExp exnTagMap
-                                                            val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty valMap
-                                                            val used = Syntax.StrIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used strMap
-                                                            val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used exnTagMap
-                                                        in (used, F.StructExp { valMap = Syntax.VIdMap.map #2 valMap, strMap = Syntax.StrIdMap.map #2 strMap, exnTagMap = Syntax.VIdMap.map #2 exnTagMap })
-                                                        end
-  | doExp (F.ValueProjectionExp (exp, label)) = let val (used, exp) = doExp exp
-                                                in (used, F.ValueProjectionExp (exp, label))
-                                                end
-  | doExp (F.StructureProjectionExp (exp, label)) = let val (used, exp) = doExp exp
-                                                    in (used, F.StructureProjectionExp (exp, label))
-                                                    end
-  | doExp (F.ExTagProjectionExp (exp, label)) = let val (used, exp) = doExp exp
-                                                in (used, F.ExTagProjectionExp (exp, label))
-                                                end
+  | doExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = let val valMap = Syntax.VIdMap.map doExp valMap
+                                                                         val strMap = Syntax.StrIdMap.map doExp strMap
+                                                                         val exnTagMap = Syntax.VIdMap.map doExp exnTagMap
+                                                                         val equalityMap = Syntax.TyConMap.map doExp equalityMap
+                                                                         val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty valMap
+                                                                         val used = Syntax.StrIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used strMap
+                                                                         val used = Syntax.VIdMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used exnTagMap
+                                                                         val used = Syntax.TyConMap.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) used equalityMap
+                                                                     in (used, F.StructExp { valMap = Syntax.VIdMap.map #2 valMap
+                                                                                           , strMap = Syntax.StrIdMap.map #2 strMap
+                                                                                           , exnTagMap = Syntax.VIdMap.map #2 exnTagMap
+                                                                                           , equalityMap = Syntax.TyConMap.map #2 equalityMap
+                                                                                           }
+                                                                        )
+                                                                     end
+  | doExp (F.SProjectionExp (exp, label)) = let val (used, exp) = doExp exp
+                                            in (used, F.SProjectionExp (exp, label))
+                                            end
 and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
                             in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                             end
@@ -720,12 +715,11 @@ and doIgnoredExp (F.SConExp _) = (USyntax.VIdSet.empty, [])
                                                 end
   | doIgnoredExp (F.DataTagExp exp) = doIgnoredExp exp
   | doIgnoredExp (F.DataPayloadExp exp) = doIgnoredExp exp
-  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) = let val xs = List.map doIgnoredExp (Syntax.VIdMap.listItems valMap @ Syntax.StrIdMap.listItems strMap @ Syntax.VIdMap.listItems exnTagMap)
-                                                               in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs, List.foldr (fn ((_, e), xs) => e @ xs) [] xs)
-                                                               end
-  | doIgnoredExp (F.ValueProjectionExp (exp, label)) = doIgnoredExp exp
-  | doIgnoredExp (F.StructureProjectionExp (exp, label)) = doIgnoredExp exp
-  | doIgnoredExp (F.ExTagProjectionExp (exp, label)) = doIgnoredExp exp
+  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap })
+    = let val xs = List.map doIgnoredExp (Syntax.VIdMap.listItems valMap @ Syntax.StrIdMap.listItems strMap @ Syntax.VIdMap.listItems exnTagMap @ Syntax.TyConMap.listItems equalityMap)
+      in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs, List.foldr (fn ((_, e), xs) => e @ xs) [] xs)
+      end
+  | doIgnoredExp (F.SProjectionExp (exp, label)) = doIgnoredExp exp
 (* doDec : USyntax.VIdSet.set * F.Dec -> USyntax.VIdSet.set * F.Dec *)
 and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : USyntax.VIdSet.set * F.Dec list
     = if not (USyntax.VIdSet.member (used, vid)) then

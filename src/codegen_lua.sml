@@ -538,14 +538,14 @@ and commaSep1 [] = []
 
 local
 fun extractStrId(F.VarExp(USyntax.MkVId(name, n))) = SOME (USyntax.MkStrId(name, n), [])
-  | extractStrId(F.StructureProjectionExp(exp, strid)) = (case extractStrId exp of
+  | extractStrId(F.SProjectionExp(exp, F.StructLabel strid)) = (case extractStrId exp of
                                                               SOME (strid0, revStrids) => SOME (strid0, strid :: revStrids)
                                                             | NONE => NONE
                                                          )
   | extractStrId _ = NONE
 in
 fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
-  | extractLongVId(F.ValueProjectionExp(exp, vid)) = Option.map (fn (strid0, revStrids) => USyntax.MkLongVId(strid0, List.rev revStrids, vid)) (extractStrId exp)
+  | extractLongVId(F.SProjectionExp(exp, F.ValueLabel vid)) = Option.map (fn (strid0, revStrids) => USyntax.MkLongVId(strid0, List.rev revStrids, vid)) (extractStrId exp)
   | extractLongVId _ = NONE
 end
 
@@ -808,34 +808,44 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
               )
   | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
   | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
-  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
+  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) dest
     = let val valMap' = Syntax.VIdMap.listItemsi valMap
           val strMap' = Syntax.StrIdMap.listItemsi strMap
           val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
+          val equalityMap' = Syntax.TyConMap.listItemsi equalityMap
       in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                  valMap'
-                 (fn valMap' => let val (stmts, valFields) = ListPair.unzip valMap'
-                                in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                           strMap'
-                                           (fn strMap' =>
-                                               let val (stmts', strFields) = ListPair.unzip strMap'
-                                               in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                                          exnTagMap'
-                                                          (fn exnTagMap' => let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
-                                                                                val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
-                                                                                val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
-                                                                                val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
-                                                                            in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts'
-                                                                                                      , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields) @ [ Fragment "}" ] }
-                                                                                                      )
-                                                                            end
-                                                          )
-                                               end
-                                           )
-                                end
+                 (fn valMap' =>
+                     let val (stmts, valFields) = ListPair.unzip valMap'
+                     in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
+                                strMap'
+                                (fn strMap' =>
+                                    let val (stmts', strFields) = ListPair.unzip strMap'
+                                    in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
+                                               exnTagMap'
+                                               (fn exnTagMap' =>
+                                                   let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
+                                                   in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
+                                                              equalityMap'
+                                                              (fn equalityMap' =>
+                                                                  let val (stmts''', equalityFields) = ListPair.unzip equalityMap'
+                                                                      val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
+                                                                      val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
+                                                                      val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
+                                                                      val equalityFields = List.map (fn (Syntax.MkTyCon name, e) => [ Fragment ("[" ^ toLuaStringLit (name ^ ".=") ^ "] = ") ] @ #exp e) equalityFields
+                                                                  in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts'
+                                                                                            , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields @ equalityFields) @ [ Fragment "}" ] }
+                                                                                            )
+                                                                  end
+                                                              )
+                                                   end
+                                               )
+                                    end
+                                )
+                     end
                  )
       end
-  | doExpTo ctx env (exp as F.ValueProjectionExp (exp', vid)) dest = let val builtin = case extractLongVId exp of
+  | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest = let val builtin = case extractLongVId exp of
                                                                                            SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
                                                                                                                 SOME luaExpr => SOME luaExpr
                                                                                                               | NONE => NONE
@@ -845,10 +855,13 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                             SOME luaExpr => putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment luaExpr ] }) (* TODO: prec for true, false, nil *)
                                                                           | NONE => doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "]") ] }))
                                                                      end
-  | doExpTo ctx env (exp as F.StructureProjectionExp (exp', Syntax.MkStrId name)) dest = doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "]") ] }))
-  | doExpTo ctx env (exp as F.ExTagProjectionExp (exp', vid)) dest = let val name = Syntax.getVIdName vid
-                                                                     in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (name ^ ".tag") ^ "]") ] }))
-                                                                     end
+  | doExpTo ctx env (exp as F.SProjectionExp (exp', label)) dest = let val field = case label of
+                                                                                       F.ValueLabel vid => Syntax.getVIdName vid
+                                                                                     | F.StructLabel (Syntax.MkStrId name) => "_" ^ name
+                                                                                     | F.ExnTagLabel vid => Syntax.getVIdName vid ^ ".tag"
+                                                                                     | F.EqualityLabel (Syntax.MkTyCon name) => name ^ ".="
+                                                                   in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
+                                                                   end
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
