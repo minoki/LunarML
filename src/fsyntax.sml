@@ -63,6 +63,7 @@ datatype Exp = SConExp of Syntax.SCon
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
+             | ExceptionRepDec of { conName : USyntax.VId, conExp : Exp, tagExp : Exp, payloadTy : Ty option }
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of USyntax.VIdSet.set option * Dec list
@@ -181,6 +182,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
+          | doDec (ExceptionRepDec { conName, conExp, tagExp, payloadTy }) = ExceptionRepDec { conName = conName, conExp = doExp conExp, tagExp = doExp tagExp, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
@@ -268,6 +270,7 @@ and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
+  | print_Dec (ExceptionRepDec _) = "ExceptionRepDec"
   | print_Dec (ExportValue _) = "ExportValue"
   | print_Dec (ExportModule _) = "ExportModule"
   | print_Dec (GroupDec _) = "GroupDec"
@@ -581,15 +584,19 @@ and toFDecs(ctx, env, []) = (env, [])
                                                     in ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), F.VarExp(tag))
                                                        , F.ExceptionDec { conName = vid
                                                                         , tagName = tag
-                                                                        , payloadTy = case optTy of
-                                                                                          NONE => NONE 
-                                                                                        | SOME ty => SOME (toFTy(ctx, env, ty))
+                                                                        , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
                                                                         } :: xs
                                                        )
                                                     end
-                                                | (U.ExReplication(span, vid, longvid), (exnTagMap, xs)) =>
+                                                | (U.ExReplication(span, vid, longvid, optTy), (exnTagMap, xs)) =>
                                                   (case USyntax.LongVIdMap.find(#exnTagMap env, longvid) of
-                                                       SOME exp => (USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), exp), F.ValDec(F.SimpleBind(vid, (* TODO *) F.TyCon([], Typing.primTyCon_exn), F.LongVarExp longvid)) ::xs)
+                                                       SOME exp => ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), exp)
+                                                                   , F.ExceptionRepDec { conName = vid
+                                                                                       , conExp = F.LongVarExp longvid
+                                                                                       , tagExp = exp
+                                                                                       , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
+                                                                                       } :: xs
+                                                                   )
                                                      | NONE => raise Fail ("exception not found: " ^ USyntax.print_LongVId longvid)
                                                   )
                                                 ) (exnTagMap, []) exbinds

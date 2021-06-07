@@ -133,7 +133,7 @@ datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
 datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list * (* admits equality? (after type check) *) bool
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
-                | ExReplication of SourcePos.span * VId * LongVId
+                | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | InstantiatedVarExp of SourcePos.span * LongVId * Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
@@ -393,7 +393,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                       in DatBind(span, tyvars, tycon, List.map doConBind conbinds, eq)
                                                                       end
           and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
-            | doExBind(exbind as ExReplication(span, vid, longvid)) = exbind
+            | doExBind(ExReplication(span, vid, longvid, optTy)) = ExReplication(span, vid, longvid, Option.map doTy optTy)
           fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv, admitsEquality, isAlias }
               = { typeFunction = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                  in TypeFunction(tyvars, applySubstTy subst ty)
@@ -479,7 +479,8 @@ and freeTyVarsInConBind(bound, ConBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInConBind(bound, ConBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInExBind(bound, ExBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
-  | freeTyVarsInExBind(bound, ExReplication(_, _, _)) = TyVarSet.empty
+  | freeTyVarsInExBind(bound, ExReplication(_, _, _, NONE)) = TyVarSet.empty
+  | freeTyVarsInExBind(bound, ExReplication(_, _, _, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
            HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)

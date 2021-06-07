@@ -133,6 +133,16 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                }
                 in (env', dec)
                 end
+            | doDec env (dec as F.ExceptionRepDec { conName, conExp, tagExp, payloadTy })
+              = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
+                    val conTy = case payloadTy of
+                                    NONE => exnTy
+                                  | SOME ty => FSyntax.FnType(ty, exnTy)
+                    val env' = { dataConMap = USyntax.LongVIdMap.insert (#dataConMap env, USyntax.MkShortVId conName, conTy)
+                               , exnConMap = USyntax.LongVIdMap.insert (#exnConMap env, USyntax.MkShortVId conName, tagExp)
+                               }
+                in (env', F.ValDec(F.SimpleBind(conName, conTy, conExp)))
+                end
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
             | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
@@ -341,6 +351,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (F.IgnoreDec exp) = (env, SOME (F.IgnoreDec (doExp env exp)))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, SOME dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
+            | doDec env (dec as F.ExceptionRepDec _) = (env, SOME dec) (* TODO *)
             | doDec env (F.ExportValue exp) = (env, SOME (F.ExportValue (doExp env exp)))
             | doDec env (F.ExportModule fields) = (env, SOME (F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields)))
             | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
@@ -435,7 +446,8 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
-            | doDec env (dec as F.ExceptionDec datbinds) = (env, dec)
+            | doDec env (dec as F.ExceptionDec _) = (env, dec)
+            | doDec env (dec as F.ExceptionRepDec _) = (env, dec)
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
             | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
@@ -507,6 +519,7 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = ext
   | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
   | doDec (dec as F.DatatypeDec _) = dec
   | doDec (dec as F.ExceptionDec _) = dec
+  | doDec (dec as F.ExceptionRepDec _) = dec
   | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
   | doDec (F.ExportModule xs) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp exp)) xs)
   | doDec (F.GroupDec (e, decs)) = F.GroupDec (e, doDecs decs)
@@ -766,6 +779,10 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
                                                                               (used, [dec])
                                                                           else
                                                                               (used, [])
+  | doDec (used, dec as F.ExceptionRepDec { conName, conExp, tagExp, payloadTy }) = if USyntax.VIdSet.member (used, conName) then
+                                                                                        (used, [dec])
+                                                                                    else
+                                                                                        (used, [])
   | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp
                                       in (USyntax.VIdSet.union (used, used'), [F.ExportValue exp])
                                       end
@@ -791,6 +808,7 @@ and definedInDec (F.ValDec valbind) = definedInValBind valbind
   | definedInDec (F.IgnoreDec _) = USyntax.VIdSet.empty
   | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind(vid, _), s) => USyntax.VIdSet.add(s, vid)) s conbinds) USyntax.VIdSet.empty datbinds
   | definedInDec (F.ExceptionDec { conName, tagName, ... }) = USyntax.VIdSet.add(USyntax.VIdSet.singleton conName, tagName)
+  | definedInDec (F.ExceptionRepDec { conName, ... }) = USyntax.VIdSet.singleton conName
   | definedInDec (F.ExportValue _) = USyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.ExportModule _) = USyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.GroupDec(_, decs)) = definedInDecs decs (* should not occur *)

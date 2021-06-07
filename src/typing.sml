@@ -968,7 +968,12 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
               = let val vid' = newVId(ctx, vid)
                 in case lookupLongVIdInEnv(ctx, env, span, longvid) of
                        SOME (longvid, tysc, ids as Syntax.ExceptionConstructor) =>
-                       (S.VIdMap.insert(valMap, vid, (U.MkShortVId(vid'), tysc, ids)), U.ExReplication(span, vid', longvid) :: exbinds)
+                       let val optTy = case tysc of
+                                           U.TypeScheme([], U.FnType(_, payloadTy, _)) => SOME payloadTy
+                                         | U.TypeScheme([], _) => NONE
+                                         | U.TypeScheme(_ :: _, _) => emitError(ctx, [span], "exception constructor must have monomorphic type")
+                       in (S.VIdMap.insert(valMap, vid, (U.MkShortVId(vid'), tysc, ids)), U.ExReplication(span, vid', longvid, optTy) :: exbinds)
+                       end
                      | _ => emitError(ctx, [span], "exception replication: RHS must be an exception constructor")
                 end
           val (valMap, exbinds) = List.foldr doExBind (Syntax.VIdMap.empty, []) exbinds
@@ -1223,7 +1228,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                                                         ; tyconset
                                                        end
             | goDec (U.ExceptionDec (span, exbinds)) = ( List.app (fn U.ExBind (span, vid, optTy) => Option.app goTy optTy
-                                                                  | U.ExReplication (span, vid, longvid) => ()
+                                                                  | U.ExReplication (span, vid, longvid, optTy) => Option.app goTy optTy
                                                                   ) exbinds
                                                        ; tyconset
                                                        )
