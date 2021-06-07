@@ -984,7 +984,10 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                       , sigMap = #sigMap env''
                       , boundTyVars = #boundTyVars env''
                       }
-      in (env'', decs1 @ decs2)
+      in (env'', case decs1 @ decs2 of
+                     decs as [] => decs
+                   | decs as [dec] => decs
+                   | decs => [U.GroupDec(span, decs)])
       end
   | typeCheckDec(ctx, env, S.OpenDec(span, longstrids))
     = let fun getStructure(Syntax.MkQualified([], strid))
@@ -1224,6 +1227,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                                                                   ) exbinds
                                                        ; tyconset
                                                        )
+            | goDec (U.GroupDec (span, decs)) = goDecs decs
           and goDecs decs = List.foldl (fn (dec, tyconset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tyconset)
                                                               in goDec dec
                                                               end)
@@ -1247,6 +1251,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                                                                  end
           and goStrDec (U.CoreDec(_, dec)) = goDec dec
             | goStrDec (U.StrBindDec(_, strid, strexp, s)) = goStrExp strexp (* TODO: signature *)
+            | goStrDec (U.GroupStrDec(_, decs)) = goStrDecs decs
           and goStrDecs decs = List.foldl (fn (dec, tyconset) => let val { goStrDec, ... } = checkTyScope (ctx, tvset, tyconset)
                                                                  in goStrDec dec
                                                                  end)
@@ -1341,7 +1346,11 @@ and typeCheckStrDec(ctx : Context, env : Env, S.CoreDec(span, dec)) : Env * USyn
                       , sigMap = #sigMap env''
                       , boundTyVars = #boundTyVars env''
                       }
-      in (env'', decs1 @ decs2)
+      in (env'', case decs1 @ decs2 of
+                     decs as [] => decs
+                   | decs as [_] => decs
+                   | decs => [U.GroupStrDec(span, decs)]
+         )
       end
 and typeCheckStrDecs(ctx : Context, env : Env, []) = (emptyEnv, [])
   | typeCheckStrDecs(ctx, env, dec :: decs) = let val (env', dec) = typeCheckStrDec(ctx, env, dec)

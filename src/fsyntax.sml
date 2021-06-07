@@ -65,6 +65,7 @@ datatype Exp = SConExp of Syntax.SCon
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
+             | GroupDec of USyntax.VIdSet.set option * Dec list
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 fun TuplePat xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -182,6 +183,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
         and doValBind (SimpleBind (vid, ty, exp)) = SimpleBind (vid, doTy ty, doExp exp)
           | doValBind (TupleBind (binds, exp)) = TupleBind (List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
     in { doTy = doTy
@@ -268,6 +270,7 @@ and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
   | print_Dec (ExportValue _) = "ExportValue"
   | print_Dec (ExportModule _) = "ExportModule"
+  | print_Dec (GroupDec _) = "GroupDec"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -597,6 +600,14 @@ and toFDecs(ctx, env, []) = (env, [])
           val (env, decs) = toFDecs(ctx, env, decs)
       in (env, exbinds @ decs)
       end
+  | toFDecs(ctx, env, U.GroupDec(span, decs) :: decs') = let val (env, decs) = toFDecs(ctx, env, decs)
+                                                             val (env, decs') = toFDecs(ctx, env, decs')
+                                                         in (env, case decs of
+                                                                      [] => decs'
+                                                                    | [dec] => dec :: decs'
+                                                                    | _ => F.GroupDec(NONE, decs) :: decs'
+                                                            )
+                                                         end
 and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
@@ -704,6 +715,13 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                      }
       in (env', [F.ValDec(F.SimpleBind(vid, ty, strExpToFExp(ctx, env, strexp)))]) (* TODO: unpack existentials *)
       end
+  | strDecToFDecs(ctx, env, U.GroupStrDec(span, decs)) = let val (env, decs) = strDecsToFDecs(ctx, env, decs)
+                                                         in (env, case decs of
+                                                                      [] => decs
+                                                                    | [_] => decs
+                                                                    | _ => [F.GroupDec(NONE, decs)]
+                                                            )
+                                                         end
 and strDecsToFDecs(ctx, env : Env, []) = (env, [])
   | strDecsToFDecs(ctx, env, dec :: decs) = let val (env, dec) = strDecToFDecs(ctx, env, dec)
                                                 val (env, decs) = strDecsToFDecs(ctx, env, decs)

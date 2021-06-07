@@ -360,8 +360,126 @@ fun paren allowed { prec, exp } = if allowed < prec then
                                       exp
 
 type Context = { nextLuaId : int ref }
-type Env = {}
-val initialEnv : Env = {}
+type Env = { boundSymbols : StringSet.set, hoistedSymbols : StringSet.set }
+val initialEnv : Env = { boundSymbols = StringSet.fromList
+                                            [ "_Record_EQUAL"
+                                            , "_EQUAL"
+                                            , "_NOTEQUAL"
+                                            , "_LT"
+                                            , "_GT"
+                                            , "_LE"
+                                            , "_GE"
+                                            , "_PLUS"
+                                            , "_MINUS"
+                                            , "_TIMES"
+                                            , "_DIVIDE"
+                                            , "_INTDIV"
+                                            , "_MOD"
+                                            , "_pow"
+                                            , "_unm"
+                                            , "_andb"
+                                            , "_orb"
+                                            , "_xorb"
+                                            , "_notb"
+                                            , "_LSHIFT"
+                                            , "_RSHIFT"
+                                            , "_concat"
+                                            , "_length"
+                                            , "_not"
+                                            , "_id"
+                                            , "_exn_meta"
+                                            , "_Match_tag"
+                                            , "_Match"
+                                            , "_Bind_tag"
+                                            , "_Bind"
+                                            , "_Overflow_tag"
+                                            , "_Overflow"
+                                            , "_Div_tag"
+                                            , "_Div"
+                                            , "_Size_tag"
+                                            , "_Size"
+                                            , "_Subscript_tag"
+                                            , "_Subscript"
+                                            , "_Fail_tag"
+                                            , "_Fail"
+                                            , "_raise"
+                                            , "__Int_add"
+                                            , "_Int_add"
+                                            , "__Int_sub"
+                                            , "_Int_sub"
+                                            , "__Int_mul"
+                                            , "_Int_mul"
+                                            , "__Int_div"
+                                            , "_Int_div"
+                                            , "__Int_mod"
+                                            , "_Int_mod"
+                                            , "_Int_negate"
+                                            , "_Int_abs"
+                                            , "__Word_div"
+                                            , "_Word_div"
+                                            , "__Word_mod"
+                                            , "_Word_mod"
+                                            , "__Word_LT"
+                                            , "_Word_LT"
+                                            , "_Word_GT"
+                                            , "_Word_LE"
+                                            , "_Word_GE"
+                                            , "_Real_abs"
+                                            , "_nil"
+                                            , "_cons"
+                                            , "_List_EQUAL"
+                                            , "_list"
+                                            , "_ref"
+                                            , "_set"
+                                            , "_read"
+                                            , "_Array_array"
+                                            , "_VectorOrArray_fromList"
+                                            , "_VectorOrArray_length"
+                                            , "_VectorOrArray_sub"
+                                            , "_Vector_Array"
+                                            , "_EQUAL_vector"
+                                            , "_Lua_sub"
+                                            , "_Lua_set"
+                                            , "_Lua_global"
+                                            , "_Lua_call"
+                                            , "_Lua_method"
+                                            , "_Lua_isNil"
+                                            , "_Lua_newTable"
+                                            , "_Lua_function"
+                                            , "_General"
+                                            , "_Bool"
+                                            , "_Int"
+                                            , "_Word"
+                                            , "_Real"
+                                            , "_String"
+                                            , "_Char"
+                                            , "_Array"
+                                            , "_Vector"
+                                            , "_Lua"
+                                            , "_LunarML"
+                                            ]
+                       , hoistedSymbols = StringSet.empty
+                       }
+fun addSymbol ({ boundSymbols, hoistedSymbols } : Env, s)
+    = { boundSymbols = StringSet.add (boundSymbols, s)
+      , hoistedSymbols = hoistedSymbols
+      }
+fun addHoistedSymbol ({ boundSymbols, hoistedSymbols } : Env, s)
+    = { boundSymbols = StringSet.add (boundSymbols, s)
+      , hoistedSymbols = StringSet.add (hoistedSymbols, s)
+      }
+fun isHoisted ({ hoistedSymbols, ... } : Env, s)
+    = StringSet.member (hoistedSymbols, s)
+fun declareIfNotHoisted (env : Env, vars)
+    = let val (env, vars) = List.foldr (fn (v, (env, xs)) => if isHoisted (env, v) then
+                                                                 (env, xs)
+                                                             else
+                                                                 (addHoistedSymbol (env, v), v :: xs)) (env, []) vars
+      in (env, case vars of
+                   [] => []
+                 | _ => [ Indent, Fragment ("local " ^ String.concatWith ", " vars), LineTerminator ]
+         )
+      end
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
@@ -407,7 +525,7 @@ datatype Destination = Return
                      | AssignTo of string
                      | UnpackingAssignTo of string list
                      | Discard
-                     | Continue of (* statements *) Fragment list * (* pure expression *) Exp -> Fragment list (* the continuation should be called exactly once, and the expression should be used only once *)
+                     | Continue of (* statements *) Fragment list * Env * (* pure expression *) Exp -> Fragment list (* the continuation should be called exactly once, and the expression should be used only once *)
 
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
@@ -436,7 +554,7 @@ fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "re
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
   | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
   | putPureTo ctx env Discard (stmts, exp) = stmts
-  | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, exp)
+  | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
 and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
   | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
@@ -446,15 +564,16 @@ and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "
                                                             [ Indent, Fragment "_id(" ] @ #exp exp @ [ Fragment ")", OptSemicolon ]
                                                        )
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
-                                                       in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], { prec = ~1, exp = [ Fragment dest ] })
+                                                           val env = addSymbol (env, dest)
+                                                       in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], env, { prec = ~1, exp = [ Fragment dest ] })
                                                        end
-and doExpCont ctx env exp cont = doExpTo ctx env exp (Continue cont)
+and doExpCont ctx env exp (cont : Fragment list * Env * Exp -> Fragment list)  = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env dest ([], doLiteral scon)
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] }) (* TODO: prec for true, false, nil *)
   | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "nil" ] })
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
-    = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+    = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
               fields
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
@@ -466,7 +585,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
               )
   | doExpTo ctx env (F.LetExp (dec, exp)) (Continue cont)
     = let val dec' = doDec ctx env dec
-      in doExpCont ctx env exp (fn (stmts, exp) => cont (dec' @ stmts, exp))
+      in doExpCont ctx env exp (fn (stmts, env, exp) => cont (dec' @ stmts, env, exp)) (* TODO: modify environment *)
       end
   | doExpTo ctx env (F.LetExp (dec, exp)) dest
     = let val dec' = doDec ctx env dec
@@ -475,13 +594,13 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
     = let val doProjection = case exp1 of
                                  F.ProjectionExp { label, ... } =>
-                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] })))
+                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, env, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] })))
                                | _ => NONE
           val doBinary = case (extractLongVId exp1, exp2) of
                              (SOME longvid, F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
-                             let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, e1') => doExpCont ctx env e2 (fn (stmts2, e2') => f (stmts1 @ stmts2, e1', e2'))))
+                             let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, env, e1') => doExpCont ctx env e2 (fn (stmts2, env, e2') => f (stmts1 @ stmts2, env, e1', e2'))))
                              in case USyntax.LongVIdMap.find(builtinBinaryOps, longvid) of
-                                    SOME (binop, pure) => wrap (fn (stmts, e1', e2') =>
+                                    SOME (binop, pure) => wrap (fn (stmts, env, e1', e2') =>
                                                                    let val e = case binop of
                                                                                    InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
                                                                                  | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' @ Fragment (" " ^ luaop ^ " ") :: paren prec e2' }
@@ -502,7 +621,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                    end
                                                                )
                                   | NONE => if USyntax.eqULongVId(longvid, InitialEnv.VId_Lua_sub) then
-                                                wrap (fn (stmts, e1', e2') =>
+                                                wrap (fn (stmts, env, e1', e2') =>
                                                          let val e = { prec = ~1, exp = paren ~1 e1' @ Fragment "[" :: #exp e2' @ [ Fragment "]" ] }
                                                          in putImpureTo ctx env dest (stmts, e)
                                                          end
@@ -516,17 +635,17 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
                             in if USyntax.eqULongVId(vid, VId_Real_TILDE) orelse USyntax.eqULongVId(vid, VId_Word_TILDE) orelse USyntax.eqULongVId(vid, VId_Lua_unm) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
                                else if USyntax.eqULongVId(vid, VId_Bool_not) orelse USyntax.eqULongVId(vid, VId_Lua_isFalsy) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
                                else if USyntax.eqULongVId(vid, VId_EXCLAM) then
-                                   wrap (fn (stmts, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
+                                   wrap (fn (stmts, env, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
                                else if USyntax.eqULongVId(vid, VId_String_size) orelse USyntax.eqULongVId(vid, VId_Lua_length) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
                                else if USyntax.eqULongVId(vid, VId_Lua_isNil) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
                                else if USyntax.eqULongVId(vid, VId_Lua_notb) then
-                                   wrap (fn (stmts, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
                                else
                                    NONE
                             end
@@ -535,8 +654,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                               (F.AppExp(vid_luacall, f), F.VectorExp(xs, _)) =>
                               if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
                                   SOME (fn () => doExpCont ctx env f
-                                                           (fn (stmts1, f) =>
-                                                               mapCont (fn (e, cont) => doExpCont ctx env e cont)
+                                                           (fn (stmts1, env, f) =>
+                                                               mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                                                                        (Vector.foldr (op ::) [] xs)
                                                                        (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                      val zs = List.map (#exp o #2) ys
@@ -554,8 +673,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                 (F.AppExp(vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.SConExp(Syntax.StringConstant method))]), F.VectorExp(xs, _)) =>
                                 if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
                                     SOME (fn () => doExpCont ctx env self
-                                                             (fn (stmts1, self) =>
-                                                                 mapCont (fn (e, cont) => doExpCont ctx env e cont)
+                                                             (fn (stmts1, env, self) =>
+                                                                 mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                                                                          (Vector.foldr (op ::) [] xs)
                                                                          (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                        val zs = List.map (#exp o #2) ys
@@ -580,9 +699,9 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                        doExpTo ctx env exp2 dest
                    else
                        doExpCont ctx env exp1
-                                 (fn (stmts1, e1') =>
+                                 (fn (stmts1, env, e1') =>
                                      doExpCont ctx env exp2
-                                               (fn (stmts2, e2') =>
+                                               (fn (stmts2, env, e2') =>
                                                    putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 e1' @ Fragment "(" :: #exp e2' @ [ Fragment ")" ] })
                                                )
                                  )
@@ -590,30 +709,33 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = let val status = genSym ctx
           val result = genSym ctx
+          val exnName = VIdToLua exnName
+          val env' = addSymbol (addSymbol (env, status), result)
+          val env'' = addSymbol (env', exnName)
           val stmts = [ Indent, Fragment ("local " ^ status ^ ", " ^ result ^ " = pcall(function()"), LineTerminator, IncreaseIndent ]
-                      @ doExpTo ctx env body Return
+                      @ doExpTo ctx env' body Return
                       @ [ DecreaseIndent, Indent, Fragment "end)", OptSemicolon
                         , Indent, Fragment ("if not " ^ status ^ " then"), LineTerminator, IncreaseIndent
-                        , Indent, Fragment ("local " ^ VIdToLua exnName ^ " = " ^ result), OptSemicolon
+                        , Indent, Fragment ("local " ^ exnName ^ " = " ^ result), OptSemicolon
                         ]
-                      @ doExpTo ctx env handler (AssignTo result) (* TODO: tail call *)
+                      @ doExpTo ctx env'' handler (AssignTo result) (* TODO: tail call *)
                       @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator
                         ]
       in putPureTo ctx env dest (stmts, { prec = ~1, exp = [ Fragment result ] })
       end
   | doExpTo ctx env (F.RaiseExp (span as { start = { file, line, column }, ... }, exp)) dest
     = doExpCont ctx env exp
-                (fn (stmts, exp') =>
+                (fn (stmts, env, exp') =>
                     case dest of
-                        Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ], { prec = 0, exp = [ Fragment "nil" ] })
+                        Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ], env, { prec = 0, exp = [ Fragment "nil" ] })
                       | _ => stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ]
                 )
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
-                (fn (stmts1, exp1') =>
+                (fn (stmts1, env, exp1') =>
                     let fun doElseIf env (F.IfThenElseExp(e1, e2, e3)) dest'
                             = doExpCont ctx env e1
-                                        (fn (s1, e1') =>
+                                        (fn (s1, env, e1') =>
                                             if List.null s1 then
                                                 [ Indent, Fragment "elseif " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
                                                 @ doExpTo ctx env e2 dest'
@@ -633,14 +755,15 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                    @ [ DecreaseIndent ]
                     in case dest of
                            Continue cont => let val result = genSym ctx
+                                                val env' = addSymbol (env, result)
                                             in cont (stmts1
                                                      @ [ Indent, Fragment ("local " ^ result), LineTerminator
                                                        , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                     @ doExpTo ctx env exp2 (AssignTo result)
+                                                     @ doExpTo ctx env' exp2 (AssignTo result)
                                                      @ [ DecreaseIndent ]
-                                                     @ doElseIf env exp3 (AssignTo result)
+                                                     @ doElseIf env' exp3 (AssignTo result)
                                                      @ [ Indent, Fragment "end", LineTerminator ]
-                                                    , { prec = ~1, exp = [ Fragment result ] })
+                                                    , env', { prec = ~1, exp = [ Fragment result ] })
                                             end
                          | _ => stmts1
                                 @ [ Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
@@ -657,14 +780,14 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
     = if Vector.length xs = 0 then
           putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_nil" ] })
       else
-          mapCont (fn (e, cont) => doExpCont ctx env e cont)
+          mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                   (Vector.foldr (op ::) [] xs)
                   (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                             in putPureTo ctx env dest (stmts, { prec = ~2, exp = Fragment ("_list{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
                             end
                   )
   | doExpTo ctx env (F.VectorExp (xs, _)) dest
-    = mapCont (fn (e, cont) => doExpCont ctx env e cont)
+    = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
               (Vector.foldr (op ::) [] xs)
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                         in putPureTo ctx env dest (stmts, { prec = ~1, exp = Fragment ("{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
@@ -673,7 +796,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
   | doExpTo ctx env (F.TyAbsExp (_, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.RecordEqualityExp fields) dest
-    = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, exp') => cont (stmts, (label, exp'))))
+    = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, exp') => cont (stmts, (label, exp'))))
               fields
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
                         in putPureTo ctx env dest (List.concat stmts
@@ -683,20 +806,20 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                   )
                         end
               )
-  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
-  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
+  | doExpTo ctx env (F.DataTagExp exp) dest = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
+  | doExpTo ctx env (F.DataPayloadExp exp) dest = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
   | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
     = let val valMap' = Syntax.VIdMap.listItemsi valMap
           val strMap' = Syntax.StrIdMap.listItemsi strMap
           val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
-      in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+      in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                  valMap'
                  (fn valMap' => let val (stmts, valFields) = ListPair.unzip valMap'
-                                in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                                in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                            strMap'
                                            (fn strMap' =>
                                                let val (stmts', strFields) = ListPair.unzip strMap'
-                                               in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+                                               in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                                           exnTagMap'
                                                           (fn exnTagMap' => let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
                                                                                 val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
@@ -720,35 +843,38 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                                          | NONE => NONE
                                                                      in case builtin of
                                                                             SOME luaExpr => putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment luaExpr ] }) (* TODO: prec for true, false, nil *)
-                                                                          | NONE => doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "]") ] }))
+                                                                          | NONE => doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "]") ] }))
                                                                      end
-  | doExpTo ctx env (exp as F.StructureProjectionExp (exp', Syntax.MkStrId name)) dest = doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "]") ] }))
+  | doExpTo ctx env (exp as F.StructureProjectionExp (exp', Syntax.MkStrId name)) dest = doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "]") ] }))
   | doExpTo ctx env (exp as F.ExTagProjectionExp (exp', vid)) dest = let val name = Syntax.getVIdName vid
-                                                                     in doExpCont ctx env exp' (fn (stmts, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (name ^ ".tag") ^ "]") ] }))
+                                                                     in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (name ^ ".tag") ^ "]") ] }))
                                                                      end
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
     = let val luavid = VIdToLua v
-      in [ Indent, Fragment ("local " ^ luavid), LineTerminator ] @ doExpTo ctx env exp (AssignTo luavid)
+          val (env', dec) = declareIfNotHoisted (env, [luavid])
+      in dec @ doExpTo ctx env' exp (AssignTo luavid)
       end
   | doDec ctx env (F.ValDec (F.TupleBind([], exp)))
     = doExpTo ctx env exp Discard
   | doDec ctx env (F.ValDec (F.TupleBind(vars, exp)))
-    = let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-          val decs = [ Indent, Fragment ("local " ^ String.concatWith ", " vars'), LineTerminator ]
-      in decs @ doExpTo ctx env exp (UnpackingAssignTo vars')
+    = let val vars = List.map (VIdToLua o #1) vars
+          val (env', decs) = declareIfNotHoisted (env, vars)
+      in decs @ doExpTo ctx env' exp (UnpackingAssignTo vars)
       end
   | doDec ctx env (F.RecValDec valbinds)
-    = let val (decs, assignments) = ListPair.unzip (List.map (fn F.SimpleBind (v,_,exp) => let val v' = VIdToLua v
-                                                                                           in ([ Indent, Fragment ("local " ^ v'), LineTerminator ], doExpTo ctx env exp (AssignTo v'))
-                                                                                           end
-                                                             | F.TupleBind ([], exp) => ([], doExpTo ctx env exp Discard)
-                                                             | F.TupleBind (vars, exp) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-                                                                                          in ([ Indent, Fragment ("local " ^ String.concatWith ", " vars'), LineTerminator ], doExpTo ctx env exp (UnpackingAssignTo vars'))
-                                                                                          end
-                                                             ) valbinds)
-      in List.foldr (op @) (List.concat assignments) decs
+    = let val (decs, assignments) = List.foldr (fn (F.SimpleBind (v,_,exp), (decs, assignments)) => let val v' = VIdToLua v
+                                                                                                        val (env, dec) = declareIfNotHoisted (env, [v'])
+                                                                                                    in (dec @ decs, doExpTo ctx env exp (AssignTo v') @ assignments)
+                                                                                                    end
+                                               | (F.TupleBind ([], exp), (decs, assignments)) => (decs, doExpTo ctx env exp Discard @ assignments)
+                                               | (F.TupleBind (vars, exp), (decs, assignments)) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
+                                                                                                       val (env, dec) = declareIfNotHoisted (env, vars')
+                                                                                                   in (dec @ decs, doExpTo ctx env exp (UnpackingAssignTo vars') @ assignments)
+                                                                                                   end
+                                               ) ([], []) valbinds
+      in decs @ assignments
       end
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
@@ -757,8 +883,8 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
           val tagName' = VIdToLua tagName
       in [ Indent, Fragment ("local " ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
          @ (case payloadTy of
-                NONE => [ Indent, Fragment ("local " ^ conName' ^ " = { tag = " ^ tagName' ^ " }"), LineTerminator ]
-              | SOME _ => [ Indent, Fragment ("local function " ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
+                NONE => [ Indent, Fragment ((if isHoisted (env, conName') then "" else "local ") ^ conName' ^ " = { tag = " ^ tagName' ^ " }"), LineTerminator ]
+              | SOME _ => [ Indent, Fragment ((if isHoisted (env, conName') then "function " else "local function ") ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
                           , Indent, Fragment ("return { tag = " ^ tagName' ^ ", payload = payload }"), LineTerminator
                           , DecreaseIndent, Indent, Fragment "end", LineTerminator
                           ]
@@ -766,15 +892,22 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
       end
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
+  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, List.map VIdToLua (USyntax.VIdSet.toList hoist))
+                                                    in dec
+                                                       @ [ Indent, Fragment "do", LineTerminator, IncreaseIndent ]
+                                                       @ doDecs ctx env decs
+                                                       @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
+                                                    end
+  | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
 and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
-and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Indent, Fragment ("local " ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }"), LineTerminator ]
-  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = [ Indent, Fragment ("local function " ^ VIdToLua vid ^ "(x)"), LineTerminator, IncreaseIndent
+and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Indent, Fragment ((if isHoisted (env, VIdToLua vid) then "" else "local ") ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }"), LineTerminator ]
+  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = [ Indent, Fragment ((if isHoisted (env, VIdToLua vid) then "function " else "local function ") ^ VIdToLua vid ^ "(x)"), LineTerminator, IncreaseIndent
                                                                             , Indent, Fragment ("return { tag = " ^ toLuaStringLit name ^ ", payload = x }"), LineTerminator
                                                                             , DecreaseIndent, Indent, Fragment "end", LineTerminator
                                                                             ]
 
-fun doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
-  | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, e) => cont (stmts, (label, e))))
+and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
+  | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                                      (Vector.foldr (op ::) [] fields)
                                                      (fn ys => let val (stmts, fields') = ListPair.unzip ys
                                                                in putPureTo ctx env Return ( List.concat stmts

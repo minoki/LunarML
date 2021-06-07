@@ -135,6 +135,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                 end
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
+            | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
+                                                 in (env, F.GroupDec (v, decs))
+                                                 end
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           and doDatBind (F.DatBind (tyvars, tycon, conbinds), { dataConMap, exnConMap })
@@ -236,7 +239,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | isExhaustive env (F.RecordPat (row, _)) = List.all (fn (_, e) => isExhaustive env e) row
             | isExhaustive env (F.ConPat (longvid, pat, _)) = false (* TODO *)
             | isExhaustive env (F.LayeredPat (_, _, innerPat)) = isExhaustive env innerPat
-          fun doDecs env [] = (env, [])
+          and doDecs env [] = (env, [])
             | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
                                              val (env'', decs') = doDecs env' decs
                                          in (env'', dec' :: decs')
@@ -340,6 +343,13 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (dec as F.ExceptionDec _) = (env, SOME dec) (* TODO *)
             | doDec env (F.ExportValue exp) = (env, SOME (F.ExportValue (doExp env exp)))
             | doDec env (F.ExportModule fields) = (env, SOME (F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields)))
+            | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
+                                                 in (env, case decs of
+                                                              [] => NONE
+                                                            | [dec] => SOME dec
+                                                            | _ => SOME (F.GroupDec (v, decs))
+                                                    )
+                                                 end
           and doValBind env (F.SimpleBind (vid, ty, exp)) = let val exp' = doExp env exp
                                                             in if isSimpleExp exp' then
                                                                    ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, exp') }, NONE)
@@ -350,7 +360,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                              val env' = List.foldl removeFromEnv env vars
                                                          in (env', SOME (F.TupleBind (binds, doExp env exp)))
                                                          end
-          fun doDecs env [] = (env, [])
+          and doDecs env [] = (env, [])
             | doDecs env (dec :: decs) = (case doDec env dec of
                                               (env', NONE) => doDecs env' decs
                                             | (env', SOME dec') => let val (env'', decs') = doDecs env' decs
@@ -428,9 +438,12 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (dec as F.ExceptionDec datbinds) = (env, dec)
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
+            | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
+                                                 in (env, F.GroupDec (v, decs))
+                                                 end
           and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
-          fun doDecs env [] = (env, [])
+          and doDecs env [] = (env, [])
             | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
                                              val (env'', decs') = doDecs env' decs
                                          in (env'', dec' :: decs')
@@ -700,8 +713,28 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
   | doDec (used, F.ExportModule fields) = let val fields' = Vector.map (fn (label, exp) => (label, doExp exp)) fields
                                           in (Vector.foldl (fn ((_, (used', _)), acc) => USyntax.VIdSet.union (used', acc)) used fields', [F.ExportModule (Vector.map (fn (label, (_, exp)) => (label, exp)) fields')])
                                           end
+  | doDec (used, F.GroupDec (_, decs)) = let val (used', decs) = doDecs (used, decs)
+                                         in (used', case decs of
+                                                        [] => decs
+                                                      | [_] => decs
+                                                      | _ => let val defined = definedInDecs(decs)
+                                                             in [F.GroupDec (SOME (USyntax.VIdSet.intersection (used, defined)), decs)]
+                                                             end
+                                            )
+                                         end
 (* doDecs : USyntax.VIdSet.set * F.Dec list -> USyntax.VIdSet.set * F.Dec list *)
-fun doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
+and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
                                                                 end) (used, []) decs
+and definedInDecs decs = List.foldl (fn (dec, s) => USyntax.VIdSet.union(definedInDec dec, s)) USyntax.VIdSet.empty decs
+and definedInDec (F.ValDec valbind) = definedInValBind valbind
+  | definedInDec (F.RecValDec valbinds) = List.foldl (fn (valbind, s) => USyntax.VIdSet.union(definedInValBind valbind, s)) USyntax.VIdSet.empty valbinds
+  | definedInDec (F.IgnoreDec _) = USyntax.VIdSet.empty
+  | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind(vid, _), s) => USyntax.VIdSet.add(s, vid)) s conbinds) USyntax.VIdSet.empty datbinds
+  | definedInDec (F.ExceptionDec { conName, tagName, ... }) = USyntax.VIdSet.add(USyntax.VIdSet.singleton conName, tagName)
+  | definedInDec (F.ExportValue _) = USyntax.VIdSet.empty (* should not occur *)
+  | definedInDec (F.ExportModule _) = USyntax.VIdSet.empty (* should not occur *)
+  | definedInDec (F.GroupDec(_, decs)) = definedInDecs decs (* should not occur *)
+and definedInValBind (F.SimpleBind (vid, _, _)) = USyntax.VIdSet.singleton vid
+  | definedInValBind (F.TupleBind (binds, _)) = List.foldl (fn ((vid, _), s) => USyntax.VIdSet.add(s, vid)) USyntax.VIdSet.empty binds
 end (* structure DeadCodeElimination *)

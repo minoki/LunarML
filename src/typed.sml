@@ -153,6 +153,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
+             | GroupDec of SourcePos.span * Dec list
      and ValBind' = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                   | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
@@ -180,6 +181,7 @@ datatype StrExp = StructExp of { sourceSpan : SourcePos.span
                 | LetInStrExp of SourcePos.span * StrDec list * StrExp
      and StrDec = CoreDec of SourcePos.span * Dec
                 | StrBindDec of SourcePos.span * StrId * StrExp * Signature
+                | GroupStrDec of SourcePos.span * StrDec list
 
 datatype TopDec = StrDec of StrDec
                 (* | SigDec of Syntax.SigId * SigExp *)
@@ -276,6 +278,7 @@ and print_Dec (ValDec'(_,valbinds)) = "ValDec'(" ^ Syntax.print_list print_ValBi
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
+  | print_Dec (GroupDec _) = "GroupDec"
 and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
 and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
 and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
@@ -368,6 +371,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
             | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
             | doDec(DatatypeDec(span, datbinds)) = DatatypeDec(span, List.map doDatBind datbinds)
             | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
+            | doDec(GroupDec(span, decs)) = GroupDec(span, List.map doDec decs)
           and doValBind'(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
             | doValBind'(PolyVarBind(span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
                                                                                                             val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
@@ -410,6 +414,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
             | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, List.map doStrDec strdecs, doStrExp strexp)
           and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec dec)
             | doStrDec(StrBindDec(span, strid, strexp, s)) = StrBindDec(span, strid, doStrExp strexp, doSignature s)
+            | doStrDec(GroupStrDec(span, decs)) = GroupStrDec(span, List.map doStrDec decs)
           fun doTopDec(StrDec strdec) = StrDec(doStrDec strdec)
       in { doExp = doExp
          , doDec = doDec
@@ -460,6 +465,7 @@ and freeTyVarsInDec(bound, dec)
          | TypeDec(_, typbinds) => List.foldl (fn (typbind, acc) => TyVarSet.union(acc, freeTyVarsInTypBind(bound, typbind))) TyVarSet.empty typbinds
          | DatatypeDec(_, datbinds) => List.foldl (fn (datbind, acc) => TyVarSet.union(acc, freeTyVarsInDatBind(bound, datbind))) TyVarSet.empty datbinds
          | ExceptionDec(_, exbinds) => List.foldl (fn (exbind, acc) => TyVarSet.union(acc, freeTyVarsInExBind(bound, exbind))) TyVarSet.empty exbinds
+         | GroupDec(_, decs) => freeTyVarsInDecs(bound, decs)
       )
 and freeTyVarsInValBind'(bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => TyVarSet.union(acc, freeTyVarsInTy(bound, ty))) (freeTyVarsInExp(bound, exp)) xs
   | freeTyVarsInValBind'(bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = let val bound' = TyVarSet.addList(bound, List.map #1 tyvars)
@@ -494,6 +500,7 @@ fun freeTyVarsInStrExp(bound, StructExp { ... }) = TyVarSet.empty (* TODO: tyCon
   | freeTyVarsInStrExp(bound, LetInStrExp(_, strdecs, strexp)) = TyVarSet.union(freeTyVarsInStrDecs(bound, strdecs), freeTyVarsInStrExp(bound, strexp))
 and freeTyVarsInStrDec(bound, CoreDec(_, dec)) = freeTyVarsInDec(bound, dec)
   | freeTyVarsInStrDec(bound, StrBindDec(_, _, strexp, s)) = TyVarSet.union(freeTyVarsInStrExp(bound, strexp), freeTyVarsInSignature(bound, s))
+  | freeTyVarsInStrDec(bound, GroupStrDec(_, decs)) = freeTyVarsInStrDecs(bound, decs)
 and freeTyVarsInStrDecs(bound, decs) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInStrDec(bound, dec))) TyVarSet.empty decs
 
 fun freeTyVarsInTopDec(bound, StrDec(strdec)) = freeTyVarsInStrDec(bound, strdec)
