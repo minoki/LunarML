@@ -9,6 +9,8 @@ datatype SLabel = ValueLabel of Syntax.VId
                 | StructLabel of Syntax.StrId
                 | ExnTagLabel of Syntax.VId (* of constructor *)
                 | EqualityLabel of Syntax.TyCon
+datatype Path = Root of USyntax.VId
+              | Child of Path * SLabel
 datatype Ty = TyVar of TyVar
             | RecordType of (Syntax.Label * Ty) list
             | TyCon of Ty list * TyCon
@@ -25,7 +27,7 @@ datatype Pat = WildcardPat
              | SConPat of Syntax.SCon
              | VarPat of USyntax.VId * Ty
              | RecordPat of (Syntax.Label * Pat) list * bool
-             | ConPat of USyntax.LongVId * Pat option * Ty list
+             | ConPat of Path * Pat option * Ty list
              | LayeredPat of USyntax.VId * Ty * Pat
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
@@ -50,10 +52,10 @@ datatype Exp = SConExp of Syntax.SCon
              | RecordEqualityExp of (Syntax.Label * Exp) list
              | DataTagExp of Exp (* * TyCon *)
              | DataPayloadExp of Exp (* * USyntax.LongVId * TyCon *)
-             | StructExp of { valMap : Exp Syntax.VIdMap.map
-                            , strMap : Exp Syntax.StrIdMap.map
-                            , exnTagMap : Exp Syntax.VIdMap.map
-                            , equalityMap : Exp Syntax.TyConMap.map
+             | StructExp of { valMap : Path Syntax.VIdMap.map
+                            , strMap : Path Syntax.StrIdMap.map
+                            , exnTagMap : Path Syntax.VIdMap.map
+                            , equalityMap : Path Syntax.TyConMap.map
                             }
              | SProjectionExp of Exp * SLabel
      (* PackExp *)
@@ -65,7 +67,7 @@ datatype Exp = SConExp of Syntax.SCon
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
-             | ExceptionRepDec of { conName : USyntax.VId, conExp : Exp, tagExp : Exp, payloadTy : Ty option }
+             | ExceptionRepDec of { conName : USyntax.VId, conPath : Path, tagPath : Path, payloadTy : Ty option }
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of USyntax.VIdSet.set option * Dec list
@@ -81,6 +83,10 @@ fun TupleExp xs = let fun doFields i nil = nil
 fun strIdToVId(USyntax.MkStrId(name, n)) = USyntax.MkVId(name, n)
 fun LongVarExp(USyntax.MkShortVId vid) = VarExp vid
   | LongVarExp(USyntax.MkLongVId(strid0, strids, vid)) = SProjectionExp (List.foldl (fn (label, x) => SProjectionExp (x, StructLabel label)) (VarExp (strIdToVId strid0)) strids, ValueLabel vid)
+fun PathToExp(Root vid) = VarExp vid
+  | PathToExp(Child (parent, label)) = SProjectionExp (PathToExp parent, label)
+fun rootOfPath(Root vid) = vid
+  | rootOfPath(Child (parent, _)) = rootOfPath parent
 fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(InitialEnv.VId_false))
 fun SimplifyingAndalsoExp(a as VarExp(vid), b) = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                                                      b
@@ -156,7 +162,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doPat (pat as SConPat _) = pat
           | doPat (VarPat (vid, ty)) = VarPat (vid, doTy ty)
           | doPat (RecordPat (fields, wildcard)) = RecordPat (List.map (fn (label, pat) => (label, doPat pat)) fields, wildcard)
-          | doPat (ConPat (longvid, optPat, tyargs)) = ConPat (longvid, Option.map doPat optPat, List.map doTy tyargs)
+          | doPat (ConPat (path, optPat, tyargs)) = ConPat (path, Option.map doPat optPat, List.map doTy tyargs)
           | doPat (LayeredPat (vid, ty, pat)) = LayeredPat (vid, doTy ty, doPat pat)
         fun doConBind (ConBind (vid, optTy)) = ConBind (vid, Option.map doTy optTy)
         fun doDatBind (DatBind (tyvars, tycon, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
@@ -183,10 +189,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doExp (RecordEqualityExp fields) = RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
           | doExp (DataTagExp exp) = DataTagExp (doExp exp)
           | doExp (DataPayloadExp exp) = DataPayloadExp (doExp exp)
-          | doExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = StructExp { valMap = Syntax.VIdMap.map doExp valMap
-                                                                                     , strMap = Syntax.StrIdMap.map doExp strMap
-                                                                                     , exnTagMap = Syntax.VIdMap.map doExp exnTagMap
-                                                                                     , equalityMap = Syntax.TyConMap.map doExp equalityMap
+          | doExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = StructExp { valMap = valMap
+                                                                                     , strMap = strMap
+                                                                                     , exnTagMap = exnTagMap
+                                                                                     , equalityMap = equalityMap
                                                                                      }
           | doExp (SProjectionExp (exp, label)) = SProjectionExp (doExp exp, label)
         and doDec (ValDec valbind) = ValDec (doValBind valbind)
@@ -194,7 +200,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
-          | doDec (ExceptionRepDec { conName, conExp, tagExp, payloadTy }) = ExceptionRepDec { conName = conName, conExp = doExp conExp, tagExp = doExp tagExp, payloadTy = Option.map doTy payloadTy }
+          | doDec (ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = ExceptionRepDec { conName = conName, conPath = conPath, tagPath = tagPath, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
@@ -224,6 +230,8 @@ val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
 val print_LongVId = USyntax.print_LongVId
 val print_TyCon = USyntax.print_TyCon
+fun print_Path (Root vid) = USyntax.print_VId vid
+  | print_Path (Child (parent, label)) = print_Path parent ^ "/.." (* TODO *)
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
@@ -244,7 +252,7 @@ fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
   | print_Pat (VarPat(vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (ConPat(longvid, pat, tyargs)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (ConPat(path, pat, tyargs)) = "ConPat(" ^ print_Path path ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat(x, false)) = (case Syntax.extractTuple (1, x) of
                                            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -289,11 +297,17 @@ end (* structure PrettyPrint *)
 end (* structure FSyntax *)
 
 structure ToFSyntax = struct
+fun LongStrIdExp(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (label, x) => FSyntax.SProjectionExp (x, FSyntax.StructLabel label)) (FSyntax.VarExp (FSyntax.strIdToVId strid0)) strids
+
+fun LongVIdToPath(USyntax.MkLongVId(strid0, strids, vid)) = FSyntax.Child (List.foldl (fn (strid, p) => FSyntax.Child(p, FSyntax.StructLabel strid)) (FSyntax.Root (FSyntax.strIdToVId strid0)) strids, FSyntax.ValueLabel vid)
+  | LongVIdToPath(USyntax.MkShortVId vid) = FSyntax.Root vid
+fun LongStrIdToPath(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (strid, p) => FSyntax.Child(p, FSyntax.StructLabel strid)) (FSyntax.Root (FSyntax.strIdToVId strid0)) strids
+
 type Context = { nextVId : int ref
                }
 type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
            , equalityForTyConMap : USyntax.LongVId USyntax.TyConMap.map
-           , exnTagMap : FSyntax.Exp USyntax.LongVIdMap.map
+           , exnTagMap : FSyntax.Path USyntax.LongVIdMap.map
            }
 val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                        , equalityForTyConMap = let open Typing InitialEnv
@@ -308,14 +322,14 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                                              ]
                                                end
                        , exnTagMap = let open InitialEnv
-                                     in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                                                   [(LongVId_Match, FSyntax.LongVarExp VId_Match_tag)
-                                                   ,(LongVId_Bind, FSyntax.LongVarExp VId_Bind_tag)
-                                                   ,(LongVId_Div, FSyntax.LongVarExp VId_Div_tag)
-                                                   ,(LongVId_Overflow, FSyntax.LongVarExp VId_Overflow_tag)
-                                                   ,(LongVId_Size, FSyntax.LongVarExp VId_Size_tag)
-                                                   ,(LongVId_Subscript, FSyntax.LongVarExp VId_Subscript_tag)
-                                                   ,(LongVId_Fail, FSyntax.LongVarExp VId_Fail_tag)
+                                     in List.foldl (fn ((con, tag), m) => USyntax.LongVIdMap.insert(m, con, LongVIdToPath tag)) USyntax.LongVIdMap.empty
+                                                   [(LongVId_Match, VId_Match_tag)
+                                                   ,(LongVId_Bind, VId_Bind_tag)
+                                                   ,(LongVId_Div, VId_Div_tag)
+                                                   ,(LongVId_Overflow, VId_Overflow_tag)
+                                                   ,(LongVId_Size, VId_Size_tag)
+                                                   ,(LongVId_Subscript, VId_Subscript_tag)
+                                                   ,(LongVId_Fail, VId_Fail_tag)
                                                    ]
                                      end
                        }
@@ -334,8 +348,6 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
                                              ; USyntax.MkVId(name, n)
                                             end
-
-fun LongStrIdExp(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (label, x) => FSyntax.SProjectionExp (x, FSyntax.StructLabel label)) (FSyntax.VarExp (FSyntax.strIdToVId strid0)) strids
 
 local structure U = USyntax
       structure F = FSyntax
@@ -431,10 +443,10 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                                        in (USyntax.VIdMap.empty, F.RecordPat(List.map doField fields, wildcard)) (* TODO *)
                                                                        end
   | toFPat(ctx, env, U.InstantiatedConPat { sourceSpan = span, longvid, payload = NONE, tyargs, isSoleConstructor })
-    = (USyntax.VIdMap.empty, F.ConPat(longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+    = (USyntax.VIdMap.empty, F.ConPat(LongVIdToPath longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
   | toFPat(ctx, env, U.InstantiatedConPat { sourceSpan = span, longvid, payload = SOME payloadPat, tyargs, isSoleConstructor })
     = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
-      in (USyntax.VIdMap.empty, F.ConPat(longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+      in (USyntax.VIdMap.empty, F.ConPat(LongVIdToPath longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
       end
   | toFPat(ctx, env, U.TypedPat(_, pat, _)) = toFPat(ctx, env, pat)
   | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
@@ -590,8 +602,8 @@ and toFDecs(ctx, env, []) = (env, [])
       end
   | toFDecs(ctx, env as { exnTagMap, ... }, U.ExceptionDec(span, exbinds) :: decs)
     = let val (exnTagMap, exbinds) = List.foldr (fn (U.ExBind(span, vid as USyntax.MkVId(name, _), optTy), (exnTagMap, xs)) =>
-                                                    let val tag = freshVId(ctx, name)
-                                                    in ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), F.VarExp(tag))
+                                                    let val tag = freshVId(ctx, name ^ "_tag")
+                                                    in ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), F.Root(tag))
                                                        , F.ExceptionDec { conName = vid
                                                                         , tagName = tag
                                                                         , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
@@ -600,13 +612,13 @@ and toFDecs(ctx, env, []) = (env, [])
                                                     end
                                                 | (U.ExReplication(span, vid, longvid, optTy), (exnTagMap, xs)) =>
                                                   (case USyntax.LongVIdMap.find(#exnTagMap env, longvid) of
-                                                       SOME exp => ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), exp)
-                                                                   , F.ExceptionRepDec { conName = vid
-                                                                                       , conExp = F.LongVarExp longvid
-                                                                                       , tagExp = exp
-                                                                                       , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
-                                                                                       } :: xs
-                                                                   )
+                                                       SOME tagPath => ( USyntax.LongVIdMap.insert(exnTagMap, U.MkShortVId(vid), tagPath)
+                                                                       , F.ExceptionRepDec { conName = vid
+                                                                                           , conPath = LongVIdToPath longvid
+                                                                                           , tagPath = tagPath
+                                                                                           , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
+                                                                                           } :: xs
+                                                                       )
                                                      | NONE => raise Fail ("exception not found: " ^ USyntax.print_LongVId longvid)
                                                   )
                                                 ) (exnTagMap, []) exbinds
@@ -657,7 +669,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                       , F.VarExp(param)
                                                       , paramTy
                                                       , List.foldr (fn (U.ConBind (span, conName, NONE), rest) =>
-                                                                       let val conPat = F.ConPat(U.MkShortVId(conName), NONE, tyvars'')
+                                                                       let val conPat = F.ConPat(F.Root(conName), NONE, tyvars'')
                                                                        in ( F.TuplePat [conPat, conPat]
                                                                           , F.VarExp(InitialEnv.VId_true)
                                                                           ) :: rest
@@ -667,7 +679,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                                          val payload2 = freshVId(ctx, "b")
                                                                          val payloadEq = getEquality(ctx, env'', payloadTy)
                                                                          val payloadTy = toFTy(ctx, env, payloadTy)
-                                                                     in ( F.TuplePat [F.ConPat(U.MkShortVId(conName), SOME (F.VarPat(payload1, payloadTy)), tyvars''), F.ConPat(U.MkShortVId(conName), SOME (F.VarPat(payload2, payloadTy)), tyvars'')]
+                                                                     in ( F.TuplePat [F.ConPat(F.Root(conName), SOME (F.VarPat(payload1, payloadTy)), tyvars''), F.ConPat(F.Root(conName), SOME (F.VarPat(payload2, payloadTy)), tyvars'')]
                                                                         , F.AppExp(payloadEq, F.TupleExp [F.VarExp(payload1), F.VarExp(payload2)])
                                                                         ) :: rest
                                                                      end
@@ -709,30 +721,36 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap, variables } : U.Signatur
                    } (* TODO: pack existentials *)
       end
 fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap })
-    = (env, F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, _) => F.LongVarExp(longvid)) valMap
-                        , strMap = Syntax.StrIdMap.map LongStrIdExp strMap
-                        , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, ids) => if ids = Syntax.ExceptionConstructor then
-                                                                                         case USyntax.LongVIdMap.find (#exnTagMap env, longvid) of
-                                                                                             SOME exp => SOME exp
-                                                                                           | NONE => raise Fail ("exception tag not found for " ^ USyntax.print_LongVId longvid ^ "\n" ^ String.concatWith ", " (List.map (fn (k,v) => USyntax.print_LongVId k ^ ": " ^ F.PrettyPrint.print_Exp v) (USyntax.LongVIdMap.listItemsi (#exnTagMap env))))
-                                                                                     else
-                                                                                         NONE
-                                                               ) valMap
-                        , equalityMap = Syntax.TyConMap.mapPartial (fn { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
-                                                                       let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyCon_bool))
-                                                                           val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
-                                                                           val env' = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
-                                                                                      , equalityForTyConMap = #equalityForTyConMap env
-                                                                                      , exnTagMap = #exnTagMap env
-                                                                                      }
-                                                                           val body = getEquality(ctx, env', ty)
-                                                                           val body = List.foldr (fn ((tv, eqParam), body) => F.FnExp ( eqParam, eqTy (F.TyVar tv), body)) body tyvars'
-                                                                       in SOME (List.foldr F.TyAbsExp body tyvars)
-                                                                       end
-                                                                   | { admitsEquality = false, ... } => NONE
-                                                                   ) tyConMap
-                        }
-      )
+    = let val equalities = Syntax.TyConMap.foldli (fn (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
+                                                      let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyCon_bool))
+                                                          val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
+                                                          val env' = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
+                                                                     , equalityForTyConMap = #equalityForTyConMap env
+                                                                     , exnTagMap = #exnTagMap env
+                                                                     }
+                                                          val body = getEquality(ctx, env', ty)
+                                                          val body = List.foldr (fn ((tv, eqParam), body) => F.FnExp (eqParam, eqTy (F.TyVar tv), body)) body tyvars'
+                                                          val body = List.foldr F.TyAbsExp body tyvars
+                                                          val ty = List.foldl (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (toFTy(ctx, env, ty)) tyvars
+                                                          val ty = List.foldr F.ForallType ty tyvars
+                                                          val vid = freshVId(ctx, "eq")
+                                                      in (tycon, vid, body, ty) :: xs
+                                                      end
+                                                  | (_, { admitsEquality = false, ... }, xs) => xs
+                                                  ) [] tyConMap
+          val exp = F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, ids) => LongVIdToPath(longvid)) valMap
+                                , strMap = Syntax.StrIdMap.map LongStrIdToPath strMap
+                                , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, ids) => if ids = Syntax.ExceptionConstructor then
+                                                                                                 case USyntax.LongVIdMap.find (#exnTagMap env, longvid) of
+                                                                                                     SOME path => SOME path
+                                                                                                   | NONE => raise Fail ("exception tag not found for " ^ USyntax.print_LongVId longvid)
+                                                                                             else
+                                                                                                 NONE
+                                                                       ) valMap
+                                , equalityMap = List.foldl (fn ((tycon, vid, _, _), m) => Syntax.TyConMap.insert(m, tycon, F.Root vid)) Syntax.TyConMap.empty equalities
+                                }
+      in (env, List.foldl (fn ((_, vid, fnBody, ty), exp) => F.LetExp(F.ValDec(F.SimpleBind(vid, ty, fnBody)), exp)) exp equalities)
+      end
   | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, LongStrIdExp longstrid)
   | strExpToFExp(ctx, env, U.TransparentConstraintExp _) = raise Fail "transparent constraint: not implemented yet"
   | strExpToFExp(ctx, env, U.OpaqueConstraintExp _) = raise Fail "opaque constraint: not implemented yet"
@@ -745,15 +763,15 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
     = let val vid = F.strIdToVId strid
           val ty = signatureToTy(ctx, env, s)
           val (env', exp) = strExpToFExp(ctx, env, strexp)
-          fun updateExnTagMap (strids, { valMap, strMap, ... }, e, exnTagMap)
-              = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert(m, U.MkLongVId(strid, strids, vid), F.SProjectionExp(e, F.ExnTagLabel vid))
+          fun updateExnTagMap (strids, { valMap, strMap, ... }, path, exnTagMap)
+              = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert(m, U.MkLongVId(strid, strids, vid), F.Child(path, F.ExnTagLabel vid))
                                                          | (_, (_, _), m) => m
                                                          ) exnTagMap valMap
-                in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, m) => updateExnTagMap(strids @ [strid], s, F.SProjectionExp(e, F.StructLabel strid), m)) exnTagMap strMap
+                in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, m) => updateExnTagMap(strids @ [strid], s, F.Child(path, F.StructLabel strid), m)) exnTagMap strMap
                 end
           val env'' = { equalityForTyVarMap = #equalityForTyVarMap env
                       , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env, #equalityForTyConMap env')
-                      , exnTagMap = updateExnTagMap ([], s, F.VarExp vid, #exnTagMap env)
+                      , exnTagMap = updateExnTagMap ([], s, F.Root vid, #exnTagMap env)
                       }
       in (env'', [F.ValDec(F.SimpleBind(vid, ty, exp))]) (* TODO: unpack existentials *)
       end
