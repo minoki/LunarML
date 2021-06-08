@@ -442,9 +442,9 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                                                                      end
                                                                        in (USyntax.VIdMap.empty, F.RecordPat(List.map doField fields, wildcard)) (* TODO *)
                                                                        end
-  | toFPat(ctx, env, U.InstantiatedConPat { sourceSpan = span, longvid, payload = NONE, tyargs, isSoleConstructor })
+  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = NONE, tyargs, isSoleConstructor })
     = (USyntax.VIdMap.empty, F.ConPat(LongVIdToPath longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
-  | toFPat(ctx, env, U.InstantiatedConPat { sourceSpan = span, longvid, payload = SOME payloadPat, tyargs, isSoleConstructor })
+  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = SOME payloadPat, tyargs, isSoleConstructor })
     = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
       in (USyntax.VIdMap.empty, F.ConPat(LongVIdToPath longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
       end
@@ -453,7 +453,7 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
                                                               in (USyntax.VIdMap.empty, F.LayeredPat(vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
                                                               end
 and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
-  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
+  | toFExp(ctx, env, U.VarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
     = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
           getEquality(ctx, env, tyarg)
       else
@@ -470,7 +470,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                        else
                            F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg))
           )
-  | toFExp(ctx, env, U.InstantiatedVarExp(span, longvid, _, tyargs))
+  | toFExp(ctx, env, U.VarExp(span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
                      if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
                          F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
@@ -583,12 +583,12 @@ and getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
                                                          end
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs(ctx, env, []) = (env, [])
-  | toFDecs(ctx, env, U.ValDec'(span, valbinds) :: decs)
+  | toFDecs(ctx, env, U.ValDec(span, valbinds) :: decs)
     = let val dec = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec @ decs)
       end
-  | toFDecs(ctx, env, U.RecValDec'(span, valbinds) :: decs)
+  | toFDecs(ctx, env, U.RecValDec(span, valbinds) :: decs)
     = let val dec = F.RecValDec (List.map (doValBind ctx env) valbinds)
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec :: decs)

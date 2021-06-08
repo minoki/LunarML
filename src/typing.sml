@@ -158,7 +158,7 @@ fun isSoleConstructor(ctx : Context, env : Env, span : SourcePos.span, longvid: 
 (* The Definition, 4.7 Non-expansive Expressions *)
 (* isNonexpansive : Env * USyntax.Exp -> bool *)
 fun isNonexpansive(env : Env, USyntax.SConExp _) = true
-  | isNonexpansive(env, USyntax.InstantiatedVarExp _) = true (* <op> longvid *)
+  | isNonexpansive(env, USyntax.VarExp _) = true (* <op> longvid *)
   | isNonexpansive(env, USyntax.RecordExp(_, fields)) = List.all (fn (_, e) => isNonexpansive(env, e)) fields
   | isNonexpansive(env, USyntax.TypedExp(_, e, _)) = isNonexpansive(env, e)
   | isNonexpansive(env, USyntax.AppExp(_, conexp, e)) = isConexp(env, conexp) andalso isNonexpansive(env, e)
@@ -167,10 +167,10 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
-  | isConexp(env, USyntax.InstantiatedVarExp(_, _, Syntax.ValueVariable, _)) = false
-  | isConexp(env, USyntax.InstantiatedVarExp(_, USyntax.MkShortVId(USyntax.MkVId(name, _)), Syntax.ValueConstructor, _)) = name <> "ref"
-  | isConexp(env, USyntax.InstantiatedVarExp(_, USyntax.MkLongVId(_, _, Syntax.MkVId(name)), Syntax.ValueConstructor, _)) = name <> "ref"
-  | isConexp(env, USyntax.InstantiatedVarExp(_, _, Syntax.ExceptionConstructor, _)) = true
+  | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueVariable, _)) = false
+  | isConexp(env, USyntax.VarExp(_, USyntax.MkShortVId(USyntax.MkVId(name, _)), Syntax.ValueConstructor, _)) = name <> "ref"
+  | isConexp(env, USyntax.VarExp(_, USyntax.MkLongVId(_, _, Syntax.MkVId(name)), Syntax.ValueConstructor, _)) = name <> "ref"
+  | isConexp(env, USyntax.VarExp(_, _, Syntax.ExceptionConstructor, _)) = true
   | isConexp(env, _) = false
 
 (* isExhaustive : Context * Env * USyntax.Pat -> bool *)
@@ -178,8 +178,8 @@ fun isExhaustive(ctx, env : Env, USyntax.WildcardPat _) = true
   | isExhaustive(ctx, env, USyntax.SConPat _) = false
   | isExhaustive(ctx, env, USyntax.VarPat _) = true
   | isExhaustive(ctx, env, USyntax.RecordPat{fields, ...}) = List.all (fn (_, e) => isExhaustive(ctx, env, e)) fields
-  | isExhaustive(ctx, env, USyntax.InstantiatedConPat{ sourceSpan, longvid, payload = NONE, tyargs, isSoleConstructor }) = isSoleConstructor
-  | isExhaustive(ctx, env, USyntax.InstantiatedConPat{ sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor }) = isSoleConstructor andalso isExhaustive(ctx, env, innerPat)
+  | isExhaustive(ctx, env, USyntax.ConPat{ sourceSpan, longvid, payload = NONE, tyargs, isSoleConstructor }) = isSoleConstructor
+  | isExhaustive(ctx, env, USyntax.ConPat{ sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor }) = isSoleConstructor andalso isExhaustive(ctx, env, innerPat)
   | isExhaustive(ctx, env, USyntax.TypedPat(_, innerPat, _)) = isExhaustive(ctx, env, innerPat)
   | isExhaustive(ctx, env, USyntax.LayeredPat(_, _, _, innerPat)) = isExhaustive(ctx, env, innerPat)
 
@@ -529,13 +529,13 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
                                             end
 
                 in case optInnerPat of
-                       NONE => (ty, Syntax.VIdMap.empty, U.InstantiatedConPat { sourceSpan = span, longvid = longvid, payload = NONE, tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
+                       NONE => (ty, Syntax.VIdMap.empty, U.ConPat { sourceSpan = span, longvid = longvid, payload = NONE, tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
                      | SOME innerPat =>
                        (case ty of
                             U.FnType(span', argTy, resultTy) =>
                             let val (argTy', innerVars, innerPat') = typeCheckPat(ctx, env, innerPat)
                             in addConstraint(ctx, env, U.EqConstr(span, argTy, argTy'))
-                             ; (resultTy, innerVars, U.InstantiatedConPat { sourceSpan = span, longvid = longvid, payload = SOME innerPat', tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
+                             ; (resultTy, innerVars, U.ConPat { sourceSpan = span, longvid = longvid, payload = SOME innerPat', tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
                             end
                           | _ => emitError(ctx, [span], "invalid pattern")
                        )
@@ -592,7 +592,7 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
   | typeCheckExp(ctx, env, exp as S.VarExp(span, longvid as Syntax.MkQualified(_, vid)))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
            SOME (longvid, tysc, ids) => let val (ty, tyargs) = instantiate(ctx, span, tysc)
-                               in (ty, U.InstantiatedVarExp(span, longvid, ids, tyargs))
+                               in (ty, U.VarExp(span, longvid, ids, tyargs))
                                end
          | NONE => emitError(ctx, [span], "unknown value name " ^ Syntax.getVIdName vid)
       )
@@ -657,7 +657,7 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
           val fnExp = case matches of
                           [(U.VarPat(span2, vid, _), body)] => U.FnExp(span, vid, argTy, body)
                         | _ => let val vid = newVId(ctx, Syntax.MkVId "a")
-                               in U.FnExp(span, vid, argTy, U.CaseExp(span, U.InstantiatedVarExp(span, U.MkShortVId(vid), Syntax.ValueVariable, []), argTy, matches))
+                               in U.FnExp(span, vid, argTy, U.CaseExp(span, U.VarExp(span, U.MkShortVId(vid), Syntax.ValueVariable, []), argTy, matches))
                                end
       in (U.FnType(span, argTy, retTy), fnExp)
       end
@@ -710,10 +710,10 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                                      val vid' = renewVId ctx vid
                                                                                      val pat' = U.renameVarsInPat (U.VIdMap.insert(U.VIdMap.empty, vid, vid')) pat
                                                                                  in U.CaseExp(espan, exp, ty, if isExhaustive(ctx, env, pat) then
-                                                                                                                  [(pat', U.InstantiatedVarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))]
+                                                                                                                  [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))]
                                                                                                               else
-                                                                                                                  [(pat', U.InstantiatedVarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))
-                                                                                                                  ,(U.WildcardPat span, U.RaiseExp(span, U.InstantiatedVarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
+                                                                                                                  [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))
+                                                                                                                  ,(U.WildcardPat span, U.RaiseExp(span, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
                                                                                                                   ]
                                                                                              )
                                                                                  end
@@ -724,7 +724,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                 val vars' = List.map (fn (vid, _) => (vid, renewVId ctx vid)) vars
                                 val varsMap = List.foldl U.VIdMap.insert' U.VIdMap.empty vars'
                                 val pat' = U.renameVarsInPat varsMap pat
-                                val tup = U.TupleExp(espan, List.map (fn (_, vid') => U.InstantiatedVarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, [])) vars')
+                                val tup = U.TupleExp(espan, List.map (fn (_, vid') => U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, [])) vars')
                                 val valbind' = U.TupleBind( span
                                                           , vars
                                                           , U.CaseExp( espan
@@ -734,7 +734,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                            [(pat', tup)]
                                                                        else
                                                                            [(pat', tup)
-                                                                           ,(U.WildcardPat span, U.RaiseExp(span, U.InstantiatedVarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
+                                                                           ,(U.WildcardPat span, U.RaiseExp(span, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
                                                                            ]
                                                                      )
                                                           )
@@ -769,7 +769,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                       | polyPart ((vid, U.TypeScheme([], _)) :: rest) = polyPart rest
                       | polyPart ((vid, tysc) :: rest) = let val vid' = renewVId ctx vid
                                                              val pat' = USyntax.renameVarsInPat (USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, vid')) pat
-                                                         in U.PolyVarBind(span, vid, tysc, USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat (fn x => x = vid') pat', USyntax.InstantiatedVarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, []))])) :: polyPart rest
+                                                         in U.PolyVarBind(span, vid, tysc, USyntax.CaseExp(espan, exp, expTy, [(USyntax.filterVarsInPat (fn x => x = vid') pat', USyntax.VarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, []))])) :: polyPart rest
                                                          end
                     fun isMonoVar vid = List.exists (fn (vid', U.TypeScheme(tvs, _)) => U.eqVId(vid, vid') andalso List.null tvs) valEnv'L
                     val valbind' = if allPoly then
@@ -782,12 +782,12 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                        in case xs of
                                               [(vid, ty)] => let val vid' = renewVId ctx vid
                                                                  val pat' = USyntax.renameVarsInPat (USyntax.VIdMap.insert(USyntax.VIdMap.empty, vid, vid')) (USyntax.filterVarsInPat isMonoVar pat)
-                                                             in U.PolyVarBind(span, vid, U.TypeScheme([], ty), U.CaseExp(espan, exp, expTy, [(pat', U.InstantiatedVarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, []))])) :: polyPart valEnv'L
+                                                             in U.PolyVarBind(span, vid, U.TypeScheme([], ty), U.CaseExp(espan, exp, expTy, [(pat', U.VarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, []))])) :: polyPart valEnv'L
                                                              end
                                             | _ => let val vars' = List.map (fn (vid, _) => (vid, renewVId ctx vid)) xs
                                                        val varsMap = List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty vars'
                                                        val pat' = USyntax.renameVarsInPat varsMap (USyntax.filterVarsInPat isMonoVar pat)
-                                                       val tup = U.TupleExp(espan, List.map (fn (_, vid') => U.InstantiatedVarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, [])) vars')
+                                                       val tup = U.TupleExp(espan, List.map (fn (_, vid') => U.VarExp(espan, USyntax.MkShortVId(vid'), Syntax.ValueVariable, [])) vars')
                                                    in U.TupleBind(span, xs, U.CaseExp(espan, exp, expTy, [(pat', tup)])) :: polyPart valEnv'L
                                                    end
                                        end
@@ -795,7 +795,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (U.MkShortVId vid, tysc, Syntax.ValueVariable)) valEnv)
-      in (env', [U.ValDec'(span, valbinds)])
+      in (env', [U.ValDec(span, valbinds)])
       end
   | typeCheckDec(ctx, env, S.RecValDec(span, tyvarseq, valbinds))
     = let val valbinds' : (SourcePos.span * (U.Ty * (U.VId * U.Ty) S.VIdMap.map * U.Pat) * S.Exp) list
@@ -851,7 +851,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds''
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (USyntax.MkShortVId vid, tysc, Syntax.ValueVariable)) valEnv)
-      in (env', [U.RecValDec'(span, valbinds)])
+      in (env', [U.RecValDec(span, valbinds)])
       end
   | typeCheckDec(ctx, env, S.TypeDec(span, typbinds))
     = let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))
@@ -1185,13 +1185,13 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
             | goPat (U.SConPat _) = ()
             | goPat (U.VarPat (_, _, ty)) = goTy ty
             | goPat (U.RecordPat { sourceSpan, fields, wildcard }) = List.app (fn (label, pat) => goPat pat) fields
-            | goPat (U.InstantiatedConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ( List.app goTy tyargs
-                                                                                                         ; Option.app goPat payload
-                                                                                                         )
+            | goPat (U.ConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ( List.app goTy tyargs
+                                                                                             ; Option.app goPat payload
+                                                                                             )
             | goPat (U.TypedPat(span, pat, ty)) = ( goTy ty; goPat pat )
             | goPat (U.LayeredPat(span, vid, ty, pat)) = ( goTy ty; goPat pat )
           fun goExp (U.SConExp (span, scon)) = ()
-            | goExp (U.InstantiatedVarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
+            | goExp (U.VarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
             | goExp (U.RecordExp (span, fields)) = List.app (fn (label, exp) => goExp exp) fields
             | goExp (U.LetInExp (span, decs, exp)) = let val tyconset = goDecs decs
                                                          val { goExp, ... } = checkTyScope (ctx, tvset, tyconset)
@@ -1206,12 +1206,12 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
             | goExp (U.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (U.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
             | goExp (U.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
-          and goDec (U.ValDec' (span, valbinds)) = ( List.app goValBind' valbinds
-                                                   ; tyconset
-                                                   )
-            | goDec (U.RecValDec' (span, valbinds)) = ( List.app goValBind' valbinds
-                                                      ; tyconset
-                                                      )
+          and goDec (U.ValDec (span, valbinds)) = ( List.app goValBind valbinds
+                                                  ; tyconset
+                                                  )
+            | goDec (U.RecValDec (span, valbinds)) = ( List.app goValBind valbinds
+                                                     ; tyconset
+                                                     )
             | goDec (U.TypeDec (span, typbinds)) = let fun goTypBind (U.TypBind (span, tyvars, tycon, ty), acc) = let val { goTy, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, tyvars), tyconset)
                                                                                                                   in goTy ty
                                                                                                                    ; U.TyConSet.add (acc, tycon)
@@ -1237,10 +1237,10 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tyconset : U.TyConSet.set)
                                                               in goDec dec
                                                               end)
                                        tyconset decs
-          and goValBind' (U.TupleBind (span, binds, exp)) = ( List.app (fn (vid, ty) => goTy ty) binds
-                                                            ; goExp exp
-                                                            )
-            | goValBind' (U.PolyVarBind (span, vid, U.TypeScheme (typarams, ty), exp))
+          and goValBind (U.TupleBind (span, binds, exp)) = ( List.app (fn (vid, ty) => goTy ty) binds
+                                                           ; goExp exp
+                                                           )
+            | goValBind (U.PolyVarBind (span, vid, U.TypeScheme (typarams, ty), exp))
               = let val { goTy, goExp, ... } = checkTyScope (ctx, U.TyVarSet.addList (tvset, List.map #1 typarams), tyconset)
                 in List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
                  ; goTy ty
