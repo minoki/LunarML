@@ -15,6 +15,21 @@ function compile(file)
   assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
   return succ, output
 end
+function split_join_lines(str)
+   -- Avoid unexpected comparison results caused by differing line endings when running on WSL.
+   function split(inputstr, sep)
+      local lines = {}
+      for line, s in string.gmatch(inputstr, sep) do
+         table.insert(lines, line)
+         if s == "" then return lines end
+      end
+      return lines
+   end
+   function join(lines, sep)
+      return table.concat(lines, sep)
+   end
+   return join(split(str, "[^\r\n]+"), "\n")
+end
 function compile_and_run(file)
   local compile_succ, output = compile(file)
   if not compile_succ then
@@ -22,11 +37,11 @@ function compile_and_run(file)
   end
   local luafile = file:gsub("%.sml$", ".lua")
   local h = assert(io.popen(string.format("\"%s\" \"%s\"", lua_interpreter, luafile), "r"))
-  local actual_output = h:read("a")
+  local actual_output = split_join_lines(h:read("a"))
   h:close()
   local expected_output_file = file:gsub("%.sml$", ".stdout")
   local h = assert(io.open(expected_output_file, "r"))
-  local expected_output = h:read("a")
+  local expected_output = split_join_lines(h:read("a"))
   h:close()
   if actual_output == expected_output then
     return true
