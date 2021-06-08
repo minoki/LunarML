@@ -894,7 +894,7 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
   | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
     = let val conName' = VIdToLua conName
           val tagName' = VIdToLua tagName
-      in [ Indent, Fragment ("local " ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
+      in [ Indent, Fragment ((if isHoisted (env, tagName') then "" else "local ") ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
          @ (case payloadTy of
                 NONE => [ Indent, Fragment ((if isHoisted (env, conName') then "" else "local ") ^ conName' ^ " = { tag = " ^ tagName' ^ " }"), LineTerminator ]
               | SOME _ => [ Indent, Fragment ((if isHoisted (env, conName') then "function " else "local function ") ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
