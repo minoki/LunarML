@@ -5,8 +5,6 @@ A Standard ML compiler that produces Lua.
 ## Building
 
 You need a recent version of MLton to build the executable, and Lua 5.3+ to run the compiled script.
-If running `make` yields the error "Undefined variable USyntax.VIdSet.disjoint", you need to update
-your version of MLton (tested with `MLton 20130715`).
 
 ```
 $ make
