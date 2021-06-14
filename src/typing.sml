@@ -867,7 +867,6 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                     val tystr : U.TypeStructure = { typeFunction = U.TypeFunction(List.map #2 tyvars, ty)
                                                   , valEnv = U.emptyValEnv
                                                   , admitsEquality = false
-                                                  , isAlias = true
                                                   }
                 in (Syntax.TyConMap.insert(tyConEnv, tycon, tystr) (* TODO: error on duplicate *), U.TypBind(span, List.map #2 tyvars, newTyCon(ctx, tycon), ty) :: typbinds)
                 end
@@ -881,7 +880,6 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                                            , valEnv = U.emptyValEnv
                                                                            , admitsEquality = false
-                                                                           , isAlias = false
                                                                            }
                                                            in (Syntax.TyConMap.insert(m, tycon, tystr), USyntax.TyConMap.insert(m', tycon', tystr))
                                                            end
@@ -918,7 +916,6 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                   let val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                                   , valEnv = Syntax.VIdMap.map (fn (_, tysc, ids) => (tysc, ids)) valEnv
                                                                   , admitsEquality = USyntax.TyConMap.lookup(equality, tycon')
-                                                                  , isAlias = false
                                                                   }
                                                   in (Syntax.TyConMap.insert(tyConMap, tycon, tystr), USyntax.TyConMap.insert(allTyConMap, tycon', tystr), Syntax.VIdMap.unionWith #2 (accValEnv, valEnv) (* TODO: check for duplicate *))
                                                   end

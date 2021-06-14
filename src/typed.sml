@@ -111,7 +111,6 @@ val emptyValEnv : ValEnv = Syntax.VIdMap.empty
 type TypeStructure = { typeFunction : TypeFunction
                      , valEnv : ValEnv
                      , admitsEquality : bool
-                     , isAlias : bool
                      }
 
 datatype Signature' = MkSignature of Signature
@@ -394,13 +393,12 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                       end
           and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
             | doExBind(ExReplication(span, vid, longvid, optTy)) = ExReplication(span, vid, longvid, Option.map doTy optTy)
-          fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv, admitsEquality, isAlias }
+          fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv, admitsEquality }
               = { typeFunction = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                  in TypeFunction(tyvars, applySubstTy subst ty)
                                  end
                 , valEnv = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valEnv
                 , admitsEquality = admitsEquality
-                , isAlias = isAlias
                 }
           fun doSignature({ valMap, tyConMap, strMap, variables } : Signature) = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valMap
                                                                                  , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap

@@ -335,65 +335,53 @@ val initialEnv : Typing.Env
                                                   ,("false", TypeScheme ([], primTy_bool))
                                                   ]
                            , admitsEquality = true
-                           , isAlias = false
                            }
           val tyStr_int = { typeFunction = TypeFunction([], primTy_int)
                           , valEnv = emptyValEnv
                           , admitsEquality = true
-                          , isAlias = false
                           }
           val tyStr_word = { typeFunction = TypeFunction([], primTy_word)
                            , valEnv = emptyValEnv
                            , admitsEquality = true
-                           , isAlias = false
                            }
           val tyStr_real = { typeFunction = TypeFunction([], primTy_real)
                            , valEnv = emptyValEnv
                            , admitsEquality = false
-                           , isAlias = false
                            }
           val tyStr_string = { typeFunction = TypeFunction([], primTy_string)
                              , valEnv = emptyValEnv
                              , admitsEquality = true
-                             , isAlias = false
                              }
           val tyStr_char = { typeFunction = TypeFunction([], primTy_char)
                            , valEnv = emptyValEnv
                            , admitsEquality = true
-                           , isAlias = false
                            }
           val tyStr_list = { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
                            , valEnv = mkValConMap [("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
                                                   ]
                            , admitsEquality = true
-                           , isAlias = false
                            }
           val tyStr_ref = { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
                           , valEnv = mkValConMap [("ref", TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
                                                  ]
                           , admitsEquality = false (* must be handled specially *)
-                          , isAlias = false
                           }
           val tyStr_exn = { typeFunction = TypeFunction([], primTy_exn)
                           , valEnv = emptyValEnv
                           , admitsEquality = false
-                          , isAlias = false
                           }
           val tyStr_array = { typeFunction = TypeFunction([tyVarA], arrayOf tyA)
                             , valEnv = emptyValEnv
                             , admitsEquality = false (* must be handled specially *)
-                            , isAlias = false
                             }
           val tyStr_vector = { typeFunction = TypeFunction([tyVarA], vectorOf tyA)
                              , valEnv = emptyValEnv
                              , admitsEquality = true
-                             , isAlias = false
                              }
           val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
                                 , valEnv = emptyValEnv
                                 , admitsEquality = false
-                                , isAlias = false
                                 }
           val sig_General = { tyConMap = mkTyMap []
                             , valMap = mkValMap
