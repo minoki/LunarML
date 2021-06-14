@@ -398,7 +398,22 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.ProjectionExp { label, recordTy, fieldTy } => (exp0, NONE)
                    | F.ListExp (xs, ty) => (F.ListExp (Vector.map (doExp env) xs, ty), NONE)
                    | F.VectorExp (xs, ty) => (F.VectorExp (Vector.map (doExp env) xs, ty), NONE)
-                   | F.TyAbsExp (tyvar, exp) => (F.TyAbsExp (tyvar, doExp env exp), NONE)
+                   | F.TyAbsExp (tv, exp) => let val (exp, iexp) = doExp' env exp
+                                                 val c = case exp of
+                                                             F.TyAppExp(exp', F.TyVar tv') => if tv = tv' then
+                                                                                                  let val fv = F.freeTyVarsInExp (USyntax.TyVarSet.empty, exp')
+                                                                                                  in if USyntax.TyVarSet.member (fv, tv) then
+                                                                                                         NONE
+                                                                                                     else
+                                                                                                         SOME (exp', tryInlineExp exp')
+                                                                                                  end
+                                                                                              else
+                                                                                                  NONE
+                                                           | _ => NONE
+                                             in case c of
+                                                    SOME result => result 
+                                                  | NONE => (F.TyAbsExp (tv, exp), NONE)
+                                             end
                    | F.TyAppExp (exp, ty) => (F.TyAppExp (doExp env exp, ty), NONE)
                    | F.RecordEqualityExp fields => (F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields), NONE)
                    | F.DataTagExp exp => (F.DataTagExp (doExp env exp), NONE)
