@@ -237,7 +237,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                        | F.Child (parent, F.ValueLabel vid) => F.PathToExp (F.Child (parent, F.ExnTagLabel vid))
                                        | _ => raise Fail ("internal error: invalid exception constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val (env, payload) = genMatcher env (F.DataPayloadExp exp) payloadTy innerPat
-                       in (env, F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, tag]), payload))
+                       in (env, F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_exn_instanceof), F.TupleExp [exp, tag]), payload))
                        end
                    else
                        let val tag = case path of
@@ -261,7 +261,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                     )
                                     | F.Child (parent, F.ValueLabel vid) => F.PathToExp (F.Child (parent, F.ExnTagLabel vid))
                                     | _ => raise Fail ("internal error: invalid exception constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
-                    in (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_exntag), F.TupleExp [F.DataTagExp exp, tag]))
+                    in (env, F.AppExp(F.LongVarExp(InitialEnv.VId_exn_instanceof), F.TupleExp [exp, tag]))
                     end
                 else
                     let val tag = case path of

@@ -137,6 +137,7 @@ val VId_Overflow_tag = newShortVId "Overflow"
 val VId_Size_tag = newShortVId "Size"
 val VId_Subscript_tag = newShortVId "Subscript"
 val VId_Fail_tag = newShortVId "Fail"
+val VId_exn_instanceof = newShortVId "exn-instanceof"
 
 (* Overloaded *)
 val VId_abs = newVId "abs"
@@ -163,7 +164,6 @@ val VId_EQUAL_list = newShortVId "=@list"
 val VId_EQUAL_ref = newShortVId "=@ref"
 val VId_EQUAL_array  = newShortVId "=@array"
 val VId_EQUAL_vector = newShortVId "=@vector"
-val VId_EQUAL_exntag = newShortVId "=@exntag"
 
 (* Int *)
 local val newVId = newLongVId (StrId_Int, [])
@@ -255,7 +255,7 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
-val primTyCon_Lua_value = USyntax.MkTyCon("Lua.value", 11)
+val primTyCon_Lua_value = USyntax.MkTyCon("Lua.value", 12)
 val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_Lua_value)
 val VId_Lua_sub = newVId "sub"
 val VId_Lua_set = newVId "set"

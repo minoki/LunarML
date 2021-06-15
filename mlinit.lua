@@ -104,6 +104,13 @@ local function _Fail(message)
   return { tag = _Fail_tag, payload = message }
 end
 
+local function __exn_instanceof(e, tag)
+  return e.tag == tag
+end
+local function _exn_instanceof(a)
+  return __exn_instanceof(a[1], a[2])
+end
+
 local function _raise(x, file, line, column)
   local e = setmetatable({ tag = x.tag, payload = x.payload, file = file, line = line, column = column }, _exn_meta)
   error(e, 1)
