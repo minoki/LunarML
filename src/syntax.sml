@@ -78,6 +78,13 @@ fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
 end
 structure LabelSet = RedBlackSetFn(LabelKey)
 
+structure TyConKey = struct
+type ord_key = TyCon
+fun compare (MkTyCon x, MkTyCon y) = String.compare (x, y)
+end : ORD_KEY
+structure TyConSet = RedBlackSetFn(TyConKey)
+structure TyConMap = RedBlackMapFn(TyConKey)
+
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Label * Ty) list (* record type expression *)
             | TyCon of SourcePos.span * Ty list * LongTyCon (* type construction *)

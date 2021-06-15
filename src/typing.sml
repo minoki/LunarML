@@ -390,12 +390,12 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare functions")
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tycon), U.IsEqType span3) =>
-           let val { admitsEquality, ... } = lookupUTyConInEnv(ctx, env, span2, tycon)
-           in if admitsEquality then
-                  unify(ctx, env, List.map (fn tyarg => U.UnaryConstraint(span1, tyarg, U.IsEqType span3)) tyargs @ ctrs)
-              else if U.eqUTyCon(tycon, primTyCon_ref) orelse U.eqUTyCon(tycon, primTyCon_array) then
+           let val { admitsEquality, isRefOrArray, ... } = lookupUTyConInEnv(ctx, env, span2, tycon)
+           in if isRefOrArray then
                   unify(ctx, env, ctrs)
-              else
+              else if admitsEquality then
+                  unify(ctx, env, List.map (fn tyarg => U.UnaryConstraint(span1, tyarg, U.IsEqType span3)) tyargs @ ctrs)
+              else 
                   emitError(ctx, [span1, span2, span3], USyntax.PrettyPrint.print_TyCon tycon ^ " does not admit equality")
            end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tycon), U.IsIntegral span3) =>
@@ -868,6 +868,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                     val tystr : U.TypeStructure = { typeFunction = U.TypeFunction(List.map #2 tyvars, ty)
                                                   , valEnv = U.emptyValEnv
                                                   , admitsEquality = false
+                                                  , isRefOrArray = false
                                                   }
                 in (Syntax.TyConMap.insert(tyConEnv, tycon, tystr) (* TODO: error on duplicate *), U.TypBind(span, List.map #2 tyvars, newTyCon(ctx, tycon), ty) :: typbinds)
                 end
@@ -875,18 +876,20 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
       in (envWithTyConEnv(tyConEnv, USyntax.TyConMap.empty), [U.TypeDec(span, typbinds)])
       end
   | typeCheckDec(ctx, env, S.DatatypeDec(span, datbinds))
-    = let val datbinds = List.map (fn datbind as S.DatBind(span, tyvars, tycon, conbinds) => (datbind, newTyCon(ctx, tycon))) datbinds
+    = let val equalityMap : bool S.TyConMap.map = determineDatatypeEquality(ctx, env, List.foldl (fn (S.DatBind(_, tyvars, tycon, conbinds), m) => S.TyConMap.insert(m, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty datbinds)
+          val datbinds = List.map (fn datbind as S.DatBind(span, tyvars, tycon, conbinds) => (datbind, newTyCon(ctx, tycon))) datbinds
           val partialEnv = envWithTyConEnv (List.foldl (fn ((S.DatBind(span, tyvars, tycon, conbinds), tycon'), (m, m')) =>
                                                            let val tyvars = List.map (fn tv => genTyVar(ctx, tv)) tyvars
                                                                val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                                            , valEnv = U.emptyValEnv
-                                                                           , admitsEquality = false
+                                                                           , admitsEquality = S.TyConMap.lookup(equalityMap, tycon)
+                                                                           , isRefOrArray = false
                                                                            }
                                                            in (Syntax.TyConMap.insert(m, tycon, tystr), USyntax.TyConMap.insert(m', tycon', tystr))
                                                            end
                                                        ) (Syntax.TyConMap.empty, USyntax.TyConMap.empty) datbinds)
-          val datbinds' : (S.TyCon * U.DatBind * (U.LongVId * U.TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map) list
-              = let fun doDatBind (S.DatBind(span, tyvars, tycon, conbinds), tycon')
+          val (tyConMap, allTyConMap, valMap, datbinds)
+              = let fun doDatBind ((S.DatBind(span, tyvars, tycon, conbinds), tycon'), (tyConMap, allTyConMap, accValEnv, datbinds))
                         = let val tyvars = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
                               val env = mergeEnv(env, { valMap = #valMap partialEnv
                                                       , tyConMap = #tyConMap partialEnv
@@ -896,31 +899,28 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                       , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars partialEnv) tyvars
                                                       }
                                                 )
+                              val tyvars = List.map #2 tyvars
                               val (valEnv, conbinds) = List.foldr (fn (S.ConBind(span, vid, optTy), (valEnv, conbinds)) =>
                                                                       let val vid' = newVId(ctx, vid)
                                                                           val optTy = Option.map (fn ty => evalTy(ctx, env, ty)) optTy
                                                                           val conbind = U.ConBind(span, vid', optTy)
-                                                                          val tysc = U.TypeScheme(List.map (fn (_, tv) => (tv, [])) tyvars, case optTy of
-                                                                                                                                                NONE => U.TyCon(span, List.map (fn (_, tv) => U.TyVar(span, tv)) tyvars, tycon')
-                                                                                                                                              | SOME payloadTy => U.FnType(span, payloadTy, U.TyCon(span, List.map (fn (_, tv) => U.TyVar(span, tv)) tyvars, tycon'))
+                                                                          val tysc = U.TypeScheme(List.map (fn tv => (tv, [])) tyvars, case optTy of
+                                                                                                                                           NONE => U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon')
+                                                                                                                                         | SOME payloadTy => U.FnType(span, payloadTy, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                                                                  )
                                                                       in (Syntax.VIdMap.insert(valEnv, vid, (U.MkShortVId vid', tysc, Syntax.ValueConstructor)) (* TODO: check for duplicate *), conbind :: conbinds)
                                                                       end
                                                                   ) (Syntax.VIdMap.empty, []) conbinds
-                          in (tycon, U.DatBind(span, List.map #2 tyvars, tycon', conbinds, false), valEnv)
+                              val datbind = U.DatBind(span, tyvars, tycon', conbinds, S.TyConMap.lookup(equalityMap, tycon))
+                              val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
+                                          , valEnv = Syntax.VIdMap.map (fn (_, tysc, ids) => (tysc, ids)) valEnv
+                                          , admitsEquality = Syntax.TyConMap.lookup(equalityMap, tycon)
+                                          , isRefOrArray = false
+                                          }
+                          in (Syntax.TyConMap.insert(tyConMap, tycon, tystr), USyntax.TyConMap.insert(allTyConMap, tycon', tystr), Syntax.VIdMap.unionWith #2 (accValEnv, valEnv) (* TODO: check for duplicate *), datbind :: datbinds)
                           end
-                in List.map doDatBind datbinds
+                in List.foldr doDatBind (Syntax.TyConMap.empty, USyntax.TyConMap.empty, Syntax.VIdMap.empty, []) datbinds
                 end
-          val equality : bool USyntax.TyConMap.map = determineDatatypeEquality(ctx, env, List.map #2 datbinds')
-          val datbinds = List.map (fn (_, U.DatBind(span, tyvars, tycon, conbinds, _), _) => U.DatBind(span, tyvars, tycon, conbinds, USyntax.TyConMap.lookup(equality, tycon))) datbinds'
-          val (tyConMap, allTyConMap, valMap) = List.foldl (fn ((tycon, U.DatBind(span, tyvars, tycon', conbinds, _), valEnv), (tyConMap, allTyConMap, accValEnv)) =>
-                                                  let val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
-                                                                  , valEnv = Syntax.VIdMap.map (fn (_, tysc, ids) => (tysc, ids)) valEnv
-                                                                  , admitsEquality = USyntax.TyConMap.lookup(equality, tycon')
-                                                                  }
-                                                  in (Syntax.TyConMap.insert(tyConMap, tycon, tystr), USyntax.TyConMap.insert(allTyConMap, tycon', tystr), Syntax.VIdMap.unionWith #2 (accValEnv, valEnv) (* TODO: check for duplicate *))
-                                                  end
-                                              ) (Syntax.TyConMap.empty, USyntax.TyConMap.empty, Syntax.VIdMap.empty) datbinds'
           val env' = { valMap = valMap
                      , tyConMap = tyConMap
                      , allTyConMap = allTyConMap
@@ -1027,66 +1027,69 @@ and typeCheckDecs(ctx, env, []) : Env * U.Dec list = (emptyEnv, [])
                                                val (env'', decs) = typeCheckDecs(ctx, mergeEnv(env, env'), decs)
                                            in (mergeEnv(env', env''), dec @ decs)
                                            end
-and determineDatatypeEquality(ctx, env, datbinds : U.DatBind list) : bool USyntax.TyConMap.map
-    = let val localTyCons = List.foldl (fn (U.DatBind (span, tyvars, tycon, conbinds, _), set) => U.TyConSet.add(set, tycon)) U.TyConSet.empty datbinds
-          val graph : (U.TyConSet.set ref) U.TyConMap.map = U.TyConSet.foldl (fn (tycon, map) => U.TyConMap.insert(map, tycon, ref U.TyConSet.empty)) U.TyConMap.empty localTyCons
-          val nonEqualitySet = ref U.TyConSet.empty
-          fun doDatBind (U.DatBind (span, tyvars, tycon, conbinds, _))
-              = let val r = U.TyConMap.lookup (graph, tycon)
-                    fun doTy (U.TyVar (span, tv)) = if List.exists (fn tv' => U.eqUTyVar(tv, tv')) tyvars then
+and determineDatatypeEquality(ctx, env, datbinds : (S.TyVar list * S.Ty list) S.TyConMap.map) : bool S.TyConMap.map
+    = let val localTyCons = S.TyConMap.foldli (fn (tycon, _, s) => S.TyConSet.add (s, tycon)) S.TyConSet.empty datbinds
+          val graph : (S.TyConSet.set ref) S.TyConMap.map = Syntax.TyConMap.map (fn _ => ref S.TyConSet.empty) datbinds
+          val nonEqualitySet = ref S.TyConSet.empty
+          fun doDatBind (tycon, (tyvars, payloads))
+              = let val r = S.TyConMap.lookup (graph, tycon)
+                    fun doTy (S.TyVar (span, tv)) = if List.exists (fn tv' => tv = tv') tyvars then
                                                         SOME []
                                                     else
                                                         (case tv of
-                                                             U.NamedTyVar(_, eq, _) => if eq then
-                                                                                           SOME []
-                                                                                       else
-                                                                                          NONE
-                                                           | _ => emitError(ctx, [span], "unexpected anonymous type variable")
+                                                             S.MkTyVar name => if String.isPrefix "''" name then
+                                                                                   SOME []
+                                                                               else
+                                                                                   NONE
                                                         )
-                      | doTy (U.RecordType (span, fields)) = doTypes (List.map #2 fields)
-                      | doTy (U.TyCon (span, tyargs, tycon)) = if U.eqUTyCon(tycon, primTyCon_ref) orelse U.eqUTyCon(tycon, primTyCon_array) then
-                                                                   SOME []
-                                                               else if U.TyConSet.member(localTyCons, tycon) then
-                                                                   SOME [tycon]
-                                                               else
-                                                                   (case lookupUTyConInEnv(ctx, env, span, tycon) of
-                                                                        { admitsEquality = e, ... } => if e then
-                                                                                                           doTypes tyargs
-                                                                                                       else
-                                                                                                           NONE
-                                                                   )
-                      | doTy (U.FnType _) = NONE
+                      | doTy (S.RecordType (span, fields)) = doTypes (List.map #2 fields)
+                      | doTy (S.TyCon (span, tyargs, longtycon)) = let val l = case longtycon of
+                                                                                   Syntax.MkQualified([], tycon) =>
+                                                                                   if S.TyConSet.member (localTyCons, tycon) then
+                                                                                       SOME [tycon]
+                                                                                   else
+                                                                                       NONE
+                                                                                 | _ => NONE
+                                                                   in case l of
+                                                                          result as SOME _ => result
+                                                                        | NONE => let val { admitsEquality, isRefOrArray, ... } = lookupTyConInEnv(ctx, env, span, longtycon)
+                                                                                  in if isRefOrArray then
+                                                                                         SOME []
+                                                                                     else if admitsEquality then
+                                                                                         doTypes tyargs
+                                                                                     else
+                                                                                         NONE
+                                                                                  end
+                                                                   end
+                      | doTy (S.FnType _) = NONE
                     and doTypes types = let fun go (acc, ty :: types) = (case doTy ty of
-                                                                              NONE => NONE
-                                                                            | SOME xs => go (xs @ acc, types)
-                                                                         )
+                                                                             NONE => NONE
+                                                                           | SOME xs => go (xs @ acc, types)
+                                                                        )
                                               | go (acc, []) = SOME acc
                                         in go ([], types)
                                         end
-                    fun collectPayloads [] = []
-                      | collectPayloads (U.ConBind (span, vid, NONE) :: conbinds) = collectPayloads conbinds
-                      | collectPayloads (U.ConBind (span, vid, SOME ty) :: conbinds) = ty :: collectPayloads conbinds
-                in case doTypes (collectPayloads conbinds) of
-                       NONE => nonEqualitySet := U.TyConSet.add (!nonEqualitySet, tycon)
-                     | SOME xs => List.app (fn member => let val r = U.TyConMap.lookup (graph, member)
-                                                         in r := U.TyConSet.add (!r, tycon)
+                in case doTypes payloads of
+                       NONE => nonEqualitySet := S.TyConSet.add (!nonEqualitySet, tycon)
+                     | SOME xs => List.app (fn member => let val r = S.TyConMap.lookup (graph, member)
+                                                         in r := S.TyConSet.add (!r, tycon)
                                                          end) xs
                 end
-          fun dfs tycon = let val set = !(U.TyConMap.lookup (graph, tycon))
-                          in U.TyConSet.app (fn t => let val s = !nonEqualitySet
-                                                     in if U.TyConSet.member(s, t) then
+          fun dfs tycon = let val set = !(S.TyConMap.lookup (graph, tycon))
+                          in S.TyConSet.app (fn t => let val s = !nonEqualitySet
+                                                     in if S.TyConSet.member (s, t) then
                                                             ()
                                                         else
-                                                            ( nonEqualitySet := U.TyConSet.add(s, t)
+                                                            ( nonEqualitySet := S.TyConSet.add (s, t)
                                                             ; dfs t
                                                             )
                                                      end
                                             ) set
                           end
-          val () = List.app doDatBind datbinds (* construct the graph *)
-          val () = U.TyConSet.app dfs (!nonEqualitySet)
+          val () = S.TyConMap.appi doDatBind datbinds
+          val () = S.TyConSet.app dfs (!nonEqualitySet)
           val nonEqualitySet = !nonEqualitySet
-      in U.TyConSet.foldl (fn (tycon, map) => U.TyConMap.insert(map, tycon, not (U.TyConSet.member(nonEqualitySet, tycon)))) U.TyConMap.empty localTyCons
+      in S.TyConSet.foldl (fn (tycon, map) => S.TyConMap.insert (map, tycon, not (S.TyConSet.member (nonEqualitySet, tycon)))) S.TyConMap.empty localTyCons
       end
  (* typeCheckMatch : Context * Env * SourcePos.span * (S.Pat * S.Exp) list -> (* pattern *) Syntax.Ty * (* expression *) Syntax.Ty * (Pat * Exp) list *)
 and typeCheckMatch(ctx, env, span, (pat0, exp0) :: rest) : U.Ty * U.Ty * (U.Pat * U.Exp) list
@@ -1370,10 +1373,11 @@ fun applySubstTyConInSig (ctx : Context, subst : U.TypeFunction U.TyConMap.map) 
           fun goTypeScheme (U.TypeScheme (tvs, ty)) = U.TypeScheme (tvs, goTy ty)
           fun goTypeFunction (U.TypeFunction (tvs, ty)) = U.TypeFunction (tvs, goTy ty)
           fun goSig { valMap, tyConMap, strMap, variables } = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids)) valMap
-                                                              , tyConMap = Syntax.TyConMap.map (fn { typeFunction, valEnv, admitsEquality } =>
+                                                              , tyConMap = Syntax.TyConMap.map (fn { typeFunction, valEnv, admitsEquality, isRefOrArray } =>
                                                                                                    { typeFunction = goTypeFunction typeFunction
                                                                                                    , valEnv = Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids)) valEnv
                                                                                                    , admitsEquality = admitsEquality
+                                                                                                   , isRefOrArray = false (* TODO *)
                                                                                                    }
                                                                                                ) tyConMap
                                                               , strMap = Syntax.StrIdMap.map (fn U.MkSignature s => U.MkSignature (goSig s)) strMap
@@ -1444,6 +1448,7 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.Signature
                                                  val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                              , valEnv = Syntax.VIdMap.empty
                                                              , admitsEquality = false
+                                                             , isRefOrArray = false
                                                              }
                                              in { valMap = #valMap s
                                                 , tyConMap = Syntax.TyConMap.insert(#tyConMap s, tycon, tystr)
@@ -1463,6 +1468,7 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.Signature
                                                  val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                              , valEnv = Syntax.VIdMap.empty
                                                              , admitsEquality = true
+                                                             , isRefOrArray = false
                                                              }
                                              in { valMap = #valMap s
                                                 , tyConMap = Syntax.TyConMap.insert(#tyConMap s, tycon, tystr)
