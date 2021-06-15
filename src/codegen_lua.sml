@@ -646,6 +646,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
                                else if USyntax.eqULongVId(vid, VId_Lua_notb) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
+                               else if USyntax.eqULongVId(vid, VId_Vector_length) orelse USyntax.eqULongVId(vid, VId_Array_length) then
+                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 e2' @ [ Fragment ".n" ] }))
                                else
                                    NONE
                             end
