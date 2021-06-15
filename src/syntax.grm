@@ -528,8 +528,8 @@ SigExp : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
        | SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
        | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty (Syntax.TypeRealisationExp(span(SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty))
 
-SigBinds : SigId EQUALS SigExp (Syntax.SigBind(SigId, SigExp) :: nil)
-         | SigId EQUALS SigExp AND SigBinds (Syntax.SigBind(SigId, SigExp) :: SigBinds)
+SigBinds : SigId EQUALS SigExp ((SigId, SigExp) :: nil)
+         | SigId EQUALS SigExp AND SigBinds ((SigId, SigExp) :: SigBinds)
 
 SigDec : SIGNATURE SigBinds (SigBinds)
 

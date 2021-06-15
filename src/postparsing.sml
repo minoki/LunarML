@@ -505,7 +505,7 @@ and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
 fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdecs) = doStrDec(ctx, env, strdec)
                                                 in (env, List.map Syntax.StrDec strdecs)
                                                 end
-  | doTopDec(ctx, env, Syntax.SigDec(sigbinds)) = let val sigMap = List.foldl (fn (Syntax.SigBind (sigid, sigexp), m) => Syntax.SigIdMap.insert(m, sigid, doSigExp(ctx, env, sigexp))) Syntax.SigIdMap.empty sigbinds
+  | doTopDec(ctx, env, Syntax.SigDec(sigbinds)) = let val sigMap = List.foldl (fn ((sigid, sigexp), m) => Syntax.SigIdMap.insert(m, sigid, doSigExp(ctx, env, sigexp))) Syntax.SigIdMap.empty sigbinds
                                                   in (envWithSigMap sigMap, [Syntax.SigDec(sigbinds)])
                                                   end
 fun doTopDecs(ctx, env, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])

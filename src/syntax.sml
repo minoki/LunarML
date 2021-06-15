@@ -136,7 +136,7 @@ datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
                 | SigIdExp of SourcePos.span * SigId
                 | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty
 
-datatype SigBind = SigBind of SigId * SigExp
+type SigBind = SigId * SigExp
 
 datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
                          | StrIdExp of SourcePos.span * LongStrId
