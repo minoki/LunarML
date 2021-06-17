@@ -61,7 +61,15 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                                                            ,("Char", mkSubstrMap [])
                                                                            ,("Array", mkSubstrMap [])
                                                                            ,("Vector", mkSubstrMap [])
-                                                                           ,("Lua", mkSubstrMap [])
+                                                                           ,("Lua", mkSubstrMap
+                                                                                        [("Lib", mkSubstrMap
+                                                                                                     [("math", mkSubstrMap [])
+                                                                                                     ,("table", mkSubstrMap [])
+                                                                                                     ,("string", mkSubstrMap [])
+                                                                                                     ]
+                                                                                         )
+                                                                                        ]
+                                                                            )
                                                                            ,("LunarML", mkSubstrMap [])
                                                                            ]
                                                        }
@@ -291,6 +299,34 @@ val VId_Lua_LE = newVId "<="
 val VId_Lua_GE = newVId ">="
 val VId_Lua_concat = newVId "concat" (* .. *)
 val VId_Lua_length = newVId "length" (* # *)
+local val newVId = newLongVId (StrId_Lua, ["Lib"])
+in
+val VId_Lua_Lib_assert = newVId "assert"
+val VId_Lua_Lib_error = newVId "error"
+val VId_Lua_Lib_pairs = newVId "pairs"
+val VId_Lua_Lib_pcall = newVId "pcall"
+val VId_Lua_Lib_setmetatable = newVId "setmetatable"
+val VId_Lua_Lib_math = newVId "math"
+local val newVId = newLongVId (StrId_Lua, ["Lib", "math"])
+in
+val VId_Lua_Lib_math_abs = newVId "abs"
+val VId_Lua_Lib_math_type = newVId "type"
+val VId_Lua_Lib_math_maxinteger = newVId "maxinteger"
+val VId_Lua_Lib_math_mininteger = newVId "mininteger"
+end
+val VId_Lua_Lib_string = newVId "string"
+local val newVId = newLongVId (StrId_Lua, ["Lib", "string"])
+in
+val VId_Lua_Lib_string_format = newVId "format"
+end
+val VId_Lua_Lib_table = newVId "table"
+local val newVId = newLongVId (StrId_Lua, ["Lib", "table"])
+in
+val VId_Lua_Lib_table_pack = newVId "pack"
+val VId_Lua_Lib_table_unpack = newVId "unpack"
+val VId_Lua_Lib_table_insert = newVId "insert"
+end
+end
 end
 
 (* Other primitives *)
@@ -306,7 +342,7 @@ val initialEnv : Typing.Env
           val mkValMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueVariable))) Syntax.VIdMap.empty
           val mkValConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueConstructor))) Syntax.VIdMap.empty
           val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
-          val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, str)) Syntax.StrIdMap.empty
+          val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, USyntax.MkSignature str)) Syntax.StrIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
           val TypeFunction = USyntax.TypeFunction
           val TypeScheme = USyntax.TypeScheme
@@ -495,15 +531,59 @@ val initialEnv : Typing.Env
                           , variables = USyntax.TyConSet.empty
                           }
           val sig_Vector = { tyConMap = mkTyMap []
-                              , valMap = mkValMap
-                                             [("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
-                                             ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
-                                             ,("length", TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int))
-                                             ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
-                                             ]
-                              , strMap = mkStrMap []
-                              , variables = USyntax.TyConSet.empty
-                              }
+                           , valMap = mkValMap
+                                          [("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
+                                          ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
+                                          ,("length", TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int))
+                                          ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
+                                          ]
+                           , strMap = mkStrMap []
+                           , variables = USyntax.TyConSet.empty
+                           }
+          val sig_Lua_Lib = { tyConMap = mkTyMap []
+                            , valMap = mkValMap
+                                           [("assert", TypeScheme ([], primTy_Lua_value))
+                                           ,("error", TypeScheme ([], primTy_Lua_value))
+                                           ,("pairs", TypeScheme ([], primTy_Lua_value))
+                                           ,("pcall", TypeScheme ([], primTy_Lua_value))
+                                           ,("setmetatable", TypeScheme ([], primTy_Lua_value))
+                                           ,("math", TypeScheme ([], primTy_Lua_value))
+                                           ,("string", TypeScheme ([], primTy_Lua_value))
+                                           ,("table", TypeScheme ([], primTy_Lua_value))
+                                           ]
+                            , strMap = mkStrMap
+                                           [("math", { tyConMap = mkTyMap []
+                                                     , valMap = mkValMap
+                                                                    [("abs", TypeScheme ([], primTy_Lua_value))
+                                                                    ,("type", TypeScheme ([], primTy_Lua_value))
+                                                                    ,("maxinteger", TypeScheme ([], primTy_Lua_value))
+                                                                    ,("mininteger", TypeScheme ([], primTy_Lua_value))
+                                                                    ]
+                                                     , strMap = mkStrMap []
+                                                     , variables = USyntax.TyConSet.empty
+                                                     }
+                                            )
+                                           ,("string", { tyConMap = mkTyMap []
+                                                       , valMap = mkValMap
+                                                                      [("format", TypeScheme ([], primTy_Lua_value))
+                                                                      ]
+                                                       , strMap = mkStrMap []
+                                                       , variables = USyntax.TyConSet.empty
+                                                       }
+                                            )
+                                           ,("table", { tyConMap = mkTyMap []
+                                                       , valMap = mkValMap
+                                                                      [("pack", TypeScheme ([], primTy_Lua_value))
+                                                                      ,("unpack", TypeScheme ([], primTy_Lua_value))
+                                                                      ,("insert", TypeScheme ([], primTy_Lua_value))
+                                                                      ]
+                                                       , strMap = mkStrMap []
+                                                       , variables = USyntax.TyConSet.empty
+                                                       }
+                                            )
+                                           ]
+                            , variables = USyntax.TyConSet.empty
+                            }
           val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
                         , valMap = mkValMap
                                        [("sub", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
@@ -541,7 +621,7 @@ val initialEnv : Typing.Env
                                        ,("concat", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
                                        ,("length", TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
                                        ]
-                        , strMap = mkStrMap []
+                        , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
                         , variables = USyntax.TyConSet.empty
                         }
           val sig_LunarML = { tyConMap = mkTyMap []

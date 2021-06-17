@@ -1,3 +1,20 @@
+local assert = assert
+local error = error
+local pairs = pairs
+local pcall = pcall
+local setmetatable = setmetatable
+local math = math
+local math_abs = math.abs
+local math_type = math.type
+local math_maxinteger = math.maxinteger
+local math_mininteger = math.mininteger
+local string = string
+local string_format = string.format
+local table = table
+local table_pack = table.pack
+local table_unpack = table.unpack
+local table_insert = table.insert
+
 local function _Record_EQUAL(fields)
   return function(t)
     local a, b = t[1], t[2]
@@ -85,7 +102,7 @@ end
 
 local _exn_meta = {}
 function _exn_meta:__tostring()
-  return string.format("%s:%d:%d: %s", self.file, self.line, self.column, self.tag[1])
+  return string_format("%s:%d:%d: %s", self.file, self.line, self.column, self.tag[1])
 end
 local _Match_tag = { "Match" }
 local _Match = { tag = _Match_tag }
@@ -118,8 +135,8 @@ end
 
 -- Int
 local function __Int_add(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   local z = x + y
   if y > 0 and z < x then
     error(_Overflow)
@@ -133,8 +150,8 @@ local function _Int_add(t)
   return __Int_add(t[1], t[2])
 end
 local function __Int_sub(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   local z = x - y
   if y < 0 and z < x then
     error(_Overflow)
@@ -148,8 +165,8 @@ local function _Int_sub(t)
   return __Int_sub(t[1], t[2])
 end
 local function __Int_mul(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   local z = x * y
   if (x ~= 0 and z // x ~= y) or (y ~= 0 and z // y ~= x) then
     error(_Overflow)
@@ -161,8 +178,8 @@ local function _Int_mul(t)
   return __Int_mul(t[1], t[2])
 end
 local function __Int_div(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   if y == 0 then
     error(_Div)
   elseif x == math.mininteger and y == -1 then
@@ -174,8 +191,8 @@ local function _Int_div(t)
   return __Int_div(t[1], t[2])
 end
 local function __Int_mod(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   if y == 0 then
     error(_Div)
   end
@@ -185,15 +202,15 @@ local function _Int_mod(t)
   return __Int_mod(t[1], t[2])
 end
 local function _Int_negate(x)
-  assert(math.type(x) == "integer")
-  if x == math.mininteger then
+  assert(math_type(x) == "integer")
+  if x == math_mininteger then
     error(_Overflow)
   end
   return - x
 end
 local function _Int_abs(x)
-  assert(math.type(x) == "integer")
-  if x == math.mininteger then
+  assert(math_type(x) == "integer")
+  if x == math_mininteger then
     error(_Overflow)
   end
   return math.abs(x)
@@ -201,18 +218,18 @@ end
 
 -- Word
 local function __Word_div(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   if y == 0 then
     error(_Div)
   elseif y > 0 then
     if x >= 0 then
       return x // y
     else -- x < 0
-      local x1 = (x + math.maxinteger) + 1 -- x + 2^63
-      local u1 = ((math.maxinteger % y) + 1) % y -- 2^63 % y
-      local v1 = math.maxinteger // y
-      if math.maxinteger % y == y - 1 then
+      local x1 = (x + math_maxinteger) + 1 -- x + 2^63
+      local u1 = ((math_maxinteger % y) + 1) % y -- 2^63 % y
+      local v1 = math_maxinteger // y
+      if math_maxinteger % y == y - 1 then
         v1 = v1 + 1
       end
       -- v1 == 2^63 // y
@@ -242,17 +259,17 @@ local function _Word_div(t)
   return __Word_div(t[1], t[2])
 end
 local function __Word_mod(x, y)
-  assert(math.type(x) == "integer")
-  assert(math.type(y) == "integer")
+  assert(math_type(x) == "integer")
+  assert(math_type(y) == "integer")
   if y == 0 then
     error(_Div)
   elseif y > 0 then
     if x >= 0 then
       return x % y
     else -- x < 0
-      local x1 = ((x + math.maxinteger) + 1) % y -- (x + 2^63) % y
-      local u1 = ((math.maxinteger % y) + 1) % y -- 2^63 % y
-      if y <= math.maxinteger // 2 + 1 then -- y <= 2^62
+      local x1 = ((x + math_maxinteger) + 1) % y -- (x + 2^63) % y
+      local u1 = ((math_maxinteger % y) + 1) % y -- 2^63 % y
+      if y <= math_maxinteger // 2 + 1 then -- y <= 2^62
         -- x1 + u1 <= 2*(y-1) < 2^63
         return (x1 + u1) % y -- (x + 2^64) % y
       else
@@ -316,9 +333,6 @@ local function _Word_GE(t)
   return not __Word_LT(t[1], t[2])
 end
 
--- Real
-local _Real_abs = math.abs
-
 -- List
 local _nil = { tag = "nil" }
 local function _cons(t)
@@ -376,7 +390,7 @@ local function _VectorOrArray_fromList(xs)
   local t = {}
   local n = 0
   while xs.tag == "::" do
-    table.insert(t, xs.payload[1])
+    table_insert(t, xs.payload[1])
     xs = xs.payload[2]
     n = n + 1
   end
@@ -445,13 +459,13 @@ local function _Lua_global(name)
 end
 local function _Lua_call(f)
   return function(v)
-    return table.pack(f(table.unpack(v, 1, v.n)))
+    return table_pack(f(table_unpack(v, 1, v.n)))
   end
 end
 local function _Lua_method(t)
   local self, name = t[1], t[2]
   return function(v)
-    return table.pack(self[name](self, table.unpack(v, 1, v.n)))
+    return table_pack(self[name](self, table_unpack(v, 1, v.n)))
   end
 end
 local function _Lua_isNil(x)
@@ -462,8 +476,8 @@ local function _Lua_newTable()
 end
 local function _Lua_function(f)
   return function(...)
-    local r = f(table.pack(...))
-    return table.unpack(r, 1, r.n)
+    local r = f(table_pack(...))
+    return table_unpack(r, 1, r.n)
   end
 end
 local _General = {
@@ -503,7 +517,7 @@ local _Real = {
   ["-"] = _MINUS,
   ["*"] = _TIMES,
   ["/"] = _DIVIDE,
-  ["abs"] = _Real_abs,
+  ["abs"] = math_abs,
   ["~"] = _unm,
   ["<"] = _LT,
   [">"] = _GT,
@@ -568,6 +582,30 @@ local _Lua = {
   [">>"] = _RSHIFT,
   concat = _concat,
   length = _length,
+  _Lib = {
+    assert = assert,
+    error = error,
+    pairs = pairs,
+    pcall = pcall,
+    setmetatable = setmetatable,
+    math = math,
+    string = string,
+    table = table,
+    _math = {
+      abs = math_abs,
+      type = math_type,
+      maxinteger = math_maxinteger,
+      mininteger = math_mininteger,
+    },
+    _string = {
+      format = string_format,
+    },
+    _table = {
+      pack = table_pack,
+      unpack = table_unpack,
+      insert = table_insert,
+    },
+  }
 }
 local _LunarML = {
   assumePure = _id,

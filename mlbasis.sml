@@ -9,27 +9,30 @@ val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
 val fromChar : char -> value = unsafeToValue
 fun field (t : value, name : string) = sub (t, fromString name)
+structure Lib = struct
+open Lib
+val tonumber = LunarML.assumeDiscardable (global "tonumber")
+val tostring = LunarML.assumeDiscardable (global "tostring")
+structure math = struct
+open math
+val atan = LunarML.assumeDiscardable (field (math, "atan"))
+val log = LunarML.assumeDiscardable (field (math, "log"))
+end
+structure string = struct
+open string
+val byte = LunarML.assumeDiscardable (field (string, "byte"))
+val char = LunarML.assumeDiscardable (field (string, "char"))
+val find = LunarML.assumeDiscardable (field (string, "find"))
+val gsub = LunarML.assumeDiscardable (field (string, "gsub"))
+val match = LunarML.assumeDiscardable (field (string, "match"))
+val sub = LunarML.assumeDiscardable (field (string, "sub"))
+end
+structure table = struct
+open table
+val concat = LunarML.assumeDiscardable (field (table, "concat"))
+end
+end
 end;
-
-local
-    val tonumber = LunarML.assumeDiscardable (Lua.global "tonumber")
-    val tostring = LunarML.assumeDiscardable (Lua.global "tostring")
-    val mathlib = LunarML.assumeDiscardable (Lua.global "math")
-    val math_atan = LunarML.assumeDiscardable (Lua.field (mathlib, "atan"))
-    val math_log = LunarML.assumeDiscardable (Lua.field (mathlib, "log"))
-    val math_maxinteger = LunarML.assumeDiscardable (Lua.field (mathlib, "maxinteger"))
-    val math_mininteger = LunarML.assumeDiscardable (Lua.field (mathlib, "mininteger"))
-    val stringlib = LunarML.assumeDiscardable (Lua.global "string")
-    val string_byte = LunarML.assumeDiscardable (Lua.field (stringlib, "byte"))
-    val string_char = LunarML.assumeDiscardable (Lua.field (stringlib, "char"))
-    val string_find = LunarML.assumeDiscardable (Lua.field (stringlib, "find"))
-    val string_format = LunarML.assumeDiscardable (Lua.field (stringlib, "format"))
-    val string_gsub = LunarML.assumeDiscardable (Lua.field (stringlib, "gsub"))
-    val string_match = LunarML.assumeDiscardable (Lua.field (stringlib, "match"))
-    val string_sub = LunarML.assumeDiscardable (Lua.field (stringlib, "sub"))
-    val tablelib = LunarML.assumeDiscardable (Lua.global "table")
-    val table_concat = LunarML.assumeDiscardable (Lua.field (tablelib, "concat"))
-in
 
 structure Vector = struct
 datatype vector = datatype vector
@@ -48,7 +51,7 @@ fun foldl (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldl' (f, in
 fun foldr (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldr' (f, init, vec, length vec - 1)
 end
 end
-val vector : 'a list -> 'a vector = Vector.fromList
+val vector : 'a list -> 'a vector = Vector.fromList;
 
 (* General *)
 structure General = struct
@@ -74,14 +77,14 @@ fun x before () = x
 fun ignore _ = ()
 fun (f o g) x = f (g x)
 end (* structure General *)
-open General
+open General;
 (*
 val op before : 'a * unit -> 'a = General.before;
 val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
-datatype 'a option = NONE | SOME of 'a
+datatype 'a option = NONE | SOME of 'a;
 
 structure Bool = struct
 datatype bool = datatype bool
@@ -90,7 +93,7 @@ fun toString true = "true"
   | toString false = "false"
 (* scan, fromString *)
 end (* structure Bool *)
-val not : bool -> bool = Bool.not
+val not : bool -> bool = Bool.not;
 
 structure Int = struct
 type int = int
@@ -103,11 +106,11 @@ val precision : int option = LunarML.assumeDiscardable
                                                                              n
                                                                          else
                                                                              computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
-                                  in SOME (computeWordSize (Lua.unsafeFromValue math_maxinteger, 1))
+                                  in SOME (computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1))
                                   end
                                  )
-val minInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue math_mininteger))
-val maxInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue math_maxinteger))
+val minInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.mininteger))
+val maxInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.maxinteger))
 (*
 val quot : int * int -> int
 val rem : int * int -> int
@@ -134,25 +137,25 @@ val sign : int -> int = fn x => if x > 0 then
                                     0
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
 (* fmt *)
-fun toString (x : int) : string = let val result = Lua.call tostring (vector [Lua.fromInt x])
-                                      val result = Lua.call string_gsub (vector [Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"])
+fun toString (x : int) : string = let val result = Lua.call Lua.Lib.tostring (vector [Lua.fromInt x])
+                                      val result = Lua.call Lua.Lib.string.gsub (vector [Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"])
                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
                                   end
 (* scan *)
-fun fromString (s : string) : int option = let val result = Lua.call string_match (vector [Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"])
+fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.string.match (vector [Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"])
                                            in if Lua.isNil (Vector.sub (result, 0)) then
                                                   NONE
                                               else
                                                   let val sign = Lua.unsafeFromValue (Vector.sub (result, 0)) : string
                                                       val digits = Lua.unsafeFromValue (Vector.sub (result, 1)) : string
                                                       val result' = if sign = "~" orelse sign = "-" then
-                                                                        Lua.call tonumber (vector [Lua.fromString (String.^ ("-", digits))])
+                                                                        Lua.call Lua.Lib.tonumber (vector [Lua.fromString (String.^ ("-", digits))])
                                                                     else
-                                                                        Lua.call tonumber (vector [Lua.fromString digits])
+                                                                        Lua.call Lua.Lib.tonumber (vector [Lua.fromString digits])
                                                   in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
                                                   end
                                            end
-end (* structure Int *)
+end; (* structure Int *)
 
 structure Word = struct
 type word = word
@@ -162,7 +165,7 @@ val wordSize : int = LunarML.assumeDiscardable
                                                                            n
                                                                        else
                                                                            computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
-                          in computeWordSize (Lua.unsafeFromValue math_maxinteger, 1)
+                          in computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1)
                           end
                          )
 (* toLarge, toLargeX, toLargeWord, toLargeWordX, fromLarge, fromLargeWord, toLargeInt, toLargeIntX, fromLargeInt *)
@@ -206,37 +209,37 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                              else
                                                  x
 (* fmt *)
-val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call string_format (vector [Lua.fromString "%X", Lua.fromWord x]), 0))
+val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format (vector [Lua.fromString "%X", Lua.fromWord x]), 0))
 (* scan, fromString *)
-end (* structure Word *)
+end; (* structure Word *)
 
 structure Real = struct
 type real = real
 open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
-end (* structure Real *)
+end; (* structure Real *)
 
 structure Math = struct
 type real = real
-val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "pi")))
+val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "pi")))
 (* val e : real *)
-val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "sqrt")))
-val sin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "sin")))
-val cos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "cos")))
-val tan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "tan")))
-val asin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "asin")))
-val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "acos")))
-val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue math_atan)
-val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call math_atan (vector [Lua.fromReal y, Lua.fromReal x]), 0))
-val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (mathlib, "exp")))
+val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sqrt")))
+val sin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sin")))
+val cos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "cos")))
+val tan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "tan")))
+val asin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "asin")))
+val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "acos")))
+val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.atan)
+val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.atan (vector [Lua.fromReal y, Lua.fromReal x]), 0))
+val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "exp")))
 val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
-val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue math_log)
-val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call math_log (vector [Lua.fromReal x, Lua.fromInt 10]), 0))
+val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.log)
+val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.log (vector [Lua.fromReal x, Lua.fromInt 10]), 0))
 (*
 val sinh : real -> real
 val cosh : real -> real
 val tanh : real -> real
 *)
-end (* structure Math *)
+end; (* structure Math *)
 
 structure Char = struct
 type char = char
@@ -244,11 +247,11 @@ type string = string
 val minChar = #"\000"
 val maxChar = #"\255"
 val maxOrd = 255
-val ord : char -> int = Lua.unsafeFromValue string_byte
+val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
 val chr : int -> char = fn x => if x < 0 orelse x > 255 then
                                     raise Chr
                                 else
-                                    Lua.unsafeFromValue (Vector.sub (Lua.call string_char (vector [Lua.fromInt x]), 0))
+                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char (vector [Lua.fromInt x]), 0))
 fun succ c = chr (ord c + 1)
 fun pred c = chr (ord c - 1)
 fun compare (x : char, y : char) = if x = y then
@@ -257,12 +260,12 @@ fun compare (x : char, y : char) = if x = y then
                                        LESS
                                    else
                                        GREATER
-fun notContains (s : string) (c : char) : bool = let val result = Lua.call string_find (vector [Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true])
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find (vector [Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true])
                                                  in Lua.isNil (Vector.sub (result, 0))
                                                  end
 fun contains s c = not (notContains s c)
 local
-    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call string_match (vector [Lua.fromChar c, Lua.fromString pattern]), 0)))
+    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match (vector [Lua.fromChar c, Lua.fromString pattern]), 0)))
 in
 val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
 val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
@@ -291,8 +294,8 @@ val toUpper = fn (c : char) => let val x = ord c
                                       c
                                end
 open Char (* <, <=, >, >= *)
-(* minChar, maxChar, maxOrd, ord, chr, succ, pred, compare, contains, notContains, isAscii, toLower, toUpper, isAlpha, isAlphaNum, isCntrl, isDigit, isGraph, isHexDigit, isLower, isPrint, isSpace, isPunct, isUpper, toString, scan, fromString, toCString, fromCString *)
-end (* structure Char *)
+(* toString, scan, fromString, toCString, fromCString *)
+end; (* structure Char *)
 
 structure String = struct
 type string = string
@@ -304,36 +307,36 @@ fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
                                            let val i' = i + 1
-                                               val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt i', Lua.fromInt i'])
+                                               val result = Lua.call Lua.Lib.string.sub (vector [Lua.fromString s, Lua.fromInt i', Lua.fromInt i'])
                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                            end
 fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
                                                           raise Subscript
                                                       else
-                                                          let val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)])
+                                                          let val result = Lua.call Lua.Lib.string.sub (vector [Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)])
                                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                           end
 fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
                                                                     raise Subscript
                                                                 else
-                                                                    let val result = Lua.call string_sub (vector [Lua.fromString s, Lua.fromInt (i + 1)])
+                                                                    let val result = Lua.call Lua.Lib.string.sub (vector [Lua.fromString s, Lua.fromInt (i + 1)])
                                                                     in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                                     end
   | extract (s, i, SOME j) = substring (s, i, j)
-fun concat (l : string list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l)])
+fun concat (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat (vector [Lua.unsafeToValue (Vector.fromList l)])
                                         in Lua.unsafeFromValue (Vector.sub (result, 0))
                                         end
-fun concatWith (s : string) (l : string list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l), Lua.fromString s])
+fun concatWith (s : string) (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat (vector [Lua.unsafeToValue (Vector.fromList l), Lua.fromString s])
                                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                          end
-fun implode (l : char list) : string = let val result = Lua.call table_concat (vector [Lua.unsafeToValue (Vector.fromList l)])
+fun implode (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat (vector [Lua.unsafeToValue (Vector.fromList l)])
                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
                                        end
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
-fun map (f : char -> char) (s : string) : string = let val result = Lua.call string_gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
+fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                    end
-fun translate (f : char -> string) (s : string) : string = let val result = Lua.call string_gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
+fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub (vector [Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f])
                                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                            end
 (* tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate, toString, scan, fromString, toCString, fromCString *)
@@ -341,7 +344,7 @@ open String (* size, ^, str, <, <=, >, >= *)
 end (* structure String *)
 val op ^ : string * string -> string = String.^
 val size : string -> int = String.size
-val str : char -> string = String.str
+val str : char -> string = String.str;
 
 structure List = struct
 datatype list = datatype list
@@ -436,7 +439,7 @@ val length : 'a list -> int = List.length
 val map : ('a -> 'b) -> 'a list -> 'b list = List.map
 val null : 'a list -> bool = List.null
 val rev : 'a list -> 'a list = List.rev
-val tl : 'a list -> 'a list = List.tl
+val tl : 'a list -> 'a list = List.tl;
 
 structure Option = struct
 datatype option = datatype option
@@ -468,20 +471,20 @@ fun composePartial (f, g) x = case g x of
 end (* structure Option *)
 val getOpt : 'a option * 'a -> 'a = Option.getOpt
 val isSome : 'a option -> bool = Option.isSome
-val valOf : 'a option -> 'a = Option.valOf
+val valOf : 'a option -> 'a = Option.valOf;
 
 structure Array = struct
 datatype array = datatype array
 datatype vector = datatype vector
 open Array (* array, fromList, tabulate, length, sub, update *)
-end (* structure Array *)
+end; (* structure Array *)
 
 structure IO = struct
 exception Io of { name : string
                 , function : string
                 , cause : exn
                 }
-end (* structure IO *)
+end; (* structure IO *)
 
 structure TextIO = struct
 local
@@ -554,7 +557,7 @@ fun print s = (Lua.call io_write (vector [Lua.fromString s]); ())
 (* scanStream *)
 end (* local *)
 end (* structure TextIO *)
-val print : string -> unit = TextIO.print
+val print : string -> unit = TextIO.print;
 
 structure OS = struct
 local
@@ -606,7 +609,7 @@ val errorMsg : syserror -> string
 val errorName : syserror -> string
 val syserror : string -> syserror option
 *)
-end (* structure OS *)
+end; (* structure OS *)
 
 structure CommandLine = struct
 local
@@ -620,6 +623,4 @@ val name : unit -> string = fn () => let val s = Lua.sub (luaarg, Lua.fromInt 0)
                                      end
 val arguments : unit -> string list = fn () => List.tabulate (Lua.unsafeFromValue (Lua.length luaarg), fn i => Lua.unsafeFromValue (Lua.sub (luaarg, Lua.fromInt (i + 1))) : string)
 end
-end (* structure CommandLine *)
-
-end; (* local *)
+end; (* structure CommandLine *)

@@ -136,7 +136,7 @@ val builtins
                     ,(VId_Real_MINUS, "_MINUS") (* Lua - (binary) *)
                     ,(VId_Real_TIMES, "_TIMES") (* Lua * *)
                     ,(VId_Real_DIVIDE, "_DIVIDE") (* Lua / *)
-                    ,(VId_Real_abs, "_Real_abs") (* Lua math.abs *)
+                    ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     ,(VId_Real_TILDE, "_unm") (* Lua - (unary) *)
                     ,(VId_Real_LT, "_LT")
                     ,(VId_Real_GT, "_GT")
@@ -209,6 +209,22 @@ val builtins
                     ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), "_Array")
                     ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), "_Lua")
                     ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), "_LunarML")
+                    ,(VId_Lua_Lib_assert, "assert")
+                    ,(VId_Lua_Lib_error, "error")
+                    ,(VId_Lua_Lib_pairs, "pairs")
+                    ,(VId_Lua_Lib_pcall, "pcall")
+                    ,(VId_Lua_Lib_setmetatable, "setmetatable")
+                    ,(VId_Lua_Lib_math, "math")
+                    ,(VId_Lua_Lib_math_abs, "math_abs")
+                    ,(VId_Lua_Lib_math_type, "math_type")
+                    ,(VId_Lua_Lib_math_maxinteger, "math_maxinteger")
+                    ,(VId_Lua_Lib_math_mininteger, "math_mininteger")
+                    ,(VId_Lua_Lib_string, "string")
+                    ,(VId_Lua_Lib_string_format, "string_format")
+                    ,(VId_Lua_Lib_table, "table")
+                    ,(VId_Lua_Lib_table_pack, "table_pack")
+                    ,(VId_Lua_Lib_table_unpack, "table_unpack")
+                    ,(VId_Lua_Lib_table_insert, "table_insert")
                     ]
       end
 datatype BinaryOp = InfixOp of (* prec *) int * string
@@ -424,7 +440,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_Word_GT"
                                             , "_Word_LE"
                                             , "_Word_GE"
-                                            , "_Real_abs"
                                             , "_nil"
                                             , "_cons"
                                             , "_List_EQUAL"
@@ -457,6 +472,22 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_Vector"
                                             , "_Lua"
                                             , "_LunarML"
+                                            , "assert"
+                                            , "error"
+                                            , "pairs"
+                                            , "pcall"
+                                            , "setmetatable"
+                                            , "math"
+                                            , "math_abs"
+                                            , "math_type"
+                                            , "math_maxinteger"
+                                            , "math_mininteger"
+                                            , "string"
+                                            , "string_format"
+                                            , "table_insert"
+                                            , "table"
+                                            , "table_pack"
+                                            , "table_unpack"
                                             ]
                        , hoistedSymbols = StringSet.empty
                        }
@@ -552,12 +583,12 @@ end
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> Line list *)
 fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
-  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
 and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
-  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table.unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
   | putImpureTo ctx env Discard (stmts, exp) = stmts @ (if #prec exp = ~2 then
                                                             Indent :: #exp exp @ [ OptSemicolon ]
                                                         else
@@ -663,7 +694,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                                      val zs = List.map (#exp o #2) ys
                                                                                  in case dest of
                                                                                         Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment ")" ] })
-                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table.pack(" :: paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment "))" ] })
+                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table_pack(" :: paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment "))" ] })
                                                                                  end
                                                                        )
                                                            )
@@ -682,7 +713,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                                                        val zs = List.map (#exp o #2) ys
                                                                                    in case dest of
                                                                                           Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment ")" ] })
-                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table.pack(" :: paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment "))" ] })
+                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table_pack(" :: paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment "))" ] })
                                                                                    end
                                                                          )
                                                              )
