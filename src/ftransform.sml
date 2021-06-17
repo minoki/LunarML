@@ -418,13 +418,23 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.RecordEqualityExp fields => (F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields), NONE)
                    | F.DataTagExp exp => (F.DataTagExp (doExp env exp), NONE)
                    | F.DataPayloadExp exp => (F.DataPayloadExp (doExp env exp), NONE)
-                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
-                                                                                              , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
-                                                                                              , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
-                                                                                              , equalityMap = Syntax.TyConMap.map (#1 o doPath env) equalityMap
-                                                                                            }
-                                                                               , NONE
-                                                                               )
+                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => let fun doPath' path = (case doPath env path of
+                                                                                                           (path, SOME iexp) => iexp
+                                                                                                         | (path, NONE) => Path path
+                                                                                                      )
+                                                                               in ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
+                                                                                                , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
+                                                                                                , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
+                                                                                                , equalityMap = Syntax.TyConMap.map (#1 o doPath env) equalityMap
+                                                                                                }
+                                                                                  , SOME (StructExp { valMap = Syntax.VIdMap.map doPath' valMap
+                                                                                                    , strMap = Syntax.StrIdMap.map doPath' strMap
+                                                                                                    , exnTagMap = Syntax.VIdMap.map doPath' exnTagMap
+                                                                                                    , equalityMap = Syntax.TyConMap.map doPath' equalityMap
+                                                                                                    }
+                                                                                         )
+                                                                                  )
+                                                                               end
                    | F.SProjectionExp (exp, label) => (case doExp' env exp of
                                                            (exp, SOME (Path path)) => (F.SProjectionExp (exp, label), SOME (Path (F.Child (path, label))))
                                                          | (exp, SOME (StructExp m)) => (case lookupSLabel(m, label) of
@@ -457,8 +467,8 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                             | _ => F.GroupDec (v, decs)
                                                     )
                                                  end
-          and doValBind env (F.SimpleBind (vid, ty, exp)) = let val exp = doExp env exp
-                                                            in case tryInlineExp exp of
+          and doValBind env (F.SimpleBind (vid, ty, exp)) = let val (exp, iexpOpt) = doExp' env exp
+                                                            in case iexpOpt of
                                                                    SOME iexp => 
                                                                    ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, iexp) }, F.SimpleBind (vid, ty, exp))
                                                                  | NONE => 
@@ -571,7 +581,7 @@ fun extractLet (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet exp
 fun doExp (exp as F.SConExp _) = exp
   | doExp (exp as F.VarExp _) = exp
   | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
-  | doExp (F.LetExp (dec, exp2)) = F.LetExp (doDec dec, exp2)
+  | doExp (F.LetExp (dec, exp2)) = F.LetExp (doDec dec, doExp exp2)
   | doExp (F.AppExp (exp1, exp2)) = F.AppExp (doExp exp1, doExp exp2)
   | doExp (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
   | doExp (F.RaiseExp (span, exp)) = F.RaiseExp (span, doExp exp)
@@ -592,14 +602,14 @@ fun doExp (exp as F.SConExp _) = exp
                                                                                  , equalityMap = equalityMap
                                                                                  }
   | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
-and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet exp1
+and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
                                                           val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
                                                       in if List.null decs then
                                                              dec
                                                          else
                                                              F.GroupDec (NONE, decs @ [dec])
                                                       end
-  | doDec (F.ValDec (F.TupleBind (binds, exp1))) = let val (decs, exp1) = extractLet exp1
+  | doDec (F.ValDec (F.TupleBind (binds, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
                                                        val dec = F.ValDec (F.TupleBind (binds, exp1))
                                                    in if List.null decs then
                                                           dec
