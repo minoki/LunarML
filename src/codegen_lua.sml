@@ -224,7 +224,6 @@ val builtins
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
-                    ,(VId_Lua_Lib_table_insert, "table_insert")
                     ]
       end
 datatype BinaryOp = InfixOp of (* prec *) int * string
@@ -484,7 +483,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "math_mininteger"
                                             , "string"
                                             , "string_format"
-                                            , "table_insert"
                                             , "table"
                                             , "table_pack"
                                             , "table_unpack"

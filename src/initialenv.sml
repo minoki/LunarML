@@ -324,7 +324,6 @@ local val newVId = newLongVId (StrId_Lua, ["Lib", "table"])
 in
 val VId_Lua_Lib_table_pack = newVId "pack"
 val VId_Lua_Lib_table_unpack = newVId "unpack"
-val VId_Lua_Lib_table_insert = newVId "insert"
 end
 end
 end
@@ -575,7 +574,6 @@ val initialEnv : Typing.Env
                                                        , valMap = mkValMap
                                                                       [("pack", TypeScheme ([], primTy_Lua_value))
                                                                       ,("unpack", TypeScheme ([], primTy_Lua_value))
-                                                                      ,("insert", TypeScheme ([], primTy_Lua_value))
                                                                       ]
                                                        , strMap = mkStrMap []
                                                        , variables = USyntax.TyConSet.empty

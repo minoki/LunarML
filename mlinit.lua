@@ -13,7 +13,6 @@ local string_format = string.format
 local table = table
 local table_pack = table.pack
 local table_unpack = table.unpack
-local table_insert = table.insert
 
 local function _Record_EQUAL(fields)
   return function(t)
@@ -390,9 +389,9 @@ local function _VectorOrArray_fromList(xs)
   local t = {}
   local n = 0
   while xs.tag == "::" do
-    table_insert(t, xs.payload[1])
-    xs = xs.payload[2]
     n = n + 1
+    t[n] = xs.payload[1]
+    xs = xs.payload[2]
   end
   t.n = n
   return t
@@ -603,7 +602,6 @@ local _Lua = {
     _table = {
       pack = table_pack,
       unpack = table_unpack,
-      insert = table_insert,
     },
   }
 }

@@ -99,6 +99,18 @@ for _,f in ipairs(should_run) do
     os.exit(1)
   end
 end
+local should_run = {
+  "nil_in_vector.sml",
+}
+for _,f in ipairs(should_run) do
+  local file = testdir .. "/lua/should_run/" .. f
+  print("Running lua/should_run/" .. f .. "...")
+  local succ, output = compile_and_run(file)
+  if not succ then
+    io.stderr:write(string.format("%s failed to compile with:\n%s", file, output))
+    os.exit(1)
+  end
+end
 local should_not_compile = {
   "fixity.sml",
   "generalization.sml",
