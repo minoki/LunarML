@@ -118,8 +118,10 @@ datatype Signature' = MkSignature of Signature
 withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
                      , tyConMap : TypeStructure Syntax.TyConMap.map
                      , strMap : Signature' Syntax.StrIdMap.map
-                     , variables : TyConSet.set
                      }
+type QSignature = { s : Signature
+                  , bound : Syntax.LongTyCon TyConMap.map
+                  }
 
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
@@ -402,11 +404,10 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                 , admitsEquality = admitsEquality
                 , isRefOrArray = isRefOrArray
                 }
-          fun doSignature({ valMap, tyConMap, strMap, variables } : Signature) = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valMap
-                                                                                 , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap
-                                                                                 , strMap = Syntax.StrIdMap.map (fn MkSignature s => MkSignature (doSignature s)) strMap
-                                                                                 , variables = variables
-                                                                                 }
+          fun doSignature({ valMap, tyConMap, strMap } : Signature) = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valMap
+                                                                      , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap
+                                                                      , strMap = Syntax.StrIdMap.map (fn MkSignature s => MkSignature (doSignature s)) strMap
+                                                                      }
           fun doStrExp(StructExp { sourceSpan, valMap, tyConMap, strMap }) = StructExp { sourceSpan = sourceSpan, valMap = valMap, tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap, strMap = strMap }
             | doStrExp(exp as StrIdExp _) = exp
             | doStrExp(TransparentConstraintExp(span, strexp, sigexp)) = raise Fail "TransparentConstraintExp: not implemented yet"
@@ -493,7 +494,7 @@ and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
          | IsOrdered _    => TyVarSet.empty
       )
 
-fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap, variables } : Signature) = TyVarSet.empty (* TODO: implement *)
+fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)
 fun freeTyVarsInStrExp(bound, StructExp { ... }) = TyVarSet.empty (* TODO: tyConMap *)
   | freeTyVarsInStrExp(bound, StrIdExp _) = TyVarSet.empty
   | freeTyVarsInStrExp(bound, TransparentConstraintExp(_, strexp, sigexp)) = freeTyVarsInStrExp(bound, strexp)

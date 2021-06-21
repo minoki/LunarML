@@ -768,7 +768,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
             | doDatBind(_, valbinds) = valbinds
       in (env', List.foldr doDatBind [] datbinds)
       end
-fun signatureToTy(ctx, env, { valMap, tyConMap, strMap, variables } : U.Signature)
+fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
     = let val exnTags = Syntax.VIdMap.foldli (fn (vid, (tysc, ids), set) => if ids = Syntax.ExceptionConstructor then
                                                                                 Syntax.VIdSet.add(set, vid)
                                                                             else

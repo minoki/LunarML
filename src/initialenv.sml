@@ -436,14 +436,12 @@ val initialEnv : Typing.Env
                                            ,("!", TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
                                            ]
                             , strMap = mkStrMap []
-                            , variables = USyntax.TyConSet.empty
                             }
           val sig_Bool = { tyConMap = mkTyMap []
                          , valMap = mkValMap
                                         [("not", TypeScheme ([], primTy_bool --> primTy_bool))
                                         ]
                          , strMap = mkStrMap []
-                         , variables = USyntax.TyConSet.empty
                          }
           val sig_Int = { tyConMap = mkTyMap []
                         , valMap = mkValMap
@@ -460,7 +458,6 @@ val initialEnv : Typing.Env
                                        ,("abs", TypeScheme ([], primTy_int --> primTy_int))
                                        ]
                         , strMap = mkStrMap []
-                        , variables = USyntax.TyConSet.empty
                         }
           val sig_Word = { tyConMap = mkTyMap []
                          , valMap = mkValMap
@@ -476,7 +473,6 @@ val initialEnv : Typing.Env
                                         ,(">=", TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_bool))
                                         ]
                          , strMap = mkStrMap []
-                         , variables = USyntax.TyConSet.empty
                          }
           val sig_Real = { tyConMap = mkTyMap []
                          , valMap = mkValMap
@@ -492,7 +488,6 @@ val initialEnv : Typing.Env
                                         ,("abs", TypeScheme ([], primTy_real --> primTy_real))
                                         ]
                          , strMap = mkStrMap []
-                         , variables = USyntax.TyConSet.empty
                          }
           val sig_String = { tyConMap = mkTyMap []
                            , valMap = mkValMap
@@ -505,7 +500,6 @@ val initialEnv : Typing.Env
                                           ,(">=", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
                                           ]
                            , strMap = mkStrMap []
-                           , variables = USyntax.TyConSet.empty
                            }
           val sig_Char = { tyConMap = mkTyMap []
                          , valMap = mkValMap
@@ -515,7 +509,6 @@ val initialEnv : Typing.Env
                                         ,(">=", TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
                                         ]
                          , strMap = mkStrMap []
-                         , variables = USyntax.TyConSet.empty
                          }
           val sig_Array = { tyConMap = mkTyMap []
                           , valMap = mkValMap
@@ -527,7 +520,6 @@ val initialEnv : Typing.Env
                                          ,("update", TypeScheme ([(tyVarA, [])], USyntax.TupleType(SourcePos.nullSpan, [arrayOf tyA, primTy_int, tyA]) --> primTy_unit))
                                          ]
                           , strMap = mkStrMap []
-                          , variables = USyntax.TyConSet.empty
                           }
           val sig_Vector = { tyConMap = mkTyMap []
                            , valMap = mkValMap
@@ -537,7 +529,6 @@ val initialEnv : Typing.Env
                                           ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
                                           ]
                            , strMap = mkStrMap []
-                           , variables = USyntax.TyConSet.empty
                            }
           val sig_Lua_Lib = { tyConMap = mkTyMap []
                             , valMap = mkValMap
@@ -559,7 +550,6 @@ val initialEnv : Typing.Env
                                                                     ,("mininteger", TypeScheme ([], primTy_Lua_value))
                                                                     ]
                                                      , strMap = mkStrMap []
-                                                     , variables = USyntax.TyConSet.empty
                                                      }
                                             )
                                            ,("string", { tyConMap = mkTyMap []
@@ -567,7 +557,6 @@ val initialEnv : Typing.Env
                                                                       [("format", TypeScheme ([], primTy_Lua_value))
                                                                       ]
                                                        , strMap = mkStrMap []
-                                                       , variables = USyntax.TyConSet.empty
                                                        }
                                             )
                                            ,("table", { tyConMap = mkTyMap []
@@ -576,11 +565,9 @@ val initialEnv : Typing.Env
                                                                       ,("unpack", TypeScheme ([], primTy_Lua_value))
                                                                       ]
                                                        , strMap = mkStrMap []
-                                                       , variables = USyntax.TyConSet.empty
                                                        }
                                             )
                                            ]
-                            , variables = USyntax.TyConSet.empty
                             }
           val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
                         , valMap = mkValMap
@@ -620,7 +607,6 @@ val initialEnv : Typing.Env
                                        ,("length", TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
                                        ]
                         , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
-                        , variables = USyntax.TyConSet.empty
                         }
           val sig_LunarML = { tyConMap = mkTyMap []
                             , valMap = mkValMap
@@ -628,7 +614,6 @@ val initialEnv : Typing.Env
                                            ,("assumeDiscardable", TypeScheme ([(tyVarA, [])], tyA --> tyA))
                                            ]
                             , strMap = mkStrMap []
-                            , variables = USyntax.TyConSet.empty
                             }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
