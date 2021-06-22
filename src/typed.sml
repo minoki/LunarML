@@ -120,7 +120,7 @@ withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
                      , strMap : Signature' Syntax.StrIdMap.map
                      }
 type QSignature = { s : Signature
-                  , bound : Syntax.LongTyCon TyConMap.map
+                  , bound : ((* arity *) int * Syntax.LongTyCon) TyConMap.map
                   }
 
 datatype Pat = WildcardPat of SourcePos.span

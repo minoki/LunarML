@@ -49,8 +49,6 @@ fun envWithTyConEnv (tyConMap, allTyConMap) : Env
       , boundTyVars = Syntax.TyVarMap.empty
       }
 
-type Subst = USyntax.Ty USyntax.TyVarMap.map
-
 fun freeTyVarsInTypeScheme(bound, USyntax.TypeScheme(tyvars, ty)) = USyntax.freeTyVarsInTy(USyntax.TyVarSet.addList(bound, List.map #1 tyvars), ty)
 fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : USyntax.Signature)
     = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInTypeScheme(bound, tysc))) USyntax.TyVarSet.empty valMap
@@ -82,7 +80,7 @@ type ProgramContext = { nextTyVar : int ref
 type Context = { nextTyVar : int ref
                , nextVId : int ref
                , tyVarConstraints : ((USyntax.UnaryConstraint list) USyntax.TyVarMap.map) ref
-               , tyVarSubst : Subst ref
+               , tyVarSubst : (USyntax.Ty USyntax.TyVarMap.map) ref
                }
 
 exception TypeError of SourcePos.span list * string
@@ -1338,9 +1336,9 @@ val emptySignature : USyntax.Signature = { valMap = Syntax.VIdMap.empty
                                          }
 
 fun mergeSignature(s1 : U.Signature, s2 : U.Signature) : U.Signature
-    = { valMap = Syntax.VIdMap.mergeWith #2 (#valMap s1, #valMap s2)
-      , tyConMap = Syntax.TyConMap.mergeWith #2 (#tyConMap s1, #tyConMap s2)
-      , strMap = Syntax.StrIdMap.mergeWith #2 (#strMap s1, #strMap s2)
+    = { valMap = Syntax.VIdMap.unionWith #2 (#valMap s1, #valMap s2)
+      , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap s1, #tyConMap s2)
+      , strMap = Syntax.StrIdMap.unionWith #2 (#strMap s1, #strMap s2)
       }
 fun mergeQSignature(s1 : U.QSignature, s2 : U.QSignature) : U.QSignature
     = { s = mergeSignature(#s s1, #s s2)
@@ -1387,13 +1385,13 @@ fun applySubstTyConInSig (ctx : Context, subst : U.TypeFunction U.TyConMap.map) 
       end
 
 
-fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs))
+fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.QSignature
     = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s)
-                                  in mergeQSignature(s, addSpec(ctx, env, spec))
+                                  in mergeQSignature(s, addSpec(ctx, env', spec))
                                   end) { s = emptySignature, bound = U.TyConMap.empty } specs
   | evalSignature(ctx, env, S.SigIdExp(span, sigid as Syntax.MkSigId name))
     = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
-           SOME s => s
+           SOME s => s (* TODO: fresh type names? *)
          | NONE => emitError(ctx, [span], "unknown signature name '" ^ name ^ "'")
       )
   | evalSignature(ctx, env, S.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty))
@@ -1455,7 +1453,7 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                       , tyConMap = Syntax.TyConMap.insert(#tyConMap (#s s), tycon, tystr)
                                                       , strMap = #strMap (#s s)
                                                       }
-                                                , bound = USyntax.TyConMap.insert(#bound s, tycon', Syntax.MkQualified([], tycon))
+                                                , bound = USyntax.TyConMap.insert(#bound s, tycon', (List.length tyvars, Syntax.MkQualified([], tycon)))
                                                 }
                                              end
                  )
@@ -1477,7 +1475,7 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                       , tyConMap = Syntax.TyConMap.insert(#tyConMap (#s s), tycon, tystr)
                                                       , strMap = #strMap (#s s)
                                                       }
-                                                , bound = USyntax.TyConMap.insert(#bound s, tycon', Syntax.MkQualified([], tycon))
+                                                , bound = USyntax.TyConMap.insert(#bound s, tycon', (List.length tyvars, Syntax.MkQualified([], tycon)))
                                                 }
                                              end
                  )
@@ -1495,10 +1493,133 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                          , tyConMap = Syntax.TyConMap.empty
                                                          , strMap = Syntax.StrIdMap.map (fn { s, bound } => U.MkSignature s) strMap
                                                          }
-                                                   , bound = Syntax.StrIdMap.foldli (fn (strid, { bound, ... }, map) => USyntax.TyConMap.unionWith #2 (map, USyntax.TyConMap.map (fn Syntax.MkQualified(strids, tycon) => Syntax.MkQualified(strid :: strids, tycon)) bound)) USyntax.TyConMap.empty strMap
+                                                   , bound = Syntax.StrIdMap.foldli (fn (strid, { bound, ... }, map) => USyntax.TyConMap.unionWith #2 (map, USyntax.TyConMap.map (fn (arity, Syntax.MkQualified(strids, tycon)) => (arity, Syntax.MkQualified(strid :: strids, tycon))) bound)) USyntax.TyConMap.empty strMap
                                                    }
                                                 end
   | addSpec(ctx, env, S.Include(span, sigexp)) = evalSignature(ctx, env, sigexp)
+
+fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
+  | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = List.all (fn (label, ty) => case List.find (fn (label', _) => label = label') fields' of
+                                                                                                          SOME (_, ty') => sameType(ty, ty')
+                                                                                                        | NONE => false
+                                                                                   ) fields
+                                                                          andalso List.all (fn (label, ty) => List.exists (fn (label', _) => label = label') fields') fields
+  | sameType(U.TyCon(span1, tyargs, tycon), U.TyCon(span2, tyargs', tycon')) = U.eqUTyCon(tycon, tycon') andalso (ListPair.allEq sameType (tyargs, tyargs') handle ListPair.UnequalLengths => false)
+  | sameType(U.FnType(span1, ty1, ty2), U.FnType(span2, ty1', ty2')) = sameType(ty1, ty1') andalso sameType(ty2, ty2')
+  | sameType(_, _) = false
+
+fun matchQSignature(ctx : Context, env : Env, span : SourcePos.span, expected : U.QSignature, strid : U.StrId, actual : U.Signature) : U.Signature * U.StrExp
+    = let val instantiation = USyntax.TyConMap.map (fn (arity, longtycon as Syntax.MkQualified(strids, tycon)) =>
+                                                       let val tystrA = let val s = lookupStr(ctx, actual, span, strids)
+                                                                        in case Syntax.TyConMap.find(#tyConMap s, tycon) of
+                                                                               SOME tystr => tystr
+                                                                             | NONE => emitError(ctx, [span], "signature matching: type not found: " ^ Syntax.print_LongTyCon longtycon)
+                                                                        end
+                                                           val () = case #typeFunction tystrA of
+                                                                        U.TypeFunction(tyvars, _) => if List.length tyvars = arity then
+                                                                                                         () (* OK *)
+                                                                                                     else
+                                                                                                         emitError(ctx, [span], "signature matching: arity mismatch (" ^ Syntax.print_LongTyCon longtycon ^ ")")
+                                                           val { admitsEquality, ... } = let val s = lookupStr(ctx, #s expected, span, strids)
+                                                                                         in case Syntax.TyConMap.find(#tyConMap s, tycon) of
+                                                                                                SOME tystr => tystr
+                                                                                              | NONE => emitError(ctx, [span], "signature matching: type not found: " ^ Syntax.print_LongTyCon longtycon ^ " (internal error)")
+                                                                                         end
+                                                               (* TODO: check equality *)
+                                                       in #typeFunction tystrA
+                                                       end
+                                                   ) (#bound expected)
+          val instantiated = applySubstTyConInSig (ctx, instantiation) (#s expected)
+      in matchSignature(ctx, env, span, instantiated, U.MkLongStrId(strid, []), actual)
+      end
+and matchSignature(ctx, env, span, expected : U.Signature, longstrid : U.LongStrId, actual : U.Signature) : U.Signature * U.StrExp
+    = let val strMap : (U.Signature * U.StrExp) S.StrIdMap.map
+              = Syntax.StrIdMap.mapi (fn (strid, U.MkSignature s) =>
+                                         case Syntax.StrIdMap.find(#strMap actual, strid) of
+                                             SOME (U.MkSignature s') => let val longstrid' = case longstrid of
+                                                                                                 U.MkLongStrId(strid0, strids0) => U.MkLongStrId(strid0, strids0 @ [strid])
+                                                                        in matchSignature(ctx, env, span, s, longstrid', s')
+                                                                        end
+                                           | NONE => emitError(ctx, [span], "signature matching: structure not found (" ^ Syntax.print_StrId strid ^ ")")
+                                     ) (#strMap expected)
+          val tyConMap : U.TypeStructure S.TyConMap.map
+              = Syntax.TyConMap.mapi (fn (tycon, expectedTyStr) =>
+                                         case Syntax.TyConMap.find (#tyConMap actual, tycon) of
+                                             SOME actualTyStr => matchTyDesc(ctx, env, span, expectedTyStr, actualTyStr)
+                                           | NONE => emitError(ctx, [span], "signature matching: " ^ (case tycon of Syntax.MkTyCon name => name) ^ " not found")
+                                     ) (#tyConMap expected)
+          val valMap : (U.TypeScheme * U.Dec list * U.LongVId * Syntax.IdStatus) S.VIdMap.map
+              = Syntax.VIdMap.mapi (fn (vid, (tyscE, idsE)) =>
+                                       case Syntax.VIdMap.find (#valMap actual, vid) of
+                                           SOME (tyscA, idsA) => let val longvid = case longstrid of
+                                                                                       U.MkLongStrId(strid0, strids0) => U.MkLongVId(strid0, strids0, vid)
+                                                                     val (tysc, decs, longvid') = matchValDesc(ctx, env, span, tyscE, longvid, tyscA, idsA)
+                                                                     val () = if idsE = Syntax.ExceptionConstructor andalso idsA <> Syntax.ExceptionConstructor then
+                                                                                  emitError(ctx, [span], "signature matching: id status mismatch: " ^ Syntax.getVIdName vid)
+                                                                              else if idsE = Syntax.ValueConstructor andalso idsA <> Syntax.ValueConstructor then
+                                                                                  emitError(ctx, [span], "signature matching: id status mismatch: " ^ Syntax.getVIdName vid)
+                                                                              else
+                                                                                  ()
+                                                                 in (tysc, decs, longvid', idsE)
+                                                                 end
+                                         | NONE => emitError(ctx, [span], "signature matching: " ^ Syntax.getVIdName vid ^ " not found")
+                                   ) (#valMap expected)
+          val (decs, strMap) = Syntax.StrIdMap.foldli (fn (strid, (s, strexp), (decs, strMap)) =>
+                                                           let val strid' = newStrId(ctx, strid)
+                                                               val decs = U.StrBindDec(span, strid', strexp, s) :: decs
+                                                           in (decs, Syntax.StrIdMap.insert(strMap, strid, U.MkLongStrId(strid', [])))
+                                                           end
+                                                       ) ([], Syntax.StrIdMap.empty) strMap
+          val (decs, valMap) = Syntax.VIdMap.foldli (fn (vid, (tysc, decs, longvid, ids), (decs', valMap)) =>
+                                                        let val decs = List.foldr (fn (dec, decs) => U.CoreDec(span, dec) :: decs) decs' decs
+                                                        in (decs, Syntax.VIdMap.insert(valMap, vid, (longvid, ids)))
+                                                        end
+                                                    ) (decs, Syntax.VIdMap.empty) valMap
+          val strexp = U.StructExp { sourceSpan = span
+                                   , valMap = valMap
+                                   , tyConMap = tyConMap
+                                   , strMap = strMap
+                                   }
+      in (expected, if List.null decs then
+                        strexp
+                    else
+                        U.LetInStrExp(span, decs, strexp)
+         )
+      end
+and matchTyDesc(ctx, env, span, expected : U.TypeStructure, actual : U.TypeStructure) : U.TypeStructure
+    = let val U.TypeFunction(tyvarsE, tyE) = #typeFunction expected
+          val U.TypeFunction(tyvarsA, tyA) = #typeFunction actual
+          (* TODO: admitsEquality *)
+      in if List.length tyvarsE = List.length tyvarsA then
+             let val tyvars = List.map (fn _ => freshTyVar(ctx)) tyvarsE
+                 val substE = ListPair.foldlEq (fn (tv, tv', m) => U.TyVarMap.insert(m, tv, U.TyVar(span, tv'))) U.TyVarMap.empty (tyvarsE, tyvars)
+                 val substA = ListPair.foldlEq (fn (tv, tv', m) => U.TyVarMap.insert(m, tv, U.TyVar(span, tv'))) U.TyVarMap.empty (tyvarsA, tyvars)
+                 val tyE = applySubstTy substE tyE
+                 val tyA = applySubstTy substA tyA
+             in if sameType(tyE, tyA) then
+                    actual (* ? *)
+                else
+                    emitError(ctx, [span], "signature matching: type mismatch")
+             end
+         else
+             emitError(ctx, [span], "signature matching: arity mismatch")
+      end
+and matchValDesc(ctx, env, span, expected : U.TypeScheme, longvid : U.LongVId, actual : U.TypeScheme, ids : Syntax.IdStatus) : U.TypeScheme * U.Dec list * U.LongVId
+    = (case (expected, actual) of
+           (U.TypeScheme([], tyE), U.TypeScheme([], tyA)) => ( addConstraint(ctx, env, U.EqConstr(span, tyE, tyA))
+                                                             ; (expected, [], longvid) (* monomorphic type *)
+                                                             )
+         | (U.TypeScheme(tyvarsE, tyE), U.TypeScheme(_, _)) =>
+           let val (tyA, tyargsA) = instantiate(ctx, span, actual)
+               val () = addConstraint(ctx, env, U.EqConstr(span, tyE, tyA))
+               val vid = newVId(ctx, case longvid of
+                                           U.MkShortVId(U.MkVId(name, _)) => Syntax.MkVId name
+                                         | U.MkLongVId(_, _, vid) => vid
+                               )
+               val dec = U.ValDec(span, [U.PolyVarBind(span, vid, expected, U.VarExp(span, longvid, ids, tyargsA))])
+           in (expected, [dec], U.MkShortVId vid)
+           end
+      )
 
 fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSignature * U.TypeStructure U.TyConMap.map * U.StrExp
     = let val ({ valMap, tyConMap, allTyConMap, strMap, ... }, decs) = typeCheckStrDecs(ctx, env, decs)
@@ -1531,9 +1652,11 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSign
                                                            )
       )
   | typeCheckStrExp(ctx, env, S.TransparentConstraintExp(span, strexp, sigexp))
-    = let val (s, allTyConMap, strexp) = typeCheckStrExp(ctx, env, strexp)
-          val s' = evalSignature(ctx, envToSigEnv env, sigexp)
-      in emitError(ctx, [span], "transparent constraint: not implemented yet") (* TODO *)
+    = let val (sA, allTyConMap, strexp) = typeCheckStrExp(ctx, env, strexp) (* TODO: unpack? *)
+          val sE = evalSignature(ctx, envToSigEnv env, sigexp)
+          val strid = newStrId(ctx, Syntax.MkStrId "tmp")
+          val (s, strexp') = matchQSignature(ctx, env, span, sE, strid, #s sA)
+      in ({ s = s, bound = U.TyConMap.empty }, allTyConMap, U.LetInStrExp(span, [U.StrBindDec(span, strid, strexp, #s sA (* ? *))], strexp'))
       end
   | typeCheckStrExp(ctx, env, S.OpaqueConstraintExp(span, strexp, sigexp))
     = let val (s, allTyConMap, strexp) = typeCheckStrExp(ctx, env, strexp)
