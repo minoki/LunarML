@@ -249,6 +249,7 @@ fun genTyConId(ctx : Context)
     = let val id = !(#nextTyVar ctx)
       in #nextTyVar ctx := id + 1 ; id end
 fun newTyCon(ctx, Syntax.MkTyCon name) = USyntax.MkTyCon(name, genTyConId(ctx))
+fun renewTyCon(ctx, USyntax.MkTyCon(name, _)) = USyntax.MkTyCon(name, genTyConId(ctx))
 
 local
     structure S = Syntax
@@ -1384,6 +1385,33 @@ fun applySubstTyConInSig (ctx : Context, subst : U.TypeFunction U.TyConMap.map) 
       in goSig
       end
 
+fun refreshTyConInTy (ctx : Context, subst : U.TyCon U.TyConMap.map) : U.Ty -> U.Ty
+    = let fun goTy (ty as U.TyVar _) = ty
+            | goTy (U.RecordType(span, fields)) = U.RecordType(span, Syntax.mapRecordRow goTy fields)
+            | goTy (U.TyCon(span, tyargs, tycon)) = let val tyargs = List.map goTy tyargs
+                                                    in case U.TyConMap.find(subst, tycon) of
+                                                           NONE => U.TyCon(span, tyargs, tycon)
+                                                         | SOME tycon' => U.TyCon(span, tyargs, tycon')
+                                                    end
+            | goTy (U.FnType(span, ty1, ty2)) = U.FnType(span, goTy ty1, goTy ty2)
+      in goTy
+      end
+fun refreshTyConInSig (ctx : Context, subst : U.TyCon U.TyConMap.map) : U.Signature -> U.Signature
+    = let val goTy = refreshTyConInTy (ctx, subst)
+          fun goTypeScheme (U.TypeScheme (tvs, ty)) = U.TypeScheme (tvs, goTy ty)
+          fun goTypeFunction (U.TypeFunction (tvs, ty)) = U.TypeFunction (tvs, goTy ty)
+          fun goSig { valMap, tyConMap, strMap } = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids)) valMap
+                                                   , tyConMap = Syntax.TyConMap.map (fn { typeFunction, valEnv, admitsEquality, isRefOrArray } =>
+                                                                                        { typeFunction = goTypeFunction typeFunction
+                                                                                        , valEnv = Syntax.VIdMap.map (fn (tysc, ids) => (goTypeScheme tysc, ids)) valEnv
+                                                                                        , admitsEquality = admitsEquality
+                                                                                        , isRefOrArray = isRefOrArray
+                                                                                        }
+                                                                                    ) tyConMap
+                                                   , strMap = Syntax.StrIdMap.map (fn U.MkSignature s => U.MkSignature (goSig s)) strMap
+                                                   }
+      in goSig
+      end
 
 fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.QSignature
     = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s)
@@ -1391,7 +1419,11 @@ fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.Q
                                   end) { s = emptySignature, bound = U.TyConMap.empty } specs
   | evalSignature(ctx, env, S.SigIdExp(span, sigid as Syntax.MkSigId name))
     = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
-           SOME s => s (* TODO: fresh type names? *)
+           SOME { s, bound } => let val subst = U.TyConMap.mapi (fn (tycon, _) => renewTyCon(ctx, tycon)) bound
+                                in { s = refreshTyConInSig (ctx, subst) s
+                                   , bound = U.TyConMap.foldli (fn (tycon, arityAndLongTyCon, map) => U.TyConMap.insert(map, U.TyConMap.lookup(subst, tycon), arityAndLongTyCon)) U.TyConMap.empty bound
+                                   }
+                                end
          | NONE => emitError(ctx, [span], "unknown signature name '" ^ name ^ "'")
       )
   | evalSignature(ctx, env, S.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty))
