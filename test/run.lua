@@ -74,6 +74,8 @@ local should_run = {
   "local_datatype.sml",
   "equality.sml",
   "xorshift64.sml",
+  "signature1.sml",
+  "signature2.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
