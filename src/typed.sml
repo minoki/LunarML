@@ -110,8 +110,6 @@ val emptyValEnv : ValEnv = Syntax.VIdMap.empty
 
 type TypeStructure = { typeFunction : TypeFunction
                      , valEnv : ValEnv
-                     , admitsEquality : bool
-                     , isRefOrArray : bool
                      }
 
 datatype Signature' = MkSignature of Signature
@@ -120,7 +118,7 @@ withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
                      , strMap : Signature' Syntax.StrIdMap.map
                      }
 type QSignature = { s : Signature
-                  , bound : ((* arity *) int * Syntax.LongTyCon) TyNameMap.map
+                  , bound : { arity : int, admitsEquality : bool, longtycon : Syntax.LongTyCon } TyNameMap.map
                   }
 
 datatype Pat = WildcardPat of SourcePos.span
@@ -382,13 +380,11 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                       end
           and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
             | doExBind(ExReplication(span, vid, longvid, optTy)) = ExReplication(span, vid, longvid, Option.map doTy optTy)
-          fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv, admitsEquality, isRefOrArray }
+          fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv }
               = { typeFunction = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                  in TypeFunction(tyvars, applySubstTy subst ty)
                                  end
                 , valEnv = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valEnv
-                , admitsEquality = admitsEquality
-                , isRefOrArray = isRefOrArray
                 }
           fun doSignature({ valMap, tyConMap, strMap } : Signature) = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valMap
                                                                       , tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap

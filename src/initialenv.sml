@@ -369,66 +369,42 @@ val initialEnv : Typing.Env
                            , valEnv = mkValConMap [("true", TypeScheme ([], primTy_bool))
                                                   ,("false", TypeScheme ([], primTy_bool))
                                                   ]
-                           , admitsEquality = true
-                           , isRefOrArray = false
                            }
           val tyStr_int = { typeFunction = TypeFunction([], primTy_int)
                           , valEnv = emptyValEnv
-                          , admitsEquality = true
-                          , isRefOrArray = false
                           }
           val tyStr_word = { typeFunction = TypeFunction([], primTy_word)
                            , valEnv = emptyValEnv
-                           , admitsEquality = true
-                           , isRefOrArray = false
                            }
           val tyStr_real = { typeFunction = TypeFunction([], primTy_real)
                            , valEnv = emptyValEnv
-                           , admitsEquality = false
-                           , isRefOrArray = false
                            }
           val tyStr_string = { typeFunction = TypeFunction([], primTy_string)
                              , valEnv = emptyValEnv
-                             , admitsEquality = true
-                             , isRefOrArray = false
                              }
           val tyStr_char = { typeFunction = TypeFunction([], primTy_char)
                            , valEnv = emptyValEnv
-                           , admitsEquality = true
-                           , isRefOrArray = false
                            }
           val tyStr_list = { typeFunction = TypeFunction([tyVarA], listOf tyA)
                            , valEnv = mkValConMap [("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
                                                   ]
-                           , admitsEquality = true
-                           , isRefOrArray = false
                            }
           val tyStr_ref = { typeFunction = TypeFunction([tyVarA], refOf tyA)
                           , valEnv = mkValConMap [("ref", TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
                                                  ]
-                          , admitsEquality = false (* must be handled specially *)
-                          , isRefOrArray = true
                           }
           val tyStr_exn = { typeFunction = TypeFunction([], primTy_exn)
                           , valEnv = emptyValEnv
-                          , admitsEquality = false
-                          , isRefOrArray = false
                           }
           val tyStr_array = { typeFunction = TypeFunction([tyVarA], arrayOf tyA)
                             , valEnv = emptyValEnv
-                            , admitsEquality = false (* must be handled specially *)
-                            , isRefOrArray = true
                             }
           val tyStr_vector = { typeFunction = TypeFunction([tyVarA], vectorOf tyA)
                              , valEnv = emptyValEnv
-                             , admitsEquality = true
-                             , isRefOrArray = false
                              }
           val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
                                 , valEnv = emptyValEnv
-                                , admitsEquality = false
-                                , isRefOrArray = false
                                 }
           val sig_General = { tyConMap = mkTyMap []
                             , valMap = mkValMap
@@ -668,18 +644,18 @@ val initialEnv : Typing.Env
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty
-                                  [(primTyName_bool, tyStr_bool)
-                                  ,(primTyName_int, tyStr_int)
-                                  ,(primTyName_word, tyStr_word)
-                                  ,(primTyName_real, tyStr_real)
-                                  ,(primTyName_string, tyStr_string)
-                                  ,(primTyName_char, tyStr_char)
-                                  ,(primTyName_list, tyStr_list)
-                                  ,(primTyName_ref, tyStr_ref)
-                                  ,(primTyName_exn, tyStr_exn)
-                                  ,(primTyName_array, tyStr_array)
-                                  ,(primTyName_vector, tyStr_vector)
-                                  ,(primTyName_Lua_value, tyStr_Lua_value)
+                                  [(primTyName_bool, { valEnv = #valEnv tyStr_bool, admitsEquality = true })
+                                  ,(primTyName_int, { valEnv = emptyValEnv, admitsEquality = true })
+                                  ,(primTyName_word, { valEnv = emptyValEnv, admitsEquality = true })
+                                  ,(primTyName_real, { valEnv = emptyValEnv, admitsEquality = false })
+                                  ,(primTyName_string, { valEnv = emptyValEnv, admitsEquality = true })
+                                  ,(primTyName_char, { valEnv = emptyValEnv, admitsEquality = true })
+                                  ,(primTyName_list, { valEnv = #valEnv tyStr_list, admitsEquality = true })
+                                  ,(primTyName_ref, { valEnv = emptyValEnv, admitsEquality = false (* must be handled specially *) })
+                                  ,(primTyName_exn, { valEnv = emptyValEnv, admitsEquality = false })
+                                  ,(primTyName_array, { valEnv = emptyValEnv, admitsEquality = false (* must be handled specially *) })
+                                  ,(primTyName_vector, { valEnv = emptyValEnv, admitsEquality = true })
+                                  ,(primTyName_Lua_value, { valEnv = emptyValEnv, admitsEquality = false })
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (USyntax.MkLongStrId(strid, []), s)))
                                Syntax.StrIdMap.empty

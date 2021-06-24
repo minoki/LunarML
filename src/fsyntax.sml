@@ -777,18 +777,21 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
       in F.SigType { valMap = Syntax.VIdMap.map (fn (tysc, ids) => typeSchemeToTy(ctx, env, tysc)) valMap
                    , strMap = Syntax.StrIdMap.map (fn U.MkSignature s => signatureToTy(ctx, env, s)) strMap
                    , exnTags = exnTags
-                   , equalityMap = Syntax.TyConMap.mapPartial (fn { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
+                   , equalityMap = Syntax.TyConMap.mapPartial (fn _ => NONE
+                                                               (* { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
                                                                   let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                                       val ty = toFTy(ctx, env, ty)
                                                                       val ty = List.foldr (fn (tv, ty) => F.FnType (eqTy (F.TyVar tv), ty)) (eqTy ty) tyvars
                                                                   in SOME (List.foldr F.ForallType ty tyvars)
                                                                   end
                                                               | { admitsEquality = false, ... } => NONE (* TODO: ref and array *)
+*)
                                                               ) tyConMap
                    } (* TODO: pack existentials *)
       end
 fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap })
-    = let val equalities = Syntax.TyConMap.foldli (fn (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
+    = let val equalities = Syntax.TyConMap.foldli (fn (_, _, xs) => xs
+                                                  (* (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
                                                       let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                           val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                                                           val env' = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
@@ -804,6 +807,7 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                                       in (tycon, vid, body, ty) :: xs
                                                       end
                                                   | (_, { admitsEquality = false, ... }, xs) => xs
+*)
                                                   ) [] tyConMap
           val exp = F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, ids) => LongVIdToPath(longvid)) valMap
                                 , strMap = Syntax.StrIdMap.map LongStrIdToPath strMap
