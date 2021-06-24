@@ -1573,22 +1573,42 @@ fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
   | sameType(U.FnType(span1, ty1, ty2), U.FnType(span2, ty1', ty2')) = sameType(ty1, ty1') andalso sameType(ty2, ty2')
   | sameType(_, _) = false
 
+fun checkEquality(ctx : Context, env : Env, tyvars : U.TyVarSet.set) : U.Ty -> bool
+    = let fun goTy (U.TyVar (span, tv)) = if U.TyVarSet.member (tyvars, tv) then
+                                              true
+                                          else
+                                              (case tv of
+                                                   U.NamedTyVar (_, eq, _) => eq
+                                                 | _ => false (* error *)
+                                              )
+            | goTy (U.RecordType (span, fields)) = List.all (fn (label, ty) => goTy ty) fields
+            | goTy (U.TyCon (span, tyargs, tyname)) = isRefOrArray tyname
+                                                      orelse (let val { admitsEquality, ... } = lookupTyNameInEnv (ctx, env, span, tyname)
+                                                              in admitsEquality andalso List.all goTy tyargs
+                                                              end
+                                                             )
+            | goTy (U.FnType _) = false
+      in goTy
+      end
 fun matchQSignature(ctx : Context, env : Env, span : SourcePos.span, expected : U.QSignature, strid : U.StrId, actual : U.Signature) : U.Signature * U.StrExp
     = let val instantiation = USyntax.TyNameMap.map (fn { arity, admitsEquality, longtycon as Syntax.MkQualified(strids, tycon) } =>
-                                                       let val tystrA = let val s = lookupStr(ctx, actual, span, strids)
-                                                                        in case Syntax.TyConMap.find(#tyConMap s, tycon) of
-                                                                               SOME tystr => tystr
-                                                                             | NONE => emitError(ctx, [span], "signature matching: type not found: " ^ Syntax.print_LongTyCon longtycon)
-                                                                        end
-                                                           val () = case #typeFunction tystrA of
-                                                                        U.TypeFunction(tyvars, _) => if List.length tyvars = arity then
-                                                                                                         () (* OK *)
-                                                                                                     else
-                                                                                                         emitError(ctx, [span], "signature matching: arity mismatch (" ^ Syntax.print_LongTyCon longtycon ^ ")")
-                                                               (* TODO: check equality *)
-                                                       in #typeFunction tystrA
-                                                       end
-                                                   ) (#bound expected)
+                                                        let val { typeFunction as U.TypeFunction(tyvars, actualTy), ... }
+                                                                = let val s = lookupStr(ctx, actual, span, strids)
+                                                                  in case Syntax.TyConMap.find(#tyConMap s, tycon) of
+                                                                         SOME tystr => tystr
+                                                                       | NONE => emitError(ctx, [span], "signature matching: type not found: " ^ Syntax.print_LongTyCon longtycon)
+                                                                  end
+                                                            val () = if List.length tyvars = arity then
+                                                                         () (* OK *)
+                                                                     else
+                                                                         emitError(ctx, [span], "signature matching: arity mismatch (" ^ Syntax.print_LongTyCon longtycon ^ ")")
+                                                            val () = if admitsEquality andalso not (checkEquality (ctx, env, U.TyVarSet.addList(U.TyVarSet.empty, tyvars)) actualTy) then
+                                                                         emitError(ctx, [span], "signature matching: equality mismatch (" ^ Syntax.print_LongTyCon longtycon ^ ")")
+                                                                     else
+                                                                         ()
+                                                        in typeFunction
+                                                        end
+                                                    ) (#bound expected)
           val instantiated = applySubstTyConInSig (ctx, instantiation) (#s expected)
       in matchSignature(ctx, env, span, instantiated, U.MkLongStrId(strid, []), actual)
       end
