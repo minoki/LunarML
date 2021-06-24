@@ -104,30 +104,30 @@ fun newContext() : Context = let val typingContext = Typing.newContext()
 
 type Env = { fixity : Fixity.Env
            , typingEnv : Typing.Env
-           , tyconset : USyntax.TyConSet.set
+           , tynameset : USyntax.TyNameSet.set
            , toFEnv : ToFSyntax.Env
            , fTransEnv : FTransform.Env
            }
 val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , typingEnv = InitialEnv.initialEnv
-                       , tyconset = InitialEnv.initialTyConSet
+                       , tynameset = InitialEnv.initialTyNameSet
                        , toFEnv = ToFSyntax.initialEnv
                        , fTransEnv = FTransform.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, typingEnv, tyconset, toFEnv, fTransEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, typingEnv, tynameset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
            val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
-           val tyconset = Typing.checkTyScopeOfProgram(typingContext, tyconset, decs)
+           val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
            val (toFEnv, fdecs) = case outputMode of
                                      ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
                                    | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, typingEnv', toFEnv, List.concat decs)
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Fixity.mergeEnv (fixity, fixity')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
-                             , tyconset = tyconset
+                             , tynameset = tynameset
                              , toFEnv = toFEnv
                              , fTransEnv = fTransEnv'
                              }

@@ -6,7 +6,7 @@ structure USyntax = struct
 datatype VId = MkVId of string * int
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
-datatype TyCon = MkTyCon of string * int
+datatype TyName = MkTyName of string * int
 datatype StrId = MkStrId of string * int
 datatype LongVId = MkShortVId of VId
                  | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
@@ -14,7 +14,7 @@ datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
 fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andalso eq = eq' andalso a = b
   | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
   | eqUTyVar(_, _) = false
-fun eqUTyCon(MkTyCon(_,a),MkTyCon(_,b)) = a = b
+fun eqTyName(MkTyName(_,a),MkTyName(_,b)) = a = b
 fun eqVId(a, b : VId) = a = b
 fun eqULongVId(MkShortVId a, MkShortVId b) = eqVId(a, b)
   | eqULongVId(MkLongVId(s, t, u), MkLongVId(s', t', u')) = s = s' andalso t = t' andalso u = u'
@@ -35,7 +35,7 @@ structure TyVarMap = RedBlackMapFn(TyVarKey)
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Syntax.Label * Ty) list (* record type expression *)
-            | TyCon of SourcePos.span * Ty list * TyCon (* type construction *)
+            | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
 
 fun PairType(span, a, b) = RecordType(span, [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
@@ -53,14 +53,14 @@ end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
 structure VIdMap = RedBlackMapFn(VIdKey)
 
-structure TyConKey = struct
-type ord_key = TyCon
-fun compare(MkTyCon(x,a), MkTyCon(y,b)) = case String.compare (x,y) of
-                                              EQUAL => Int.compare(a,b)
-                                            | ord => ord
+structure TyNameKey = struct
+type ord_key = TyName
+fun compare(MkTyName(x,a), MkTyName(y,b)) = case String.compare (x,y) of
+                                                EQUAL => Int.compare(a,b)
+                                              | ord => ord
 end : ORD_KEY
-structure TyConSet = RedBlackSetFn(TyConKey)
-structure TyConMap = RedBlackMapFn(TyConKey)
+structure TyNameSet = RedBlackSetFn(TyNameKey)
+structure TyNameMap = RedBlackMapFn(TyNameKey)
 
 structure StrIdKey = struct
 type ord_key = StrId
@@ -120,7 +120,7 @@ withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
                      , strMap : Signature' Syntax.StrIdMap.map
                      }
 type QSignature = { s : Signature
-                  , bound : ((* arity *) int * Syntax.LongTyCon) TyConMap.map
+                  , bound : ((* arity *) int * Syntax.LongTyCon) TyNameMap.map
                   }
 
 datatype Pat = WildcardPat of SourcePos.span
@@ -131,9 +131,9 @@ datatype Pat = WildcardPat of SourcePos.span
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
              | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
 
-datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
+datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
-datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list * (* admits equality? (after type check) *) bool
+datatype DatBind = DatBind of SourcePos.span * TyVar list * TyName * ConBind list * (* admits equality? *) bool
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
@@ -159,26 +159,12 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
      and ValBind = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
-datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
-              | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
-              | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
-              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list
-              | DatatypeRepSpec of SourcePos.span * TyCon * (* Long *) TyCon
-              | ExDesc of SourcePos.span * (VId * Ty option) list
-              | StrDesc of SourcePos.span * (Syntax.StrId * SigExp) list
-              | Include of SourcePos.span * SigExp
-     and SigExp = BasicSigExp of SourcePos.span * Spec list
-                | SigIdExp of SourcePos.span * Syntax.SigId
-                | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * (* Long *) TyCon * Ty
-
 datatype StrExp = StructExp of { sourceSpan : SourcePos.span
                                , valMap : (LongVId * Syntax.IdStatus) Syntax.VIdMap.map
                                , tyConMap : TypeStructure Syntax.TyConMap.map
                                , strMap : LongStrId Syntax.StrIdMap.map
                                }
                 | StrIdExp of SourcePos.span * LongStrId
-                | TransparentConstraintExp of SourcePos.span * StrExp * SigExp
-                | OpaqueConstraintExp of SourcePos.span * StrExp * SigExp
                 (* TODO: functor application *)
                 | LetInStrExp of SourcePos.span * StrDec list * StrExp
      and StrDec = CoreDec of SourcePos.span * Dec
@@ -223,29 +209,29 @@ fun print_LongVId(MkShortVId(vid)) = print_VId vid
   | print_LongVId(MkLongVId(MkStrId(strid, n), strids, vid)) = "MkLongVId(" ^ strid ^ "@" ^ Int.toString n ^ "," ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ Syntax.print_VId vid ^ ")"
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
-fun print_TyCon (MkTyCon ("int", 0)) = "primTyCon_int"
-  | print_TyCon (MkTyCon ("word", 1)) = "primTyCon_word"
-  | print_TyCon (MkTyCon ("real", 2)) = "primTyCon_real"
-  | print_TyCon (MkTyCon ("string", 3)) = "primTyCon_string"
-  | print_TyCon (MkTyCon ("char", 4)) = "primTyCon_char"
-  | print_TyCon (MkTyCon ("exn", 5)) = "primTyCon_exn"
-  | print_TyCon (MkTyCon ("bool", 6)) = "primTyCon_bool"
-  | print_TyCon (MkTyCon ("ref", 7)) = "primTyCon_ref"
-  | print_TyCon (MkTyCon ("list", 8)) = "primTyCon_list"
-  | print_TyCon (MkTyCon(tyconname, n)) = "MkTyCon(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
+fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
+  | print_TyName (MkTyName ("word", 1)) = "primTyName_word"
+  | print_TyName (MkTyName ("real", 2)) = "primTyName_real"
+  | print_TyName (MkTyName ("string", 3)) = "primTyName_string"
+  | print_TyName (MkTyName ("char", 4)) = "primTyName_char"
+  | print_TyName (MkTyName ("exn", 5)) = "primTyName_exn"
+  | print_TyName (MkTyName ("bool", 6)) = "primTyName_bool"
+  | print_TyName (MkTyName ("ref", 7)) = "primTyName_ref"
+  | print_TyName (MkTyName ("list", 8)) = "primTyName_list"
+  | print_TyName (MkTyName(tyconname, n)) = "MkTyName(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType(_,xs)) = (case Syntax.extractTuple (1, xs) of
                                        NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                      | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                   )
-  | print_Ty (TyCon(_,[],MkTyCon("int", 0))) = "primTy_int"
-  | print_Ty (TyCon(_,[],MkTyCon("word", 1))) = "primTy_word"
-  | print_Ty (TyCon(_,[],MkTyCon("real", 2))) = "primTy_real"
-  | print_Ty (TyCon(_,[],MkTyCon("string", 3))) = "primTy_string"
-  | print_Ty (TyCon(_,[],MkTyCon("char", 4))) = "primTy_char"
-  | print_Ty (TyCon(_,[],MkTyCon("exn", 5))) = "primTy_exn"
-  | print_Ty (TyCon(_,[],MkTyCon("bool", 6))) = "primTy_bool"
-  | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyCon y ^ ")"
+  | print_Ty (TyCon(_,[],MkTyName("int", 0))) = "primTy_int"
+  | print_Ty (TyCon(_,[],MkTyName("word", 1))) = "primTy_word"
+  | print_Ty (TyCon(_,[],MkTyName("real", 2))) = "primTy_real"
+  | print_Ty (TyCon(_,[],MkTyName("string", 3))) = "primTy_string"
+  | print_Ty (TyCon(_,[],MkTyName("char", 4))) = "primTy_char"
+  | print_Ty (TyCon(_,[],MkTyName("exn", 5))) = "primTy_exn"
+  | print_Ty (TyCon(_,[],MkTyName("bool", 6))) = "primTy_bool"
+  | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
   | print_Ty (FnType(_,x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat(_, x)) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
@@ -281,8 +267,8 @@ and print_Dec (ValDec(_,valbinds)) = "ValDec'(" ^ Syntax.print_list print_ValBin
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
   | print_Dec (GroupDec _) = "GroupDec"
-and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
-and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyCon tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
+and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ Syntax.print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
+and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyName tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
 and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
   | print_ConBind (ConBind(_, vid, SOME ty)) = "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
 and print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
@@ -300,7 +286,7 @@ and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
-fun print_TyConMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+fun print_TyNameMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyName,print_elem)) (TyNameMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 val print_Decs = Syntax.print_list print_Dec
 fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
   | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")"
@@ -410,8 +396,6 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                       }
           fun doStrExp(StructExp { sourceSpan, valMap, tyConMap, strMap }) = StructExp { sourceSpan = sourceSpan, valMap = valMap, tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap, strMap = strMap }
             | doStrExp(exp as StrIdExp _) = exp
-            | doStrExp(TransparentConstraintExp(span, strexp, sigexp)) = raise Fail "TransparentConstraintExp: not implemented yet"
-            | doStrExp(OpaqueConstraintExp(span, strexp, sigexp)) = raise Fail "OpaqueConstraintExp: not implemented yet"
             | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, List.map doStrDec strdecs, doStrExp strexp)
           and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec dec)
             | doStrDec(StrBindDec(span, strid, strexp, s)) = StrBindDec(span, strid, doStrExp strexp, doSignature s)
@@ -497,8 +481,6 @@ and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
 fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)
 fun freeTyVarsInStrExp(bound, StructExp { ... }) = TyVarSet.empty (* TODO: tyConMap *)
   | freeTyVarsInStrExp(bound, StrIdExp _) = TyVarSet.empty
-  | freeTyVarsInStrExp(bound, TransparentConstraintExp(_, strexp, sigexp)) = freeTyVarsInStrExp(bound, strexp)
-  | freeTyVarsInStrExp(bound, OpaqueConstraintExp(_, strexp, sigexp)) = freeTyVarsInStrExp(bound, strexp)
   | freeTyVarsInStrExp(bound, LetInStrExp(_, strdecs, strexp)) = TyVarSet.union(freeTyVarsInStrDecs(bound, strdecs), freeTyVarsInStrExp(bound, strexp))
 and freeTyVarsInStrDec(bound, CoreDec(_, dec)) = freeTyVarsInDec(bound, dec)
   | freeTyVarsInStrDec(bound, StrBindDec(_, _, strexp, s)) = TyVarSet.union(freeTyVarsInStrExp(bound, strexp), freeTyVarsInSignature(bound, s))

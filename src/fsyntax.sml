@@ -4,7 +4,7 @@
  *)
 structure FSyntax = struct
 type TyVar = USyntax.TyVar
-type TyCon = USyntax.TyCon
+type TyName = USyntax.TyName
 datatype SLabel = ValueLabel of Syntax.VId
                 | StructLabel of Syntax.StrId
                 | ExnTagLabel of Syntax.VId (* of constructor *)
@@ -13,7 +13,7 @@ datatype Path = Root of USyntax.VId
               | Child of Path * SLabel
 datatype Ty = TyVar of TyVar
             | RecordType of (Syntax.Label * Ty) list
-            | TyCon of Ty list * TyCon
+            | TyCon of Ty list * TyName
             | FnType of Ty * Ty
             | ForallType of TyVar * Ty
             (* TypeFn : (TyVar * Kind) list * Ty *)
@@ -30,7 +30,7 @@ datatype Pat = WildcardPat
              | ConPat of Path * Pat option * Ty list
              | LayeredPat of USyntax.VId * Ty * Pat
 datatype ConBind = ConBind of USyntax.VId * Ty option
-datatype DatBind = DatBind of TyVar list * TyCon * ConBind list
+datatype DatBind = DatBind of TyVar list * TyName * ConBind list
 datatype Exp = SConExp of Syntax.SCon
              | VarExp of USyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
@@ -50,8 +50,8 @@ datatype Exp = SConExp of Syntax.SCon
              | TyAbsExp of TyVar * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
-             | DataTagExp of Exp (* * TyCon *)
-             | DataPayloadExp of Exp (* * USyntax.LongVId * TyCon *)
+             | DataTagExp of Exp (* * TyName *)
+             | DataPayloadExp of Exp (* * USyntax.LongVId * TyName *)
              | StructExp of { valMap : Path Syntax.VIdMap.map
                             , strMap : Path Syntax.StrIdMap.map
                             , exnTagMap : Path Syntax.VIdMap.map
@@ -104,7 +104,7 @@ fun SimplifyingAndalsoExp(a as VarExp(vid), b) = if USyntax.eqVId(vid, InitialEn
 fun occurCheck tv =
     let fun check (TyVar tv') = USyntax.eqUTyVar(tv, tv')
           | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
-          | check (TyCon(tyargs, longtycon)) = List.exists check tyargs
+          | check (TyCon(tyargs, tyname)) = List.exists check tyargs
           | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
           | check (ForallType(tv', ty)) = if USyntax.eqUTyVar(tv, tv') then
                                               false
@@ -121,7 +121,7 @@ fun substituteTy (tv, replacement) =
                                    else
                                        ty
           | go (RecordType fields) = RecordType (Syntax.mapRecordRow go fields)
-          | go (TyCon(tyargs, longtycon)) = TyCon(List.map go tyargs, longtycon)
+          | go (TyCon(tyargs, tyname)) = TyCon(List.map go tyargs, tyname)
           | go (FnType(ty1, ty2)) = FnType(go ty1, go ty2)
           | go (ty as ForallType(tv', ty')) = if USyntax.eqUTyVar(tv, tv') then
                                                   ty
@@ -147,7 +147,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                        | SOME replacement => replacement
                                     )
           | doTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, doTy ty)) fields)
-          | doTy (TyCon (tyargs, tycon)) = TyCon (List.map doTy tyargs, tycon)
+          | doTy (TyCon (tyargs, tyname)) = TyCon (List.map doTy tyargs, tyname)
           | doTy (FnType (ty1, ty2)) = FnType (doTy ty1, doTy ty2)
           | doTy (ForallType (tv, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
                                              ForallType (tv, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
@@ -165,9 +165,9 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doPat (ConPat (path, optPat, tyargs)) = ConPat (path, Option.map doPat optPat, List.map doTy tyargs)
           | doPat (LayeredPat (vid, ty, pat)) = LayeredPat (vid, doTy ty, doPat pat)
         fun doConBind (ConBind (vid, optTy)) = ConBind (vid, Option.map doTy optTy)
-        fun doDatBind (DatBind (tyvars, tycon, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
-                                                            in DatBind (tyvars, tycon, List.map (#doConBind (substTy subst')) conbinds)
-                                                            end
+        fun doDatBind (DatBind (tyvars, tyname, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
+                                                             in DatBind (tyvars, tyname, List.map (#doConBind (substTy subst')) conbinds)
+                                                             end
         fun doExp (exp as SConExp _) = exp
           | doExp (exp as VarExp _) = exp
           | doExp (RecordExp fields) = RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
@@ -220,7 +220,7 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
                                                               else
                                                                   USyntax.TyVarSet.singleton tv
   | freeTyVarsInTy (bound, RecordType fields) = List.foldl (fn ((label, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty fields
-  | freeTyVarsInTy (bound, TyCon (tyargs, tycon)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty tyargs
+  | freeTyVarsInTy (bound, TyCon (tyargs, tyname)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty tyargs
   | freeTyVarsInTy (bound, FnType (ty1, ty2)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
   | freeTyVarsInTy (bound, ForallType (tv, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags, equalityMap }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
@@ -262,7 +262,7 @@ and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.un
 and freeTyVarsInDec (bound, ValDec valbind) = freeTyVarsInValBind (bound, valbind)
   | freeTyVarsInDec (bound, RecValDec valbinds) = List.foldl (fn (valbind, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInValBind (bound, valbind))) USyntax.TyVarSet.empty valbinds
   | freeTyVarsInDec (bound, IgnoreDec exp) = freeTyVarsInExp (bound, exp)
-  | freeTyVarsInDec (bound, DatatypeDec datbinds) = List.foldl (fn (DatBind (tyvars, tycon, conbinds), acc) =>
+  | freeTyVarsInDec (bound, DatatypeDec datbinds) = List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
                                                                    let val bound = USyntax.TyVarSet.addList (bound, tyvars)
                                                                    in List.foldl (fn (ConBind (vid, NONE), acc) => acc
                                                                                  | (ConBind (vid, SOME ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
@@ -296,7 +296,7 @@ structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
 val print_LongVId = USyntax.print_LongVId
-val print_TyCon = USyntax.print_TyCon
+val print_TyName = USyntax.print_TyName
 fun print_Path (Root vid) = USyntax.print_VId vid
   | print_Path (Child (parent, label)) = print_Path parent ^ "/.." (* TODO *)
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
@@ -304,14 +304,14 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                   | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                )
-  | print_Ty (TyCon([],USyntax.MkTyCon("int", 0))) = "primTy_int"
-  | print_Ty (TyCon([],USyntax.MkTyCon("word", 1))) = "primTy_word"
-  | print_Ty (TyCon([],USyntax.MkTyCon("real", 2))) = "primTy_real"
-  | print_Ty (TyCon([],USyntax.MkTyCon("string", 3))) = "primTy_string"
-  | print_Ty (TyCon([],USyntax.MkTyCon("char", 4))) = "primTy_char"
-  | print_Ty (TyCon([],USyntax.MkTyCon("exn", 5))) = "primTy_exn"
-  | print_Ty (TyCon([],USyntax.MkTyCon("bool", 6))) = "primTy_bool"
-  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyCon y ^ ")"
+  | print_Ty (TyCon([],USyntax.MkTyName("int", 0))) = "primTy_int"
+  | print_Ty (TyCon([],USyntax.MkTyName("word", 1))) = "primTy_word"
+  | print_Ty (TyCon([],USyntax.MkTyName("real", 2))) = "primTy_real"
+  | print_Ty (TyCon([],USyntax.MkTyName("string", 3))) = "primTy_string"
+  | print_Ty (TyCon([],USyntax.MkTyName("char", 4))) = "primTy_char"
+  | print_Ty (TyCon([],USyntax.MkTyName("exn", 5))) = "primTy_exn"
+  | print_Ty (TyCon([],USyntax.MkTyName("bool", 6))) = "primTy_bool"
+  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (SigType _) = "SigType"
@@ -373,21 +373,21 @@ fun LongStrIdToPath(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (strid
 type Context = { nextVId : int ref
                }
 type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
-           , equalityForTyConMap : USyntax.LongVId USyntax.TyConMap.map
+           , equalityForTyNameMap : USyntax.LongVId USyntax.TyNameMap.map
            , exnTagMap : FSyntax.Path USyntax.LongVIdMap.map
            }
 val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
-                       , equalityForTyConMap = let open Typing InitialEnv
-                                               in List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty
-                                                             [(primTyCon_int, VId_EQUAL_int)
-                                                             ,(primTyCon_word, VId_EQUAL_word)
-                                                             ,(primTyCon_string, VId_EQUAL_string)
-                                                             ,(primTyCon_char, VId_EQUAL_char)
-                                                             ,(primTyCon_bool, VId_EQUAL_bool)
-                                                             ,(primTyCon_list, VId_EQUAL_list)
-                                                             ,(primTyCon_vector, VId_EQUAL_vector)
-                                                             ]
-                                               end
+                       , equalityForTyNameMap = let open Typing InitialEnv
+                                                in List.foldl USyntax.TyNameMap.insert' USyntax.TyNameMap.empty
+                                                              [(primTyName_int, VId_EQUAL_int)
+                                                              ,(primTyName_word, VId_EQUAL_word)
+                                                              ,(primTyName_string, VId_EQUAL_string)
+                                                              ,(primTyName_char, VId_EQUAL_char)
+                                                              ,(primTyName_bool, VId_EQUAL_bool)
+                                                              ,(primTyName_list, VId_EQUAL_list)
+                                                              ,(primTyName_vector, VId_EQUAL_vector)
+                                                              ]
+                                                end
                        , exnTagMap = let open InitialEnv
                                      in List.foldl (fn ((con, tag), m) => USyntax.LongVIdMap.insert(m, con, LongVIdToPath tag)) USyntax.LongVIdMap.empty
                                                    [(LongVId_Match, VId_Match_tag)
@@ -402,12 +402,12 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                        }
 fun mergeEnv(env1 : Env, env2 : Env)
     = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
-      , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env1, #equalityForTyConMap env2)
+      , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env1, #equalityForTyNameMap env2)
       , exnTagMap = USyntax.LongVIdMap.unionWith #2 (#exnTagMap env1, #exnTagMap env2)
       }
 
 fun updateEqualityForTyVarMap(f, env : Env) = { equalityForTyVarMap = f (#equalityForTyVarMap env)
-                                              , equalityForTyConMap = #equalityForTyConMap env
+                                              , equalityForTyNameMap = #equalityForTyNameMap env
                                               , exnTagMap = #exnTagMap env
                                               }
 
@@ -424,68 +424,68 @@ local structure U = USyntax
       (* toFDecs : Context * Env * USyntax.Dec list -> Env * FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
       val overloads = let open Typing InitialEnv
-                      in List.foldl (fn ((vid, xs), m) => USyntax.VIdMap.insert (m, vid, List.foldl USyntax.TyConMap.insert' USyntax.TyConMap.empty xs)) USyntax.VIdMap.empty
-                                    [(VId_abs, [(primTyCon_int, VId_Int_abs)
-                                               ,(primTyCon_real, VId_Real_abs)
+                      in List.foldl (fn ((vid, xs), m) => USyntax.VIdMap.insert (m, vid, List.foldl USyntax.TyNameMap.insert' USyntax.TyNameMap.empty xs)) USyntax.VIdMap.empty
+                                    [(VId_abs, [(primTyName_int, VId_Int_abs)
+                                               ,(primTyName_real, VId_Real_abs)
                                                ]
                                      )
-                                    ,(VId_TILDE, [(primTyCon_int, VId_Int_TILDE)
-                                                 ,(primTyCon_word, VId_Word_TILDE)
-                                                 ,(primTyCon_real, VId_Real_TILDE)
+                                    ,(VId_TILDE, [(primTyName_int, VId_Int_TILDE)
+                                                 ,(primTyName_word, VId_Word_TILDE)
+                                                 ,(primTyName_real, VId_Real_TILDE)
                                                  ]
                                      )
-                                    ,(VId_div, [(primTyCon_int, VId_Int_div)
-                                               ,(primTyCon_word, VId_Word_div)
+                                    ,(VId_div, [(primTyName_int, VId_Int_div)
+                                               ,(primTyName_word, VId_Word_div)
                                                ]
                                      )
-                                    ,(VId_mod, [(primTyCon_int, VId_Int_mod)
-                                               ,(primTyCon_word, VId_Word_mod)
+                                    ,(VId_mod, [(primTyName_int, VId_Int_mod)
+                                               ,(primTyName_word, VId_Word_mod)
                                                ]
                                      )
-                                    ,(VId_TIMES, [(primTyCon_int, VId_Int_TIMES)
-                                                 ,(primTyCon_word, VId_Word_TIMES)
-                                                 ,(primTyCon_real, VId_Real_TIMES)
+                                    ,(VId_TIMES, [(primTyName_int, VId_Int_TIMES)
+                                                 ,(primTyName_word, VId_Word_TIMES)
+                                                 ,(primTyName_real, VId_Real_TIMES)
                                                  ]
                                      )
-                                    ,(VId_DIVIDE, [(primTyCon_real, VId_Real_DIVIDE)
+                                    ,(VId_DIVIDE, [(primTyName_real, VId_Real_DIVIDE)
                                                   ]
                                      )
-                                    ,(VId_PLUS, [(primTyCon_int, VId_Int_PLUS)
-                                                ,(primTyCon_word, VId_Word_PLUS)
-                                                ,(primTyCon_real, VId_Real_PLUS)
+                                    ,(VId_PLUS, [(primTyName_int, VId_Int_PLUS)
+                                                ,(primTyName_word, VId_Word_PLUS)
+                                                ,(primTyName_real, VId_Real_PLUS)
                                                 ]
                                      )
-                                    ,(VId_MINUS, [(primTyCon_int, VId_Int_MINUS)
-                                                 ,(primTyCon_word, VId_Word_MINUS)
-                                                 ,(primTyCon_real, VId_Real_MINUS)
+                                    ,(VId_MINUS, [(primTyName_int, VId_Int_MINUS)
+                                                 ,(primTyName_word, VId_Word_MINUS)
+                                                 ,(primTyName_real, VId_Real_MINUS)
                                                  ]
                                      )
-                                    ,(VId_LT, [(primTyCon_int, VId_Int_LT)
-                                              ,(primTyCon_word, VId_Word_LT)
-                                              ,(primTyCon_real, VId_Real_LT)
-                                              ,(primTyCon_string, VId_String_LT)
-                                              ,(primTyCon_char, VId_Char_LT)
+                                    ,(VId_LT, [(primTyName_int, VId_Int_LT)
+                                              ,(primTyName_word, VId_Word_LT)
+                                              ,(primTyName_real, VId_Real_LT)
+                                              ,(primTyName_string, VId_String_LT)
+                                              ,(primTyName_char, VId_Char_LT)
                                               ]
                                      )
-                                    ,(VId_LE, [(primTyCon_int, VId_Int_LE)
-                                              ,(primTyCon_word, VId_Word_LE)
-                                              ,(primTyCon_real, VId_Real_LE)
-                                              ,(primTyCon_string, VId_String_LE)
-                                              ,(primTyCon_char, VId_Char_LE)
+                                    ,(VId_LE, [(primTyName_int, VId_Int_LE)
+                                              ,(primTyName_word, VId_Word_LE)
+                                              ,(primTyName_real, VId_Real_LE)
+                                              ,(primTyName_string, VId_String_LE)
+                                              ,(primTyName_char, VId_Char_LE)
                                               ]
                                      )
-                                    ,(VId_GT, [(primTyCon_int, VId_Int_GT)
-                                              ,(primTyCon_word, VId_Word_GT)
-                                              ,(primTyCon_real, VId_Real_GT)
-                                              ,(primTyCon_string, VId_String_GT)
-                                              ,(primTyCon_char, VId_Char_GT)
+                                    ,(VId_GT, [(primTyName_int, VId_Int_GT)
+                                              ,(primTyName_word, VId_Word_GT)
+                                              ,(primTyName_real, VId_Real_GT)
+                                              ,(primTyName_string, VId_String_GT)
+                                              ,(primTyName_char, VId_Char_GT)
                                               ]
                                      )
-                                    ,(VId_GE, [(primTyCon_int, VId_Int_GE)
-                                              ,(primTyCon_word, VId_Word_GE)
-                                              ,(primTyCon_real, VId_Real_GE)
-                                              ,(primTyCon_string, VId_String_GE)
-                                              ,(primTyCon_char, VId_Char_GE)
+                                    ,(VId_GE, [(primTyName_int, VId_Int_GE)
+                                              ,(primTyName_word, VId_Word_GE)
+                                              ,(primTyName_real, VId_Real_GE)
+                                              ,(primTyName_string, VId_String_GE)
+                                              ,(primTyName_char, VId_Char_GE)
                                               ]
                                      )
                                     ]
@@ -526,7 +526,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
       else
           (case USyntax.VIdMap.find(overloads, vid) of
                SOME ov => (case tyarg of
-                               U.TyCon(_, [], tycon) => (case USyntax.TyConMap.find (ov, tycon) of
+                               U.TyCon(_, [], tycon) => (case USyntax.TyNameMap.find (ov, tycon) of
                                                              SOME vid' => F.LongVarExp(vid')
                                                            | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
                                                         )
@@ -568,7 +568,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
     = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
   | toFExp(ctx, env, U.HandleExp(span, exp, matches))
     = let val exnName = freshVId(ctx, "exn")
-          val exnTy = F.TyCon([], Typing.primTyCon_exn)
+          val exnTy = F.TyCon([], Typing.primTyName_exn)
           fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
                                   in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
                                   end
@@ -596,7 +596,7 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
                                        [] => F.ForallType (tv, ty1)
-                                     | [U.IsEqType _] => F.ForallType (tv, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool)), ty1))
+                                     | [U.IsEqType _] => F.ForallType (tv, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool)), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
@@ -605,7 +605,7 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
               = (case cts of
                      [] => F.TyAbsExp (tv, doExp (env', rest))
                    | [U.IsEqType _] => let val vid = freshVId(ctx, "eq")
-                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
+                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool))
                                            val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
                                        in F.TyAbsExp (tv, F.FnExp(vid, eqTy, doExp(env'', rest)))
                                        end
@@ -619,28 +619,28 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
                                         in F.ForallType(tv, go env' xs)
                                         end
             | go env ((tv, [U.IsEqType _]) :: xs) = let val env' = env (* TODO *)
-                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyCon_bool))
+                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool))
                                                     in F.ForallType(tv, F.FnType(eqTy, go env' xs))
                                                     end
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
-and getEquality(ctx, env, U.TyCon(span, [tyarg], tycon))
-    = if U.eqUTyCon(tycon, Typing.primTyCon_ref) then
+and getEquality(ctx, env, U.TyCon(span, [tyarg], tyname))
+    = if U.eqTyName(tyname, Typing.primTyName_ref) then
           F.TyAppExp(F.LongVarExp(InitialEnv.VId_EQUAL_ref), toFTy(ctx, env, tyarg))
-      else if U.eqUTyCon(tycon, Typing.primTyCon_array) then
+      else if U.eqTyName(tyname, Typing.primTyName_array) then
           F.TyAppExp(F.LongVarExp(InitialEnv.VId_EQUAL_array), toFTy(ctx, env, tyarg))
       else
-          (case USyntax.TyConMap.find(#equalityForTyConMap env, tycon) of
-               NONE => raise Fail (USyntax.PrettyPrint.print_TyCon tycon ^ " does not admit equality")
+          (case USyntax.TyNameMap.find(#equalityForTyNameMap env, tyname) of
+               NONE => raise Fail (USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
              | SOME longvid => F.AppExp(F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
           )
-  | getEquality (ctx, env, U.TyCon(span, tyargs, tycon)) = (case USyntax.TyConMap.find(#equalityForTyConMap env, tycon) of
-                                                                NONE => raise Fail (USyntax.PrettyPrint.print_TyCon tycon ^ " does not admit equality")
-                                                              | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp(exp, toFTy(ctx, env, tyarg))) (F.LongVarExp(longvid)) tyargs
-                                                                                in List.foldl (fn (tyarg, exp) => F.AppExp(exp, getEquality(ctx, env, tyarg))) typesApplied tyargs
-                                                                                end
-                                                           )
+  | getEquality (ctx, env, U.TyCon(span, tyargs, tyname)) = (case USyntax.TyNameMap.find(#equalityForTyNameMap env, tyname) of
+                                                                 NONE => raise Fail (USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
+                                                               | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp(exp, toFTy(ctx, env, tyarg))) (F.LongVarExp(longvid)) tyargs
+                                                                                 in List.foldl (fn (tyarg, exp) => F.AppExp(exp, getEquality(ctx, env, tyarg))) typesApplied tyargs
+                                                                                 end
+                                                            )
   | getEquality (ctx, env, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap env, tv) of
                                                      NONE => raise Fail ("equality for the type variable not found: " ^ USyntax.PrettyPrint.print_TyVar tv)
                                                    | SOME vid => F.VarExp(vid)
@@ -690,7 +690,7 @@ and toFDecs(ctx, env, []) = (env, [])
                                                   )
                                                 ) (exnTagMap, []) exbinds
           val env = { equalityForTyVarMap = #equalityForTyVarMap env
-                    , equalityForTyConMap = #equalityForTyConMap env
+                    , equalityForTyNameMap = #equalityForTyNameMap env
                     , exnTagMap = exnTagMap
                     }
           val (env, decs) = toFDecs(ctx, env, decs)
@@ -708,22 +708,22 @@ and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
 and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
-    = let val nameMap = List.foldl (fn (U.DatBind(span, tyvars, tycon as USyntax.MkTyCon(name, _), conbinds, true), map) => USyntax.TyConMap.insert(map, tycon, freshVId(ctx, "EQUAL" ^ name))
-                                   | (_, map) => map) USyntax.TyConMap.empty datbinds
+    = let val nameMap = List.foldl (fn (U.DatBind(span, tyvars, tycon as USyntax.MkTyName(name, _), conbinds, true), map) => USyntax.TyNameMap.insert(map, tycon, freshVId(ctx, "EQUAL" ^ name))
+                                   | (_, map) => map) USyntax.TyNameMap.empty datbinds
           val env' = { equalityForTyVarMap = #equalityForTyVarMap env
-                     , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env, USyntax.TyConMap.map U.MkShortVId nameMap)
+                     , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, USyntax.TyNameMap.map U.MkShortVId nameMap)
                      , exnTagMap = #exnTagMap env
                      }
           fun doDatBind(U.DatBind(span, tyvars, tycon, conbinds, true), valbinds)
-              = let val vid = USyntax.TyConMap.lookup(nameMap, tycon)
-                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyCon([], Typing.primTyCon_bool))
+              = let val vid = USyntax.TyNameMap.lookup(nameMap, tycon)
+                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyCon([], Typing.primTyName_bool))
                     val tyvars'' = List.map F.TyVar tyvars
                     val ty = List.foldr (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (eqTy (F.TyCon(tyvars'', tycon))) tyvars
                     val ty = List.foldr F.ForallType ty tyvars
                     val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                     val eqForTyVars = List.foldl USyntax.TyVarMap.insert' USyntax.TyVarMap.empty tyvars'
                     val env'' = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env', eqForTyVars)
-                                , equalityForTyConMap = #equalityForTyConMap env'
+                                , equalityForTyNameMap = #equalityForTyNameMap env'
                                 , exnTagMap = #exnTagMap env'
                                 }
                     val body = let val param = freshVId(ctx, "p")
@@ -778,7 +778,7 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
                    , strMap = Syntax.StrIdMap.map (fn U.MkSignature s => signatureToTy(ctx, env, s)) strMap
                    , exnTags = exnTags
                    , equalityMap = Syntax.TyConMap.mapPartial (fn { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
-                                                                  let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyCon_bool))
+                                                                  let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                                       val ty = toFTy(ctx, env, ty)
                                                                       val ty = List.foldr (fn (tv, ty) => F.FnType (eqTy (F.TyVar tv), ty)) (eqTy ty) tyvars
                                                                   in SOME (List.foldr F.ForallType ty tyvars)
@@ -789,10 +789,10 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
       end
 fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap })
     = let val equalities = Syntax.TyConMap.foldli (fn (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
-                                                      let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyCon_bool))
+                                                      let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                           val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                                                           val env' = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
-                                                                     , equalityForTyConMap = #equalityForTyConMap env
+                                                                     , equalityForTyNameMap = #equalityForTyNameMap env
                                                                      , exnTagMap = #exnTagMap env
                                                                      }
                                                           val body = getEquality(ctx, env', ty)
@@ -819,8 +819,6 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
       in (env, List.foldl (fn ((_, vid, fnBody, ty), exp) => F.LetExp(F.ValDec(F.SimpleBind(vid, ty, fnBody)), exp)) exp equalities)
       end
   | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, LongStrIdExp longstrid)
-  | strExpToFExp(ctx, env, U.TransparentConstraintExp _) = raise Fail "transparent constraint: not implemented yet"
-  | strExpToFExp(ctx, env, U.OpaqueConstraintExp _) = raise Fail "opaque constraint: not implemented yet"
   | strExpToFExp(ctx, env, U.LetInStrExp(span, strdecs, strexp)) = let val (env', decs) = strDecsToFDecs(ctx, env, strdecs)
                                                                        val (env', exp) = strExpToFExp(ctx, env', strexp)
                                                                    in (env', List.foldr F.LetExp exp decs)
@@ -837,7 +835,7 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                 in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, m) => updateExnTagMap(strids @ [strid], s, F.Child(path, F.StructLabel strid), m)) exnTagMap strMap
                 end
           val env'' = { equalityForTyVarMap = #equalityForTyVarMap env
-                      , equalityForTyConMap = USyntax.TyConMap.unionWith #2 (#equalityForTyConMap env, #equalityForTyConMap env')
+                      , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, #equalityForTyNameMap env')
                       , exnTagMap = updateExnTagMap ([], s, F.Root vid, #exnTagMap env)
                       }
       in (env'', [F.ValDec(F.SimpleBind(vid, ty, exp))]) (* TODO: unpack existentials *)

@@ -22,21 +22,21 @@ val emptyEnv : Env = { valMap = USyntax.VIdMap.empty
 (* true, false, nil, ::, ref *)
 val initialEnv : Env = { valMap = let open InitialEnv
                                       val tyVarA = USyntax.AnonymousTyVar(0)
-                                      val primTyCon_list = Typing.primTyCon_list
-                                      val primTyCon_ref = Typing.primTyCon_ref
+                                      val primTyName_list = Typing.primTyName_list
+                                      val primTyName_ref = Typing.primTyName_ref
                                   in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
-                                                [(VId_true, FSyntax.TyCon([], Typing.primTyCon_bool))
-                                                ,(VId_false, FSyntax.TyCon([], Typing.primTyCon_bool))
-                                                ,(VId_nil, FSyntax.ForallType(tyVarA, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)))
-                                                ,(VId_DCOLON, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.PairType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list)), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_list))))
-                                                ,(VId_ref, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyCon_ref))))
-                                                ,(VId_Match, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Bind, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Div, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Overflow, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Size, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Subscript, FSyntax.TyCon([], Typing.primTyCon_exn))
-                                                ,(VId_Fail, FSyntax.FnType(FSyntax.TyCon([], Typing.primTyCon_string), FSyntax.TyCon([], Typing.primTyCon_exn)))
+                                                [(VId_true, FSyntax.TyCon([], Typing.primTyName_bool))
+                                                ,(VId_false, FSyntax.TyCon([], Typing.primTyName_bool))
+                                                ,(VId_nil, FSyntax.ForallType(tyVarA, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyName_list)))
+                                                ,(VId_DCOLON, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.PairType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyName_list)), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyName_list))))
+                                                ,(VId_ref, FSyntax.ForallType(tyVarA, FSyntax.FnType(FSyntax.TyVar(tyVarA), FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyName_ref))))
+                                                ,(VId_Match, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Bind, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Div, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Overflow, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Size, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Subscript, FSyntax.TyCon([], Typing.primTyName_exn))
+                                                ,(VId_Fail, FSyntax.FnType(FSyntax.TyCon([], Typing.primTyName_string), FSyntax.TyCon([], Typing.primTyName_exn)))
                                                 ]
                                   end
                        , exnTagMap = let open InitialEnv
@@ -61,7 +61,7 @@ fun isWildcardPat F.WildcardPat = true
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
-fun isExnType (F.TyCon ([], tycon)) = tycon = Typing.primTyCon_exn
+fun isExnType (F.TyCon ([], tycon)) = tycon = Typing.primTyName_exn
   | isExnType _ = false
 fun splitPath (components, F.Child(parent, label)) = splitPath (label :: components, parent)
   | splitPath (components, F.Root vid) = (vid, components)
@@ -102,7 +102,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.AppExp(exp1, exp2) => F.AppExp(doExp env exp1, doExp env exp2)
                    | F.HandleExp{body, exnName, handler} => F.HandleExp { body = doExp env body
                                                                         , exnName = exnName
-                                                                        , handler = let val env = addVar(env, exnName, F.TyCon([], Typing.primTyCon_exn))
+                                                                        , handler = let val env = addVar(env, exnName, F.TyCon([], Typing.primTyName_exn))
                                                                                     in doExp env handler
                                                                                     end
                                                                         }
@@ -168,7 +168,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
             | doDec env (dec as F.ExceptionDec { conName, tagName, payloadTy })
-              = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
+              = let val exnTy = FSyntax.TyCon([], Typing.primTyName_exn)
                     val conTy = case payloadTy of
                                     NONE => exnTy
                                   | SOME ty => F.FnType(ty, exnTy)
@@ -178,7 +178,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                 in (env', dec)
                 end
             | doDec env (dec as F.ExceptionRepDec { conName, conPath, tagPath, payloadTy })
-              = let val exnTy = FSyntax.TyCon([], Typing.primTyCon_exn)
+              = let val exnTy = FSyntax.TyCon([], Typing.primTyName_exn)
                     val conTy = case payloadTy of
                                     NONE => exnTy
                                   | SOME ty => FSyntax.FnType(ty, exnTy)

@@ -263,8 +263,8 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
-val primTyCon_Lua_value = USyntax.MkTyCon("Lua.value", 12)
-val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyCon_Lua_value)
+val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 12)
+val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
 val VId_Lua_sub = newVId "sub"
 val VId_Lua_set = newVId "set"
 val VId_Lua_global = newVId "global"
@@ -361,10 +361,10 @@ val initialEnv : Typing.Env
           fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
           fun mkTupleType(xs) = USyntax.TupleType(SourcePos.nullSpan, xs)
           fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
-          fun refOf(t) = mkTyCon([t], primTyCon_ref)
-          fun listOf(t) = mkTyCon([t], primTyCon_list)
-          fun arrayOf(t) = mkTyCon([t], primTyCon_array)
-          fun vectorOf(t) = mkTyCon([t], primTyCon_vector)
+          fun refOf(t) = mkTyCon([t], primTyName_ref)
+          fun listOf(t) = mkTyCon([t], primTyName_list)
+          fun arrayOf(t) = mkTyCon([t], primTyName_array)
+          fun vectorOf(t) = mkTyCon([t], primTyName_vector)
           val tyStr_bool = { typeFunction = TypeFunction([], primTy_bool)
                            , valEnv = mkValConMap [("true", TypeScheme ([], primTy_bool))
                                                   ,("false", TypeScheme ([], primTy_bool))
@@ -397,14 +397,14 @@ val initialEnv : Typing.Env
                            , admitsEquality = true
                            , isRefOrArray = false
                            }
-          val tyStr_list = { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_list))
+          val tyStr_list = { typeFunction = TypeFunction([tyVarA], listOf tyA)
                            , valEnv = mkValConMap [("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
                                                   ]
                            , admitsEquality = true
                            , isRefOrArray = false
                            }
-          val tyStr_ref = { typeFunction = TypeFunction([tyVarA], mkTyCon([mkTyVar(tyVarA)], primTyCon_ref))
+          val tyStr_ref = { typeFunction = TypeFunction([tyVarA], refOf tyA)
                           , valEnv = mkValConMap [("ref", TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
                                                  ]
                           , admitsEquality = false (* must be handled specially *)
@@ -666,21 +666,21 @@ val initialEnv : Typing.Env
                                  ,("array", tyStr_array)
                                  ,("vector", tyStr_vector)
                                  ]
-         , allTyConMap = List.foldl USyntax.TyConMap.insert'
-                                    USyntax.TyConMap.empty
-                                    [(primTyCon_bool, tyStr_bool)
-                                    ,(primTyCon_int, tyStr_int)
-                                    ,(primTyCon_word, tyStr_word)
-                                    ,(primTyCon_real, tyStr_real)
-                                    ,(primTyCon_string, tyStr_string)
-                                    ,(primTyCon_char, tyStr_char)
-                                    ,(primTyCon_list, tyStr_list)
-                                    ,(primTyCon_ref, tyStr_ref)
-                                    ,(primTyCon_exn, tyStr_exn)
-                                    ,(primTyCon_array, tyStr_array)
-                                    ,(primTyCon_vector, tyStr_vector)
-                                    ,(primTyCon_Lua_value, tyStr_Lua_value)
-                                    ]
+         , tyNameMap = List.foldl USyntax.TyNameMap.insert'
+                                  USyntax.TyNameMap.empty
+                                  [(primTyName_bool, tyStr_bool)
+                                  ,(primTyName_int, tyStr_int)
+                                  ,(primTyName_word, tyStr_word)
+                                  ,(primTyName_real, tyStr_real)
+                                  ,(primTyName_string, tyStr_string)
+                                  ,(primTyName_char, tyStr_char)
+                                  ,(primTyName_list, tyStr_list)
+                                  ,(primTyName_ref, tyStr_ref)
+                                  ,(primTyName_exn, tyStr_exn)
+                                  ,(primTyName_array, tyStr_array)
+                                  ,(primTyName_vector, tyStr_vector)
+                                  ,(primTyName_Lua_value, tyStr_Lua_value)
+                                  ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (USyntax.MkLongStrId(strid, []), s)))
                                Syntax.StrIdMap.empty
                                [("General", StrId_General, sig_General)
@@ -700,20 +700,20 @@ val initialEnv : Typing.Env
          }
       end
 
-val initialTyConSet = let open Typing
-                      in USyntax.TyConSet.fromList
-                             [primTyCon_int
-                             ,primTyCon_word
-                             ,primTyCon_real
-                             ,primTyCon_string
-                             ,primTyCon_char
-                             ,primTyCon_exn
-                             ,primTyCon_bool
-                             ,primTyCon_ref
-                             ,primTyCon_list
-                             ,primTyCon_array
-                             ,primTyCon_vector
-                             ,primTyCon_Lua_value
-                             ]
-                      end
+val initialTyNameSet = let open Typing
+                       in USyntax.TyNameSet.fromList
+                              [primTyName_int
+                              ,primTyName_word
+                              ,primTyName_real
+                              ,primTyName_string
+                              ,primTyName_char
+                              ,primTyName_exn
+                              ,primTyName_bool
+                              ,primTyName_ref
+                              ,primTyName_list
+                              ,primTyName_array
+                              ,primTyName_vector
+                              ,primTyName_Lua_value
+                              ]
+                       end
 end
