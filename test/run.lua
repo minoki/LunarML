@@ -76,6 +76,7 @@ local should_run = {
   "xorshift64.sml",
   "signature1.sml",
   "signature2.sml",
+  "signature3.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
@@ -129,6 +130,7 @@ local should_not_compile = {
   "equality_exn.sml",
   "equality_tyvar.sml",
   "nonfree_tyvar.sml",
+  -- "signature1.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
