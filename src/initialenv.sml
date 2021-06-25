@@ -593,7 +593,7 @@ val initialEnv : Typing.Env
                             }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
-                               [List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (vid, tysc, Syntax.ValueConstructor)))
+                               [List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueConstructor, vid)))
                                            Syntax.VIdMap.empty
                                            [("ref", LongVId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
                                            ,("true", LongVId_true, TypeScheme ([], primTy_bool))
@@ -601,7 +601,7 @@ val initialEnv : Typing.Env
                                            ,("nil", LongVId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
                                            ,("::", LongVId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
                                            ]
-                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (vid, tysc, Syntax.ExceptionConstructor)))
+                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ExceptionConstructor, vid)))
                                            Syntax.VIdMap.empty
                                            [("Match", LongVId_Match, TypeScheme ([], primTy_exn))
                                            ,("Bind", LongVId_Bind, TypeScheme ([], primTy_exn))
@@ -611,7 +611,7 @@ val initialEnv : Typing.Env
                                            ,("Subscript", LongVId_Subscript, TypeScheme ([], primTy_exn))
                                            ,("Fail", LongVId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
                                            ]
-                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (vid, tysc, Syntax.ValueVariable)))
+                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
                                            Syntax.VIdMap.empty
                                            [("=", USyntax.MkShortVId VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
                                            ,("abs", USyntax.MkShortVId VId_abs, TypeScheme([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
@@ -657,7 +657,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_vector, { valEnv = emptyValEnv, admitsEquality = true })
                                   ,(primTyName_Lua_value, { valEnv = emptyValEnv, admitsEquality = false })
                                   ]
-         , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (USyntax.MkLongStrId(strid, []), s)))
+         , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
                                [("General", StrId_General, sig_General)
                                ,("Bool", StrId_Bool, sig_Bool)

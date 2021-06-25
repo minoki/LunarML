@@ -865,10 +865,10 @@ fun isAlphaNumName name = List.all (fn c => Char.isAlphaNum c orelse c = #"_") (
 fun libraryToFDecs(ctx, tenv: Typing.Env, env, decs)
     = case (Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export"), Syntax.StrIdMap.find (#strMap tenv, Syntax.MkStrId "export")) of
           (NONE, NONE) => raise Fail "No value to export was found."
-        | (SOME (longvid, _, _), NONE) => let val (env, decs) = programToFDecs(ctx, env, decs)
+        | (SOME (_, _, longvid), NONE) => let val (env, decs) = programToFDecs(ctx, env, decs)
                                    in (env, decs @ [ F.ExportValue (F.LongVarExp longvid) ])
                                    end
-        | (NONE, SOME (U.MkLongStrId(strid0, strids), { valMap, ... })) =>
+        | (NONE, SOME ({ valMap, ... }, U.MkLongStrId(strid0, strids))) =>
           let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (vid, _) => let val name = Syntax.getVIdName vid
                                                                                               in if isAlphaNumName name then
                                                                                                      SOME (name, F.LongVarExp(U.MkLongVId(strid0, strids, vid)))
