@@ -195,10 +195,10 @@ structure String : sig
   val explode : string -> char list
   val map : (char -> char) -> string -> string
   val translate : (char -> string) -> string -> string
-  val < : char * char -> bool
-  val <= : char * char -> bool
-  val > : char * char -> bool
-  val >= : char * char -> bool
+  val < : string * string -> bool
+  val <= : string * string -> bool
+  val > : string * string -> bool
+  val >= : string * string -> bool
 end
 val size = String.size
 val ^ = String.^
@@ -269,8 +269,13 @@ structure Vector : sig
   val tabulate : int * (int -> 'a) -> 'a vector
   val length : 'a vector -> int
   val sub : 'a vector * int -> 'a
+  val update : 'a vector * int * 'a -> 'a vector
   val foldl : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
   val foldr : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+  val findi : (int * 'a -> bool) -> 'a vector -> (int * 'a) option
+  val find : ('a -> bool) -> 'a vector -> 'a option
+  val exists : ('a -> bool) -> 'a vector -> bool
+  val all : ('a -> bool) -> 'a vector -> bool
 end
 val vector = Vector.fromList
 

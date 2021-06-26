@@ -310,7 +310,7 @@ val VId_Lua_Lib_math = newVId "math"
 local val newVId = newLongVId (StrId_Lua, ["Lib", "math"])
 in
 val VId_Lua_Lib_math_abs = newVId "abs"
-val VId_Lua_Lib_math_type = newVId "type"
+val VId_Lua_Lib_math_type = newVId "type'"
 val VId_Lua_Lib_math_maxinteger = newVId "maxinteger"
 val VId_Lua_Lib_math_mininteger = newVId "mininteger"
 end
@@ -521,7 +521,7 @@ val initialEnv : Typing.Env
                                            [("math", { tyConMap = mkTyMap []
                                                      , valMap = mkValMap
                                                                     [("abs", TypeScheme ([], primTy_Lua_value))
-                                                                    ,("type", TypeScheme ([], primTy_Lua_value))
+                                                                    ,("type'", TypeScheme ([], primTy_Lua_value))
                                                                     ,("maxinteger", TypeScheme ([], primTy_Lua_value))
                                                                     ,("mininteger", TypeScheme ([], primTy_Lua_value))
                                                                     ]

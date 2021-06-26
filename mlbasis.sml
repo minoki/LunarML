@@ -1,6 +1,85 @@
 fun x <> y = Bool.not (x = y);
 
-structure Lua = struct
+type unit = {}
+
+structure Lua : sig
+              type value
+              val sub : value * value -> value  (* t[k] *)
+              val field : value * string -> value  (* t[k] *)
+              val set : value * value * value -> unit  (* t[k] = v *)
+              val global : string -> value  (* _ENV[name] *)
+              val call : value -> value vector -> value vector  (* f(args) *)
+              val method : value * string -> value vector -> value vector  (* f:name(args) *)
+              val NIL : value  (* Lua nil *)
+              val isNil : value -> bool  (* x == nil *)
+              val isFalsy : value -> bool  (* not x *)
+              val fromBool : bool -> value
+              val fromInt : int -> value
+              val fromWord : word -> value
+              val fromReal : real -> value
+              val fromChar : char -> value
+              val fromString : string -> value
+              val unsafeToValue : 'a -> value
+              val unsafeFromValue : value -> 'a
+              val newTable : unit -> value  (* {} *)
+              val function : (value vector -> value vector) -> value
+              val + : value * value -> value
+              val - : value * value -> value
+              val * : value * value -> value
+              val / : value * value -> value
+              val // : value * value -> value
+              val % : value * value -> value
+              val pow : value * value -> value  (* x ^ y *)
+              val unm : value -> value  (* unary minus *)
+              val andb : value * value -> value  (* x & y *)
+              val orb : value * value -> value  (* x | y *)
+              val xorb : value * value -> value  (* x ~ y *)
+              val notb : value -> value  (* ~ x *)
+              val << : value * value -> value
+              val >> : value * value -> value
+              val == : value * value -> bool
+              val ~= : value * value -> bool
+              val < : value * value -> bool
+              val > : value * value -> bool
+              val <= : value * value -> bool
+              val >= : value * value -> bool
+              val concat : value * value -> value  (* x .. y *)
+              val length : value -> value  (* #x *)
+              structure Lib : sig
+                            val assert : value
+                            val error : value
+                            val math : value
+                            val pairs : value
+                            val pcall : value
+                            val setmetatable : value
+                            val string : value
+                            val table : value
+                            val tonumber : value
+                            val tostring : value
+                            structure math : sig
+                                          val abs : value
+                                          val atan : value
+                                          val log : value
+                                          val maxinteger : value
+                                          val mininteger : value
+                                          val type' : value
+                                      end
+                            structure string : sig
+                                          val byte : value
+                                          val char : value
+                                          val find : value
+                                          val format : value
+                                          val gsub : value
+                                          val match : value
+                                          val sub : value
+                                      end
+                            structure table : sig
+                                          val concat : value
+                                          val pack : value
+                                          val unpack : value
+                                      end
+                        end
+          end = struct
 open Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
 val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
@@ -34,9 +113,32 @@ end
 end
 end;
 
-structure Vector = struct
+datatype 'a option = NONE | SOME of 'a;
+
+structure Vector : sig
+              datatype vector = datatype vector
+              val fromList : 'a list -> 'a vector
+              val tabulate : int * (int -> 'a) -> 'a vector
+              val length : 'a vector -> int
+              val sub : 'a vector * int -> 'a
+              val update : 'a vector * int * 'a -> 'a vector
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val findi : (int * 'a -> bool) -> 'a vector -> (int * 'a) option
+              val find : ('a -> bool) -> 'a vector -> 'a option
+              val exists : ('a -> bool) -> 'a vector -> bool
+              val all : ('a -> bool) -> 'a vector -> bool
+          end = struct
 datatype vector = datatype vector
 open Vector (* fromList, tabulate, length, sub *)
+(* maxLen *)
+fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
+                                                           x
+                                                       else
+                                                           sub (vec, i)
+                                  )
+(* concat : 'a vector list -> 'a vector *)
+(* foldli, foldri *)
 local
     fun foldl' (f, acc, vec, i) = if i >= length vec then
                                       acc
@@ -50,11 +152,88 @@ in
 fun foldl (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldl' (f, init, vec, 0)
 fun foldr (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldr' (f, init, vec, length vec - 1)
 end
+fun appi f vec = let val n = length vec
+                     fun go i = if i = n then
+                                    ()
+                                else
+                                    ( f (i, sub (vec, i))
+                                    ; go (i + 1)
+                                    )
+                 in go 0
+                 end
+fun app f vec = let val n = length vec
+                    fun go i = if i = n then
+                                   ()
+                               else
+                                   ( f (sub (vec, i))
+                                   ; go (i + 1)
+                                   )
+                in go 0
+                end
+fun mapi f vec = tabulate (length vec, fn i => f (i, sub (vec, i)))
+fun map f vec = tabulate (length vec, fn i => f (sub (vec, i)))
+fun findi f vec = let val n = length vec
+                      fun go i = if i = n then
+                                     NONE
+                                 else
+                                     let val x = sub (vec, i)
+                                     in if f (i, x) then
+                                            SOME (i, x)
+                                        else
+                                            go (i + 1)
+                                     end
+                   in go 0
+                   end
+fun find f vec = let val n = length vec
+                     fun go i = if i = n then
+                                    NONE
+                                else
+                                    let val x = sub (vec, i)
+                                    in if f x then
+                                           SOME x
+                                       else
+                                           go (i + 1)
+                                    end
+                 in go 0
+                 end
+fun exists f vec = let val n = length vec
+                       fun go i = if i = n then
+                                      false
+                                  else
+                                      f (sub (vec, i)) orelse go (i + 1)
+                   in go 0
+                   end
+fun all f vec = let val n = length vec
+                    fun go i = if i = n then
+                                   true
+                               else
+                                   f (sub (vec, i)) andalso go (i + 1)
+                in go 0
+                end
+(* collate *)
 end
 val vector : 'a list -> 'a vector = Vector.fromList;
 
-(* General *)
-structure General = struct
+structure General : sig
+              type unit
+              type exn
+              exception Bind
+              exception Match
+              exception Chr
+              exception Div
+              exception Domain
+              exception Fail of string
+              exception Overflow
+              exception Size
+              exception Span
+              exception Subscript
+              datatype order = LESS | EQUAL | GREATER
+              val ! : 'a ref -> 'a
+              val := : 'a ref * 'a -> unit
+              val before : 'a * unit -> 'a
+              val ignore : 'a -> unit
+              val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
+          end = struct
 open General (* !, := *)
 type unit = {}
 type exn = exn
@@ -84,9 +263,11 @@ val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
-datatype 'a option = NONE | SOME of 'a;
-
-structure Bool = struct
+structure Bool : sig
+              datatype bool = datatype bool
+              val not : bool -> bool
+              val toString : bool -> string
+          end = struct
 datatype bool = datatype bool
 open Bool
 fun toString true = "true"
@@ -95,7 +276,32 @@ fun toString true = "true"
 end (* structure Bool *)
 val not : bool -> bool = Bool.not;
 
-structure Int = struct
+structure Int : sig
+              type int
+              val toInt : int -> int
+              val fromInt : int -> int
+              val precision : int option
+              val minInt : int option
+              val maxInt : int option
+              val + : int * int -> int
+              val - : int * int -> int
+              val * : int * int -> int
+              val div : int * int -> int
+              val mod : int * int -> int
+              val compare : int * int -> order
+              val < : int * int -> bool
+              val <= : int * int -> bool
+              val > : int * int -> bool
+              val >= : int * int -> bool
+              val ~ : int -> int
+              val abs : int -> int
+              val min : int * int -> int
+              val max : int * int -> int
+              val sign : int -> int
+              val sameSign : int * int -> bool
+              val toString : int -> string
+              val fromString : string -> int option
+          end = struct
 type int = int
 open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
 (* toLarge, fromLarge *)
@@ -157,7 +363,34 @@ fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.str
                                            end
 end; (* structure Int *)
 
-structure Word = struct
+structure Word : sig
+              type word
+              val wordSize : int
+              val toInt : word -> int
+              val toIntX : word -> int
+              val fromInt : int -> word
+              val andb : word * word -> word
+              val orb : word * word -> word
+              val xorb : word * word -> word
+              val notb : word -> word
+              val << : word * word -> word
+              val >> : word * word -> word
+              val ~>> : word * word -> word
+              val + : word * word -> word
+              val - : word * word -> word
+              val * : word * word -> word
+              val div : word * word -> word
+              val mod : word * word -> word
+              val ~ : word -> word
+              val compare : word * word -> order
+              val < : word * word -> bool
+              val <= : word * word -> bool
+              val > : word * word -> bool
+              val >= : word * word -> bool
+              val min : word * word -> word
+              val max : word * word -> word
+              val toString : word -> string
+          end = struct
 type word = word
 open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 val wordSize : int = LunarML.assumeDiscardable
@@ -213,12 +446,39 @@ val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.cal
 (* scan, fromString *)
 end; (* structure Word *)
 
-structure Real = struct
+structure Real : sig
+              type real
+              val + : real * real -> real
+              val - : real * real -> real
+              val * : real * real -> real
+              val / : real * real -> real
+              val ~ : real -> real
+              val abs : real -> real
+              val < : real * real -> bool
+              val <= : real * real -> bool
+              val > : real * real -> bool
+              val >= : real * real -> bool
+          end = struct
 type real = real
 open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
 end; (* structure Real *)
 
-structure Math = struct
+structure Math : sig
+              type real
+              val pi : real
+              val sqrt : real -> real
+              val sin : real -> real
+              val cos : real -> real
+              val tan : real -> real
+              val asin : real -> real
+              val acos : real -> real
+              val atan : real -> real
+              val atan2 : real * real -> real
+              val exp : real -> real
+              val pow : real * real -> real
+              val ln : real -> real
+              val log10 : real -> real
+          end = struct
 type real = real
 val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "pi")))
 (* val e : real *)
@@ -241,7 +501,38 @@ val tanh : real -> real
 *)
 end; (* structure Math *)
 
-structure Char = struct
+structure Char : sig
+              type char
+              type string
+              val minChar : char
+              val maxChar : char
+              val maxOrd : int
+              val ord : char -> int
+              val chr : int -> char
+              val succ : char -> char
+              val pred : char -> char
+              val compare : char * char -> order
+              val < : char * char -> bool
+              val <= : char * char -> bool
+              val > : char * char -> bool
+              val >= : char * char -> bool
+              val contains : string -> char -> bool
+              val notContains : string -> char -> bool
+              val isAscii : char -> bool
+              val toLower : char -> char
+              val toUpper : char -> char
+              val isAlpha : char -> bool
+              val isAlphaNum : char -> bool
+              val isCntrl : char -> bool
+              val isDigit : char -> bool
+              val isGraph : char -> bool
+              val isHexDigit : char -> bool
+              val isLower : char -> bool
+              val isPrint : char -> bool
+              val isSpace : char -> bool
+              val isPunct : char -> bool
+              val isUpper : char -> bool
+          end = struct
 type char = char
 type string = string
 val minChar = #"\000"
@@ -297,7 +588,26 @@ open Char (* <, <=, >, >= *)
 (* toString, scan, fromString, toCString, fromCString *)
 end; (* structure Char *)
 
-structure String = struct
+structure String : sig
+              type string
+              type char
+              val size : string -> int
+              val sub : string * int -> char
+              val extract : string * int * int option -> string
+              val substring : string * int * int -> string
+              val ^ : string * string -> string
+              val concat : string list -> string
+              val concatWith : string -> string list -> string
+              val str : char -> string
+              val implode : char list -> string
+              val explode : string -> char list
+              val map : (char -> char) -> string -> string
+              val translate : (char -> string) -> string -> string
+              val < : string * string -> bool
+              val <= : string * string -> bool
+              val > : string * string -> bool
+              val >= : string * string -> bool
+          end = struct
 type string = string
 type char = char
 val size = String.size
@@ -346,7 +656,35 @@ val op ^ : string * string -> string = String.^
 val size : string -> int = String.size
 val str : char -> string = String.str;
 
-structure List = struct
+structure List : sig
+              datatype list = datatype list
+              exception Empty
+              val null : 'a list -> bool
+              val length : 'a list -> int
+              val @ : 'a list * 'a list -> 'a list
+              val hd : 'a list -> 'a
+              val tl : 'a list -> 'a list
+              val last : 'a list -> 'a
+              val getItem : 'a list -> ('a * 'a list) option
+              val nth : 'a list * int -> 'a
+              val take : 'a list * int -> 'a list
+              val drop : 'a list * int -> 'a list
+              val rev : 'a list -> 'a list
+              val concat : 'a list list -> 'a list
+              val revAppend : 'a list * 'a list -> 'a list
+              val app : ('a -> unit) -> 'a list -> unit
+              val map : ('a -> 'b) -> 'a list -> 'b list
+              val mapPartial : ('a -> 'b option) -> 'a list -> 'b list
+              val find : ('a -> bool) -> 'a list -> 'a option
+              val filter : ('a -> bool) -> 'a list -> 'a list
+              val partition : ('a -> bool) -> 'a list -> 'a list * 'a list
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+              val exists : ('a -> bool) -> 'a list -> bool
+              val all : ('a -> bool) -> 'a list -> bool
+              val tabulate : int * (int -> 'a) -> 'a list
+              val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
+          end = struct
 datatype list = datatype list
 exception Empty
 fun null [] = true
@@ -426,7 +764,7 @@ fun tabulate (n, f) = let fun go i = if i >= n then
 fun collate compare ([], []) = EQUAL
   | collate compare (_ :: _, []) = GREATER
   | collate compare ([], _ :: _) = LESS
-  | collate compare (x :: xs, y :: ys) = case compare x y of
+  | collate compare (x :: xs, y :: ys) = case compare (x, y) of
                                              EQUAL => collate compare (xs, ys)
                                            | c => c
 end (* structure List *)
@@ -441,7 +779,20 @@ val null : 'a list -> bool = List.null
 val rev : 'a list -> 'a list = List.rev
 val tl : 'a list -> 'a list = List.tl;
 
-structure Option = struct
+structure Option : sig
+              datatype 'a option = NONE | SOME of 'a
+              exception Option
+              val getOpt : 'a option * 'a -> 'a
+              val isSome : 'a option -> bool
+              val valOf : 'a option -> 'a
+              val filter : ('a -> bool) -> 'a -> 'a option
+              val join : 'a option option -> 'a option
+              val app : ('a -> unit) -> 'a option -> unit
+              val map : ('a -> 'b) -> 'a option -> 'b option
+              val mapPartial : ('a -> 'b option) -> 'a option -> 'b option
+              val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
+              val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
+          end = struct
 datatype option = datatype option
 exception Option
 fun getOpt (NONE, default) = default
@@ -473,32 +824,65 @@ val getOpt : 'a option * 'a -> 'a = Option.getOpt
 val isSome : 'a option -> bool = Option.isSome
 val valOf : 'a option -> 'a = Option.valOf;
 
-structure Array = struct
+structure Array : sig
+              datatype array = datatype array
+              datatype vector = datatype vector
+              val array : int * 'a -> 'a array
+              val fromList : 'a list -> 'a array
+              val tabulate : int * (int -> 'a) -> 'a array
+              val length : 'a array -> int
+              val sub : 'a array * int -> 'a
+              val update : 'a array * int * 'a -> unit
+          end = struct
 datatype array = datatype array
 datatype vector = datatype vector
 open Array (* array, fromList, tabulate, length, sub, update *)
 end; (* structure Array *)
 
-structure IO = struct
+structure IO : sig
+              exception Io of { name : string
+                              , function : string
+                              , cause : exn
+                              }
+          end = struct
 exception Io of { name : string
                 , function : string
                 , cause : exn
                 }
 end; (* structure IO *)
 
-structure TextIO = struct
+structure TextIO : sig
+              type instream
+              type outstream
+              type vector
+              type elem
+              val input1 : instream -> elem option
+              val inputN : instream * int -> vector
+              val inputAll : instream -> vector
+              val closeIn : instream -> unit
+              val output : outstream * vector -> unit
+              val output1 : outstream * elem -> unit
+              val flushOut : outstream -> unit
+              val closeOut : outstream -> unit
+              val inputLine : instream -> string option
+              val openIn : string -> instream
+              val openOut : string -> outstream
+              val openAppend : string -> outstream
+              val stdIn : instream
+              val stdOut : outstream
+              val stdErr : outstream
+              val print : string -> unit
+          end = struct
 local
-    datatype instream = Instream of Lua.value
-    datatype outstream = Outstream of Lua.value
     val io = LunarML.assumeDiscardable (Lua.global "io")
     val io_open = LunarML.assumeDiscardable (Lua.field (io, "open"))
     val io_write = LunarML.assumeDiscardable (Lua.field (io, "write"))
 in
+datatype instream = Instream of Lua.value
+datatype outstream = Outstream of Lua.value
 (* IMPERATIVE_IO *)
 type vector = string
 type elem = char
-type instream = instream
-type outstream = outstream
 fun input1 (Instream f) = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
                           in if Lua.isNil result then
                                  NONE
@@ -559,7 +943,26 @@ end (* local *)
 end (* structure TextIO *)
 val print : string -> unit = TextIO.print;
 
-structure OS = struct
+structure OS : sig
+              structure FileSys : sig
+                            val remove : string -> unit
+                            val rename : { old : string, new : string } -> unit
+                        end
+              structure IO : sig
+                        end
+              structure Path : sig
+                        end
+              structure Process : sig
+                            type status
+                            val success : status
+                            val failure : status
+                            val isSuccess : status -> bool
+                            val system : string -> status
+                            val exit : status -> 'a
+                            val terminate : status -> 'a
+                            val getEnv : string -> string option
+                        end
+          end = struct
 local
     val oslib = LunarML.assumeDiscardable (Lua.global "os")
     val os_execute = LunarML.assumeDiscardable (Lua.field (oslib, "execute"))
@@ -611,7 +1014,10 @@ val syserror : string -> syserror option
 *)
 end; (* structure OS *)
 
-structure CommandLine = struct
+structure CommandLine : sig
+              val name : unit -> string
+              val arguments : unit -> string list
+          end = struct
 local
     val luaarg = LunarML.assumeDiscardable (Lua.global "arg")
 in
