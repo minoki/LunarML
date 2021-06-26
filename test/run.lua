@@ -78,6 +78,7 @@ local should_run = {
   "signature2.sml",
   "signature3.sml",
   "signature4.sml",
+  "signature5.sml",
 }
 for _,f in ipairs(should_run) do
   local file = testdir .. "/should_run/" .. f
@@ -134,6 +135,8 @@ local should_not_compile = {
   "signature1.sml",
   "signature2.sml",
   "signature3.sml",
+  "signature4.sml",
+  "signature5.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
