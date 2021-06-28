@@ -215,8 +215,8 @@ end
 val vector : 'a list -> 'a vector = Vector.fromList;
 
 structure General : sig
-              type unit
-              type exn
+              type unit = {}
+              type exn = exn
               exception Bind
               exception Match
               exception Chr
@@ -277,7 +277,7 @@ end (* structure Bool *)
 val not : bool -> bool = Bool.not;
 
 structure Int : sig
-              type int
+              type int = int
               val toInt : int -> int
               val fromInt : int -> int
               val precision : int option
@@ -364,7 +364,7 @@ fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.str
 end; (* structure Int *)
 
 structure Word : sig
-              type word
+              type word = word
               val wordSize : int
               val toInt : word -> int
               val toIntX : word -> int
@@ -447,7 +447,7 @@ val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.cal
 end; (* structure Word *)
 
 structure Real : sig
-              type real
+              type real = real
               val + : real * real -> real
               val - : real * real -> real
               val * : real * real -> real
@@ -464,7 +464,7 @@ open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
 end; (* structure Real *)
 
 structure Math : sig
-              type real
+              type real = real
               val pi : real
               val sqrt : real -> real
               val sin : real -> real
@@ -502,8 +502,8 @@ val tanh : real -> real
 end; (* structure Math *)
 
 structure Char : sig
-              type char
-              type string
+              type char = char
+              type string = string
               val minChar : char
               val maxChar : char
               val maxOrd : int
@@ -589,8 +589,8 @@ open Char (* <, <=, >, >= *)
 end; (* structure Char *)
 
 structure String : sig
-              type string
-              type char
+              type string = string
+              type char = char
               val size : string -> int
               val sub : string * int -> char
               val extract : string * int * int option -> string
@@ -854,8 +854,8 @@ end; (* structure IO *)
 structure TextIO : sig
               type instream
               type outstream
-              type vector
-              type elem
+              type vector = string
+              type elem = char
               val input1 : instream -> elem option
               val inputN : instream * int -> vector
               val inputAll : instream -> vector

@@ -116,6 +116,17 @@ for _,f in ipairs(should_run) do
     os.exit(1)
   end
 end
+local should_compile = {
+  "typealias_in_signature.sml",
+}
+for _,f in ipairs(should_compile) do
+  local file = testdir .. "/successor_ml/should_compile/" .. f
+  print("Compiling successor_ml/should_compile/" .. f .. "...")
+  if not compile(file) then
+    io.stderr:write(string.format("%s should compile, but it did not!\n", file))
+    os.exit(1)
+  end
+end
 local should_not_compile = {
   "fixity.sml",
   "generalization.sml",
@@ -141,6 +152,17 @@ local should_not_compile = {
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
   print("Compiling should_not_compile/" .. f .. "...")
+  if compile(file) then
+    io.stderr:write(string.format("%s should not compile, but it did!\n", file))
+    os.exit(1)
+  end
+end
+local should_not_compile = {
+  "typealias_in_signature.sml",
+}
+for _,f in ipairs(should_not_compile) do
+  local file = testdir .. "/successor_ml/should_not_compile/" .. f
+  print("Compiling successor_ml/should_not_compile/" .. f .. "...")
   if compile(file) then
     io.stderr:write(string.format("%s should not compile, but it did!\n", file))
     os.exit(1)

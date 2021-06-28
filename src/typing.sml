@@ -1632,7 +1632,29 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
   | addSpec(ctx, env, S.Include(span, sigexp)) = evalSignature(ctx, env, sigexp)
   | addSpec(ctx, env, S.Sharing(span, specs, longtycons)) = raise Fail "sharing: not implemented yet"
   | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids)) = raise Fail "sharing: not implemented yet"
-  | addSpec(ctx, env, S.TypeAliasDesc(span, descs)) = raise Fail "type alias in signature: not implemented yet"
+  | addSpec(ctx, env, S.TypeAliasDesc(span, descs))
+    = { s = { valMap = Syntax.VIdMap.empty
+            , tyConMap = List.foldl (fn ((tyvars, tycon, ty), tyConMap) =>
+                                        let val tyvars = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+                                            val ty = let val env = { valMap = #valMap env
+                                                                   , tyConMap = #tyConMap env (* not accumulated (Successor ML) *)
+                                                                   , tyNameMap = #tyNameMap env
+                                                                   , strMap = #strMap env
+                                                                   , sigMap = #sigMap env
+                                                                   , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars env) tyvars
+                                                                   }
+                                                     in evalTy(ctx, env, ty)
+                                                     end
+                                            val tystr = { typeFunction = U.TypeFunction(List.map #2 tyvars, ty)
+                                                        , valEnv = Syntax.VIdMap.empty
+                                                        }
+                                        in Syntax.TyConMap.insert(tyConMap, tycon, tystr)
+                                        end
+                                    ) Syntax.TyConMap.empty descs
+            , strMap = Syntax.StrIdMap.empty
+            }
+      , bound = USyntax.TyNameMap.empty
+      }
 
 fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
   | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = List.all (fn (label, ty) => case List.find (fn (label', _) => label = label') fields' of
