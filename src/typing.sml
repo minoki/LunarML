@@ -1630,6 +1630,9 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                    }
                                                 end
   | addSpec(ctx, env, S.Include(span, sigexp)) = evalSignature(ctx, env, sigexp)
+  | addSpec(ctx, env, S.Sharing(span, specs, longtycons)) = raise Fail "sharing: not implemented yet"
+  | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids)) = raise Fail "sharing: not implemented yet"
+  | addSpec(ctx, env, S.TypeAliasDesc(span, descs)) = raise Fail "type alias in signature: not implemented yet"
 
 fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
   | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = List.all (fn (label, ty) => case List.find (fn (label', _) => label = label') fields' of

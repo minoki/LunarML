@@ -139,6 +139,9 @@ datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
               | ExDesc of SourcePos.span * (VId * Ty option) list
               | StrDesc of SourcePos.span * (StrId * SigExp) list
               | Include of SourcePos.span * SigExp
+              | Sharing of SourcePos.span * Spec list * LongTyCon list
+              | SharingStructure of SourcePos.span * Spec list * LongStrId list (* derived form *)
+              | TypeAliasDesc of SourcePos.span * (TyVar list * TyCon * Ty) list (* derived form *)
      and SigExp = BasicSigExp of SourcePos.span * Spec list
                 | SigIdExp of SourcePos.span * SigId
                 | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty

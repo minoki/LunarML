@@ -424,12 +424,13 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
     = emitError(ctx, [span], "invalid function declaration")
 and doInfixFPat(ctx, env, span, vidspan, vid, patL, patR, pats) = (vidspan, vid, Syntax.TuplePat(span, [doPat(ctx, env, patL), doPat(ctx, env, patR)]) :: List.map (fn p => doPat(ctx, env, p)) pats)
 and doPrefixFPat(ctx, env, span, vid, pats) = (span, vid, List.map (fn p => doPat(ctx, env, p)) pats)
-fun doSigExp(ctx, env, Syntax.BasicSigExp(span, specs)) : IdStatusMap = List.foldl (fn (spec, m) => mergeIdStatusMap(m, doSpec(ctx, mergeEnv(env, envWithIdStatusMap m), spec))) emptyIdStatusMap specs
+fun doSigExp(ctx, env, Syntax.BasicSigExp(span, specs)) : IdStatusMap = doSpecs(ctx, env, specs)
   | doSigExp(ctx, env, Syntax.SigIdExp(span, sigid)) = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
                                                             SOME m => m
                                                           | NONE => emitError(ctx, [span], "signature not found: " ^ Syntax.print_SigId sigid)
                                                        )
   | doSigExp(ctx, env, Syntax.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty)) = doSigExp(ctx, env, sigexp) (* does not affect idstatus *)
+and doSpecs(ctx, env, specs) = List.foldl (fn (spec, m) => mergeIdStatusMap(m, doSpec(ctx, mergeEnv(env, envWithIdStatusMap m), spec))) emptyIdStatusMap specs
 and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.EqtypeDesc(span, descs)) = emptyIdStatusMap
@@ -459,6 +460,9 @@ and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
                                                        }
                                                     end
   | doSpec(ctx, env, Syntax.Include(span, sigexp)) = doSigExp(ctx, env, sigexp)
+  | doSpec(ctx, env, Syntax.Sharing(span, specs, longtycons)) = doSpecs(ctx, env, specs)
+  | doSpec(ctx, env, Syntax.SharingStructure(span, specs, longstrids)) = doSpecs(ctx, env, specs)
+  | doSpec(ctx, env, Syntax.TypeAliasDesc(span, descs)) = emptyIdStatusMap
 (* doStrExp : Context * Env * UnfixedSyntax.Dec Syntax.StrExp -> IdStatusMap * Syntax.Dec Syntax.StrExp *)
 (* doStrDec : Context * Env * UnfixedSyntax.Dec Syntax.StrDec -> Env * Syntax.Dec Syntax.StrDec *)
 (* doStrDecs : Context * Env * (UnfixedSyntax.Dec Syntax.StrDec) list -> Env * (Syntax.Dec Syntax.StrDec) list *)

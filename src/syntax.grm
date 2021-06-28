@@ -124,16 +124,23 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | StrDecs of (UnfixedSyntax.Dec Syntax.StrDec) list
        | StrBind of (Syntax.StrId * UnfixedSyntax.Dec Syntax.StrExp) list
        | StrBindRest of (Syntax.StrId * UnfixedSyntax.Dec Syntax.StrExp) list
-       | Spec of Syntax.Spec
+       | Spec of Syntax.Spec list
        | ValDesc of (Syntax.VId * Syntax.Ty) list
        | TypDesc of (Syntax.TyVar list * Syntax.TyCon) list
+       | TypDescRest of (Syntax.TyVar list * Syntax.TyCon) list
+       | TypDescEQRest of (Syntax.TyVar list * Syntax.TyCon * Syntax.Ty) list
        | DatDescRest of (Syntax.TyVar list * Syntax.TyCon * Syntax.ConBind list) list
        | ConDesc of Syntax.ConBind list
        | ConDescRest of Syntax.ConBind list
        | ExDesc of (Syntax.VId * Syntax.Ty option) list
        | ExDescRest of (Syntax.VId * Syntax.Ty option) list
        | StrDesc of (Syntax.StrId * Syntax.SigExp) list
+       | SigIds of Syntax.SigId list
+       | Specs_NoSharing of Syntax.Spec list
        | Specs of Syntax.Spec list
+       | EQUAL_LongTyCons of Syntax.LongTyCon list
+       | EQUAL_LongStrIds of Syntax.LongStrId list
+       | SigExp_NoSigId of Syntax.SigExp
        | SigExp of Syntax.SigExp
        | SigBinds of Syntax.SigBind list
        | SigDec of Syntax.SigBind list
@@ -483,24 +490,30 @@ StrBind : StrId EQUALS StrExp StrBindRest ((StrId, StrExp) :: StrBindRest)
 StrBindRest : AND StrBind (StrBind)
             | (nil)
 
-Spec : VAL ValDesc (Syntax.ValDesc(span(VALleft, ValDescright), ValDesc))
-     | TYPE TypDesc (Syntax.TypeDesc(span(TYPEleft, TypDescright), TypDesc))
-     | EQTYPE TypDesc (Syntax.EqtypeDesc(span(EQTYPEleft, TypDescright), TypDesc))
+Spec : VAL ValDesc ([Syntax.ValDesc(span(VALleft, ValDescright), ValDesc)])
+     | TYPE TyVarSeq TyCon TypDescRest ([Syntax.TypeDesc(span(TYPEleft, TypDescRestright), (TyVarSeq, TyCon) :: TypDescRest)])
+     | TYPE TyVarSeq TyCon EQUALS Ty TypDescEQRest ([Syntax.TypeAliasDesc(span(TYPEleft, TypDescEQRestright), (TyVarSeq, TyCon, Ty) :: TypDescEQRest)])
+     | EQTYPE TypDesc ([Syntax.EqtypeDesc(span(EQTYPEleft, TypDescright), TypDesc)])
      (* | DATATYPE DatDesc (Syntax.DatDesc(span(DATATYPEleft, DatDescright), DatDesc)) *)
-     | DATATYPE TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([], TyCon, ConDesc) :: DatDescRest))
-     | DATATYPE TyVar TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([TyVar], TyCon, ConDesc) :: DatDescRest))
-     | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConDesc DatDescRest (Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), (TyVar :: TyVarSeqRest, TyCon, ConDesc) :: DatDescRest))
-     | DATATYPE TyCon EQUALS DATATYPE LongTyCon (Syntax.DatatypeRepSpec(span(DATATYPEleft, LongTyConright), TyCon, LongTyCon))
-     | EXCEPTION ExDesc (Syntax.ExDesc(span(EXCEPTIONleft, ExDescright), ExDesc))
-     | STRUCTURE StrDesc (Syntax.StrDesc(span(STRUCTUREleft, StrDescright), StrDesc))
-     | INCLUDE SigExp (Syntax.Include(span(INCLUDEleft, SigExpright), SigExp))
-               (* TODO: sharing *)
+     | DATATYPE TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([], TyCon, ConDesc) :: DatDescRest)])
+     | DATATYPE TyVar TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([TyVar], TyCon, ConDesc) :: DatDescRest)])
+     | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), (TyVar :: TyVarSeqRest, TyCon, ConDesc) :: DatDescRest)])
+     | DATATYPE TyCon EQUALS DATATYPE LongTyCon ([Syntax.DatatypeRepSpec(span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)])
+     | EXCEPTION ExDesc ([Syntax.ExDesc(span(EXCEPTIONleft, ExDescright), ExDesc)])
+     | STRUCTURE StrDesc ([Syntax.StrDesc(span(STRUCTUREleft, StrDescright), StrDesc)])
+     | INCLUDE SigExp_NoSigId ([Syntax.Include(span(INCLUDEleft, SigExp_NoSigIdright), SigExp_NoSigId)])
+     | INCLUDE SigIds (let val s = span(INCLUDEleft, SigIdsright) in List.map (fn sigid => Syntax.Include(s, Syntax.SigIdExp(s, sigid))) SigIds end)
 
 ValDesc : VId COLON Ty ((VId, Ty) :: nil)
         | VId COLON Ty AND ValDesc ((VId, Ty) :: ValDesc)
 
-TypDesc : TyVarSeq TyCon ((TyVarSeq, TyCon) :: nil)
-        | TyVarSeq TyCon AND TypDesc ((TyVarSeq, TyCon) :: TypDesc)
+TypDesc : TyVarSeq TyCon TypDescRest ((TyVarSeq, TyCon) :: TypDescRest)
+
+TypDescRest : AND TyVarSeq TyCon TypDescRest ((TyVarSeq, TyCon) :: TypDescRest)
+            | (nil)
+
+TypDescEQRest : AND TyVarSeq TyCon EQUALS Ty TypDescEQRest ((TyVarSeq, TyCon, Ty) :: TypDescEQRest)
+              | (nil)
 
 DatDescRest : AND TyVarSeq TyCon EQUALS ConDesc DatDescRest ((TyVarSeq, TyCon, ConDesc) :: DatDescRest)
             | (nil)
@@ -518,11 +531,29 @@ ExDescRest : AND ExDesc (ExDesc)
            | (nil)
 
 StrDesc : StrId COLON SigExp ((StrId, SigExp) :: nil)
-        | StrId COLON SigExp AND StrDesc ((StrId, SigExp) :: StrDesc)
+           | StrId COLON SigExp AND StrDesc ((StrId, SigExp) :: StrDesc)
+
+SigIds : SigId SigIds (SigId :: SigIds)
+       | SigId (SigId :: nil)
+
+Specs_NoSharing : ([])
+                | Spec Specs_NoSharing (Spec @ Specs_NoSharing)
+                | Spec SEMICOLON Specs_NoSharing (Spec @ Specs_NoSharing)
 
 Specs : ([])
-      | Spec Specs (Spec :: Specs)
-      | Spec SEMICOLON Specs (Spec :: Specs)
+      | Spec Specs_NoSharing (Spec @ Specs_NoSharing)
+      | Spec SEMICOLON Specs_NoSharing (Spec @ Specs_NoSharing)
+      | Specs SHARING TYPE LongTyCon EQUAL_LongTyCons Specs_NoSharing (Syntax.Sharing(span(Specsleft, EQUAL_LongTyConsright), Specs, LongTyCon :: EQUAL_LongTyCons) :: Specs_NoSharing)
+      | Specs SHARING LongStrId EQUAL_LongStrIds Specs_NoSharing (Syntax.SharingStructure(span(Specsleft, EQUAL_LongStrIdsright), Specs, LongStrId :: EQUAL_LongStrIds) :: Specs_NoSharing)
+
+EQUAL_LongTyCons : EQUALS LongTyCon EQUAL_LongTyCons (LongTyCon :: EQUAL_LongTyCons)
+                 | EQUALS LongTyCon (LongTyCon :: nil)
+
+EQUAL_LongStrIds : EQUALS LongStrId EQUAL_LongStrIds (LongStrId :: EQUAL_LongStrIds)
+                 | EQUALS LongStrId (LongStrId :: nil)
+
+SigExp_NoSigId : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
+               | SigExp_NoSigId WHERE TYPE TyVarSeq LongTyCon EQUALS Ty (Syntax.TypeRealisationExp(span(SigExp_NoSigIdleft, Tyright), SigExp_NoSigId, TyVarSeq, LongTyCon, Ty))
 
 SigExp : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
        | SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
