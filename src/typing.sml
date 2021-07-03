@@ -1421,10 +1421,27 @@ fun checkEquality(ctx : Context, env : ('val,'str) Env', tyvars : U.TyVarSet.set
       in goTy
       end
 
+fun lookupLongTyConInQSignature(ctx, span, s : U.QSignature, longtycon) : U.TypeStructure
+    = let val S.MkQualified(strids, tycon as Syntax.MkTyCon name) = longtycon
+          val { tyConMap, ... } = lookupStr(ctx, #s s, span, strids)
+      in case Syntax.TyConMap.find(tyConMap, tycon) of
+             SOME tystr => tystr
+           | NONE => emitError(ctx, [span], "unknown type constructor '" ^ name ^ "'")
+      end
+fun getTypeNameFromTypeStructure(ctx, { typeFunction = U.TypeFunction(tyvars, U.TyCon(_, tyargs, tyname)), ... }) : (U.TyName * int) option
+    = let val arity = List.length tyvars
+      in if List.length tyargs = arity then
+             if ListPair.allEq (fn (tv, U.TyVar(_, tv')) => tv = tv' | _ => false) (tyvars, tyargs) then
+                 SOME (tyname, arity)
+             else
+                 NONE
+         else
+             NONE
+      end
+  | getTypeNameFromTypeStructure _ = NONE
+
 fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.QSignature
-    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s)
-                                  in mergeQSignature(s, addSpec(ctx, env', spec))
-                                  end) { s = emptySignature, bound = U.TyNameMap.empty } specs
+    = evalSpecs(ctx, env, specs)
   | evalSignature(ctx, env, S.SigIdExp(span, sigid as Syntax.MkSigId name))
     = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
            SOME { s, bound } => let val subst = U.TyNameMap.mapi (fn (tycon, _) => renewTyName(ctx, tycon)) bound
@@ -1446,32 +1463,28 @@ fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.Q
                                  }
                    in evalTy(ctx, env, ty)
                    end
-          val { typeFunction, ... } = let val S.MkQualified(strids, tycon as Syntax.MkTyCon name) = longtycon
-                                          val { tyConMap, ... } = lookupStr(ctx, #s s, span, strids)
-                                      in case Syntax.TyConMap.find(tyConMap, tycon) of
-                                             SOME tystr => tystr
-                                           | NONE => emitError(ctx, [span], "unknown type constructor '" ^ name ^ "'")
-                                      end
-      in case typeFunction of
-             U.TypeFunction(tyvars', U.TyCon(_, tyargs', tyname)) =>
-             if List.length tyvars = List.length tyvars' then
-                 if ListPair.allEq (fn (tv, U.TyVar(_, tv')) => tv = tv' | _ => false) (tyvars', tyargs') then
-                     case U.TyNameMap.find(#bound s, tyname) of
-                         SOME { admitsEquality, ... } =>
-                         let val () = if admitsEquality andalso not (checkEquality (ctx, env, List.foldl (fn ((_, tv), set) => U.TyVarSet.add(set, tv)) U.TyVarSet.empty tyvars) ty) then
-                                          emitError(ctx, [span], "type realisation failed (equality)")
-                                      else
-                                          ()
-                             val subst = U.TyNameMap.singleton(tyname, U.TypeFunction(List.map #2 tyvars, ty))
-                         in { s = applySubstTyConInSig (ctx, subst) (#s s), bound = #1 (U.TyNameMap.remove (#bound s, tyname)) }
-                         end
-                       | NONE => emitError(ctx, [span], "type realisation against a rigid type")
-                 else
-                     emitError(ctx, [span], "type realisation against a rigid type")
+          val tystr = lookupLongTyConInQSignature(ctx, span, s, longtycon)
+      in case getTypeNameFromTypeStructure(ctx, tystr) of
+             SOME (tyname, arity) => 
+             if List.length tyvars = arity then
+                 case U.TyNameMap.find(#bound s, tyname) of
+                     SOME { admitsEquality, ... } =>
+                     let val () = if admitsEquality andalso not (checkEquality (ctx, env, List.foldl (fn ((_, tv), set) => U.TyVarSet.add(set, tv)) U.TyVarSet.empty tyvars) ty) then
+                                      emitError(ctx, [span], "type realisation failed (equality)")
+                                  else
+                                      ()
+                         val subst = U.TyNameMap.singleton(tyname, U.TypeFunction(List.map #2 tyvars, ty))
+                     in { s = applySubstTyConInSig (ctx, subst) (#s s), bound = #1 (U.TyNameMap.remove (#bound s, tyname)) }
+                     end
+                   | NONE => emitError(ctx, [span], "type realisation against a rigid type")
              else
                  emitError(ctx, [span], "type realisation against a rigid type")
-          | _ => emitError(ctx, [span], "type realisation against a rigid type")
+           | NONE => emitError(ctx, [span], "type realisation against a rigid type")
       end
+and evalSpecs(ctx : Context, env : SigEnv, specs) : U.QSignature
+    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s)
+                                  in mergeQSignature(s, addSpec(ctx, env', spec))
+                                  end) { s = emptySignature, bound = U.TyNameMap.empty } specs
 and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
     = { s = { valMap = List.foldl (fn ((vid, ty), valMap) => let val tvs = PostParsing.freeTyVarsInTy(Syntax.TyVarSet.empty, ty)
                                                                  val tvs = Syntax.TyVarSet.foldr (fn (tv, m) => Syntax.TyVarMap.insert(m, tv, genTyVar(ctx, tv))) Syntax.TyVarMap.empty tvs
@@ -1630,8 +1643,52 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                    }
                                                 end
   | addSpec(ctx, env, S.Include(span, sigexp)) = evalSignature(ctx, env, sigexp)
-  | addSpec(ctx, env, S.Sharing(span, specs, longtycons)) = raise Fail "sharing: not implemented yet"
-  | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids)) = raise Fail "sharing: not implemented yet"
+  | addSpec(ctx, env, S.Sharing(span, specs, longtycon0 :: longtycons))
+    = let val s = evalSpecs(ctx, env, specs)
+          val tystr0 = lookupLongTyConInQSignature(ctx, span, s, longtycon0)
+          val tystrs = List.map (fn longtycon => lookupLongTyConInQSignature(ctx, span, s, longtycon)) longtycons
+      in case getTypeNameFromTypeStructure(ctx, tystr0) of
+             SOME (tyname0, arity0) =>
+             (case U.TyNameMap.find(#bound s, tyname0) of
+                  SOME { arity, admitsEquality, ... } =>
+                  if arity0 = arity then
+                      let val typeFn = let val tyvars = List.tabulate(arity, fn _ => genTyVar(ctx, Syntax.MkTyVar "a"))
+                                       in U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tyname0))
+                                       end
+                          val subst = List.foldl (fn (tystr, subst) =>
+                                                     case getTypeNameFromTypeStructure(ctx, tystr) of
+                                                         SOME (tyname, arity') =>
+                                                         if arity' <> arity then
+                                                             emitError(ctx, [span], "sharing: arity mismatch")
+                                                         else
+                                                             (case U.TyNameMap.find(#bound s, tyname) of
+                                                                  SOME { arity = arity', admitsEquality = admitsEquality', ... } =>
+                                                                  if arity' <> arity then
+                                                                      emitError(ctx, [span], "sharing: arity mismatch")
+                                                                  else if U.eqTyName(tyname, tyname0) then
+                                                                      subst (* do nothing *)
+                                                                  else if admitsEquality <> admitsEquality' then
+                                                                      emitError(ctx, [span], "sharing: equality mismatch")
+                                                                  else
+                                                                      U.TyNameMap.insert(subst, tyname, typeFn)
+                                                                | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+                                                             )
+                                                       | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+                                                 ) U.TyNameMap.empty tystrs
+                      in { s = applySubstTyConInSig(ctx, subst) (#s s)
+                         , bound = U.TyNameMap.filteri (fn (tyname, _) => not (U.TyNameMap.inDomain(subst, tyname))) (#bound s)
+                         }
+                      end
+                  else
+                      emitError(ctx, [span], "sharing: invalid arity")
+                | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+             )
+           | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+      end
+  | addSpec(ctx, env, S.Sharing(span, specs, [])) = emitError(ctx, [span], "sharing: empty longtycons (internal error)")
+  | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids)) = let val s = evalSpecs(ctx, env, specs)
+                                                                     in raise Fail "sharing: not implemented yet"
+                                                                     end
   | addSpec(ctx, env, S.TypeAliasDesc(span, descs))
     = { s = { valMap = Syntax.VIdMap.empty
             , tyConMap = List.foldl (fn ((tyvars, tycon, ty), tyConMap) =>

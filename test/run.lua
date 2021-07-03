@@ -89,6 +89,18 @@ for _,f in ipairs(should_run) do
     os.exit(1)
   end
 end
+local should_compile = {
+  "signature_sharing1.sml",
+  "signature_sharing2.sml",
+}
+for _,f in ipairs(should_compile) do
+  local file = testdir .. "/should_compile/" .. f
+  print("Compiling should_compile/" .. f .. "...")
+  if not compile(file) then
+    io.stderr:write(string.format("%s should compile, but it did not!\n", file))
+    os.exit(1)
+  end
+end
 local should_run = {
   "general.sml",
   "string.sml",
@@ -148,6 +160,8 @@ local should_not_compile = {
   "signature3.sml",
   "signature4.sml",
   "signature5.sml",
+  "signature_sharing1.sml",
+  "signature_sharing2.sml",
 }
 for _,f in ipairs(should_not_compile) do
   local file = testdir .. "/should_not_compile/" .. f
