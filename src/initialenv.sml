@@ -232,12 +232,12 @@ val VId_String_GE = newVId ">="
 end
 
 (* Char *)
-local val newVId = newLongVId (StrId_String, [])
+local val newVId = newLongVId (StrId_Char, [])
 in
-val VId_Char_LT = newVId "Char.<"
-val VId_Char_GT = newVId "Char.>"
-val VId_Char_LE = newVId "Char.<="
-val VId_Char_GE = newVId "Char.>="
+val VId_Char_LT = newVId "<"
+val VId_Char_GT = newVId ">"
+val VId_Char_LE = newVId "<="
+val VId_Char_GE = newVId ">="
 end
 
 (* Vector *)
