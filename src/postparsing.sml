@@ -293,18 +293,19 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
   | doDec(ctx, env, UnfixedSyntax.RecValDec(span, tyvars, valbind)) = (emptyEnv, [Syntax.RecValDec(span, tyvars, List.map (fn vb => doValBind(ctx, env, vb)) valbind)])
   | doDec(ctx, env, UnfixedSyntax.FValDec(span, tyvars, fvalbind)) = (emptyEnv, [Syntax.RecValDec(span, tyvars, List.map (fn fvb => doFValBind(ctx, env, fvb)) fvalbind)])
   | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
-  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds)) = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
-                                                                         = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
-                                                                                          (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
-                                                                                          Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
-                                                                     val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
-                                                                     val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
-                                                                     val idStatusMap = { valMap = valMap
-                                                                                       , tyConMap = tyConMap
-                                                                                       , strMap = Syntax.StrIdMap.empty
-                                                                                       }
-                                                                 in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeDec(span, datbinds)])
-                                                                 end
+  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds, typbinds))
+    = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
+              = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
+                               (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
+                               Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
+          val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
+          val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
+          val idStatusMap = { valMap = valMap
+                            , tyConMap = tyConMap
+                            , strMap = Syntax.StrIdMap.empty
+                            }
+      in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeDec(span, datbinds, typbinds)])
+      end
   | doDec(ctx, env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
                                                                                                  SOME valMap => valMap
                                                                                                | NONE => Syntax.VIdMap.empty
@@ -434,13 +435,13 @@ and doSpecs(ctx, env, specs) = List.foldl (fn (spec, m) => mergeIdStatusMap(m, d
 and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.EqtypeDesc(span, descs)) = emptyIdStatusMap
-  | doSpec(ctx, env, Syntax.DatDesc(span, descs)) = List.foldl (fn ((tyvars, tycon, condescs), { valMap, tyConMap, strMap }) =>
-                                                                   let val valMap' = List.foldl (fn (Syntax.ConBind(_, vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty condescs
-                                                                   in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
-                                                                      , tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, valMap')
-                                                                      , strMap = strMap }
-                                                                   end
-                                                               ) emptyIdStatusMap descs
+  | doSpec(ctx, env, Syntax.DatDesc(span, descs, typbinds)) = List.foldl (fn ((tyvars, tycon, condescs), { valMap, tyConMap, strMap }) =>
+                                                                             let val valMap' = List.foldl (fn (Syntax.ConBind(_, vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty condescs
+                                                                             in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
+                                                                                , tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, valMap')
+                                                                                , strMap = strMap }
+                                                                             end
+                                                                         ) emptyIdStatusMap descs
   | doSpec(ctx, env, Syntax.DatatypeRepSpec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
                                                                                             SOME m => m
                                                                                           | NONE => Syntax.VIdMap.empty
@@ -576,7 +577,7 @@ local
     and collectDec(bound, ValDec _) = TyVarSet.empty
       | collectDec(bound, RecValDec _) = TyVarSet.empty
       | collectDec(bound, TypeDec(_, typbinds)) = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
-      | collectDec(bound, DatatypeDec(_, datbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) TyVarSet.empty datbinds
+      | collectDec(bound, DatatypeDec(_, datbinds, typbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) (List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds) datbinds
       | collectDec(bound, DatatypeRepDec(_, _, _)) = TyVarSet.empty
       | collectDec(bound, AbstypeDec(_, _, _)) = TyVarSet.empty (* not implemeted yet *)
       | collectDec(bound, ExceptionDec(span, exbinds)) = List.foldl (fn (ExBind(span, vid, SOME ty), acc) => TyVarSet.union(freeTyVarsInTy(bound, ty), acc)

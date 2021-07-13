@@ -123,7 +123,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
      and Dec = ValDec of SourcePos.span * TyVar list * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * TyVar list * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list
-             | DatatypeDec of SourcePos.span * DatBind list
+             | DatatypeDec of SourcePos.span * DatBind list * TypBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
              | AbstypeDec of SourcePos.span * DatBind list * Dec list (* not implemented yet *)
              | ExceptionDec of SourcePos.span * ExBind list
@@ -134,7 +134,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
               | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
               | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
-              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list
+              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list * TypBind list
               | DatatypeRepSpec of SourcePos.span * TyCon * LongTyCon
               | ExDesc of SourcePos.span * (VId * Ty option) list
               | StrDesc of SourcePos.span * (StrId * SigExp) list
@@ -322,7 +322,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | RecValDec of SourcePos.span * Syntax.TyVar list * ValBind list
              | FValDec of SourcePos.span * Syntax.TyVar list * FValBind list
              | TypeDec of SourcePos.span * Syntax.TypBind list
-             | DatatypeDec of SourcePos.span * Syntax.DatBind list
+             | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
              | DatatypeRepDec of SourcePos.span * Syntax.TyCon * Syntax.LongTyCon
              | AbstypeDec of SourcePos.span * Syntax.DatBind list * Dec list
              | ExceptionDec of SourcePos.span * Syntax.ExBind list

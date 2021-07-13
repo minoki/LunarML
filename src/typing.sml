@@ -976,8 +976,12 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
           val (tyConEnv, typbinds) = List.foldr doTypBind (Syntax.TyConMap.empty, []) typbinds
       in (envWithTyConEnv(tyConEnv, USyntax.TyNameMap.empty), [U.TypeDec(span, typbinds)])
       end
-  | typeCheckDec(ctx, env, S.DatatypeDec(span, datbinds))
-    = let val equalityMap : bool S.TyConMap.map = determineDatatypeEquality(ctx, env, List.foldl (fn (S.DatBind(_, tyvars, tycon, conbinds), m) => S.TyConMap.insert(m, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty datbinds)
+  | typeCheckDec(ctx, env, S.DatatypeDec(span, datbinds, typbinds))
+    = let val () = if List.null typbinds then
+                       ()
+                   else
+                       emitError(ctx, [span], "withtype: not implemented yet")
+          val equalityMap : bool S.TyConMap.map = determineDatatypeEquality(ctx, env, List.foldl (fn (S.DatBind(_, tyvars, tycon, conbinds), m) => S.TyConMap.insert(m, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty datbinds)
           val datbinds = List.map (fn datbind as S.DatBind(span, tyvars, tycon, conbinds) => (datbind, newTyName(ctx, tycon))) datbinds
           val partialEnv = envWithTyConEnv (List.foldl (fn ((S.DatBind(span, tyvars, tycon, conbinds), tycon'), (m, m')) =>
                                                            let val tyvars = List.map (fn tv => genTyVar(ctx, tv)) tyvars
@@ -1551,8 +1555,12 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                        }
                  , bound = USyntax.TyNameMap.empty
                  } descs
-  | addSpec(ctx, env, S.DatDesc(span, descs : (S.TyVar list * S.TyCon * S.ConBind list) list))
-    = let val localTyConMap = List.foldl (fn ((tyvars, tycon, conbinds), map) => S.TyConMap.insert(map, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty descs
+  | addSpec(ctx, env, S.DatDesc(span, descs : (S.TyVar list * S.TyCon * S.ConBind list) list, typbinds))
+    = let val () = if List.null typbinds then
+                       ()
+                   else
+                       emitError(ctx, [span], "withtype: not implemented yet")
+          val localTyConMap = List.foldl (fn ((tyvars, tycon, conbinds), map) => S.TyConMap.insert(map, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty descs
           val equalityMap : bool S.TyConMap.map = determineDatatypeEquality(ctx, env, localTyConMap)
           val (partialTyConMap, tyNameMap, descs) = List.foldl (fn ((tyvars, tycon, condescs), (tyConMap, tyNameMap, descs)) =>
                                                                    let val tyname = newTyName(ctx, tycon)

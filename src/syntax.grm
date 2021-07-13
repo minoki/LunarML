@@ -115,6 +115,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TypBind of Syntax.TypBind list
        | DatBind of Syntax.DatBind list
        | DatBindRest of Syntax.DatBind list
+       | Withtype of Syntax.TypBind list
        | ConBind of Syntax.ConBind list
        | ConBindRest of Syntax.ConBind list
        | ExBind of Syntax.ExBind list
@@ -388,9 +389,9 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), TyVar :: TyVarSeqRest, FValBind)) (* [derived] function declaration *)
             | TYPE TypBind (UnfixedSyntax.TypeDec(span(TYPEleft, TypBindright), TypBind)) (* type declaration *)
             (* | DATATYPE DatBind (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindright), DatBind)) (* datatype declaration *) *)
-            | DATATYPE TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(TyConleft, ConBindright), [], TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
-            | DATATYPE TyVar TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(TyVarleft, ConBindright), [TyVar], TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
-            | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConBind DatBindRest (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindRestright), Syntax.DatBind (span(LPARENleft, ConBindright), TyVar :: TyVarSeqRest, TyCon, ConBind) :: DatBindRest)) (* datatype declaration *)
+            | DATATYPE TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(TyConleft, ConBindright), [], TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
+            | DATATYPE TyVar TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(TyVarleft, ConBindright), [TyVar], TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
+            | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(LPARENleft, ConBindright), TyVar :: TyVarSeqRest, TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
             | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)) (* datatype replication *)
             | ABSTYPE DatBind WITH Decs END (UnfixedSyntax.AbstypeDec (span(ABSTYPEleft, ENDright), DatBind, Decs)) (* abstype declaration *)
             | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec(span(EXCEPTIONleft, ExBindright), ExBind)) (* exception declaration *)
@@ -454,6 +455,9 @@ DatBind : TyVarSeq TyCon EQUALS ConBind DatBindRest (Syntax.DatBind (span(TyVarS
 DatBindRest : AND DatBind (DatBind)
             | (nil)
 
+Withtype : WITHTYPE TypBind (TypBind)
+         | (nil)
+
 (* constructor bindings *)
 ConBind : Opt_OP BoundVId OF Ty ConBindRest (Syntax.ConBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ConBindRest)
         | Opt_OP BoundVId ConBindRest (Syntax.ConBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ConBindRest)
@@ -495,9 +499,9 @@ Spec : VAL ValDesc ([Syntax.ValDesc(span(VALleft, ValDescright), ValDesc)])
      | TYPE TyVarSeq TyCon EQUALS Ty TypDescEQRest ([Syntax.TypeAliasDesc(span(TYPEleft, TypDescEQRestright), (TyVarSeq, TyCon, Ty) :: TypDescEQRest)])
      | EQTYPE TypDesc ([Syntax.EqtypeDesc(span(EQTYPEleft, TypDescright), TypDesc)])
      (* | DATATYPE DatDesc (Syntax.DatDesc(span(DATATYPEleft, DatDescright), DatDesc)) *)
-     | DATATYPE TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([], TyCon, ConDesc) :: DatDescRest)])
-     | DATATYPE TyVar TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), ([TyVar], TyCon, ConDesc) :: DatDescRest)])
-     | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConDesc DatDescRest ([Syntax.DatDesc(span(DATATYPEleft, DatDescRestright), (TyVar :: TyVarSeqRest, TyCon, ConDesc) :: DatDescRest)])
+     | DATATYPE TyCon EQUALS ConDesc DatDescRest Withtype ([Syntax.DatDesc(span(DATATYPEleft, Withtyperight), ([], TyCon, ConDesc) :: DatDescRest, Withtype)])
+     | DATATYPE TyVar TyCon EQUALS ConDesc DatDescRest Withtype ([Syntax.DatDesc(span(DATATYPEleft, Withtyperight), ([TyVar], TyCon, ConDesc) :: DatDescRest, Withtype)])
+     | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConDesc DatDescRest Withtype ([Syntax.DatDesc(span(DATATYPEleft, Withtyperight), (TyVar :: TyVarSeqRest, TyCon, ConDesc) :: DatDescRest, Withtype)])
      | DATATYPE TyCon EQUALS DATATYPE LongTyCon ([Syntax.DatatypeRepSpec(span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)])
      | EXCEPTION ExDesc ([Syntax.ExDesc(span(EXCEPTIONleft, ExDescright), ExDesc)])
      | STRUCTURE StrDesc ([Syntax.StrDesc(span(STRUCTUREleft, StrDescright), StrDesc)])
