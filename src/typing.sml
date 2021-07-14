@@ -1663,28 +1663,33 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                       let val typeFn = let val tyvars = List.tabulate(arity, fn _ => genTyVar(ctx, Syntax.MkTyVar "a"))
                                        in U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tyname0))
                                        end
-                          val subst = List.foldl (fn (tystr, subst) =>
-                                                     case getTypeNameFromTypeStructure(ctx, tystr) of
-                                                         SOME (tyname, arity') =>
-                                                         if arity' <> arity then
-                                                             emitError(ctx, [span], "sharing: arity mismatch")
-                                                         else
-                                                             (case U.TyNameMap.find(#bound s, tyname) of
-                                                                  SOME { arity = arity', admitsEquality = admitsEquality', ... } =>
-                                                                  if arity' <> arity then
-                                                                      emitError(ctx, [span], "sharing: arity mismatch")
-                                                                  else if U.eqTyName(tyname, tyname0) then
-                                                                      subst (* do nothing *)
-                                                                  else if admitsEquality <> admitsEquality' then
-                                                                      emitError(ctx, [span], "sharing: equality mismatch")
-                                                                  else
-                                                                      U.TyNameMap.insert(subst, tyname, typeFn)
-                                                                | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
-                                                             )
-                                                       | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
-                                                 ) U.TyNameMap.empty tystrs
+                          val (subst, admitsEquality) = List.foldl (fn (tystr, (subst, admitsEquality)) =>
+                                                                       case getTypeNameFromTypeStructure(ctx, tystr) of
+                                                                           SOME (tyname, arity') =>
+                                                                           if arity' <> arity then
+                                                                               emitError(ctx, [span], "sharing: arity mismatch")
+                                                                           else
+                                                                               (case U.TyNameMap.find(#bound s, tyname) of
+                                                                                    SOME { arity = arity', admitsEquality = admitsEquality', ... } =>
+                                                                                    if arity' <> arity then
+                                                                                        emitError(ctx, [span], "sharing: arity mismatch")
+                                                                                    else if U.eqTyName(tyname, tyname0) then
+                                                                                        (subst, admitsEquality) (* do nothing *)
+                                                                                    else
+                                                                                        (U.TyNameMap.insert(subst, tyname, typeFn), admitsEquality orelse admitsEquality')
+                                                                                  | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+                                                                               )
+                                                                         | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
+                                                                   ) (U.TyNameMap.empty, admitsEquality) tystrs
                       in { s = applySubstTyConInSig(ctx, subst) (#s s)
-                         , bound = U.TyNameMap.filteri (fn (tyname, _) => not (U.TyNameMap.inDomain(subst, tyname))) (#bound s)
+                         , bound = U.TyNameMap.mapPartiali (fn (tyname, x as { arity, admitsEquality = _, longtycon }) =>
+                                                               if U.TyNameMap.inDomain(subst, tyname) then
+                                                                   NONE
+                                                               else if U.eqTyName(tyname, tyname0) then
+                                                                   SOME { arity = arity, admitsEquality = admitsEquality, longtycon = longtycon }
+                                                               else
+                                                                   SOME x
+                                                           ) (#bound s)
                          }
                       end
                   else

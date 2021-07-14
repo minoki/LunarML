@@ -110,6 +110,7 @@ should_run "should_run/" {
 should_compile "should_compile/" {
   "signature_sharing1.sml",
   "signature_sharing2.sml",
+  "signature_sharing3.sml",
 }
 should_not_compile "should_not_compile/" {
   "fixity.sml",
