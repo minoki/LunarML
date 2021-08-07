@@ -17,6 +17,7 @@ fun MkPairPat (span, p1, p2) = UnfixedSyntax.TuplePat(span, [p1, p2])
 fun MkConsPat (span, p1, p2) = UnfixedSyntax.ConPat(span, Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(span, p1, p2))
 fun MkListPat (span, nil) = nilPat span
   | MkListPat (span, x :: xs) = MkConsPat (span, x, MkListPat (span, xs))
+fun MkVectorPat (span, xs, ellipsis) = UnfixedSyntax.VectorPat(span, Vector.fromList xs, ellipsis)
 fun MkSequentialExp (span, e1, []) = e1
   | MkSequentialExp (span, e1, e2 :: xs) = UnfixedSyntax.CaseExp(span,e1,[(UnfixedSyntax.WildcardPat span, MkSequentialExp(span,e2,xs))])
 fun MkTupleTy(_,[x]) = x
@@ -84,6 +85,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TypedPat of UnfixedSyntax.Pat
        | Pat of UnfixedSyntax.Pat
        | PatSeqRest of UnfixedSyntax.Pat list
+       | PatSeqRestEllipsis of UnfixedSyntax.Pat list * bool
        | AtTy of Syntax.Ty
        | ConTy of Syntax.Ty
        | TupTy of Syntax.Ty list
@@ -242,6 +244,9 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat(span(UNDERSCOREleft,UNDERSCORErigh
       | LPAREN Pat COMMA Pat PatSeqRest RPAREN (UnfixedSyntax.TuplePat(span(LPARENleft,RPARENright), Pat1 :: Pat2 :: PatSeqRest)) (* [derived] tuple pattern *)
       | LBRACK RBRACK (nilPat (span(LBRACKleft,RBRACKright))) (* [derived] empty list *)
       | LBRACK Pat PatSeqRest RBRACK (MkListPat(span(LBRACKleft,RBRACKright), Pat :: PatSeqRest)) (* [derived] list pattern *)
+      | HASHLBRACK RBRACK (MkVectorPat(span(HASHLBRACKleft,RBRACKright), [], false)) (* [extension] vector list *)
+      | HASHLBRACK ELLIPSIS RBRACK (MkVectorPat(span(HASHLBRACKleft,RBRACKright), [], true)) (* [extension] vector list *)
+      | HASHLBRACK Pat PatSeqRestEllipsis RBRACK (case PatSeqRestEllipsis of (PatSeqRest, ellipsis) => MkVectorPat(span(HASHLBRACKleft,RBRACKright), Pat :: PatSeqRest, ellipsis)) (* [extension] vector pattern *)
 
 (* one or more atomic patterns *)
 AtPats : AtPat ([AtPat])
@@ -275,6 +280,10 @@ PatRow : ELLIPSIS ((nil, true)) (* wildcard *)
 
 PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
            | (nil)
+
+PatSeqRestEllipsis : COMMA Pat PatSeqRestEllipsis (case PatSeqRestEllipsis of (PatSeqRest, ellipsis) => (Pat :: PatSeqRest, ellipsis))
+                   | COMMA ELLIPSIS ((nil, true))
+                   | ((nil, false))
 
 AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
      | LBRACE RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), nil)) (* record type expression *)

@@ -29,6 +29,7 @@ datatype Pat = WildcardPat
              | RecordPat of (Syntax.Label * Pat) list * bool
              | ConPat of Path * Pat option * Ty list
              | LayeredPat of USyntax.VId * Ty * Pat
+             | VectorPat of Pat vector * bool * Ty
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyName * ConBind list
 datatype Exp = SConExp of Syntax.SCon
@@ -164,6 +165,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doPat (RecordPat (fields, wildcard)) = RecordPat (List.map (fn (label, pat) => (label, doPat pat)) fields, wildcard)
           | doPat (ConPat (path, optPat, tyargs)) = ConPat (path, Option.map doPat optPat, List.map doTy tyargs)
           | doPat (LayeredPat (vid, ty, pat)) = LayeredPat (vid, doTy ty, doPat pat)
+          | doPat (VectorPat (pats, ellipsis, elemTy)) = VectorPat (Vector.map doPat pats, ellipsis, doTy elemTy)
         fun doConBind (ConBind (vid, optTy)) = ConBind (vid, Option.map doTy optTy)
         fun doDatBind (DatBind (tyvars, tyname, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
                                                              in DatBind (tyvars, tyname, List.map (#doConBind (substTy subst')) conbinds)
@@ -234,6 +236,7 @@ fun freeTyVarsInPat (bound, WildcardPat) = USyntax.TyVarSet.empty
   | freeTyVarsInPat (bound, ConPat (path, NONE, tyargs)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty tyargs
   | freeTyVarsInPat (bound, ConPat (path, SOME innerPat, tyargs)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) (freeTyVarsInPat (bound, innerPat)) tyargs
   | freeTyVarsInPat (bound, LayeredPat (_, ty, innerPat)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInPat (bound, innerPat))
+  | freeTyVarsInPat (bound, VectorPat (pats, ellipsis, elemTy)) = Vector.foldr (fn (pat, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat))) (freeTyVarsInTy (bound, elemTy)) pats
 fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, SConExp _) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, VarExp _) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty fields
@@ -325,6 +328,7 @@ fun print_Pat WildcardPat = "WildcardPat"
                                          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
                                       )
   | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
+  | print_Pat (VectorPat _) = "VectorPat"
 fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
@@ -519,6 +523,9 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat)
   | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
                                                               in (USyntax.VIdMap.empty, F.LayeredPat(vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
                                                               end
+  | toFPat(ctx, env, U.VectorPat(span, pats, ellipsis, elemTy)) = let val pats = Vector.map (fn pat => toFPat(ctx, env, pat)) pats
+                                                                  in (USyntax.VIdMap.empty, F.VectorPat(Vector.map #2 pats, ellipsis, toFTy(ctx, env, elemTy)))
+                                                                  end
 and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.VarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
     = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
@@ -578,6 +585,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
             | isExhaustive (F.RecordPat _) = false (* exn is not a record *)
             | isExhaustive (F.ConPat _) = false (* exn is open *)
             | isExhaustive (F.LayeredPat (_, _, pat)) = isExhaustive pat
+            | isExhaustive (F.VectorPat _) = false (* exn is not a vector *)
           val matches' = List.map doMatch matches
           val matches'' = if List.exists (fn (pat, _) => isExhaustive pat) matches' then
                               matches'

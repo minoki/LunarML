@@ -100,6 +100,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | ConPat of SourcePos.span * LongVId * Pat option (* constructed pattern *)
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
              | LayeredPat of SourcePos.span * VId * Ty option * Pat (* layered *)
+             | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
 
 datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
@@ -180,6 +181,7 @@ fun getSourceSpanOfPat(WildcardPat span) = span
   | getSourceSpanOfPat(ConPat(span, _, _)) = span
   | getSourceSpanOfPat(TypedPat(span, _, _)) = span
   | getSourceSpanOfPat(LayeredPat(span, _, _, _)) = span
+  | getSourceSpanOfPat(VectorPat(span, _, _)) = span
 
 fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(VarExp(span, _)) = span
@@ -259,6 +261,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
                                                                      | SOME ys => "TuplePat " ^ print_list print_Pat ys
                                                                   )
   | print_Pat (RecordPat { fields = x, wildcard = true, ... }) = "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",true)"
+  | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (VarExp(_,MkQualified([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
@@ -304,6 +307,7 @@ datatype Pat
   | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, wildcard : bool }
   | TypedPat of SourcePos.span * Pat * Syntax.Ty (* typed *)
   | ConjunctivePat of SourcePos.span * Pat * Pat (* layered or [Successor ML] conjunctive *)
+  | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
@@ -356,5 +360,6 @@ fun getSourceSpanOfPat(WildcardPat span) = span
   | getSourceSpanOfPat(RecordPat{sourceSpan, ...}) = sourceSpan
   | getSourceSpanOfPat(TypedPat(span, _, _)) = span
   | getSourceSpanOfPat(ConjunctivePat(span, _, _)) = span
+  | getSourceSpanOfPat(VectorPat(span, _, _)) = span
 
 end (* structure UnfixedSyntax *)

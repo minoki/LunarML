@@ -195,6 +195,7 @@ fun isExhaustive(ctx, env : Env, USyntax.WildcardPat _) = true
   | isExhaustive(ctx, env, USyntax.ConPat{ sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor }) = isSoleConstructor andalso isExhaustive(ctx, env, innerPat)
   | isExhaustive(ctx, env, USyntax.TypedPat(_, innerPat, _)) = isExhaustive(ctx, env, innerPat)
   | isExhaustive(ctx, env, USyntax.LayeredPat(_, _, _, innerPat)) = isExhaustive(ctx, env, innerPat)
+  | isExhaustive(ctx, env, USyntax.VectorPat(_, pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
 
 val primTyName_int    = USyntax.MkTyName("int", 0)
 val primTyName_word   = USyntax.MkTyName("word", 1)
@@ -593,6 +594,17 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
                      in (ty, Syntax.VIdMap.insert(vars, vid, (vid', ty)), U.LayeredPat(span, vid', ty, pat))
                      end
            | SOME _ => emitError(ctx, [span], "trying to bind the same identifier twice")
+      end
+  | typeCheckPat(ctx, env, S.VectorPat(span, pats, ellipsis))
+    = let val elemTy = USyntax.TyVar(span, freshTyVar(ctx))
+          val pats = Vector.map (fn pat => let val (elemTy', vars, pat) = typeCheckPat(ctx, env, pat)
+                                           in addConstraint(ctx, env, U.EqConstr(span, elemTy, elemTy'))
+                                            ; (vars, pat)
+                                           end
+                                ) pats
+          val vars = Vector.foldr (fn ((vars, _), vars') => Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "trying to bind the same identifier twice")) (vars, vars')) Syntax.VIdMap.empty pats
+          val pats = Vector.map #2 pats
+      in (U.TyCon(span, [elemTy], primTyName_vector), vars, U.VectorPat(span, pats, ellipsis, elemTy))
       end
 
 fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar list * S.Ty list) S.TyConMap.map) : bool S.TyConMap.map
@@ -1242,6 +1254,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                                                                                              )
             | goPat (U.TypedPat(span, pat, ty)) = ( goTy ty; goPat pat )
             | goPat (U.LayeredPat(span, vid, ty, pat)) = ( goTy ty; goPat pat )
+            | goPat (U.VectorPat(span, pats, ellipsis, elemTy)) = ( goTy elemTy; Vector.app goPat pats )
           fun goExp (U.SConExp (span, scon)) = ()
             | goExp (U.VarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
             | goExp (U.RecordExp (span, fields)) = List.app (fn (label, exp) => goExp exp) fields

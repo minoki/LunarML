@@ -128,6 +128,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | ConPat of { sourceSpan : SourcePos.span, longvid : LongVId, payload : Pat option, tyargs : Ty list, isSoleConstructor : bool }
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
              | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
+             | VectorPat of SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
 
 datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
@@ -244,6 +245,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
                                                              | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
                                                           )
   | print_Pat (RecordPat{fields = x, wildcard = true, ...}) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
+  | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (VarExp(_, x, idstatus, tyargs)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Ty, Syntax.print_list print_UnaryConstraint)) tyargs ^ ")"
@@ -375,6 +377,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
             | doPat(ConPat{sourceSpan, longvid, payload, tyargs, isSoleConstructor}) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, isSoleConstructor = isSoleConstructor }
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
+            | doPat(VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, doTy elemTy)
           and doTypBind(TypBind(span, tyvars, tycon, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
                                                             in TypBind(span, tyvars, tycon, applySubstTy subst ty)
                                                             end
@@ -421,6 +424,7 @@ fun freeTyVarsInPat(bound, pat)
          | ConPat { payload = SOME pat, tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) (freeTyVarsInPat(bound, pat)) tyargs
          | TypedPat(_, pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
          | LayeredPat(_, _, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
+         | VectorPat(_, pats, _, elemTy) => Vector.foldl (fn (pat, set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) (freeTyVarsInTy(bound, elemTy)) pats
       )
 
 (* freeTyVarsInExp : TyVarSet * Exp -> TyVarSet *)
@@ -502,6 +506,7 @@ fun filterVarsInPat pred =
                           | ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (doPat innerPat), tyargs = tyargs, isSoleConstructor = isSoleConstructor }
                           | TypedPat(span, innerPat, ty) => TypedPat(span, doPat innerPat, ty)
                           | LayeredPat(span, vid, ty, innerPat) => if pred vid then LayeredPat(span, vid, ty, doPat innerPat) else TypedPat(span, doPat innerPat, ty)
+                          | VectorPat(span, pats, ellipsis, elemTy) => VectorPat(span, Vector.map doPat pats, ellipsis, elemTy)
     in doPat
     end
 
@@ -523,6 +528,7 @@ fun renameVarsInPat m =
                                                                           NONE => vid
                                                                         | SOME repl => repl
                                                                 , ty, doPat pat)
+          | doPat (VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, elemTy)
     in doPat
     end
 end (* structure USyntax *)

@@ -219,6 +219,7 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
          | UnfixedSyntax.JuxtapositionPat(_, [UnfixedSyntax.NonInfixVIdPat(_, Syntax.MkQualified([], vid))]) => Syntax.LayeredPat (span, vid, NONE, doPat(ctx, env, pat2))
          | _ => emitError(ctx, [span], "conjunctive: not implemented yet") (* Successor ML *)
       )
+  | doPat(ctx, env, UnfixedSyntax.VectorPat(span, pats, ellipsis)) = Syntax.VectorPat(span, Vector.map (fn pat => doPat(ctx, env, pat)) pats, ellipsis)
 fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, scon)
   | doExp(ctx, env, UnfixedSyntax.InfixOrVIdExp(span, vid)) = (case getFixityStatus(env, vid) of
                                                                    Syntax.Nonfix => Syntax.VarExp(span, Syntax.MkLongVId([], vid))
@@ -550,6 +551,7 @@ fun freeTyVarsInPat(_, WildcardPat _) = TyVarSet.empty
   | freeTyVarsInPat(bound, TypedPat(_, pat, ty)) = TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
   | freeTyVarsInPat(bound, LayeredPat(_, _, SOME ty, pat)) = TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
   | freeTyVarsInPat(bound, LayeredPat(_, _, NONE, pat)) = freeTyVarsInPat(bound, pat)
+  | freeTyVarsInPat(bound, VectorPat(_, pats, _)) = Vector.foldl (fn (pat, set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty pats
 
 (* unguardedTyVarsInValBind : TyVarSet.set * ValBind -> TyVarSet.set *)
 local
@@ -700,6 +702,7 @@ local
       | doPat(S.TypedPat(_, pat, ty)) = (doPat pat ; doTy ty)
       | doPat(S.LayeredPat(_, vid, NONE, pat)) = (doPat pat)
       | doPat(S.LayeredPat(_, vid, SOME ty, pat)) = (doTy ty ; doPat pat)
+      | doPat(S.VectorPat(_, pats, _)) = Vector.app doPat pats
 
     fun doTypBind(S.TypBind(_, tyvarseq, tycon, ty))
         = if checkTyVarSeq tyvarseq then

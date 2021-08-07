@@ -47,7 +47,7 @@ Successor ML features:
 
 Other extensions planned:
 
-* [ ] Vector expressions and patterns
+* [x] Vector expressions and patterns
 * [ ] Packaged modules (like in Alice ML or HaMLet S)
 * [ ] Hexadecimal floating-point literals
 * [ ] Variably-encoded Unicode escape sequence in string literals

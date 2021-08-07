@@ -58,6 +58,7 @@ fun isWildcardPat F.WildcardPat = true
   | isWildcardPat (F.RecordPat (fields, _)) = List.all (fn (label, pat) => isWildcardPat pat) fields
   | isWildcardPat (F.ConPat (longvid, optPat, tyargs)) = false (* TODO *)
   | isWildcardPat (F.LayeredPat _) = false
+  | isWildcardPat (F.VectorPat (pats, ellipsis, _)) = ellipsis andalso Vector.length pats = 0
 fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
   | getPayloadTy (ty :: tys, FSyntax.ForallType(tv, rest)) = getPayloadTy (tys, FSyntax.substituteTy (tv, ty) rest)
   | getPayloadTy _ = raise Fail "getPayloadTy: invalid"
@@ -273,6 +274,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = let val env = addVar(env, vid, ty1)
                                                                            in genMatcher env exp ty0 innerPat
                                                                            end
+            | genMatcher env exp ty0 (F.VectorPat (pats, ellipsis, elemTy)) = let val e0 = F.AppExp(if ellipsis then F.LongVarExp(InitialEnv.VId_Int_GE) else F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_length), elemTy), exp), F.SConExp (Syntax.IntegerConstant (Vector.length pats))])
+                                                                              in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_sub), elemTy), F.TupleExp [exp, F.SConExp (Syntax.IntegerConstant i)])) elemTy pat
+                                                                                                                         in (env, F.SimplifyingAndalsoExp(e, exp))
+                                                                                                                         end
+                                                                                               ) (env, e0) pats
+                                                                              end
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
@@ -285,12 +292,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                                                genBinders env (F.DataPayloadExp exp) innerPat
             | genBinders env exp (F.ConPat(path, NONE, tyargs)) = []
             | genBinders env exp (F.LayeredPat(vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
+            | genBinders env exp (F.VectorPat(pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_sub), elemTy), F.TupleExp [exp, F.SConExp (Syntax.IntegerConstant i)])) pat @ acc) [] pats
           and isExhaustive env F.WildcardPat = true
             | isExhaustive env (F.SConPat _) = false
             | isExhaustive env (F.VarPat _) = true
             | isExhaustive env (F.RecordPat (row, _)) = List.all (fn (_, e) => isExhaustive env e) row
             | isExhaustive env (F.ConPat (longvid, pat, _)) = false (* TODO *)
             | isExhaustive env (F.LayeredPat (_, _, innerPat)) = isExhaustive env innerPat
+            | isExhaustive env (F.VectorPat (pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
           and doDecs env [] = (env, [])
             | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
                                              val (env'', decs') = doDecs env' decs
@@ -329,6 +338,7 @@ fun freeVarsInPat F.WildcardPat = USyntax.VIdSet.empty
                                                             | SOME pat => freeVarsInPat pat
                                                          )
   | freeVarsInPat (F.LayeredPat (vid, ty, pat)) = USyntax.VIdSet.add (freeVarsInPat pat, vid)
+  | freeVarsInPat (F.VectorPat (pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) USyntax.VIdSet.empty pats
 fun removeFromEnv (vid, env as { vidMap } : Env) = if USyntax.VIdMap.inDomain (vidMap, vid) then
                                                        { vidMap = #1 (USyntax.VIdMap.remove (vidMap, vid)) }
                                                    else
@@ -679,6 +689,7 @@ fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.ConPat (F.Root vid, SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
   | doPat (F.ConPat (F.Child _, _, tyargs)) = raise Fail "not implemented yet"
   | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
+  | doPat (F.VectorPat (pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty pats
 (* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
 fun doExp (exp as F.SConExp _ : F.Exp) : USyntax.VIdSet.set * F.Exp = (USyntax.VIdSet.empty, exp)
   | doExp (exp as F.VarExp vid) = (USyntax.VIdSet.singleton vid, exp)
