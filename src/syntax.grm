@@ -12,6 +12,7 @@ fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp sp
 fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)])
 fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
 fun MkListExp (span, xs) = UnfixedSyntax.ListExp(span, Vector.fromList xs)
+fun MkVectorExp (span, xs) = UnfixedSyntax.VectorExp(span, Vector.fromList xs)
 fun MkPairPat (span, p1, p2) = UnfixedSyntax.TuplePat(span, [p1, p2])
 fun MkConsPat (span, p1, p2) = UnfixedSyntax.ConPat(span, Syntax.MkLongVId(nil, Syntax.MkVId("::")), MkPairPat(span, p1, p2))
 fun MkListPat (span, nil) = nilPat span
@@ -49,6 +50,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SEMICOLON | ELLIPSIS | UNDERSCORE | BAR | EQUALS | DARROW | ARROW | HASH
     (* :> *)
     | COLONGT
+    (* #[ (extension) *)
+    | HASHLBRACK
     (* reserved words *)
     | ABSTYPE | AND | ANDALSO | AS | CASE | DATATYPE | DO | ELSE | END | EQTYPE
     | EXCEPTION | FN | FUN | FUNCTOR | HANDLE | IF | IN | INCLUDE | INFIX
@@ -326,6 +329,8 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
       | LET Decs IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, MkSequentialExp(span(Exp1left, ExpSSeqRestright), Exp1, Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
       | LBRACK RBRACK (MkListExp(span(LBRACKleft,RBRACKright),[])) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | LBRACK Exp ExpCSeqRest RBRACK (MkListExp(span(LBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
+      | HASHLBRACK RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), [])) (* [extension] vector expression *)
+      | HASHLBRACK Exp ExpCSeqRest RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [extension] vector expression *)
       | HASH Lab (UnfixedSyntax.ProjectionExp(span(HASHleft,Labright), Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
 
 (* comma-separated list of expressions *)

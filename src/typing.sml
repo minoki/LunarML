@@ -779,6 +779,14 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
                                          end) xs
       in (U.TyCon(span, [elemTy], primTyName_list), U.ListExp(span, xs, elemTy))
       end
+  | typeCheckExp(ctx, env, S.VectorExp(span, xs))
+    = let val elemTy = USyntax.TyVar(span, freshTyVar(ctx))
+          val xs = Vector.map (fn exp => let val (expTy, exp) = typeCheckExp(ctx, env, exp)
+                                         in addConstraint(ctx, env, U.EqConstr(span, expTy, elemTy))
+                                          ; exp
+                                         end) xs
+      in (U.TyCon(span, [elemTy], primTyName_vector), U.VectorExp(span, xs, elemTy))
+      end
 (* typeCheckDec : Context * Env * S.Dec -> (* created environment *) Env * U.Dec list *)
 and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
     = let val valbinds = let val env = { valMap = #valMap env
@@ -1250,6 +1258,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
             | goExp (U.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (U.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
             | goExp (U.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
+            | goExp (U.VectorExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
           and goDec (U.ValDec (span, valbinds)) = ( List.app goValBind valbinds
                                                   ; tynameset
                                                   )

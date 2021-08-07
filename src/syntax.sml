@@ -120,6 +120,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | FnExp of SourcePos.span * (Pat * Exp) list
              | ProjectionExp of SourcePos.span * Label
              | ListExp of SourcePos.span * Exp vector
+             | VectorExp of SourcePos.span * Exp vector
      and Dec = ValDec of SourcePos.span * TyVar list * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * TyVar list * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list
@@ -193,6 +194,7 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(FnExp(span, _)) = span
   | getSourceSpanOfExp(ProjectionExp(span, _)) = span
   | getSourceSpanOfExp(ListExp(span, _)) = span
+  | getSourceSpanOfExp(VectorExp(span, _)) = span
 
 fun MkInfixConPat(pat1, _, vid, pat2) = let val span = SourcePos.mergeSpan(getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
                                         in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], wildcard = false }))
@@ -275,6 +277,7 @@ fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (FnExp(_,x)) = "FnExp(" ^ print_list (print_pair (print_Pat,print_Exp)) x ^ ")"
   | print_Exp (ProjectionExp(_,label)) = "ProjectionExp(" ^ print_Label label ^ ")"
   | print_Exp (ListExp _) = "ListExp"
+  | print_Exp (VectorExp _) = "VectorExp"
 and print_Dec (ValDec (_,bound,valbind)) = "ValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec (RecValDec (_,bound,valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
@@ -318,6 +321,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | FnExp of SourcePos.span * (Pat * Exp) list
              | ProjectionExp of SourcePos.span * Syntax.Label
              | ListExp of SourcePos.span * Exp vector
+             | VectorExp of SourcePos.span * Exp vector
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * ValBind list
              | RecValDec of SourcePos.span * Syntax.TyVar list * ValBind list
              | FValDec of SourcePos.span * Syntax.TyVar list * FValBind list

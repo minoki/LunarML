@@ -43,6 +43,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"#" :: #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c, nil, xs)
                                                           in SOME (Tokens.CharacterConst (implode str,pos(l,c),pos(l',c'-1)), l', c', rest)
                                                           end
+              | tokenizeOne (l, c, #"#" :: #"[" :: xs) = SOME (Tokens.HASHLBRACK (pos(l,c),pos(l,c+1)), l, c+2, xs)
               | tokenizeOne (l, c, #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+1, nil, xs)
                                                   in SOME (Tokens.StringConst (implode str,pos(l,c),pos(l',c'-1)), l', c', rest)
                                                   end

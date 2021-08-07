@@ -152,3 +152,9 @@ should_not_compile "successor_ml/should_not_compile/" {
   "val_rec_override.sml",
   "typealias_in_signature.sml",
 }
+should_run "extension/should_run/" {
+  "vector_exp.sml",
+}
+should_compile "extension/should_compile/" {
+  "vector_exp_generalize.sml",
+}
