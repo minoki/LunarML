@@ -103,7 +103,7 @@ exception TypeError of SourcePos.span list * string
 fun emitErrorP(ctx : ProgramContext, spans, message) = raise TypeError (spans, message)
 fun emitError(ctx : Context, spans, message) = raise TypeError (spans, message)
 
-(* lookupStr : Context * USyntax..Signature * SourcePos.span * Syntax.StrId list -> USyntax.Signature *)
+(* lookupStr : Context * USyntax.Signature * SourcePos.span * Syntax.StrId list -> USyntax.Signature *)
 fun lookupStr(ctx, s : USyntax.Signature, span, nil) = s
   | lookupStr(ctx, s as { strMap = strMap, ... }, span, (strid0 as Syntax.MkStrId name) :: strids)
     = (case Syntax.StrIdMap.find(strMap, strid0) of
@@ -511,7 +511,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
          | Syntax.StringConstant(_)    => (primTy_string, S.VIdMap.empty, U.SConPat(span, scon))
          | Syntax.CharacterConstant(_) => (primTy_char, S.VIdMap.empty, U.SConPat(span, scon))
       )
-  | typeCheckPat(ctx, env, pat as S.VarPat(span, vid))
+  | typeCheckPat(ctx, env, S.VarPat(span, vid))
     = (case Syntax.VIdMap.find(#valMap env, vid) of
            SOME (_, Syntax.ValueConstructor, _) => emitError(ctx, [span], "VarPat: invalid pattern")
          | SOME (_, Syntax.ExceptionConstructor, _) => emitError(ctx, [span], "VarPat: invalid pattern")
@@ -523,7 +523,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
   | typeCheckPat(ctx, env, S.RecordPat{sourceSpan, fields, wildcard})
     = let fun oneField((label, pat), (fieldTypes, vars, fieldPats))
               = let val (ty, vars', pat') = typeCheckPat(ctx, env, pat)
-                in ((label, ty) :: fieldTypes, Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "trying to bind the same identifier twice")) (vars, vars'), (label, pat') :: fieldPats)
+                in ((label, ty) :: fieldTypes, Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "duplicate identifier in a pattern")) (vars, vars'), (label, pat') :: fieldPats)
                 end
           val (fieldTypes, vars, fieldPats) = List.foldr oneField ([], Syntax.VIdMap.empty, []) fields
       in if wildcard then
@@ -562,11 +562,11 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
            )
          | NONE => emitError(ctx, [span], "invalid pattern")
       )
-  | typeCheckPat(ctx, env, pat as S.TypedPat(span1, S.WildcardPat span2, ty))
+  | typeCheckPat(ctx, env, S.TypedPat(span1, S.WildcardPat span2, ty))
     = let val ty = evalTy(ctx, env, ty)
       in (ty, Syntax.VIdMap.empty, U.TypedPat(span1, U.WildcardPat span2, ty))
       end
-  | typeCheckPat(ctx, env, pat as S.TypedPat(span1, S.VarPat(span2, vid), ty))
+  | typeCheckPat(ctx, env, S.TypedPat(span1, S.VarPat(span2, vid), ty))
     = let val ty = evalTy(ctx, env, ty)
       in case Syntax.VIdMap.find(#valMap env, vid) of
              SOME (_, Syntax.ValueConstructor, _) => emitError(ctx, [span2], "VarPat: invalid pattern")
@@ -593,7 +593,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
                          val vid' = newVId(ctx, vid)
                      in (ty, Syntax.VIdMap.insert(vars, vid, (vid', ty)), U.LayeredPat(span, vid', ty, pat))
                      end
-           | SOME _ => emitError(ctx, [span], "trying to bind the same identifier twice")
+           | SOME _ => emitError(ctx, [span], "duplicate identifier in a pattern")
       end
   | typeCheckPat(ctx, env, S.VectorPat(span, pats, ellipsis))
     = let val elemTy = USyntax.TyVar(span, freshTyVar(ctx))
@@ -602,7 +602,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
                                             ; (vars, pat)
                                            end
                                 ) pats
-          val vars = Vector.foldr (fn ((vars, _), vars') => Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "trying to bind the same identifier twice")) (vars, vars')) Syntax.VIdMap.empty pats
+          val vars = Vector.foldr (fn ((vars, _), vars') => Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "duplicate identifier in a pattern")) (vars, vars')) Syntax.VIdMap.empty pats
           val pats = Vector.map #2 pats
       in (U.TyCon(span, [elemTy], primTyName_vector), vars, U.VectorPat(span, pats, ellipsis, elemTy))
       end
@@ -842,7 +842,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                                              )
                                                                                  end
                                                                       )
-                                      in (valbind' :: valbinds, S.VIdMap.unionWith #2 (S.VIdMap.map (fn (vid, ty) => (vid, U.TypeScheme([], ty))) valEnv, valEnvRest))
+                                      in (valbind' :: valbinds, S.VIdMap.unionWith (fn _ => emitError (ctx, [span], "duplicate identifier in a binding")) (S.VIdMap.map (fn (vid, ty) => (vid, U.TypeScheme([], ty))) valEnv, valEnvRest))
                                       end
                      | _ => let val espan = U.getSourceSpanOfExp exp
                                 val vars' = List.map (fn (vid, _) => (vid, renewVId ctx vid)) vars
@@ -862,7 +862,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                            ]
                                                                      )
                                                           )
-                            in (valbind' :: valbinds, S.VIdMap.unionWith #2 (S.VIdMap.map (fn (vid, ty) => (vid, U.TypeScheme([], ty))) valEnv, valEnvRest))
+                            in (valbind' :: valbinds, S.VIdMap.unionWith (fn _ => emitError (ctx, [span], "duplicate identifier in a binding")) (S.VIdMap.map (fn (vid, ty) => (vid, U.TypeScheme([], ty))) valEnv, valEnvRest))
                             end
                 end
             | generalize({ sourceSpan = span, pat, exp, expTy, valEnv, generalizable = true }, (valbinds, valEnvRest))
@@ -915,7 +915,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                    in U.TupleBind(span, xs, U.CaseExp(espan, exp, expTy, [(pat', tup)])) :: polyPart valEnv'L
                                                    end
                                        end
-                in (valbind' @ valbinds, Syntax.VIdMap.unionWith #2 (Syntax.VIdMap.map (fn (vid, tysc) => (vid, tysc)) valEnv', valEnvRest))
+                in (valbind' @ valbinds, Syntax.VIdMap.unionWith (fn _ => emitError (ctx, [span], "duplicate identifier in a binding")) (Syntax.VIdMap.map (fn (vid, tysc) => (vid, tysc)) valEnv', valEnvRest))
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, U.MkShortVId vid)) valEnv)

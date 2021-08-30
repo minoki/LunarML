@@ -49,19 +49,18 @@ fun compare (MkVId x, MkVId y) = String.compare (x,y)
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
 structure VIdMap = RedBlackMapFn(VIdKey)
-structure TyConMap = RedBlackMapFn(struct
-                                    type ord_key = TyCon
-                                    fun compare (MkTyCon x, MkTyCon y) = String.compare (x,y)
-                                    end)
 structure StrIdKey = struct
 type ord_key = StrId
 fun compare (MkStrId x, MkStrId y) = String.compare (x,y)
 end : ORD_KEY
+structure StrIdSet = RedBlackSetFn(StrIdKey)
 structure StrIdMap = RedBlackMapFn(StrIdKey)
-structure SigIdMap = RedBlackMapFn(struct
-                                    type ord_key = SigId
-                                    fun compare (MkSigId x, MkSigId y) = String.compare (x,y)
-                                    end)
+structure SigIdKey = struct
+type ord_key = SigId
+fun compare (MkSigId x, MkSigId y) = String.compare (x,y)
+end
+structure SigIdSet = RedBlackSetFn(SigIdKey)
+structure SigIdMap = RedBlackMapFn(SigIdKey)
 structure TyVarKey = struct
 type ord_key = TyVar
 fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)

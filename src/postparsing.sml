@@ -527,7 +527,16 @@ fun doProgram(ctx, env, []) : Env * ((Syntax.Dec Syntax.TopDec) list) list = (em
                                        end
 end (* structure Fixity *)
 
-structure PostParsing = struct
+structure PostParsing : sig
+              val freeTyVarsInTy : Syntax.TyVarSet.set * Syntax.Ty -> Syntax.TyVarSet.set
+              val freeTyVarsInPat : Syntax.TyVarSet.set * Syntax.Pat -> Syntax.TyVarSet.set
+              val scopeTyVarsInDecs : Syntax.TyVarSet.set * Syntax.Dec list -> Syntax.Dec list
+              val scopeTyVarsInDec : Syntax.TyVarSet.set * Syntax.Dec -> Syntax.Dec
+              val scopeTyVarsInExp : Syntax.TyVarSet.set * Syntax.Exp -> Syntax.Exp
+              val scopeTyVarsInStrDec : Syntax.Dec Syntax.StrDec -> Syntax.Dec Syntax.StrDec
+              val scopeTyVarsInTopDecs : Syntax.Dec Syntax.TopDec list -> Syntax.Dec Syntax.TopDec list
+              val scopeTyVarsInProgram : Syntax.Program -> Syntax.Program
+              end = struct
 (* structure TyVarSet = Syntax.TyVarSet *)
 local
     open Syntax
@@ -657,98 +666,297 @@ val scopeTyVarsInTopDecs = List.map (fn StrDec(strdec) => StrDec(scopeTyVarsInSt
 val scopeTyVarsInProgram = List.map scopeTyVarsInTopDecs
 end (* local *)
 end (* local *)
+end (* structure PostParsing *)
 
+structure CheckSyntacticRestrictions : sig
+              val checkProgram : Syntax.Program -> unit
+          end = struct
 (* Check syntactic restrictions (The Definition 2.9) *)
-local
-    structure S = Syntax
+structure S = Syntax
 
-    (* checkRow : (Label * 'a) list -> bool, returns true if the same label is bound twice *)
-    fun checkRow(row: (S.Label * 'a) list) = doCheckRow(S.LabelSet.empty, row)
-    and doCheckRow(seen, []) = false
-      | doCheckRow(seen, (label, _) :: xs) = if S.LabelSet.member(seen, label) then
-                                                 true
-                                             else
-                                                 doCheckRow(S.LabelSet.add(seen, label), xs)
-
-    (* checkTyVarSeq : TyVar list -> bool, returns true if the same TyVar is bound twice *)
-    fun checkTyVarSeq(xs: S.TyVar list) = doCheckTyVarSeq(S.TyVarSet.empty, xs)
-    and doCheckTyVarSeq(seen, []) = false
-      | doCheckTyVarSeq(seen, tv :: xs) = if S.TyVarSet.member(seen, tv) then
+(* checkRow : (Label * 'a) list -> bool, returns true if the same label is bound twice *)
+fun checkRow (row: (S.Label * 'a) list) = doCheckRow (S.LabelSet.empty, row)
+and doCheckRow (seen, []) = false
+  | doCheckRow (seen, (label, _) :: xs) = if S.LabelSet.member (seen, label) then
                                               true
                                           else
-                                              doCheckTyVarSeq(S.TyVarSet.add(seen, tv), xs)
+                                              doCheckRow (S.LabelSet.add (seen, label), xs)
 
+(* checkTyVarSeq : SourcePos.span * TyVar list -> unit *)
+fun checkTyVarSeq (span, xs: S.TyVar list) = doCheckTyVarSeq (span, S.TyVarSet.empty, xs)
+and doCheckTyVarSeq (span, seen, []) = ()
+  | doCheckTyVarSeq (span, seen, tv :: xs) = if S.TyVarSet.member (seen, tv) then
+                                                 raise S.SyntaxError ([span], "no tyvarseq may contain the same tyvar twice")
+                                             else
+                                                 doCheckTyVarSeq (span, S.TyVarSet.add (seen, tv), xs)
 
-    (* doTy : S.Ty -> unit *)
-    fun doTy(S.TyVar _) = ()
-      | doTy(S.RecordType(_, row)) = if checkRow row then
-                                         raise S.SyntaxError ([], "No type-expression row may bind the same label twice")
-                                     else
-                                         ()
-      | doTy(S.TyCon(_, arg, longtycon)) = ()
-      | doTy(S.FnType(_, s, t)) = (doTy s ; doTy t)
+(* doTy : S.Ty -> unit *)
+fun doTy (S.TyVar span) = ()
+  | doTy (S.RecordType (span, fields)) = if checkRow fields then
+                                             raise S.SyntaxError ([span], "no type-expression row may bind the same label twice")
+                                         else
+                                             ()
+  | doTy (S.TyCon (span, tyargs, longtycon)) = List.app doTy tyargs
+  | doTy (S.FnType (span, s, t)) = ( doTy s ; doTy t )
 
-    (* doPat : S.Pat -> unit *)
-    fun doPat(S.WildcardPat _) = ()
-      | doPat(S.SConPat(_, S.RealConstant _)) = raise S.SyntaxError ([], "No real constant may occur in a pattern")
-      | doPat(S.SConPat _) = ()
-      | doPat(S.VarPat _) = ()
-      | doPat(S.RecordPat{fields = row, wildcard = ellip, ...}) = if checkRow row then
-                                                                      raise S.SyntaxError ([], "No pattern row may bind the same label twice")
-                                                                  else
-                                                                      List.app (fn (_, pat) => doPat pat) row
-      | doPat(S.ConPat(_, _, NONE)) = ()
-      | doPat(S.ConPat(_, longvid, SOME pat)) = doPat pat
-      | doPat(S.TypedPat(_, pat, ty)) = (doPat pat ; doTy ty)
-      | doPat(S.LayeredPat(_, vid, NONE, pat)) = (doPat pat)
-      | doPat(S.LayeredPat(_, vid, SOME ty, pat)) = (doTy ty ; doPat pat)
-      | doPat(S.VectorPat(_, pats, _)) = Vector.app doPat pats
+(* doPat : S.Pat -> unit *)
+fun doPat (S.WildcardPat _) = ()
+  | doPat (S.SConPat (span, S.RealConstant _)) = raise S.SyntaxError ([span], "no real constant may occur in a pattern")
+  | doPat (S.SConPat _) = ()
+  | doPat (S.VarPat (_, vid)) = ()
+  | doPat (S.RecordPat { sourceSpan, fields, wildcard }) = if checkRow fields then
+                                                               raise S.SyntaxError ([sourceSpan], "no pattern row may bind the same label twice")
+                                                           else
+                                                               ()
+  | doPat (S.ConPat (_, _, NONE)) = ()
+  | doPat (S.ConPat (_, longvid, SOME pat)) = doPat pat
+  | doPat (S.TypedPat (_, pat, ty)) = ( doTy ty ; doPat pat )
+  | doPat (S.LayeredPat (span, vid, optTy, pat)) = ( Option.app doTy optTy ; doPat pat )
+  | doPat (S.VectorPat (span, pats, _)) = Vector.app doPat pats
 
-    fun doTypBind(S.TypBind(_, tyvarseq, tycon, ty))
-        = if checkTyVarSeq tyvarseq then
-              raise S.SyntaxError ([], "No tyvarseq may contain the same tyvar twice")
-          else
-              doTy ty
+fun doTypBind (S.TypBind (span, tyvarseq, tycon, ty))
+    = ( checkTyVarSeq (span, tyvarseq)
+      ; doTy ty
+      )
 
-    val invalidBoundNames = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true", S.MkVId "false", S.MkVId "nil", S.MkVId "::", S.MkVId "ref"]
+val invalidBoundNames = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true", S.MkVId "false", S.MkVId "nil", S.MkVId "::", S.MkVId "ref"]
 
-    (* doExBind : S.DatBind -> unit *)
-    fun doDatBind(S.DatBind(_, tyvarseq, tycon, conbinds))
-        = if checkTyVarSeq tyvarseq then
-              raise S.SyntaxError ([], "No tyvarseq may contain the same tyvar twice")
-          else
-              doConBinds(S.VIdSet.empty, conbinds)
-    and doConBinds(seen, []) = ()
-      | doConBinds(seen, S.ConBind(_, vid, tyopt) :: conbinds) = if S.VIdSet.member(seen, vid) then
-                                                                     raise S.SyntaxError ([], "No datbind may bind the same identifier twice")
+(* doDatBind : S.DatBind -> unit *)
+fun doDatBind (S.DatBind (span, tyvarseq, tycon, conbinds))
+    = ( checkTyVarSeq (span, tyvarseq)
+      ; List.foldl (fn (S.ConBind (span, vid, optTy), seen) =>
+                       if S.VIdSet.member(seen, vid) then
+                           raise S.SyntaxError ([span], "no datbind may bind the same identifier twice")
+                       else
+                           if vid = S.MkVId "it" orelse S.VIdSet.member(invalidBoundNames, vid) then
+                               raise S.SyntaxError ([span], "invalid bound name")
+                           else
+                               S.VIdSet.add(seen, vid)
+                   ) S.VIdSet.empty conbinds
+      )
+
+(* doExp : S.TyVarSet * S.Exp -> unit *)
+(* doDec : S.TyVarSet * S.Dec -> unit *)
+(* doValBind : S.TyVarSet * S.ValBind -> unit *)
+fun doExp (env : S.TyVarSet.set, S.SConExp span) = ()
+  | doExp (env, S.VarExp span) = ()
+  | doExp (env, S.RecordExp (span, fields)) = if checkRow fields then
+                                                  raise S.SyntaxError ([span], "no expression row may bind the same label twice")
+                                              else
+                                                  List.app (fn (label, exp) => doExp (env, exp)) fields
+  | doExp (env, S.LetInExp (span, decls, exp)) = ( List.app (fn dec => doDec (env, dec)) decls ; doExp (env, exp) )
+  | doExp (env, S.AppExp (span, e1, e2)) = ( doExp (env, e1) ; doExp (env, e2) )
+  | doExp (env, S.TypedExp (span, exp, ty)) = ( doExp (env, exp) ; doTy ty )
+  | doExp (env, S.HandleExp (span, exp, matches)) = ( doExp (env, exp) ; doMatches (env, matches) )
+  | doExp (env, S.RaiseExp (span, exp)) = doExp (env, exp)
+  | doExp (env, S.IfThenElseExp (span, exp1, exp2, exp3)) = ( doExp (env, exp1) ; doExp (env, exp2) ; doExp (env, exp3) )
+  | doExp (env, S.CaseExp (span, exp, matches)) = ( doExp (env, exp) ; doMatches (env, matches) )
+  | doExp (env, S.FnExp (span, matches)) = doMatches (env, matches)
+  | doExp (env, S.ProjectionExp (span, label)) = ()
+  | doExp (env, S.ListExp (span, exps)) = Vector.app (fn exp => doExp (env, exp)) exps
+  | doExp (env, S.VectorExp (span, exps)) = Vector.app (fn exp => doExp (env, exp)) exps
+and doMatches (env, matches) = List.app (fn (pat, exp) => ( doPat pat ; doExp (env, exp) )) matches
+and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val tyvars = S.TyVarSet.fromList tyvarseq
+                                                                        in if S.TyVarSet.disjoint (env, S.TyVarSet.fromList tyvarseq) then
+                                                                               doValBinds (S.TyVarSet.union (env, tyvars), valbinds)
+                                                                           else
+                                                                               raise S.SyntaxError ([span], "in a nested value bindings, type variables must be disjoint")
+                                                                        end
+  | doDec (env : S.TyVarSet.set, S.RecValDec (span, tyvarseq, valbinds)) = let val tyvars = S.TyVarSet.fromList tyvarseq
+                                                                           in if S.TyVarSet.disjoint (env, S.TyVarSet.fromList tyvarseq) then
+                                                                                  doValBinds (S.TyVarSet.union (env, tyvars), valbinds)
+                                                                              else
+                                                                                  raise S.SyntaxError ([span], "in a nested value bindings, type variables must be disjoint")
+                                                                           end
+  | doDec (env, S.TypeDec (span, typbinds)) = ignore (List.foldl (fn (S.TypBind (span, tyvarseq, tycon, ty), set) =>
+                                                                     ( checkTyVarSeq (span, tyvarseq)
+                                                                     ; doTy ty
+                                                                     ; if S.TyConSet.member (set, tycon) then
+                                                                           raise S.SyntaxError ([span], "duplicate type constructor in type declaration")
+                                                                       else
+                                                                           S.TyConSet.add (set, tycon)
+                                                                     )
+                                                                 ) S.TyConSet.empty typbinds)
+  | doDec (env, S.DatatypeDec (span, datbinds, withtypebinds))
+    = let val set = #ty (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, conbinds), { v, ty }) =>
+                                        ( checkTyVarSeq (span, tyvarseq)
+                                        ; { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
+                                                               ( Option.app doTy optTy
+                                                               ; if Syntax.VIdSet.member (set, vid) then
+                                                                     raise S.SyntaxError ([span], "duplicate value identifier in datatype declaration")
                                                                  else
-                                                                     if vid = S.MkVId "it" orelse S.VIdSet.member(invalidBoundNames, vid) then
-                                                                         raise S.SyntaxError ([], "Invalid bound name")
+                                                                     Syntax.VIdSet.add (set, vid)
+                                                               )
+                                                           ) v conbinds
+                                          , ty = if Syntax.TyConSet.member (ty, tycon) then
+                                                     raise S.SyntaxError ([span], "duplicate type constructor in datatype declaration")
+                                                 else
+                                                     Syntax.TyConSet.add (ty, tycon)
+                                          }
+                                        )
+                                    ) { v = Syntax.VIdSet.empty, ty = Syntax.TyConSet.empty } datbinds)
+      in ignore (List.foldl (fn (S.TypBind (span, tyvarseq, tycon, ty), set) =>
+                                ( doTy ty
+                                ; checkTyVarSeq (span, tyvarseq)
+                                ; if Syntax.TyConSet.member (set, tycon) then
+                                      raise S.SyntaxError ([span], "duplicate type constructor in withtype declaration")
+                                  else
+                                      Syntax.TyConSet.add (set, tycon)
+                                )
+                            ) set withtypebinds)
+      end
+  | doDec (env, S.DatatypeRepDec (span, tycon, longtycon)) = ()
+  | doDec (env, S.AbstypeDec (span, datbinds, decs)) = ( ignore (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, conbinds), { v, ty }) =>
+                                                                                ( checkTyVarSeq (span, tyvarseq)
+                                                                                ; { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
+                                                                                                       ( Option.app doTy optTy
+                                                                                                       ; if Syntax.VIdSet.member (set, vid) then
+                                                                                                             raise S.SyntaxError ([span], "duplicate value identifier in datatype declaration")
+                                                                                                         else
+                                                                                                             Syntax.VIdSet.add (set, vid)
+                                                                                                       )
+                                                                                                   ) v conbinds
+                                                                                  , ty = if Syntax.TyConSet.member (ty, tycon) then
+                                                                                             raise S.SyntaxError ([span], "duplicate type constructor in datatype declaration")
+                                                                                         else
+                                                                                             Syntax.TyConSet.add (ty, tycon)
+                                                                                  }
+                                                                                )
+                                                                            ) { v = Syntax.VIdSet.empty, ty = Syntax.TyConSet.empty } datbinds)
+                                                       ; List.app (fn dec => doDec (env, dec)) decs
+                                                       )
+  | doDec (env, S.ExceptionDec (span, exbinds)) = ignore (List.foldl (fn (S.ExBind (span, vid, optTy), set) =>
+                                                                         ( Option.app doTy optTy
+                                                                         ; if Syntax.VIdSet.member (set, vid) then
+                                                                               raise S.SyntaxError ([span], "duplicate exception constructor")
+                                                                           else
+                                                                               Syntax.VIdSet.add (set, vid)
+                                                                         )
+                                                                     | (S.ExReplication (span, vid, longvid), set) =>
+                                                                       if Syntax.VIdSet.member (set, vid) then
+                                                                           raise S.SyntaxError ([span], "duplicate exception constructor")
+                                                                       else
+                                                                           Syntax.VIdSet.add (set, vid)
+                                                                     ) Syntax.VIdSet.empty exbinds)
+  | doDec (env, S.LocalDec (span, decs1, decs2)) = ( List.app (fn dec => doDec (env, dec)) decs1
+                                                   ; List.app (fn dec => doDec (env, dec)) decs2
+                                                   )
+  | doDec (env, S.OpenDec (span, longstrids)) = ()
+and doValBinds (env, valbinds) = List.app (fn (S.PatBind (_, pat, exp)) => ( doPat pat ; doExp (env, exp) )) valbinds (* duplicate identifiers are not checked here *)
+
+(* doSpec : Syntax.Spec -> unit *)
+fun doSpec (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), set) =>
+                                                              ( doTy ty
+                                                              ; if Syntax.VIdSet.member (set, vid) then
+                                                                    raise S.SyntaxError ([span], "duplicate identifier in value description")
+                                                                else
+                                                                    Syntax.VIdSet.add (set, vid)
+                                                              )
+                                                          ) Syntax.VIdSet.empty descs)
+  | doSpec (S.TypeDesc (span, descs)) = ignore (List.foldl (fn ((tyvarseq, tycon), set) =>
+                                                               ( checkTyVarSeq (span, tyvarseq)
+                                                               ; if Syntax.TyConSet.member (set, tycon) then
+                                                                     raise S.SyntaxError ([span], "duplicate type constructor in type description")
+                                                                 else
+                                                                     Syntax.TyConSet.add (set, tycon)
+                                                               )
+                                                           ) Syntax.TyConSet.empty descs)
+  | doSpec (S.EqtypeDesc (span, descs)) = ignore (List.foldl (fn ((tyvarseq, tycon), set) =>
+                                                                 ( checkTyVarSeq (span, tyvarseq)
+                                                                 ; if Syntax.TyConSet.member (set, tycon) then
+                                                                       raise S.SyntaxError ([span], "duplicate type constructor in type description")
+                                                                   else
+                                                                       Syntax.TyConSet.add (set, tycon)
+                                                                 )
+                                                             ) Syntax.TyConSet.empty descs)
+  | doSpec (S.DatDesc (span, descs, withtypedescs))
+    = let val set = #ty (List.foldl (fn ((tyvarseq, tycon, condescs), { v, ty }) =>
+                                        ( checkTyVarSeq (span, tyvarseq)
+                                        ; if Syntax.TyConSet.member (ty, tycon) then
+                                              raise S.SyntaxError ([span], "duplicate type constructor in datatype description")
+                                          else
+                                              { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
+                                                                   ( Option.app doTy optTy
+                                                                   ; if Syntax.VIdSet.member (set, vid) then
+                                                                         raise S.SyntaxError ([span], "duplicate value identifier in datatype description")
                                                                      else
-                                                                         doConBinds(S.VIdSet.add(seen, vid), conbinds)
+                                                                         Syntax.VIdSet.add (set, vid)
+                                                                   )
+                                                               ) v condescs
+                                              , ty = Syntax.TyConSet.add (ty, tycon)
+                                              }
+                                        )
+                                    ) { v = Syntax.VIdSet.empty, ty = Syntax.TyConSet.empty } descs)
+      in ignore (List.foldl (fn (S.TypBind (span, tyvarseq, tycon, ty), set) =>
+                                ( doTy ty
+                                ; checkTyVarSeq (span, tyvarseq)
+                                ; if Syntax.TyConSet.member (set, tycon) then
+                                      raise S.SyntaxError ([span], "duplicate type constructor in withtype description")
+                                  else
+                                      Syntax.TyConSet.add (set, tycon)
+                                )
+                            ) set withtypedescs)
+      end
+  | doSpec (S.DatatypeRepSpec (span, tycon, longtycon)) = ()
+  | doSpec (S.ExDesc (span, descs)) = ignore (List.foldl (fn ((vid, optTy), set) =>
+                                                             ( Option.app doTy optTy
+                                                             ; if Syntax.VIdSet.member (set, vid) then
+                                                                   raise S.SyntaxError ([span], "duplicate exception description")
+                                                               else
+                                                                   Syntax.VIdSet.add (set, vid)
+                                                             )
+                                                         ) Syntax.VIdSet.empty descs)
+  | doSpec (S.StrDesc (span, strdescs)) = ignore (List.foldl (fn ((strid, sigexp), set) =>
+                                                                 ( doSigExp sigexp
+                                                                 ; if Syntax.StrIdSet.member (set, strid) then
+                                                                       raise S.SyntaxError ([span], "duplicate structure identifier")
+                                                                   else
+                                                                       Syntax.StrIdSet.add (set, strid)
+                                                                 )
+                                                             ) Syntax.StrIdSet.empty strdescs)
+  | doSpec (S.Include (span, sigexp)) = doSigExp sigexp
+  | doSpec (S.Sharing (span, specs, longtycons)) = doSpecs (span, specs)
+  | doSpec (S.SharingStructure (span, specs, longstrids)) = doSpecs (span, specs)
+  | doSpec (S.TypeAliasDesc (span, descs)) = ignore (List.foldl (fn ((tyvarseq, tycon, ty), set) =>
+                                                                    ( checkTyVarSeq (span, tyvarseq)
+                                                                    ; doTy ty
+                                                                    ; if Syntax.TyConSet.member (set, tycon) then
+                                                                          raise S.SyntaxError ([span], "duplicate type constructor in type description")
+                                                                      else
+                                                                          Syntax.TyConSet.add (set, tycon)
+                                                                    )
+                                                                ) Syntax.TyConSet.empty descs)
+and doSpecs (span, specs) = List.app doSpec specs
+and doSigExp (S.BasicSigExp (span, specs)) = doSpecs (span, specs)
+  | doSigExp (S.SigIdExp (_, _)) = ()
+  | doSigExp (S.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty)) = ( checkTyVarSeq (span, tyvarseq)
+                                                                              ; doTy ty
+                                                                              )
 
-    (* doExBind : S.ExBind -> unit *)
-    fun doExBind(_: S.ExBind): unit = raise Fail "not implemented yet"
+fun doStrExp (S.StructExp (span, strdecs)) = List.app doStrDec strdecs
+  | doStrExp (S.StrIdExp (span, longstrid)) = ()
+  | doStrExp (S.TransparentConstraintExp (span, strexp, sigexp)) = ( doSigExp sigexp ; doStrExp strexp )
+  | doStrExp (S.OpaqueConstraintExp (span, strexp, sigexp)) = ( doSigExp sigexp ; doStrExp strexp )
+  | doStrExp (S.LetInStrExp (span, strdecs, strexp)) = ( List.app doStrDec strdecs ; doStrExp strexp )
+and doStrDec (S.CoreDec (span, dec)) = doDec (S.TyVarSet.empty, dec)
+  | doStrDec (S.StrBindDec (span, strbinds)) = ignore (List.foldl (fn ((strid, strexp), set) =>
+                                                                      ( doStrExp strexp
+                                                                      ; if Syntax.StrIdSet.member (set, strid) then
+                                                                            raise S.SyntaxError ([span], "duplicate structure binding")
+                                                                        else
+                                                                            Syntax.StrIdSet.add (set, strid)
+                                                                      )
+                                                                  ) Syntax.StrIdSet.empty strbinds)
+  | doStrDec (S.LocalStrDec (span, strdecs1, strdecs2)) = ( List.app doStrDec strdecs1 ; List.app doStrDec strdecs2 )
 
-    (* doExp : S.TyVarSet * S.Exp -> unit *)
-    (* doDec : S.TyVarSet * S.Dec -> unit *)
-    (* doValBind : S.TyVarSet * S.ValBind -> unit *)
-    fun doExp(tyvarenv : S.TyVarSet.set, S.SConExp _) = ()
-      | doExp(tyvarenv, S.VarExp _) = ()
-      | doExp(tyvarenv, S.RecordExp(_, row)) = if checkRow row then
-                                               raise S.SyntaxError ([], "No expression row may bind the same label twice")
-                                               else
-                                                   ()
-      | doExp(tyvarenv, S.LetInExp(_, decls, exp)) = (List.app (fn dec => doDec(tyvarenv, dec)) decls ; doExp(tyvarenv, exp))
-      | doExp(tyvarenv, S.AppExp(_, e1, e2)) = (doExp(tyvarenv, e1) ; doExp(tyvarenv, e2))
-      | doExp(tyvarenv, S.TypedExp(_, exp, ty)) = (doExp(tyvarenv, exp) ; doTy ty)
-      | doExp _ = raise Fail "not implemented yet"
-    and doDec(tyvarenv : S.TyVarSet.set, S.ValDec(_, tyvarseq, valbind)) = raise Fail "not implemented yet"
-      | doDec(tyvarenv : S.TyVarSet.set, S.RecValDec(_, tyvarseq, valbind)) = raise Fail "not implemented yet"
-      | doDec _ = raise Fail "not implemented yet"
-    and doValBind(tyvarenv, S.PatBind(_, pat, exp)) = (doPat pat ; doExp(tyvarenv, exp))
-in
-val checkExp = doExp
-val checkDec = doDec
-end (* local *)
-end (* structure PostParsing *)
+fun doTopDec (S.StrDec strdec) = doStrDec strdec
+  | doTopDec (S.SigDec sigbinds) = ignore (List.foldl (fn ((sigid, sigexp), set) =>
+                                                          ( doSigExp sigexp
+                                                          ; if Syntax.SigIdSet.member (set, sigid) then
+                                                                raise S.SyntaxError ([], "duplicate signature binding") (* TODO: location info *)
+                                                            else
+                                                                Syntax.SigIdSet.add (set, sigid)
+                                                          )
+                                                      ) Syntax.SigIdSet.empty sigbinds)
+val checkProgram = List.app (List.app doTopDec)
+end (* structure CheckSyntacticRestrictions *)

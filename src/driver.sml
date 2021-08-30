@@ -118,6 +118,7 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
 fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, typingEnv, tynameset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
+           val () = CheckSyntacticRestrictions.checkProgram ast1
            val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
            val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)

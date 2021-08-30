@@ -77,7 +77,7 @@ function should_not_compile(dir)
       local file = testdir .. "/" .. dir .. f
       print("Compiling " .. dir .. f .. "...")
       if compile(file) then
-        io.stderr:write(string.format("%s should compile, but it did not!\n", file))
+        io.stderr:write(string.format("%s should not compile, but it did!\n", file))
         os.exit(1)
       end
     end
@@ -134,6 +134,14 @@ should_not_compile "should_not_compile/" {
   "signature5.sml",
   "signature_sharing1.sml",
   "signature_sharing2.sml",
+  "syntax_expression_row_label.sml",
+  "syntax_pattern_row_label.sml",
+  "syntax_type_expression_row_label.sml",
+  "syntax_valbind.sml",
+  "syntax_typbind.sml",
+  "syntax_datbind.sml",
+  "syntax_datbind2.sml",
+  "syntax_exbind.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
