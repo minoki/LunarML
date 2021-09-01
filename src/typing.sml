@@ -310,8 +310,7 @@ fun substituteConstraint (tv, replacement) =
 
 val applySubstTy = U.applySubstTy
 fun applySubstEnv subst =
-    let val substTy = applySubstTy subst
-        fun substTypeScheme(U.TypeScheme(tyvars, ty))
+    let fun substTypeScheme(U.TypeScheme(tyvars, ty))
             = let val subst' = U.TyVarMap.filteri (fn (tv, ty) => not (List.exists (fn (tv', _) => U.eqUTyVar(tv', tv)) tyvars)) subst
               in U.TypeScheme(tyvars, applySubstTy subst' ty)
                  (* TODO: unwanted capture? e.g. 'a. 'a list * 'c, 'c := 'b * 'a *)
@@ -1182,8 +1181,8 @@ fun print_Env ({ tyConMap, valMap, strMap, boundTyVars, ... } : Env) = "Env{tyMa
 end (* structure PrettyPrint *)
 open PrettyPrint
           *)
-(* applyDefaultTypes : Context * (U.UnaryConstraint list) USyntax.TyVarMap.map * USyntax.TopDec list -> USyntax.TopDec list *)
-fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.TopDec list =
+(* applyDefaultTypes : Context * (U.UnaryConstraint list) USyntax.TyVarMap.map * USyntax.TopDec list -> U.Ty U.TyVarMap.map *)
+fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
     let fun doInt [] = primTy_int
           | doInt (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
           | doInt (USyntax.IsEqType _ :: xs) = doInt xs
@@ -1224,8 +1223,7 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.TopDec list =
                              NONE => primTy_unit
                            | SOME constraints => defaultTyForConstraints(false, constraints)
         val freeTyVars = USyntax.freeTyVarsInTopDecs(USyntax.TyVarSet.empty, decs)
-        val subst = USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
-    in #doTopDecs (USyntax.mapTy (ctx, subst, false)) decs
+    in USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
     end
 
 fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
@@ -2014,13 +2012,15 @@ fun typeCheckClosedTopDecs(pctx : ProgramContext, env, topdecs) : Env * USyntax.
                     , tyVarConstraints = ref USyntax.TyVarMap.empty
                     , tyVarSubst = ref USyntax.TyVarMap.empty
                     }
-          val (env', decs) = typeCheckTopDecs(ctx, env, topdecs)
+          val (env, decs) = typeCheckTopDecs(ctx, env, topdecs)
           val subst = !(#tyVarSubst ctx)
           val tvc = !(#tyVarConstraints ctx)
-          val mapTyInTopDec = #doTopDec (USyntax.mapTy (ctx, subst, false))
-          val decs = List.map mapTyInTopDec decs
-          val decs = applyDefaultTypes(ctx, tvc, decs)
-      in (env', decs)
+          val env = applySubstEnv subst env
+          val decs = List.map (#doTopDec (USyntax.mapTy (ctx, subst, false))) decs
+          val subst = applyDefaultTypes(ctx, tvc, decs)
+          val env = applySubstEnv subst env
+          val decs = #doTopDecs (USyntax.mapTy (ctx, subst, false)) decs
+      in (env, decs)
       end
 (* typeCheckProgram : ProgramContext * Env * ((Syntax.Dec Syntax.TopDec) list) list -> Env * USyntax.TopDec list *)
 fun typeCheckProgram(ctx, env, [] : ((Syntax.Dec Syntax.TopDec) list) list) : Env * (USyntax.TopDec list) list = (emptyEnv, [])

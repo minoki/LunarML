@@ -134,6 +134,7 @@ should_not_compile "should_not_compile/" {
   "signature5.sml",
   "signature_sharing1.sml",
   "signature_sharing2.sml",
+  "vector.sml",
   "syntax_expression_row_label.sml",
   "syntax_pattern_row_label.sml",
   "syntax_type_expression_row_label.sml",

@@ -264,8 +264,8 @@ fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy, ... }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
   | print_Exp (VectorExp _) = "VectorExp"
-and print_Dec (ValDec(_,valbinds)) = "ValDec'(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
-  | print_Dec (RecValDec(_,valbinds)) = "RecValDec'(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+  | print_Dec (RecValDec(_,valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
@@ -293,6 +293,8 @@ fun print_TyNameMap print_elem x = Syntax.print_list (Syntax.print_pair (print_T
 val print_Decs = Syntax.print_list print_Dec
 fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
   | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")"
+fun print_TopDec (StrDec (CoreDec (span,dec))) = print_Dec dec
+  | print_TopDec _ = "StrDec"
 end (* structure PrettyPrint *)
 open PrettyPrint
 
