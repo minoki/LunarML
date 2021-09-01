@@ -111,6 +111,7 @@ should_compile "should_compile/" {
   "signature_sharing1.sml",
   "signature_sharing2.sml",
   "signature_sharing3.sml",
+  "withtype.sml",
 }
 should_not_compile "should_not_compile/" {
   "fixity.sml",
@@ -155,6 +156,7 @@ should_run "lua/should_run/" {
 }
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
+  "withtype_in_signature.sml",
 }
 should_not_compile "successor_ml/should_not_compile/" {
   "nonexhaustive_bind.sml",

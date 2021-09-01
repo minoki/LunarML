@@ -21,7 +21,6 @@ Hello world!
 
 The following SML '97 features are not implemented yet:
 
-* `withtype`
 * `abstype`
 * Signatures
 * Functors
@@ -43,7 +42,7 @@ Successor ML features:
 * [ ] Optional bars and semicolons
 * [ ] Optional else branch
 * [ ] Do declarations
-* [ ] Withtype in signatures
+* [x] Withtype in signatures
 
 Other extensions planned:
 
