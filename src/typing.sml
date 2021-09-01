@@ -178,6 +178,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.FnExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
+  | isNonexpansive(env, USyntax.VectorExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueVariable, _)) = false
