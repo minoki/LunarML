@@ -67,6 +67,13 @@ fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
 end : ORD_KEY
 structure TyVarMap = RedBlackMapFn(TyVarKey)
 structure TyVarSet = RedBlackSetFn(TyVarKey)
+structure TyVarSet = struct
+(* compatibility with older smlnj-lib *)
+open TyVarSet
+val toList = foldr (op ::) []
+fun disjoint (x, y) = isEmpty (intersection (x, y))
+open TyVarSet
+end
 structure LabelKey = struct
 type ord_key = Label
 (* NumericLabel _ < IdentifierLabel _ *)

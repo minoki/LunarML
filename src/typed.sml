@@ -51,6 +51,13 @@ fun compare(MkVId(x,a), MkVId(y,b)) = case String.compare (x,y) of
                                         | ord => ord
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
+structure VIdSet = struct
+(* compatibility with older smlnj-lib *)
+open VIdSet
+val toList = foldr (op ::) []
+fun disjoint (x, y) = isEmpty (intersection (x, y))
+open VIdSet
+end
 structure VIdMap = RedBlackMapFn(VIdKey)
 
 structure TyNameKey = struct

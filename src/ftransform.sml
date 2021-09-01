@@ -846,7 +846,7 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
           end
   | doDec (used, F.ValDec (F.TupleBind (binds, exp)))
     = let val bound = USyntax.VIdSet.fromList (List.map #1 binds)
-      in if USyntax.VIdSet.isEmpty (USyntax.VIdSet.intersection (used, bound)) then
+      in if USyntax.VIdSet.disjoint (used, bound) then
              if isDiscardable exp then
                  (used, [])
              else
@@ -863,7 +863,7 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
                                  (List.map (fn F.SimpleBind (vid, _, _) => USyntax.VIdSet.singleton vid
                                            | F.TupleBind (binds, _) => USyntax.VIdSet.fromList (List.map #1 binds)
                                            ) valbinds)
-      in if USyntax.VIdSet.isEmpty (USyntax.VIdSet.intersection (used, bound)) then
+      in if USyntax.VIdSet.disjoint (used, bound) then
              (used, []) (* RHS should be fn _ => _, and therefore discardable *)
          else
              let val (used, valbinds) = List.foldr (fn (F.SimpleBind (vid, ty, exp), (used, valbinds)) => let val (used', exp) = doExp exp
