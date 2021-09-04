@@ -1,9 +1,11 @@
 fun x <> y = Bool.not (x = y);
 
 type unit = {}
+datatype 'a option = NONE | SOME of 'a;
 
 structure Lua : sig
               type value
+              exception TypeError of string
               val sub : value * value -> value  (* t[k] *)
               val field : value * string -> value  (* t[k] *)
               val set : value * value * value -> unit  (* t[k] = v *)
@@ -45,17 +47,26 @@ structure Lua : sig
               val >= : value * value -> bool
               val concat : value * value -> value  (* x .. y *)
               val length : value -> value  (* #x *)
+              val typeof : value -> string (* type *)
+              val checkString : value -> string
+              val checkBoolean : value -> bool
+              val checkInt : value -> int
+              val checkWord : value -> word
+              val checkReal : value -> real
+              val optString : value -> string option
               structure Lib : sig
                             val assert : value
                             val error : value
                             val math : value
                             val pairs : value
                             val pcall : value
+                            val require : value
                             val setmetatable : value
                             val string : value
                             val table : value
                             val tonumber : value
                             val tostring : value
+                            val type' : value
                             structure math : sig
                                           val abs : value
                                           val atan : value
@@ -78,6 +89,7 @@ structure Lua : sig
                                           val pack : value
                                           val unpack : value
                                       end
+                            val lfs : value option (* LuaFileSystem *)
                         end
           end = struct
 open Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
@@ -90,8 +102,10 @@ val fromChar : char -> value = unsafeToValue
 fun field (t : value, name : string) = sub (t, fromString name)
 structure Lib = struct
 open Lib
+val require = LunarML.assumeDiscardable (global "require")
 val tonumber = LunarML.assumeDiscardable (global "tonumber")
 val tostring = LunarML.assumeDiscardable (global "tostring")
+val type' = LunarML.assumeDiscardable (global "type")
 structure math = struct
 open math
 val atan = LunarML.assumeDiscardable (field (math, "atan"))
@@ -110,10 +124,58 @@ structure table = struct
 open table
 val concat = LunarML.assumeDiscardable (field (table, "concat"))
 end
+val lfs = LunarML.assumeDiscardable (let val results = Lua.call pcall #[require, fromString "lfs"]
+                                         val ok = unsafeFromValue (Vector.sub (results, 0)) : bool
+                                     in if ok then
+                                            SOME (Vector.sub (results, 1))
+                                        else
+                                            NONE
+                                     end
+                                    )
 end
+fun typeof x : string = let val results = Lua.call Lib.type' #[x]
+                        in unsafeFromValue (Vector.sub (results, 0))
+                        end
+exception TypeError of string
+fun checkString x : string = let val t = typeof x
+                             in if t = "string" then
+                                    unsafeFromValue x
+                                else
+                                    raise TypeError (String.^ ("expected a string, but got ", t))
+                             end
+fun checkBoolean x : bool = let val t = typeof x
+                            in if t = "boolean" then
+                                   unsafeFromValue x
+                               else
+                                   raise TypeError (String.^ ("expected a boolean, but got ", t))
+                            end
+fun checkInt x : int = let val results = Lua.call Lib.math.type' #[x]
+                       in if == (Vector.sub (results, 0), fromString "integer") then
+                              unsafeFromValue x
+                          else
+                              raise TypeError (String.^ ("expected an integer, but got ", typeof x))
+                       end
+fun checkWord x : word = let val results = Lua.call Lib.math.type' #[x]
+                         in if == (Vector.sub (results, 0), fromString "integer") then
+                                unsafeFromValue x
+                            else
+                                raise TypeError (String.^ ("expected an integer, but got ", typeof x))
+                         end
+fun checkReal x : real = let val results = Lua.call Lib.math.type' #[x]
+                         in if == (Vector.sub (results, 0), fromString "float") then
+                                unsafeFromValue x
+                            else
+                                raise TypeError (String.^ ("expected a real number, but got ", typeof x))
+                         end
+fun optString x : string option = let val t = typeof x
+                                  in if t = "string" then
+                                         SOME (unsafeFromValue x)
+                                     else if t = "nil" then
+                                         NONE
+                                     else
+                                         raise TypeError (String.^ ("expected a string, but got ", t))
+                                  end
 end;
-
-datatype 'a option = NONE | SOME of 'a;
 
 structure Vector : sig
               datatype vector = datatype vector
@@ -692,7 +754,7 @@ fun null [] = true
 local
     fun doLength (acc, []) = acc : int
       | doLength (acc, x :: xs) = doLength (acc + 1, xs)
-in 
+in
 fun length xs = doLength (0, xs)
 end
 fun [] @ ys = ys
@@ -945,6 +1007,13 @@ val print : string -> unit = TextIO.print;
 
 structure OS : sig
               structure FileSys : sig
+                            val chDir : string -> unit (* requires LuaFileSystem *)
+                            val getDir : unit -> string (* requires LuaFileSystem *)
+                            val mkDir : string -> unit (* requires LuaFileSystem *)
+                            val rmDir : string -> unit (* requires LuaFileSystem *)
+                            val isDir : string -> bool (* requires LuaFileSystem *)
+                            val isLink : string -> bool (* requires LuaFileSystem *)
+                            val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
                             val remove : string -> unit
                             val rename : { old : string, new : string } -> unit
                         end
@@ -962,7 +1031,11 @@ structure OS : sig
                             val terminate : status -> 'a
                             val getEnv : string -> string option
                         end
+              eqtype syserror
+              exception SysErr of string * syserror option
           end = struct
+type syserror = string
+exception SysErr of string * syserror option
 local
     val oslib = LunarML.assumeDiscardable (Lua.global "os")
     val os_execute = LunarML.assumeDiscardable (Lua.field (oslib, "execute"))
@@ -972,12 +1045,157 @@ local
     val os_rename = LunarML.assumeDiscardable (Lua.field (oslib, "rename"))
 in
 structure FileSys = struct
-val remove : string -> unit = fn filename => ( Lua.call os_remove #[Lua.fromString filename]
-                                             ; ()
-                                             )
-val rename : {old : string, new : string} -> unit = fn {old, new} => ( Lua.call os_rename #[Lua.fromString old, Lua.fromString new]
-                                                                     ; ()
+(*
+type dirstream
+val openDir : string -> dirstream : lfs.dir?
+val readDir : dirstream -> string open : dir_obj:next()
+val rewindDir : dirstream -> unit
+val closeDir : dirstream -> unit : dir_obj:close()
+val fullPath : string -> string
+val realPath : string -> string
+datatype access_mode = A_READ | A_WRITE | A_EXEC
+val access : string * access_mode list -> bool
+val tmpName : unit -> string : os.tmpname
+eqtype file_id
+val fileId : string -> file_id : lfs.attributes "ino"?
+val hash : file_id -> word
+val compare : file_id * file_id -> order
+*)
+fun use_lfs (field, f : Lua.value -> 'a -> 'b) = case Lua.Lib.lfs of
+                                                     SOME lfs => f (Lua.field (lfs, field))
+                                                   | NONE => fn _ => raise SysErr ("LuaFileSystem not available", NONE)
+val chDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("chdir", fn lfs_chdir =>
+                                                                             fn path => let val results = Lua.call lfs_chdir #[Lua.fromString path]
+                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
+                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                               in raise SysErr (message, SOME message)
+                                                                                               end
+                                                                                           else
+                                                                                               ()
+                                                                                        end
+                                                                )
+                                                       )
+val getDir : unit -> string = LunarML.assumeDiscardable (use_lfs ("currentdir", fn lfs_currentdir =>
+                                                                                   fn () => let val results = Lua.call lfs_currentdir #[]
+                                                                                                val r0 = Vector.sub (results, 0)
+                                                                                            in if Lua.typeof r0 = "string" then
+                                                                                                   Lua.unsafeFromValue r0
+                                                                                               else
+                                                                                                   let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                   in raise SysErr (message, SOME message)
+                                                                                                   end
+                                                                                            end
+                                                                 )
+                                                        )
+val mkDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("mkdir", fn lfs_mkdir =>
+                                                                             fn path => let val results = Lua.call lfs_mkdir #[Lua.fromString path]
+                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
+                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                               in raise SysErr (message, SOME message)
+                                                                                               end
+                                                                                           else
+                                                                                               ()
+                                                                                        end
+                                                                )
+                                                       )
+val rmDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("rmdir", fn lfs_rmdir =>
+                                                                             fn path => let val results = Lua.call lfs_rmdir #[Lua.fromString path]
+                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
+                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                               in raise SysErr (message, SOME message)
+                                                                                               end
+                                                                                           else
+                                                                                               ()
+                                                                                        end
+                                                                )
+                                                       )
+val isDir : string -> bool = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
+                                                                                  fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "mode"]
+                                                                                                 val r0 = Vector.sub (results, 0)
+                                                                                             in if Lua.isFalsy r0 then
+                                                                                                    let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                    in raise SysErr (message, SOME message)
+                                                                                                    end
+                                                                                                else
+                                                                                                    Lua.== (r0, Lua.fromString "directory")
+                                                                                             end
+                                                                )
+                                                       )
+val isLink : string -> bool = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
+                                                                                          fn path => let val results = Lua.call lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "mode"]
+                                                                                                         val r0 = Vector.sub (results, 0)
+                                                                                                     in if Lua.isFalsy r0 then
+                                                                                                            let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                            in raise SysErr (message, SOME message)
+                                                                                                            end
+                                                                                                        else
+                                                                                                            Lua.== (r0, Lua.fromString "link")
+                                                                                                     end
+                                                                 )
+                                                        )
+val readLink : string -> string = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
+                                                                                              fn path => let val results = Lua.call lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "target"]
+                                                                                                             val r0 = Vector.sub (results, 0)
+                                                                                                         in if Lua.isFalsy r0 then
+                                                                                                                let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                                in raise SysErr (message, SOME message)
+                                                                                                                end
+                                                                                                            else
+                                                                                                                Lua.checkString r0
+                                                                                                         end
                                                                      )
+                                                            )
+(* fullPath, realPath *)
+(*
+val modTime : string -> Time.time = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
+                                                                                  fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "modification"]
+                                                                                                 val r0 = Vector.sub (results, 0)
+                                                                                             in if Lua.isFalsy r0 then
+                                                                                                    let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                    in raise SysErr (message, SOME message)
+                                                                                                    end
+                                                                                                else
+                                                                                                    raise Fail "modTime: not implemented yet"
+                                                                                             end
+                                                                       )
+                                                              )
+val fileSize : string -> Position.int = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
+                                                                                             fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "size"]
+                                                                                                            val r0 = Vector.sub (results, 0)
+                                                                                                        in if Lua.isFalsy r0 then
+                                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                               in raise SysErr (message, SOME message)
+                                                                                                               end
+                                                                                                           else
+                                                                                                               raise Fail "fileSize: not implemented yet"
+                                                                                                        end
+                                                                           )
+                                                                  )
+val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable (use_lfs ("touch", fn lfs_touch =>
+                                                                                                  (fn (path, NONE) => let val results = Lua.call lfs_touch #[Lua.fromString path]
+                                                                                                                          val r0 = Vector.sub (results, 0)
+                                                                                                                      in if Lua.isFalsy r0 then
+                                                                                                                             let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                                             in raise SysErr (message, SOME message)
+                                                                                                                             end
+                                                                                                                         else
+                                                                                                                             ()
+                                                                                                                      end
+                                                                                                  | (path, SOME t) => let val results = Lua.call lfs_touch #[Lua.fromString path, (* TODO *) t, (* TODO *) t]
+                                                                                                                          val r0 = Vector.sub (results, 0)
+                                                                                                                      in if Lua.isFalsy r0 then
+                                                                                                                             let val message = Lua.checkString (Vector.sub (results, 1))
+                                                                                                                             in raise SysErr (message, SOME message)
+                                                                                                                             end
+                                                                                                                         else
+                                                                                                                             ()
+                                                                                                                      end
+                                                                                                  )
+                                                                                     )
+                                                                            )
+*)
+val remove : string -> unit = fn filename => ignore (Lua.call os_remove #[Lua.fromString filename])
+val rename : {old : string, new : string} -> unit = fn {old, new} => ignore (Lua.call os_rename #[Lua.fromString old, Lua.fromString new])
 end (* structure FileSys *)
 structure IO = struct end
 structure Path = struct end
@@ -1002,7 +1220,7 @@ val getEnv : string -> string option = fn name => let val result = Lua.call os_g
                                                      else
                                                          SOME (Lua.unsafeFromValue (Vector.sub (result, 0)))
                                                   end
-(* val sleep : Time.time -> unit *)
+(* val sleep : Time.time -> unit : LuaSocket's socket.sleep or luaposix's posix.time.nanosleep or use native API (nanosleep or Sleep) via FFI or system command via os.execute or busy loop *)
 end (* structure Process *)
 end (* local *)
 (*
