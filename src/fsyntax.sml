@@ -11,13 +11,14 @@ datatype SLabel = ValueLabel of Syntax.VId
                 | EqualityLabel of Syntax.TyCon
 datatype Path = Root of USyntax.VId
               | Child of Path * SLabel
+datatype Kind = TypeKind
+              | ArrowKind of Kind * Kind
 datatype Ty = TyVar of TyVar
             | RecordType of (Syntax.Label * Ty) list
-            | TyCon of Ty list * TyName
+            | AppType of { applied : Ty, arg : Ty }
             | FnType of Ty * Ty
-            | ForallType of TyVar * Ty
-            (* TypeFn : (TyVar * Kind) list * Ty *)
-            (* ExistsType of (TyVar * Kind) * Ty *)
+            | ForallType of TyVar * Kind * Ty
+            (* ExistsType of TyVar * Kind * Ty *)
             | SigType of { valMap : Ty Syntax.VIdMap.map (* id status? *)
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
@@ -48,7 +49,7 @@ datatype Exp = SConExp of Syntax.SCon
              | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of Exp vector * Ty
              | VectorExp of Exp vector * Ty
-             | TyAbsExp of TyVar * Exp
+             | TyAbsExp of TyVar * Kind * Exp
              | TyAppExp of Exp * Ty
              | RecordEqualityExp of (Syntax.Label * Exp) list
              | DataTagExp of Exp (* * TyName *)
@@ -81,6 +82,8 @@ fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
                   end
+fun tyNameToTyVar (USyntax.MkTyName (name, n)) = USyntax.NamedTyVar (name, false, n)
+fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
 fun strIdToVId(USyntax.MkStrId(name, n)) = USyntax.MkVId(name, n)
 fun LongVarExp(USyntax.MkShortVId vid) = VarExp vid
   | LongVarExp(USyntax.MkLongVId(strid0, strids, vid)) = SProjectionExp (List.foldl (fn (label, x) => SProjectionExp (x, StructLabel label)) (VarExp (strIdToVId strid0)) strids, ValueLabel vid)
@@ -105,12 +108,12 @@ fun SimplifyingAndalsoExp(a as VarExp(vid), b) = if USyntax.eqVId(vid, InitialEn
 fun occurCheck tv =
     let fun check (TyVar tv') = USyntax.eqUTyVar(tv, tv')
           | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
-          | check (TyCon(tyargs, tyname)) = List.exists check tyargs
+          | check (AppType { applied, arg }) = check applied orelse check arg
           | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
-          | check (ForallType(tv', ty)) = if USyntax.eqUTyVar(tv, tv') then
-                                              false
-                                          else
-                                              check ty
+          | check (ForallType(tv', kind, ty)) = if USyntax.eqUTyVar(tv, tv') then
+                                                    false
+                                                else
+                                                    check ty
           | check (SigType { valMap, strMap, exnTags, equalityMap }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap orelse Syntax.TyConMap.exists check equalityMap
     in check
     end
@@ -122,17 +125,17 @@ fun substituteTy (tv, replacement) =
                                    else
                                        ty
           | go (RecordType fields) = RecordType (Syntax.mapRecordRow go fields)
-          | go (TyCon(tyargs, tyname)) = TyCon(List.map go tyargs, tyname)
+          | go (AppType { applied, arg }) = AppType { applied = go applied, arg = go arg }
           | go (FnType(ty1, ty2)) = FnType(go ty1, go ty2)
-          | go (ty as ForallType(tv', ty')) = if USyntax.eqUTyVar(tv, tv') then
-                                                  ty
-                                              else if occurCheck tv' replacement then
-                                                  (* TODO: generate fresh type variable *)
-                                                  let val tv'' = raise Fail "FSyntax.substituteTy: not implemented yet"
-                                                  in ForallType(tv'', go (substituteTy (tv', TyVar tv'') ty'))
-                                                  end
-                                              else
-                                                  ForallType(tv', go ty')
+          | go (ty as ForallType(tv', kind, ty')) = if USyntax.eqUTyVar(tv, tv') then
+                                                        ty
+                                                    else if occurCheck tv' replacement then
+                                                        (* TODO: generate fresh type variable *)
+                                                        let val tv'' = raise Fail "FSyntax.substituteTy: not implemented yet"
+                                                        in ForallType(tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
+                                                        end
+                                                    else
+                                                        ForallType(tv', kind, go ty')
           | go (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map go valMap
                                                                             , strMap = Syntax.StrIdMap.map go strMap
                                                                             , exnTags = exnTags
@@ -148,12 +151,12 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                        | SOME replacement => replacement
                                     )
           | doTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, doTy ty)) fields)
-          | doTy (TyCon (tyargs, tyname)) = TyCon (List.map doTy tyargs, tyname)
+          | doTy (AppType { applied, arg }) = AppType { applied = doTy applied, arg = doTy arg }
           | doTy (FnType (ty1, ty2)) = FnType (doTy ty1, doTy ty2)
-          | doTy (ForallType (tv, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-                                             ForallType (tv, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
-                                         else
-                                             ForallType (tv, doTy ty)
+          | doTy (ForallType (tv, kind, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                                   ForallType (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
+                                               else
+                                                   ForallType (tv, kind, doTy ty)
           | doTy (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
                                                                               , strMap = Syntax.StrIdMap.map doTy strMap
                                                                               , exnTags = exnTags
@@ -183,10 +186,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doExp (ProjectionExp { label, recordTy, fieldTy }) = ProjectionExp { label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
           | doExp (ListExp (xs, ty)) = ListExp (Vector.map doExp xs, doTy ty)
           | doExp (VectorExp (xs, ty)) = VectorExp (Vector.map doExp xs, doTy ty)
-          | doExp (TyAbsExp (tv, exp)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
-                                             TyAbsExp (tv, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
-                                         else
-                                             TyAbsExp (tv, doExp exp)
+          | doExp (TyAbsExp (tv, kind, exp)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                                   TyAbsExp (tv, kind, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
+                                               else
+                                                   TyAbsExp (tv, kind, doExp exp)
           | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
           | doExp (RecordEqualityExp fields) = RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
           | doExp (DataTagExp exp) = DataTagExp (doExp exp)
@@ -222,9 +225,9 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
                                                               else
                                                                   USyntax.TyVarSet.singleton tv
   | freeTyVarsInTy (bound, RecordType fields) = List.foldl (fn ((label, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty fields
-  | freeTyVarsInTy (bound, TyCon (tyargs, tyname)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty tyargs
+  | freeTyVarsInTy (bound, AppType { applied, arg }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, applied), freeTyVarsInTy (bound, arg))
   | freeTyVarsInTy (bound, FnType (ty1, ty2)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
-  | freeTyVarsInTy (bound, ForallType (tv, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
+  | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags, equalityMap }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
                                                                                    val acc = Syntax.StrIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
                                                                                in Syntax.TyConMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc equalityMap
@@ -253,7 +256,7 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, SConExp _) = USyntax.TyVarSet
   | freeTyVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, recordTy), freeTyVarsInTy (bound, fieldTy))
   | freeTyVarsInExp (bound, ListExp (xs, ty)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInTy (bound, ty)) xs
   | freeTyVarsInExp (bound, VectorExp (xs, ty)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInTy (bound, ty)) xs
-  | freeTyVarsInExp (bound, TyAbsExp (tv, exp)) = freeTyVarsInExp (USyntax.TyVarSet.add (bound, tv), exp)
+  | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
   | freeTyVarsInExp (bound, RecordEqualityExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty fields
   | freeTyVarsInExp (bound, DataTagExp exp) = freeTyVarsInExp (bound, exp)
@@ -307,16 +310,9 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
                                     NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
                                   | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
                                )
-  | print_Ty (TyCon([],USyntax.MkTyName("int", 0))) = "primTy_int"
-  | print_Ty (TyCon([],USyntax.MkTyName("word", 1))) = "primTy_word"
-  | print_Ty (TyCon([],USyntax.MkTyName("real", 2))) = "primTy_real"
-  | print_Ty (TyCon([],USyntax.MkTyName("string", 3))) = "primTy_string"
-  | print_Ty (TyCon([],USyntax.MkTyName("char", 4))) = "primTy_char"
-  | print_Ty (TyCon([],USyntax.MkTyName("exn", 5))) = "primTy_exn"
-  | print_Ty (TyCon([],USyntax.MkTyName("bool", 6))) = "primTy_bool"
-  | print_Ty (TyCon(x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
+  | print_Ty (AppType { applied, arg }) = "AppType{applied=" ^ print_Ty applied ^ ",arg=" ^ print_Ty arg ^ "}"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
-  | print_Ty (ForallType(tv,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
+  | print_Ty (ForallType(tv,kind,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (SigType _) = "SigType"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
@@ -345,7 +341,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
   | print_Exp (VectorExp _) = "VectorExp"
-  | print_Exp (TyAbsExp(tv, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
+  | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
   | print_Exp (DataTagExp exp) = "DataTagExp(" ^ print_Exp exp ^ ")"
@@ -499,9 +495,7 @@ fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
   | toFTy(ctx, env, U.RecordType(span, fields)) = let fun doField(label, ty) = (label, toFTy(ctx, env, ty))
                                                   in F.RecordType (List.map doField fields)
                                                   end
-  | toFTy(ctx, env, U.TyCon(span, tyargs, longtycon)) = let fun doTy ty = toFTy(ctx, env, ty)
-                                                        in F.TyCon(List.map doTy tyargs, longtycon)
-                                                        end
+  | toFTy(ctx, env, U.TyCon(span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy(ctx, env, arg)) tyargs, tyname)
   | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
                                                          in F.FnType(doTy paramTy, doTy resultTy)
                                                          end
@@ -575,7 +569,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
     = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
   | toFExp(ctx, env, U.HandleExp(span, exp, matches))
     = let val exnName = freshVId(ctx, "exn")
-          val exnTy = F.TyCon([], Typing.primTyName_exn)
+          val exnTy = F.TyVar(F.tyNameToTyVar(Typing.primTyName_exn))
           fun doMatch(pat, exp) = let val (_, pat') = toFPat(ctx, env, pat)
                                   in (pat', toFExp(ctx, env, exp)) (* TODO: environment *)
                                   end
@@ -604,19 +598,19 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
     = let val ty0 = toFTy (ctx, env, ty)
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
-                                       [] => F.ForallType (tv, ty1)
-                                     | [U.IsEqType _] => F.ForallType (tv, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool)), ty1))
+                                       [] => F.ForallType (tv, F.TypeKind, ty1)
+                                     | [U.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool))), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
               = toFExp(ctx, env', exp)
             | doExp (env', (tv,cts) :: rest)
               = (case cts of
-                     [] => F.TyAbsExp (tv, doExp (env', rest))
+                     [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
                    | [U.IsEqType _] => let val vid = freshVId(ctx, "eq")
-                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool))
+                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
                                            val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
-                                       in F.TyAbsExp (tv, F.FnExp(vid, eqTy, doExp(env'', rest)))
+                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, eqTy, doExp(env'', rest)))
                                        end
                    | _ => raise Fail "invalid type constraint"
                 )
@@ -625,11 +619,11 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
 and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
             | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
-                                        in F.ForallType(tv, go env' xs)
+                                        in F.ForallType(tv, F.TypeKind, go env' xs)
                                         end
             | go env ((tv, [U.IsEqType _]) :: xs) = let val env' = env (* TODO *)
-                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyCon([], Typing.primTyName_bool))
-                                                    in F.ForallType(tv, F.FnType(eqTy, go env' xs))
+                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
+                                                    in F.ForallType(tv, F.TypeKind, F.FnType(eqTy, go env' xs))
                                                     end
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
@@ -723,12 +717,12 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                      , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, USyntax.TyNameMap.map U.MkShortVId nameMap)
                      , exnTagMap = #exnTagMap env
                      }
-          fun doDatBind(U.DatBind(span, tyvars, tycon, conbinds, true), valbinds)
-              = let val vid = USyntax.TyNameMap.lookup(nameMap, tycon)
-                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyCon([], Typing.primTyName_bool))
+          fun doDatBind(U.DatBind(span, tyvars, tyname, conbinds, true), valbinds)
+              = let val vid = USyntax.TyNameMap.lookup(nameMap, tyname)
+                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
                     val tyvars'' = List.map F.TyVar tyvars
-                    val ty = List.foldr (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (eqTy (F.TyCon(tyvars'', tycon))) tyvars
-                    val ty = List.foldr F.ForallType ty tyvars
+                    val ty = List.foldr (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (eqTy (F.TyCon(tyvars'', tyname))) tyvars
+                    val ty = List.foldr (fn (tv, ty) => F.ForallType(tv, F.TypeKind, ty)) ty tyvars
                     val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                     val eqForTyVars = List.foldl USyntax.TyVarMap.insert' USyntax.TyVarMap.empty tyvars'
                     val env'' = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env', eqForTyVars)
@@ -736,7 +730,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                 , exnTagMap = #exnTagMap env'
                                 }
                     val body = let val param = freshVId(ctx, "p")
-                                   val paramTy = let val ty = F.TyCon(tyvars'', tycon)
+                                   val paramTy = let val ty = F.TyCon(tyvars'', tyname)
                                                  in F.PairType(ty, ty)
                                                  end
                                in F.FnExp ( param
@@ -771,7 +765,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                                                 , body
                                                                                 )
                                                                      end) body tyvars'
-                    val body = List.foldr F.TyAbsExp body tyvars
+                    val body = List.foldr (fn (tv, body) => F.TyAbsExp(tv, F.TypeKind, body)) body tyvars
                 in F.SimpleBind (vid, ty, body) :: valbinds
                 end
             | doDatBind(_, valbinds) = valbinds
