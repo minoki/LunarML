@@ -3,6 +3,7 @@
  * This file is part of LunarML.
  *)
 structure CodeGenLua = struct
+exception CodeGenError of string
 (* Mapping of types:
  * SML -> Lua
  * int -> integer
@@ -69,7 +70,20 @@ fun smlNameToLuaChar #"_" = "__"
 fun smlNameToLua(name) = String.translate smlNameToLuaChar name
 val builtins
     = let open InitialEnv
-      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
+          val map = List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
+                               [(USyntax.MkShortVId (FSyntax.strIdToVId StrId_General), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Bool), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Word), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Char), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), NONE)
+                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), NONE)
+                               ]
+      in List.foldl (fn ((vid, name), map) => USyntax.LongVIdMap.insert (map, vid, SOME name)) map
                     [(* ref *)
                      (LongVId_ref, "_ref")
                     ,(VId_COLONEQUAL, "_set")
@@ -198,17 +212,6 @@ val builtins
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_General), "_General")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Bool), "_Bool")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), "_Int")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Word), "_Word")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), "_Real")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), "_String")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Char), "_Char")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), "_Vector")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), "_Array")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), "_Lua")
-                    ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), "_LunarML")
                     ,(VId_Lua_Lib_assert, "assert")
                     ,(VId_Lua_Lib_error, "error")
                     ,(VId_Lua_Lib_getmetatable, "getmetatable")
@@ -299,7 +302,8 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
                                                   case USyntax.LongVIdMap.find (builtins, USyntax.MkShortVId vid) of
                                                       NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
-                                                    | SOME luaExpr => luaExpr
+                                                    | SOME (SOME luaExpr) => luaExpr
+                                                    | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_VId vid ^ " has no runtime counterpart")
                                               else
                                                   smlNameToLua name ^ "_" ^ Int.toString n
 
@@ -882,7 +886,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
       end
   | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest = let val builtin = case extractLongVId exp of
                                                                                            SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
-                                                                                                                SOME luaExpr => SOME luaExpr
+                                                                                                                SOME (SOME luaExpr) => SOME luaExpr
+                                                                                                              | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_LongVId longvid ^ " has no runtime counterpart")
                                                                                                               | NONE => NONE
                                                                                                            )
                                                                                          | NONE => NONE

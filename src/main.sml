@@ -89,5 +89,6 @@ and doCompile opts fileName = let val progDir = OS.Path.dir progName;
                                   val () = TextIO.output (outs, lua)
                                   val () = TextIO.closeOut outs
                               in ()
-                              end handle Driver.Abort => OS.Process.exit OS.Process.failure;
+                              end handle Driver.Abort => OS.Process.exit OS.Process.failure
+                                       | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure );
 parseArgs { output = NONE, outputMode = NONE } (CommandLine.arguments ());
