@@ -47,6 +47,13 @@ structure Lua : sig
   val >= : value * value -> bool
   val concat : value * value -> value  (* x .. y *)
   val length : value -> value  (* #x *)
+  val typeof : value -> string (* type *)
+  val checkString : value -> string
+  val checkBoolean : value -> bool
+  val checkInt : value -> int
+  val checkWord : value -> word
+  val checkReal : value -> real
+  val optString : value -> string option
 end
 ```
 
@@ -101,7 +108,7 @@ Primitives
 * `'a vector`: `{ n = <length>, [1] = <0th element>, [2] = <1st element>, ... }`; compatible with `table.pack`
 * `'a array`: Same as `'a vector`, but mutable.
 * `'a ref`: `{ tag = "ref", payload = <the payload> }`
-* `Lua.value`: any Lua value
+* `Lua.value`: any Lua value, including `nil`
 
 Non-empty records: `{ [1] = <#1 of the record>, foo = <#foo of the record> }`
 

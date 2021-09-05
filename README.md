@@ -31,6 +31,7 @@ Successor ML features:
 * [x] Simplified recursive value bindings
 * [ ] Abstype as derived form
 * [x] Fixed manifest type specifications
+* [x] Abolish sequenced type realizations
 * [ ] Line comments
 * [ ] Extended literal syntax
 * [ ] Record punning

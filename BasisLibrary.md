@@ -323,6 +323,13 @@ val print = TextIO.print
 
 structure OS : sig
   structure FileSys : sig
+    val chDir : string -> unit (* requires LuaFileSystem *)
+    val getDir : unit -> string (* requires LuaFileSystem *)
+    val mkDir : string -> unit (* requires LuaFileSystem *)
+    val rmDir : string -> unit (* requires LuaFileSystem *)
+    val isDir : string -> bool (* requires LuaFileSystem *)
+    val isLink : string -> bool (* requires LuaFileSystem *)
+    val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
     val remove : string -> unit
     val rename : { old : string, new : string } -> unit
   end
@@ -340,6 +347,8 @@ structure OS : sig
     val terminate : status -> 'a
     val getEnv : string -> string option
   end
+  eqtype syserror
+  exception SysErr of string * syserror option
 end
 
 structure CommandLine : sig
