@@ -379,7 +379,8 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                      F.SConExp _ => (exp0, NONE)
                    | F.VarExp vid => (case USyntax.VIdMap.find (#vidMap env, vid) of
                                           SOME (iexp as Path path) => (F.PathToExp path, SOME iexp)
-                                        | iexpOpt => (exp0, iexpOpt)
+                                        | iexpOpt as SOME _ => (exp0, iexpOpt)
+                                        | NONE => (exp0, SOME (Path (F.Root vid)))
                                      )
                    | F.RecordExp fields => (F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields), NONE)
                    | F.LetExp (dec, exp) => let val (env, dec) = doDec env dec
@@ -479,9 +480,9 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                  end
           and doValBind env (F.SimpleBind (vid, ty, exp)) = let val (exp, iexpOpt) = doExp' env exp
                                                             in case iexpOpt of
-                                                                   SOME iexp => 
+                                                                   SOME iexp =>
                                                                    ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, iexp) }, F.SimpleBind (vid, ty, exp))
-                                                                 | NONE => 
+                                                                 | NONE =>
                                                                    (removeFromEnv (vid, env), F.SimpleBind (vid, ty, exp))
                                                             end
             | doValBind env (F.TupleBind (binds, exp)) = let val vars = List.map #1 binds
