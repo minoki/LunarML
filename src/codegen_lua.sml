@@ -673,20 +673,32 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
                                else if USyntax.eqULongVId(vid, VId_Bool_not) orelse USyntax.eqULongVId(vid, VId_Lua_isFalsy) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_EXCLAM) then
-                                   wrap (fn (stmts, env, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
                                else if USyntax.eqULongVId(vid, VId_String_size) orelse USyntax.eqULongVId(vid, VId_Lua_length) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
                                else if USyntax.eqULongVId(vid, VId_Lua_isNil) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
                                else if USyntax.eqULongVId(vid, VId_Lua_notb) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_Vector_length) orelse USyntax.eqULongVId(vid, VId_Array_length) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 e2' @ [ Fragment ".n" ] }))
                                else
                                    NONE
                             end
                           | _ => NONE
+          val doPolymorphicUnary = case exp1 of
+                                       F.TyAppExp (exp1', _) =>
+                                       (case extractLongVId exp1' of
+                                            SOME vid =>
+                                            let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
+                                                open InitialEnv
+                                            in if USyntax.eqULongVId(vid, VId_EXCLAM) then
+                                                   wrap (fn (stmts, env, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
+                                               else if USyntax.eqULongVId(vid, VId_Vector_length) orelse USyntax.eqULongVId(vid, VId_Array_length) then
+                                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 e2' @ [ Fragment ".n" ] }))
+                                               else
+                                                   NONE
+                                            end
+                                          | NONE => NONE
+                                       )
+                                     | _ => NONE
           val doLuaCall = case (exp1, exp2) of
                               (F.AppExp(vid_luacall, f), F.VectorExp(xs, _)) =>
                               if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
@@ -730,7 +742,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse F.isLongVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | exp1 => F.isLongVId(exp1, InitialEnv.VId_String_str)
-      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doLuaCall, doLuaMethod] of
+      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doPolymorphicUnary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
