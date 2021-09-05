@@ -1,5 +1,6 @@
 local assert = assert
 local error = error
+local getmetatable = getmetatable
 local pairs = pairs
 local pcall = pcall
 local setmetatable = setmetatable
@@ -101,34 +102,34 @@ end
 
 local _exn_meta = {}
 function _exn_meta:__tostring()
-  return string_format("%s:%d:%d: %s", self.file, self.line, self.column, self.tag[1])
+  return string_format("%s: %s", self.location or "<no location info>", self.tag[1])
 end
 local _Match_tag = { "Match" }
-local _Match = { tag = _Match_tag }
+local _Match = setmetatable({ tag = _Match_tag }, _exn_meta)
 local _Bind_tag = { "Bind" }
-local _Bind = { tag = _Bind_tag }
+local _Bind = setmetatable({ tag = _Bind_tag }, _exn_meta)
 local _Overflow_tag = { "Overflow" }
-local _Overflow = { tag = _Overflow_tag }
+local _Overflow = setmetatable({ tag = _Overflow_tag }, _exn_meta)
 local _Div_tag = { "Div" }
-local _Div = { tag = _Div_tag }
+local _Div = setmetatable({ tag = _Div_tag }, _exn_meta)
 local _Size_tag = { "Size" }
-local _Size = { tag = _Size_tag }
+local _Size = setmetatable({ tag = _Size_tag }, _exn_meta)
 local _Subscript_tag = { "Subscript" }
-local _Subscript = { tag = _Subscript_tag }
+local _Subscript = setmetatable({ tag = _Subscript_tag }, _exn_meta)
 local _Fail_tag = { "Fail" }
 local function _Fail(message)
-  return { tag = _Fail_tag, payload = message }
+  return setmetatable({ tag = _Fail_tag, payload = message }, _exn_meta)
 end
 
 local function __exn_instanceof(e, tag)
-  return e.tag == tag
+  return getmetatable(e) == _exn_meta and e.tag == tag
 end
 local function _exn_instanceof(a)
   return __exn_instanceof(a[1], a[2])
 end
 
-local function _raise(x, file, line, column)
-  local e = setmetatable({ tag = x.tag, payload = x.payload, file = file, line = line, column = column }, _exn_meta)
+local function _raise(x, location)
+  local e = setmetatable({ tag = x.tag, payload = x.payload, location = location }, _exn_meta)
   error(e, 1)
 end
 
@@ -138,9 +139,9 @@ local function __Int_add(x, y)
   assert(math_type(y) == "integer")
   local z = x + y
   if y > 0 and z < x then
-    error(_Overflow)
+    _raise(_Overflow, "Int.+")
   elseif y < 0 and z < x then
-    error(_Overflow)
+    _raise(_Overflow, "Int.+")
   else
     return z
   end
@@ -153,9 +154,9 @@ local function __Int_sub(x, y)
   assert(math_type(y) == "integer")
   local z = x - y
   if y < 0 and z < x then
-    error(_Overflow)
+    _raise(_Overflow, "Int.-")
   elseif y > 0 and x < z then
-    error(_Overflow)
+    _raise(_Overflow, "Int.-")
   else
     return z
   end
@@ -168,7 +169,7 @@ local function __Int_mul(x, y)
   assert(math_type(y) == "integer")
   local z = x * y
   if (x ~= 0 and z // x ~= y) or (y ~= 0 and z // y ~= x) then
-    error(_Overflow)
+    _raise(_Overflow, "Int.*")
   else
     return z
   end
@@ -180,9 +181,9 @@ local function __Int_div(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
   if y == 0 then
-    error(_Div)
+    _raise(_Div, "Int.div")
   elseif x == math.mininteger and y == -1 then
-    error(_Overflow)
+    _raise(_Overflow, "Int.div")
   end
   return x // y
 end
@@ -193,7 +194,7 @@ local function __Int_mod(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
   if y == 0 then
-    error(_Div)
+    _raise(_Div, "Int.mod")
   end
   return x % y
 end
@@ -203,14 +204,14 @@ end
 local function _Int_negate(x)
   assert(math_type(x) == "integer")
   if x == math_mininteger then
-    error(_Overflow)
+    _raise(_Overflow, "Int.~")
   end
   return - x
 end
 local function _Int_abs(x)
   assert(math_type(x) == "integer")
   if x == math_mininteger then
-    error(_Overflow)
+    _raise(_Overflow, "Int.abs")
   end
   return math.abs(x)
 end
@@ -220,7 +221,7 @@ local function __Word_div(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
   if y == 0 then
-    error(_Div)
+    _raise(_Div, "Word.div")
   elseif y > 0 then
     if x >= 0 then
       return x // y
@@ -261,7 +262,7 @@ local function __Word_mod(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
   if y == 0 then
-    error(_Div)
+    _raise(_Div, "Word.mod")
   elseif y > 0 then
     if x >= 0 then
       return x % y
@@ -377,7 +378,7 @@ end
 local function _Array_array(t)
   local n, init = t[1], t[2]
   if n < 0 then -- or maxLen < n
-    error(_Size)
+    _raise(_Size, "Array.array")
   end
   local t = { n = n }
   for i = 1, n do
@@ -399,7 +400,7 @@ end
 local function _VectorOrArray_tabulate(t)
   local n, f = t[1], t[2]
   if n < 0 then -- or maxLen < n
-    error(_Size)
+    _raise(_Size, "(Vector|Array).tabulate")
   end
   local t = { n = n }
   for i = 1, n do
@@ -413,14 +414,14 @@ end
 local function _VectorOrArray_sub(t)
   local a, i = t[1], t[2]
   if i < 0 or a.n <= i then
-    error(_Subscript)
+    _raise(_Subscript, "(Vector|Array).sub")
   end
   return a[i+1]
 end
 local function _Array_update(t)
   local a, i, x = t[1], t[2], t[3]
   if i < 0 or a.n <= i then
-    error(_Subscript)
+    _raise(_Subscript, "Array.update")
   end
   a[i+1] = x
   return nil

@@ -211,6 +211,7 @@ val builtins
                     ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), "_LunarML")
                     ,(VId_Lua_Lib_assert, "assert")
                     ,(VId_Lua_Lib_error, "error")
+                    ,(VId_Lua_Lib_getmetatable, "getmetatable")
                     ,(VId_Lua_Lib_pairs, "pairs")
                     ,(VId_Lua_Lib_pcall, "pcall")
                     ,(VId_Lua_Lib_setmetatable, "setmetatable")
@@ -473,6 +474,7 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_LunarML"
                                             , "assert"
                                             , "error"
+                                            , "getmetatable"
                                             , "pairs"
                                             , "pcall"
                                             , "setmetatable"
@@ -758,8 +760,8 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
     = doExpCont ctx env exp
                 (fn (stmts, env, exp') =>
                     case dest of
-                        Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ], env, { prec = 0, exp = [ Fragment "nil" ] })
-                      | _ => stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file) ^ ", " ^ Int.toString line ^ ", " ^ Int.toString column ^ ")"), OptSemicolon ]
+                        Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column) ^ ")"), OptSemicolon ], env, { prec = 0, exp = [ Fragment "nil" ] })
+                      | _ => stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column) ^ ")"), OptSemicolon ]
                 )
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
@@ -929,9 +931,9 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
           val tagName' = VIdToLua tagName
       in [ Indent, Fragment ((if isHoisted (env, tagName') then "" else "local ") ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
          @ (case payloadTy of
-                NONE => [ Indent, Fragment ((if isHoisted (env, conName') then "" else "local ") ^ conName' ^ " = { tag = " ^ tagName' ^ " }"), LineTerminator ]
+                NONE => [ Indent, Fragment ((if isHoisted (env, conName') then "" else "local ") ^ conName' ^ " = setmetatable({ tag = " ^ tagName' ^ " }, _exn_meta)"), LineTerminator ]
               | SOME _ => [ Indent, Fragment ((if isHoisted (env, conName') then "function " else "local function ") ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
-                          , Indent, Fragment ("return { tag = " ^ tagName' ^ ", payload = payload }"), LineTerminator
+                          , Indent, Fragment ("return setmetatable({ tag = " ^ tagName' ^ ", payload = payload }, _exn_meta)"), LineTerminator
                           , DecreaseIndent, Indent, Fragment "end", LineTerminator
                           ]
            )

@@ -57,6 +57,7 @@ structure Lua : sig
               structure Lib : sig
                             val assert : value
                             val error : value
+                            val getmetatable : value
                             val math : value
                             val pairs : value
                             val pcall : value

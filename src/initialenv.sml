@@ -303,6 +303,7 @@ local val newVId = newLongVId (StrId_Lua, ["Lib"])
 in
 val VId_Lua_Lib_assert = newVId "assert"
 val VId_Lua_Lib_error = newVId "error"
+val VId_Lua_Lib_getmetatable = newVId "getmetatable"
 val VId_Lua_Lib_pairs = newVId "pairs"
 val VId_Lua_Lib_pcall = newVId "pcall"
 val VId_Lua_Lib_setmetatable = newVId "setmetatable"
@@ -510,6 +511,7 @@ val initialEnv : Typing.Env
                             , valMap = mkValMap
                                            [("assert", TypeScheme ([], primTy_Lua_value))
                                            ,("error", TypeScheme ([], primTy_Lua_value))
+                                           ,("getmetatable", TypeScheme ([], primTy_Lua_value))
                                            ,("pairs", TypeScheme ([], primTy_Lua_value))
                                            ,("pcall", TypeScheme ([], primTy_Lua_value))
                                            ,("setmetatable", TypeScheme ([], primTy_Lua_value))
