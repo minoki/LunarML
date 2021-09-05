@@ -781,9 +781,11 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                                                 @ doElseIf env e3 dest'
                                                 @ [ Indent, Fragment "end", LineTerminator, DecreaseIndent ]
                                         )
-                          | doElseIf env e dest' = [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
-                                                   @ doExpTo ctx env e dest'
-                                                   @ [ DecreaseIndent ]
+                          | doElseIf env e dest' = case doExpTo ctx env e dest' of
+                                                       [] => []
+                                                     | else' => [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
+                                                                @ else'
+                                                                @ [ DecreaseIndent ]
                     in case dest of
                            Continue cont => let val result = genSym ctx
                                                 val env' = addSymbol (env, result)
