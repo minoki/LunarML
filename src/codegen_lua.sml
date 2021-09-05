@@ -824,7 +824,7 @@ and doExpTo ctx env (F.SConExp scon) dest : Fragment list = putPureTo ctx env de
                         in putPureTo ctx env dest (stmts, { prec = ~1, exp = Fragment ("{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
                         end
               )
-  | doExpTo ctx env (F.TyAbsExp (_, exp)) dest = doExpTo ctx env exp dest
+  | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.RecordEqualityExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, exp') => cont (stmts, (label, exp'))))
