@@ -65,7 +65,7 @@ datatype Exp = SConExp of Syntax.SCon
                  | TupleBind of (USyntax.VId * Ty) list * Exp
                  (* UnpackingBind *)
      and Dec = ValDec of ValBind
-             | RecValDec of ValBind list
+             | RecValDec of (USyntax.VId * Ty * Exp) list
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
@@ -201,7 +201,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                                                      }
           | doExp (SProjectionExp (exp, label)) = SProjectionExp (doExp exp, label)
         and doDec (ValDec valbind) = ValDec (doValBind valbind)
-          | doDec (RecValDec valbinds) = RecValDec (List.map doValBind valbinds)
+          | doDec (RecValDec valbinds) = RecValDec (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp)) valbinds)
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
@@ -266,7 +266,7 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, SConExp _) = USyntax.TyVarSet
 and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
   | freeTyVarsInValBind (bound, TupleBind (binds, exp)) = List.foldl (fn ((vid, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) (freeTyVarsInExp (bound, exp)) binds
 and freeTyVarsInDec (bound, ValDec valbind) = freeTyVarsInValBind (bound, valbind)
-  | freeTyVarsInDec (bound, RecValDec valbinds) = List.foldl (fn (valbind, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInValBind (bound, valbind))) USyntax.TyVarSet.empty valbinds
+  | freeTyVarsInDec (bound, RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => USyntax.TyVarSet.union (USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty)), freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty valbinds
   | freeTyVarsInDec (bound, IgnoreDec exp) = freeTyVarsInExp (bound, exp)
   | freeTyVarsInDec (bound, DatatypeDec datbinds) = List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
                                                                    let val bound = USyntax.TyVarSet.addList (bound, tyvars)
@@ -351,7 +351,7 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
 and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
-  | print_Dec (RecValDec (valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+  | print_Dec (RecValDec valbinds) = "RecValDec(" ^ Syntax.print_list (fn (vid, ty, exp) => "(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")") valbinds ^ ")"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
@@ -659,7 +659,10 @@ and toFDecs(ctx, env, []) = (env, [])
       in (env, dec @ decs)
       end
   | toFDecs(ctx, env, U.RecValDec(span, valbinds) :: decs)
-    = let val dec = F.RecValDec (List.map (doValBind ctx env) valbinds)
+    = let val dec = F.RecValDec (List.map (fn valbind => case doValBind ctx env valbind of
+                                                             F.SimpleBind (vid, ty, exp) => (vid, ty, exp)
+                                                           | F.TupleBind _ => raise Fail "unexpected TupleBind in RecValDec"
+                                          ) valbinds)
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec :: decs)
       end
@@ -710,7 +713,7 @@ and toFDecs(ctx, env, []) = (env, [])
 and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
-and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
+and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * F.Exp) list
     = let val nameMap = List.foldl (fn (U.DatBind(span, tyvars, tycon as USyntax.MkTyName(name, _), conbinds, true), map) => USyntax.TyNameMap.insert(map, tycon, freshVId(ctx, "EQUAL" ^ name))
                                    | (_, map) => map) USyntax.TyNameMap.empty datbinds
           val env' = { equalityForTyVarMap = #equalityForTyVarMap env
@@ -766,7 +769,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * F.ValBind list
                                                                                 )
                                                                      end) body tyvars'
                     val body = List.foldr (fn (tv, body) => F.TyAbsExp(tv, F.TypeKind, body)) body tyvars
-                in F.SimpleBind (vid, ty, body) :: valbinds
+                in (vid, ty, body) :: valbinds
                 end
             | doDatBind(_, valbinds) = valbinds
       in (env', List.foldr doDatBind [] datbinds)

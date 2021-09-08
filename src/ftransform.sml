@@ -161,10 +161,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                               | F.TupleBind (vars, _) => List.foldl (fn ((v, ty), env) => addVar(env, v, ty)) env vars
                                              in (env', F.ValDec (doValBind env valbind))
                                              end
-            | doDec env (F.RecValDec valbinds) = let val env = List.foldl (fn (F.SimpleBind (v, ty, _), env) => addVar(env, v, ty)
-                                                                          | (F.TupleBind (vars, _), env) => List.foldl (fn ((v, ty), env) => addVar(env, v, ty)) env vars
-                                                                          ) env valbinds
-                                                 in (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (F.RecValDec valbinds) = let val env = List.foldl (fn ((v, ty, _), env) => addVar(env, v, ty)) env valbinds
+                                                 in (env, F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp env exp)) valbinds))
                                                  end
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
@@ -460,10 +458,10 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                      in (env, F.ValDec valbind)
                                                      end
             | doDec env (F.RecValDec valbinds) = let fun go (env, acc, []) = (env, F.RecValDec (List.rev acc))
-                                                       | go (env, acc, valbind :: valbinds) = let val (env', valbind) = doValBind env valbind
-                                                                                                  val acc = valbind :: acc
-                                                                                              in go (env', acc, valbinds)
-                                                                                              end
+                                                       | go (env, acc, (vid, ty, exp) :: valbinds) = let val exp = doExp env exp
+                                                                                                         val acc = (vid, ty, exp) :: acc
+                                                                                                     in go (removeFromEnv (vid, env), acc, valbinds)
+                                                                                                     end
                                                  in go (env, [], valbinds)
                                                  end
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
@@ -558,7 +556,7 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                 )
           and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
-            | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (doValBind env) valbinds))
+            | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp env exp)) valbinds))
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
             | doDec env (dec as F.ExceptionDec _) = (env, dec)
@@ -627,9 +625,7 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = ext
                                                       else
                                                           F.GroupDec (NONE, decs @ [dec])
                                                    end
-  | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn F.SimpleBind (vid, ty, exp) => F.SimpleBind (vid, ty, doExp exp)
-                                                         | F.TupleBind (binds, exp) => F.TupleBind (binds, doExp exp)
-                                                         ) valbinds)
+  | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn (vid, ty, exp) => (vid, ty, doExp exp)) valbinds)
   | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
   | doDec (dec as F.DatatypeDec _) = dec
   | doDec (dec as F.ExceptionDec _) = dec
@@ -861,18 +857,13 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
       end
   | doDec (used, F.RecValDec valbinds)
     = let val bound = List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
-                                 (List.map (fn F.SimpleBind (vid, _, _) => USyntax.VIdSet.singleton vid
-                                           | F.TupleBind (binds, _) => USyntax.VIdSet.fromList (List.map #1 binds)
-                                           ) valbinds)
+                                 (List.map (fn (vid, _, _) => USyntax.VIdSet.singleton vid) valbinds)
       in if USyntax.VIdSet.disjoint (used, bound) then
              (used, []) (* RHS should be fn _ => _, and therefore discardable *)
          else
-             let val (used, valbinds) = List.foldr (fn (F.SimpleBind (vid, ty, exp), (used, valbinds)) => let val (used', exp) = doExp exp
-                                                                                                          in (USyntax.VIdSet.union (used, used'), F.SimpleBind (vid, ty, exp) :: valbinds)
-                                                                                                          end
-                                                   | (F.TupleBind (binds, exp), (used, valbinds)) => let val (used', exp) = doExp exp
-                                                                                                     in (USyntax.VIdSet.union (used, used'), F.TupleBind (binds, exp) :: valbinds)
-                                                                                                     end
+             let val (used, valbinds) = List.foldr (fn ((vid, ty, exp), (used, valbinds)) => let val (used', exp) = doExp exp
+                                                                                             in (USyntax.VIdSet.union (used, used'), (vid, ty, exp) :: valbinds)
+                                                                                             end
                                                    ) (used, []) valbinds
              in (used, [F.RecValDec valbinds])
              end
@@ -910,7 +901,7 @@ and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, d
                                                                 end) (used, []) decs
 and definedInDecs decs = List.foldl (fn (dec, s) => USyntax.VIdSet.union(definedInDec dec, s)) USyntax.VIdSet.empty decs
 and definedInDec (F.ValDec valbind) = definedInValBind valbind
-  | definedInDec (F.RecValDec valbinds) = List.foldl (fn (valbind, s) => USyntax.VIdSet.union(definedInValBind valbind, s)) USyntax.VIdSet.empty valbinds
+  | definedInDec (F.RecValDec valbinds) = List.foldl (fn ((vid, _, _), s) => USyntax.VIdSet.add(s, vid)) USyntax.VIdSet.empty valbinds
   | definedInDec (F.IgnoreDec _) = USyntax.VIdSet.empty
   | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind(vid, _), s) => USyntax.VIdSet.add(s, vid)) s conbinds) USyntax.VIdSet.empty datbinds
   | definedInDec (F.ExceptionDec { conName, tagName, ... }) = USyntax.VIdSet.add(USyntax.VIdSet.singleton conName, tagName)

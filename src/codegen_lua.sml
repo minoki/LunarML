@@ -929,15 +929,10 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
       in decs @ doExpTo ctx env' exp (UnpackingAssignTo vars)
       end
   | doDec ctx env (F.RecValDec valbinds)
-    = let val (decs, assignments) = List.foldr (fn (F.SimpleBind (v,_,exp), (decs, assignments)) => let val v' = VIdToLua v
-                                                                                                        val (env, dec) = declareIfNotHoisted (env, [v'])
-                                                                                                    in (dec @ decs, doExpTo ctx env exp (AssignTo v') @ assignments)
-                                                                                                    end
-                                               | (F.TupleBind ([], exp), (decs, assignments)) => (decs, doExpTo ctx env exp Discard @ assignments)
-                                               | (F.TupleBind (vars, exp), (decs, assignments)) => let val vars' = List.map (fn (v,_) => VIdToLua v) vars
-                                                                                                       val (env, dec) = declareIfNotHoisted (env, vars')
-                                                                                                   in (dec @ decs, doExpTo ctx env exp (UnpackingAssignTo vars') @ assignments)
-                                                                                                   end
+    = let val (decs, assignments) = List.foldr (fn ((v,_,exp), (decs, assignments)) => let val v' = VIdToLua v
+                                                                                           val (env, dec) = declareIfNotHoisted (env, [v'])
+                                                                                       in (dec @ decs, doExpTo ctx env exp (AssignTo v') @ assignments)
+                                                                                       end
                                                ) ([], []) valbinds
       in decs @ assignments
       end
