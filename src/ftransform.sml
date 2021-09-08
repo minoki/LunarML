@@ -320,6 +320,7 @@ datatype InlineExp = Path of F.Path
                                   , exnTagMap : InlineExp Syntax.VIdMap.map
                                   , equalityMap : InlineExp Syntax.TyConMap.map
                                   }
+                   | FnExp of USyntax.VId * F.Ty * F.Exp
 fun lookupSLabel ({ valMap, strMap, exnTagMap, equalityMap }, label) = case label of
                                                                            F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
                                                                          | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
@@ -341,6 +342,38 @@ fun removeFromEnv (vid, env as { vidMap } : Env) = if USyntax.VIdMap.inDomain (v
                                                        { vidMap = #1 (USyntax.VIdMap.remove (vidMap, vid)) }
                                                    else
                                                        env
+fun costOfExp (F.SConExp _) = 1
+  | costOfExp (F.VarExp _) = 0
+  | costOfExp (F.RecordExp fields) = List.foldl (fn ((label, exp), acc) => acc + costOfExp exp) 1 fields
+  | costOfExp (F.LetExp (dec, exp)) = costOfDec dec + costOfExp exp
+  | costOfExp (F.AppExp (e1, e2)) = costOfExp e1 + costOfExp e2
+  | costOfExp (F.HandleExp { body, exnName, handler }) = 5 + costOfExp body + costOfExp handler
+  | costOfExp (F.RaiseExp (span, exp)) = 1 + costOfExp exp
+  | costOfExp (F.IfThenElseExp (e1, e2, e3)) = 1 + costOfExp e1 + costOfExp e2 + costOfExp e3
+  | costOfExp (F.CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => acc + costOfExp exp) (costOfExp exp) matches
+  | costOfExp (F.FnExp (vid, ty, exp)) = 1 + costOfExp exp
+  | costOfExp (F.ProjectionExp { label, recordTy, fieldTy }) = 1
+  | costOfExp (F.ListExp (exps, elemTy)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 exps
+  | costOfExp (F.VectorExp (exps, elemTy)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 exps
+  | costOfExp (F.TyAbsExp (tv, kind, exp)) = costOfExp exp
+  | costOfExp (F.TyAppExp (exp, ty)) = costOfExp exp
+  | costOfExp (F.RecordEqualityExp fields) = List.foldl (fn ((label, exp), acc) => acc + costOfExp exp) 1 fields
+  | costOfExp (F.DataTagExp exp) = 1 + costOfExp exp
+  | costOfExp (F.DataPayloadExp exp) = 1 + costOfExp exp
+  | costOfExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = 1
+  | costOfExp (F.SProjectionExp (exp, _)) = costOfExp exp
+and costOfDec (F.ValDec valbind) = costOfValBind valbind
+  | costOfDec (F.RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => acc + costOfExp exp) 0 valbinds
+  | costOfDec (F.IgnoreDec exp) = costOfExp exp
+  | costOfDec (F.DatatypeDec datbinds) = List.length datbinds
+  | costOfDec (F.ExceptionDec { conName, tagName, payloadTy }) = 1
+  | costOfDec (F.ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = 0
+  | costOfDec (F.ExportValue exp) = costOfExp exp
+  | costOfDec (F.ExportModule entities) = Vector.foldl (fn ((name, exp), acc) => acc + costOfExp exp) 0 entities
+  | costOfDec (F.GroupDec (_, decs)) = List.foldl (fn (dec, acc) => acc + costOfDec dec) 0 decs
+and costOfValBind (F.SimpleBind (vid, ty, exp)) = costOfExp exp
+  | costOfValBind (F.TupleBind (binds, exp)) = costOfExp exp
+val INLINE_THRESHOLD = 10
 fun tryInlineExp (F.VarExp vid) = SOME (Path (F.Root vid))
   | tryInlineExp (F.SProjectionExp (exp, label)) = (case tryInlineExp exp of
                                                         SOME (Path path) => SOME (Path (F.Child (path, label)))
@@ -352,6 +385,10 @@ fun tryInlineExp (F.VarExp vid) = SOME (Path (F.Root vid))
                                                                                             , equalityMap = Syntax.TyConMap.map Path equalityMap
                                                                                             }
                                                                                  )
+  | tryInlineExp (F.FnExp (vid, paramTy, body)) = if costOfExp body <= INLINE_THRESHOLD then
+                                                      SOME (FnExp (vid, paramTy, body))
+                                                  else
+                                                      NONE
   | tryInlineExp _ = NONE
 fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                          , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
@@ -384,7 +421,11 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.LetExp (dec, exp) => let val (env, dec) = doDec env dec
                                             in (F.LetExp (dec, doExp env exp), NONE)
                                             end
-                   | F.AppExp (exp1, exp2) => (F.AppExp (doExp env exp1, doExp env exp2), NONE)
+                   | F.AppExp (exp1, exp2) => let val (exp1, iexp1) = doExp' env exp1
+                                              in case iexp1 of
+                                                     SOME (FnExp (vid, paramTy, body)) => doExp' env (F.LetExp (F.ValDec (F.SimpleBind (vid, paramTy, exp2)), body))
+                                                   | _ => (F.AppExp (exp1, doExp env exp2), NONE)
+                                              end
                    | F.HandleExp { body, exnName, handler } => ( F.HandleExp { body = doExp env body
                                                                              , exnName = exnName
                                                                              , handler = let val env' = removeFromEnv (exnName, env)
@@ -402,7 +443,8 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                            in (F.CaseExp (span, doExp env exp, ty, List.map doMatch matches), NONE)
                                                            end
                    | F.FnExp (vid, ty, exp) => let val env' = removeFromEnv (vid, env)
-                                               in (F.FnExp (vid, ty, doExp env' exp), NONE)
+                                                   val exp' = doExp env' exp
+                                               in (F.FnExp (vid, ty, exp'), if costOfExp exp' <= INLINE_THRESHOLD then SOME (FnExp (vid, ty, exp')) else NONE)
                                                end
                    | F.ProjectionExp { label, recordTy, fieldTy } => (exp0, NONE)
                    | F.ListExp (xs, ty) => (F.ListExp (Vector.map (doExp env) xs, ty), NONE)
@@ -451,7 +493,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                            | SOME iexp => (F.SProjectionExp (exp, label), SOME iexp)
                                                                                            | NONE => (F.SProjectionExp (exp, label), NONE) (* should be an error *)
                                                                                         )
-                                                         | (exp, NONE) => (F.SProjectionExp (exp, label), NONE)
+                                                         | (exp, _) => (F.SProjectionExp (exp, label), NONE)
                                                       )
                 )
           and doDec (env : Env) (F.ValDec valbind) = let val (env, valbind) = doValBind env valbind
@@ -477,11 +519,10 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                     )
                                                  end
           and doValBind env (F.SimpleBind (vid, ty, exp)) = let val (exp, iexpOpt) = doExp' env exp
-                                                            in case iexpOpt of
-                                                                   SOME iexp =>
-                                                                   ({ vidMap = USyntax.VIdMap.insert (#vidMap env, vid, iexp) }, F.SimpleBind (vid, ty, exp))
-                                                                 | NONE =>
-                                                                   (removeFromEnv (vid, env), F.SimpleBind (vid, ty, exp))
+                                                                val env' = case iexpOpt of
+                                                                               SOME iexp => { vidMap = USyntax.VIdMap.insert (#vidMap env, vid, iexp) }
+                                                                             | NONE => removeFromEnv (vid, env)
+                                                            in (env', F.SimpleBind (vid, ty, exp))
                                                             end
             | doValBind env (F.TupleBind (binds, exp)) = let val vars = List.map #1 binds
                                                              val env' = List.foldl removeFromEnv env vars
