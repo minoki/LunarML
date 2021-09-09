@@ -315,12 +315,14 @@ structure EliminateVariables = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref }
 datatype InlineExp = Path of F.Path
-                   | StructExp of { valMap : InlineExp Syntax.VIdMap.map
-                                  , strMap : InlineExp Syntax.StrIdMap.map
-                                  , exnTagMap : InlineExp Syntax.VIdMap.map
-                                  , equalityMap : InlineExp Syntax.TyConMap.map
+                   | StructExp of { valMap : F.Path Syntax.VIdMap.map
+                                  , strMap : F.Path Syntax.StrIdMap.map
+                                  , exnTagMap : F.Path Syntax.VIdMap.map
+                                  , equalityMap : F.Path Syntax.TyConMap.map
                                   }
                    | FnExp of USyntax.VId * F.Ty * F.Exp
+                   | TyAbsExp of F.TyVar * F.Kind * InlineExp
+                   | TyAppExp of InlineExp * F.Ty
 fun lookupSLabel ({ valMap, strMap, exnTagMap, equalityMap }, label) = case label of
                                                                            F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
                                                                          | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
@@ -374,46 +376,72 @@ and costOfDec (F.ValDec valbind) = costOfValBind valbind
 and costOfValBind (F.SimpleBind (vid, ty, exp)) = costOfExp exp
   | costOfValBind (F.TupleBind (binds, exp)) = costOfExp exp
 val INLINE_THRESHOLD = 10
+fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
+                                   fun doInlineExp (iexp as Path path) = iexp
+                                     | doInlineExp (iexp as StructExp _) = iexp
+                                     | doInlineExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
+                                     | doInlineExp (TyAbsExp (tv, kind, iexp)) = if USyntax.TyVarMap.inDomain (subst, tv) then
+                                                                                     TyAbsExp (tv, kind, substTyInInlineExp (#1 (USyntax.TyVarMap.remove (subst, tv))) iexp) (* TODO: use fresh tyvar if necessary *)
+                                                                                 else
+                                                                                     TyAbsExp (tv, kind, doInlineExp iexp)
+                                     | doInlineExp (TyAppExp (iexp, ty)) = TyAppExp (doInlineExp iexp, doTy ty)
+                               in doInlineExp
+                               end
+fun uninlineExp (Path path) = F.PathToExp path
+  | uninlineExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = F.StructExp { valMap = valMap, strMap = strMap, exnTagMap = exnTagMap, equalityMap = equalityMap }
+  | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
+  | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
+  | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
 fun tryInlineExp (F.VarExp vid) = SOME (Path (F.Root vid))
   | tryInlineExp (F.SProjectionExp (exp, label)) = (case tryInlineExp exp of
                                                         SOME (Path path) => SOME (Path (F.Child (path, label)))
                                                       | _ => NONE
                                                    )
-  | tryInlineExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = SOME (StructExp { valMap = Syntax.VIdMap.map Path valMap
-                                                                                            , strMap = Syntax.StrIdMap.map Path strMap
-                                                                                            , exnTagMap = Syntax.VIdMap.map Path exnTagMap
-                                                                                            , equalityMap = Syntax.TyConMap.map Path equalityMap
+  | tryInlineExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = SOME (StructExp { valMap = valMap
+                                                                                            , strMap = strMap
+                                                                                            , exnTagMap = exnTagMap
+                                                                                            , equalityMap = equalityMap
                                                                                             }
                                                                                  )
   | tryInlineExp (F.FnExp (vid, paramTy, body)) = if costOfExp body <= INLINE_THRESHOLD then
                                                       SOME (FnExp (vid, paramTy, body))
                                                   else
                                                       NONE
+  | tryInlineExp (F.TyAbsExp (tv, kind, exp)) = (case tryInlineExp exp of
+                                                     SOME iexp => SOME (TyAbsExp (tv, kind, iexp))
+                                                   | NONE => NONE
+                                                )
+  | tryInlineExp (F.TyAppExp (exp, ty)) = (case tryInlineExp exp of
+                                               SOME iexp => SOME (TyAppExp (iexp, ty))
+                                             | NONE => NONE
+                                          )
   | tryInlineExp _ = NONE
 fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                          , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
                                          , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
                                          }
     = let fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#vidMap env, vid) of
-                                                             SOME (iexp as Path path) => (path, SOME iexp)
+                                                             SOME (Path path) => doPath env path
                                                            | SOME iexp => (path, SOME iexp)
-                                                           | NONE => (path, NONE)
+                                                           | NONE => (path, SOME (Path path))
                                                         )
             | doPath env (F.Child (parent, label)) = (case doPath env parent of
                                                           (parent, SOME (StructExp m)) =>
                                                           (case lookupSLabel(m, label) of
-                                                               SOME (iexp as Path path) => (path, SOME iexp)
-                                                             | SOME iexp => (F.Child (parent, label), SOME iexp)
+                                                               SOME path => doPath env path
                                                              | NONE => (F.Child (parent, label), NONE) (* should be an error *)
                                                           )
-                                                        | (parent, _) => (F.Child (parent, label), NONE)
+                                                        | (parent, SOME (Path path)) => (F.Child (parent, label), SOME (Path (F.Child (path, label))))
+                                                        | (parent, _) => (F.Child (parent, label), SOME (Path (F.Child (parent, label))))
                                                      )
           fun doExp env exp = #1 (doExp' env exp)
           and doExp' (env : Env) exp0
               = (case exp0 of
                      F.SConExp _ => (exp0, NONE)
                    | F.VarExp vid => (case USyntax.VIdMap.find (#vidMap env, vid) of
-                                          SOME (iexp as Path path) => (F.PathToExp path, SOME iexp)
+                                          SOME (Path path) => let val (path, iexpOpt) = doPath env path
+                                                              in (F.PathToExp path, iexpOpt)
+                                                              end
                                         | iexpOpt as SOME _ => (exp0, iexpOpt)
                                         | NONE => (exp0, SOME (Path (F.Root vid)))
                                      )
@@ -424,6 +452,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.AppExp (exp1, exp2) => let val (exp1, iexp1) = doExp' env exp1
                                               in case iexp1 of
                                                      SOME (FnExp (vid, paramTy, body)) => doExp' env (F.LetExp (F.ValDec (F.SimpleBind (vid, paramTy, exp2)), body))
+                                                   | SOME (Path path) => (F.AppExp (F.PathToExp path, doExp env exp2), NONE)
                                                    | _ => (F.AppExp (exp1, doExp env exp2), NONE)
                                               end
                    | F.HandleExp { body, exnName, handler } => ( F.HandleExp { body = doExp env body
@@ -456,41 +485,56 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                                         in if USyntax.TyVarSet.member (fv, tv) then
                                                                                                                NONE
                                                                                                            else
-                                                                                                               SOME (exp', tryInlineExp exp')
+                                                                                                               SOME (doExp' env exp)
                                                                                                         end
                                                                                                     else
                                                                                                         NONE
                                                                  | _ => NONE
                                                    in case c of
                                                           SOME result => result
-                                                        | NONE => (F.TyAbsExp (tv, kind, exp), NONE)
+                                                        | NONE => (F.TyAbsExp (tv, kind, exp), case iexp of
+                                                                                                   SOME iexp => SOME (TyAbsExp (tv, kind, iexp)) (* TODO: hoisting? *)
+                                                                                                 | NONE => NONE)
                                                    end
-                   | F.TyAppExp (exp, ty) => (F.TyAppExp (doExp env exp, ty), NONE)
+                   | F.TyAppExp (exp, ty) => let val (exp, iexp) = doExp' env exp
+                                             in case iexp of
+                                                    SOME (TyAbsExp (tv, kind, exp)) => let val iexp = substTyInInlineExp (USyntax.TyVarMap.singleton (tv, ty)) exp
+                                                                                       in (uninlineExp iexp, SOME iexp)
+                                                                                       end
+                                                  | SOME (iexp as Path path) => (F.TyAppExp (F.PathToExp path, ty), SOME (TyAppExp (iexp, ty)))
+                                                  | SOME iexp => (F.TyAppExp (exp, ty), SOME (TyAppExp (iexp, ty)))
+                                                  | NONE => (F.TyAppExp (exp, ty), NONE)
+                                             end
                    | F.RecordEqualityExp fields => (F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp env exp)) fields), NONE)
                    | F.DataTagExp exp => (F.DataTagExp (doExp env exp), NONE)
                    | F.DataPayloadExp exp => (F.DataPayloadExp (doExp env exp), NONE)
-                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => let fun doPath' path = (case doPath env path of
-                                                                                                           (path, SOME iexp) => iexp
-                                                                                                         | (path, NONE) => Path path
-                                                                                                      )
-                                                                               in ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
-                                                                                                , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
-                                                                                                , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
-                                                                                                , equalityMap = Syntax.TyConMap.map (#1 o doPath env) equalityMap
-                                                                                                }
-                                                                                  , SOME (StructExp { valMap = Syntax.VIdMap.map doPath' valMap
-                                                                                                    , strMap = Syntax.StrIdMap.map doPath' strMap
-                                                                                                    , exnTagMap = Syntax.VIdMap.map doPath' exnTagMap
-                                                                                                    , equalityMap = Syntax.TyConMap.map doPath' equalityMap
-                                                                                                    }
-                                                                                         )
-                                                                                  )
-                                                                               end
+                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
+                                                                                             , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
+                                                                                             , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
+                                                                                             , equalityMap = Syntax.TyConMap.map (#1 o doPath env) equalityMap
+                                                                                             }
+                                                                               , SOME (StructExp { valMap = valMap
+                                                                                                 , strMap = strMap
+                                                                                                 , exnTagMap = exnTagMap
+                                                                                                 , equalityMap = equalityMap
+                                                                                                 }
+                                                                                      )
+                                                                               )
                    | F.SProjectionExp (exp, label) => (case doExp' env exp of
-                                                           (exp, SOME (Path path)) => (F.SProjectionExp (exp, label), SOME (Path (F.Child (path, label))))
+                                                           (exp, SOME (Path path)) => let val (path, iexpOpt) = doPath env path
+                                                                                      in (F.SProjectionExp (exp, label), case iexpOpt of
+                                                                                                                             SOME (Path path) => SOME (Path (F.Child (path, label)))
+                                                                                                                           | SOME (StructExp m) => (case lookupSLabel(m, label) of
+                                                                                                                                                        SOME path => #2 (doPath env path)
+                                                                                                                                                      | NONE => NONE (* should be an error *)
+                                                                                                                                                   )
+                                                                                                                           | _ => NONE
+                                                                                         )
+                                                                                      end
                                                          | (exp, SOME (StructExp m)) => (case lookupSLabel(m, label) of
-                                                                                             SOME (iexp as Path path) => (F.PathToExp path, SOME iexp)
-                                                                                           | SOME iexp => (F.SProjectionExp (exp, label), SOME iexp)
+                                                                                             SOME path => let val (path, iexpOpt) = doPath env path
+                                                                                                          in (F.PathToExp path, iexpOpt)
+                                                                                                          end
                                                                                            | NONE => (F.SProjectionExp (exp, label), NONE) (* should be an error *)
                                                                                         )
                                                          | (exp, _) => (F.SProjectionExp (exp, label), NONE)
