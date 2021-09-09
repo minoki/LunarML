@@ -311,6 +311,93 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
       end
 end (* structure DesugarPatternMatches *)
 
+structure DecomposeValRec = struct
+structure F = FSyntax
+type Context = {}
+fun doExp (exp as F.SConExp _) = exp
+  | doExp (exp as F.VarExp _) = exp
+  | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+  | doExp (F.LetExp (dec, exp)) = let val decs = doDec dec
+                                  in List.foldr F.LetExp (doExp exp) decs
+                                  end
+  | doExp (F.AppExp (exp1, exp2)) = F.AppExp (doExp exp1, doExp exp2)
+  | doExp (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp body
+                                                                 , exnName = exnName
+                                                                 , handler = doExp handler
+                                                                 }
+  | doExp (F.RaiseExp (span, exp)) = F.RaiseExp (span, doExp exp)
+  | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
+  | doExp (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp exp, ty, List.map (fn (pat, exp) => (pat, doExp exp)) matches)
+  | doExp (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp exp)
+  | doExp (exp as F.ProjectionExp _) = exp
+  | doExp (F.ListExp (exps, ty)) = F.ListExp (Vector.map doExp exps, ty)
+  | doExp (F.VectorExp (exps, ty)) = F.VectorExp (Vector.map doExp exps, ty)
+  | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
+  | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
+  | doExp (F.RecordEqualityExp fields) = F.RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
+  | doExp (F.DataTagExp exp) = F.DataTagExp (doExp exp)
+  | doExp (F.DataPayloadExp exp) = F.DataPayloadExp (doExp exp)
+  | doExp (F.StructExp maps) = F.StructExp maps
+  | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
+and doDec (F.ValDec (F.SimpleBind (vid, ty, exp))) = [F.ValDec (F.SimpleBind (vid, ty, doExp exp))]
+  | doDec (F.ValDec (F.TupleBind (binds, exp))) = [F.ValDec (F.TupleBind (binds, doExp exp))]
+  | doDec (F.RecValDec valbinds)
+    = let val bound = List.foldl (fn ((vid, ty, exp), set) => USyntax.VIdSet.add (set, vid)) USyntax.VIdSet.empty valbinds
+          val map = List.foldl (fn ((vid, ty, exp), map) => let val exp = doExp exp
+                                                            in USyntax.VIdMap.insert (map, vid, (ty, exp, USyntax.VIdSet.intersection (F.freeVarsInExp (USyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
+                                                            end) USyntax.VIdMap.empty valbinds
+          fun dfs1 (from, vid) = let val (ty, exp, refs, invref, seen1, _) = USyntax.VIdMap.lookup (map, vid)
+                                     val () = case from of
+                                                  SOME vid' => invref := vid' :: !invref
+                                                | NONE => ()
+                                 in if !seen1 then
+                                        []
+                                    else
+                                        ( seen1 := true
+                                        ; USyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
+                                        )
+                                 end
+          val list = USyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
+          fun dfs2 vid = let val (ty, exp, refs, ref invrefs, _, seen2) = USyntax.VIdMap.lookup (map, vid)
+                         in if !seen2 then
+                                USyntax.VIdSet.empty
+                            else
+                                ( seen2 := true
+                                ; List.foldl (fn (vid', acc) => USyntax.VIdSet.union (acc, dfs2 vid')) (USyntax.VIdSet.singleton vid) invrefs
+                                )
+                         end
+          val sccs = List.foldl (fn (vid, acc) => let val set = dfs2 vid
+                                                  in if USyntax.VIdSet.isEmpty set then
+                                                         acc
+                                                     else
+                                                         set :: acc
+                                                  end) [] list
+      in List.foldl (fn (scc, decs) => let val dec = case USyntax.VIdSet.listItems scc of
+                                                         [vid] => let val (ty, exp, refs, _, _, _) = USyntax.VIdMap.lookup (map, vid)
+                                                                  in if USyntax.VIdSet.member (refs, vid) then
+                                                                         F.RecValDec [(vid, ty, exp)]
+                                                                     else
+                                                                         F.ValDec (F.SimpleBind (vid, ty, exp))
+                                                                  end
+                                                       | scc => F.RecValDec (List.foldl (fn (vid, xs) =>
+                                                                                            let val (ty, exp, _, _, _, _) = USyntax.VIdMap.lookup (map, vid)
+                                                                                            in (vid, ty, exp) :: xs
+                                                                                            end
+                                                                                        ) [] scc)
+                                       in dec :: decs
+                                       end
+                    ) [] sccs
+      end
+  | doDec (F.IgnoreDec exp) = [F.IgnoreDec (doExp exp)]
+  | doDec (F.DatatypeDec datbinds) = [F.DatatypeDec datbinds]
+  | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
+  | doDec (F.ExceptionRepDec names) = [F.ExceptionRepDec names]
+  | doDec (F.ExportValue exp) = [F.ExportValue (doExp exp)]
+  | doDec (F.ExportModule fields) = [F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)]
+  | doDec (F.GroupDec (set, decs)) = [F.GroupDec (set, doDecs decs)]
+and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
+end
+
 structure EliminateVariables = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref }
@@ -732,6 +819,7 @@ val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEn
                        , fuse = Fuse.emptyEnv
                        }
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
+                                      val decs = DecomposeValRec.doDecs decs
                                       val decs = FlattenLet.doDecs decs
                                       val (evEnv, decs) = #doDecs (EliminateVariables.eliminateVariables ctx) (#eliminateVariables env) decs
                                       val (fuseEnv, decs) = #doDecs (Fuse.fuse ctx) (#fuse env) decs

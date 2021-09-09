@@ -288,6 +288,62 @@ and freeTyVarsInDec (bound, ValDec valbind) = freeTyVarsInValBind (bound, valbin
   | freeTyVarsInDec (bound, GroupDec (v, decs)) = freeTyVarsInDecs (bound, decs)
 and freeTyVarsInDecs (bound, decs) = List.foldl (fn (dec, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInDec (bound, dec))) USyntax.TyVarSet.empty decs
 
+fun varsInPat WildcardPat = USyntax.VIdSet.empty
+  | varsInPat (SConPat _) = USyntax.VIdSet.empty
+  | varsInPat (VarPat (vid, ty)) = USyntax.VIdSet.singleton vid
+  | varsInPat (RecordPat (fields, wildcard)) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, varsInPat pat)) USyntax.VIdSet.empty fields
+  | varsInPat (ConPat (conPath, SOME innerPat, tyargs)) = varsInPat innerPat
+  | varsInPat (ConPat (conPath, NONE, tyargs)) = USyntax.VIdSet.empty
+  | varsInPat (LayeredPat (vid, ty, innerPat)) = USyntax.VIdSet.add (varsInPat innerPat, vid)
+  | varsInPat (VectorPat (pats, wildcard, ty)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, varsInPat pat)) USyntax.VIdSet.empty pats
+
+fun freeVarsInExp (bound : USyntax.VIdSet.set, SConExp _) = USyntax.VIdSet.empty
+  | freeVarsInExp (bound, VarExp vid) = if USyntax.VIdSet.member (bound, vid) then
+                                            USyntax.VIdSet.empty
+                                        else
+                                            USyntax.VIdSet.singleton vid
+  | freeVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty fields
+  | freeVarsInExp (bound, LetExp (dec, exp)) = let val (bound, set) = freeVarsInDec (bound, dec)
+                                               in USyntax.VIdSet.union (set, freeVarsInExp (bound, exp))
+                                               end
+  | freeVarsInExp (bound, AppExp (exp1, exp2)) = USyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2))
+  | freeVarsInExp (bound, HandleExp { body, exnName, handler }) = USyntax.VIdSet.union (freeVarsInExp (bound, body), freeVarsInExp (USyntax.VIdSet.add (bound, exnName), handler))
+  | freeVarsInExp (bound, RaiseExp (span, exp)) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = USyntax.VIdSet.union (USyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2)), freeVarsInExp (bound, exp3))
+  | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (USyntax.VIdSet.union (bound, varsInPat pat), exp))) (freeVarsInExp (bound, exp)) matches
+  | freeVarsInExp (bound, FnExp (vid, ty, exp)) = freeVarsInExp (USyntax.VIdSet.add (bound, vid), exp)
+  | freeVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.VIdSet.empty
+  | freeVarsInExp (bound, ListExp (exps, ty)) = Vector.foldl (fn (exp, acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps
+  | freeVarsInExp (bound, VectorExp (exps, ty)) = Vector.foldl (fn (exp, acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps
+  | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, TyAppExp (exp, ty)) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, RecordEqualityExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty fields
+  | freeVarsInExp (bound, DataTagExp exp) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, DataPayloadExp exp) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = let fun addPath (path, set) = USyntax.VIdSet.add (set, rootOfPath path)
+                                                                                  in List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
+                                                                                                [Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty valMap
+                                                                                                ,Syntax.StrIdMap.foldl addPath USyntax.VIdSet.empty strMap
+                                                                                                ,Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty exnTagMap
+                                                                                                ,Syntax.TyConMap.foldl addPath USyntax.VIdSet.empty equalityMap
+                                                                                                ]
+                                                                                  end
+  | freeVarsInExp (bound, SProjectionExp (exp, label)) = freeVarsInExp (bound, exp)
+and freeVarsInDec (bound, ValDec (SimpleBind (vid, ty, exp))) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
+  | freeVarsInDec (bound, ValDec (TupleBind (binds, exp))) = (List.foldl (fn ((vid, ty), bound) => USyntax.VIdSet.add (bound, vid)) bound binds, freeVarsInExp (bound, exp))
+  | freeVarsInDec (bound, RecValDec valbinds) = let val bound = List.foldl (fn ((vid, _, _), bound) => USyntax.VIdSet.add (bound, vid)) bound valbinds
+                                                in (bound, List.foldl (fn ((_, _, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty valbinds)
+                                                end
+  | freeVarsInDec (bound, IgnoreDec exp) = (bound, freeVarsInExp (bound, exp))
+  | freeVarsInDec (bound, DatatypeDec datbinds) = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => USyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, USyntax.VIdSet.empty)
+  | freeVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (USyntax.VIdSet.add (USyntax.VIdSet.add (bound, conName), tagName), USyntax.VIdSet.empty)
+  | freeVarsInDec (bound, ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = (USyntax.VIdSet.add (bound, conName), USyntax.VIdSet.empty)
+  | freeVarsInDec (bound, ExportValue exp) = (bound, freeVarsInExp (bound, exp))
+  | freeVarsInDec (bound, ExportModule exps) = (bound, Vector.foldl (fn ((name, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps)
+  | freeVarsInDec (bound, GroupDec (_, decs)) = List.foldl (fn (dec, (bound, acc)) => let val (bound, set) = freeVarsInDec (bound, dec)
+                                                                                      in (bound, USyntax.VIdSet.union (acc, set))
+                                                                                      end) (bound, USyntax.VIdSet.empty) decs
+
 local
     fun isLongStrId(VarExp(USyntax.MkVId(name, n)), USyntax.MkStrId(name', n'), []) = n = n' andalso name = name'
       | isLongStrId(SProjectionExp(exp, StructLabel strid), strid0, stridLast :: strids) = strid = stridLast andalso isLongStrId(exp, strid0, strids)
