@@ -33,7 +33,14 @@ datatype Pat = WildcardPat
              | VectorPat of Pat vector * bool * Ty
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyName * ConBind list
-datatype Exp = SConExp of Syntax.SCon
+datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
+                | RaiseOp of SourcePos.span * Ty (* unary *)
+                | ListOp of Ty (* The arguments are the elements *)
+                | VectorOp of Ty (* The arguments are the elements *)
+                | RecordEqualityOp (* The argument will be the record of equalities *)
+                | DataTagOp (* unary *)
+                | DataPayloadOp (* unary *)
+datatype Exp = PrimExp of PrimOp * Exp vector
              | VarExp of USyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
              | LetExp of Dec * Exp
@@ -42,18 +49,12 @@ datatype Exp = SConExp of Syntax.SCon
                             , exnName : USyntax.VId
                             , handler : Exp
                             }
-             | RaiseExp of SourcePos.span * Exp
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of USyntax.VId * Ty * Exp
              | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
-             | ListExp of Exp vector * Ty
-             | VectorExp of Exp vector * Ty
              | TyAbsExp of TyVar * Kind * Exp
              | TyAppExp of Exp * Ty
-             | RecordEqualityExp of (Syntax.Label * Exp) list
-             | DataTagExp of Exp (* * TyName *)
-             | DataPayloadExp of Exp (* * USyntax.LongVId * TyName *)
              | StructExp of { valMap : Path Syntax.VIdMap.map
                             , strMap : Path Syntax.StrIdMap.map
                             , exnTagMap : Path Syntax.VIdMap.map
@@ -73,6 +74,13 @@ datatype Exp = SConExp of Syntax.SCon
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of USyntax.VIdSet.set option * Dec list
+fun SConExp scon = PrimExp (SConOp scon, vector [])
+fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp (span, ty), vector [exp])
+fun ListExp (exps, elemTy) = PrimExp (ListOp elemTy, exps)
+fun VectorExp (exps, elemTy) = PrimExp (VectorOp elemTy, exps)
+fun RecordEqualityExp fields = PrimExp (RecordEqualityOp, vector [RecordExp fields])
+fun DataTagExp exp = PrimExp (DataTagOp, vector [exp])
+fun DataPayloadExp exp = PrimExp (DataPayloadOp, vector [exp])
 fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
 fun TuplePat xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -173,27 +181,28 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
         fun doDatBind (DatBind (tyvars, tyname, conbinds)) = let val subst' = List.foldl (fn (tv, subst) => if USyntax.TyVarMap.inDomain (subst, tv) then #1 (USyntax.TyVarMap.remove (subst, tv)) else subst) subst tyvars (* TODO: use fresh tyvar if necessary *)
                                                              in DatBind (tyvars, tyname, List.map (#doConBind (substTy subst')) conbinds)
                                                              end
-        fun doExp (exp as SConExp _) = exp
+        fun doPrimOp (primOp as SConOp _) = primOp
+          | doPrimOp (RaiseOp (span, ty)) = RaiseOp (span, doTy ty)
+          | doPrimOp (ListOp ty) = ListOp (doTy ty)
+          | doPrimOp (VectorOp ty) = VectorOp (doTy ty)
+          | doPrimOp (primOp as RecordEqualityOp) = primOp
+          | doPrimOp (primOp as DataTagOp) = primOp
+          | doPrimOp (primOp as DataPayloadOp) = primOp
+        fun doExp (PrimExp (primOp, exps)) = PrimExp (doPrimOp primOp, Vector.map doExp exps)
           | doExp (exp as VarExp _) = exp
           | doExp (RecordExp fields) = RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
           | doExp (LetExp (dec, exp)) = LetExp (doDec dec, doExp exp)
           | doExp (AppExp (exp1, exp2)) = AppExp (doExp exp1, doExp exp2)
           | doExp (HandleExp { body, exnName, handler }) = HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
-          | doExp (RaiseExp (span, exp)) = RaiseExp (span, doExp exp)
           | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
           | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
           | doExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
           | doExp (ProjectionExp { label, recordTy, fieldTy }) = ProjectionExp { label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
-          | doExp (ListExp (xs, ty)) = ListExp (Vector.map doExp xs, doTy ty)
-          | doExp (VectorExp (xs, ty)) = VectorExp (Vector.map doExp xs, doTy ty)
           | doExp (TyAbsExp (tv, kind, exp)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
                                                    TyAbsExp (tv, kind, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
                                                else
                                                    TyAbsExp (tv, kind, doExp exp)
           | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
-          | doExp (RecordEqualityExp fields) = RecordEqualityExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
-          | doExp (DataTagExp exp) = DataTagExp (doExp exp)
-          | doExp (DataPayloadExp exp) = DataPayloadExp (doExp exp)
           | doExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = StructExp { valMap = valMap
                                                                                      , strMap = strMap
                                                                                      , exnTagMap = exnTagMap
@@ -240,13 +249,19 @@ fun freeTyVarsInPat (bound, WildcardPat) = USyntax.TyVarSet.empty
   | freeTyVarsInPat (bound, ConPat (path, SOME innerPat, tyargs)) = List.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) (freeTyVarsInPat (bound, innerPat)) tyargs
   | freeTyVarsInPat (bound, LayeredPat (_, ty, innerPat)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInPat (bound, innerPat))
   | freeTyVarsInPat (bound, VectorPat (pats, ellipsis, elemTy)) = Vector.foldr (fn (pat, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat))) (freeTyVarsInTy (bound, elemTy)) pats
-fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, SConExp _) = USyntax.TyVarSet.empty
+fun freeTyVarsInPrimOp (bound, SConOp _) = USyntax.TyVarSet.empty
+  | freeTyVarsInPrimOp (bound, RaiseOp (span, ty)) = freeTyVarsInTy (bound, ty)
+  | freeTyVarsInPrimOp (bound, ListOp ty) = freeTyVarsInTy (bound, ty)
+  | freeTyVarsInPrimOp (bound, VectorOp ty) = freeTyVarsInTy (bound, ty)
+  | freeTyVarsInPrimOp (bound, RecordEqualityOp) = USyntax.TyVarSet.empty
+  | freeTyVarsInPrimOp (bound, DataTagOp) = USyntax.TyVarSet.empty
+  | freeTyVarsInPrimOp (bound, DataPayloadOp) = USyntax.TyVarSet.empty
+fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, exps)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInPrimOp (bound, primOp)) exps
   | freeTyVarsInExp (bound, VarExp _) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty fields
   | freeTyVarsInExp (bound, LetExp (dec, exp)) = USyntax.TyVarSet.union (freeTyVarsInDec (bound, dec), freeTyVarsInExp (bound, exp))
   | freeTyVarsInExp (bound, AppExp (exp1, exp2)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), freeTyVarsInExp (bound, exp2))
   | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, body), freeTyVarsInExp (bound, handler))
-  | freeTyVarsInExp (bound, RaiseExp (span, exp)) = freeTyVarsInExp (bound, exp)
   | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp2), freeTyVarsInExp (bound, exp3)))
   | freeTyVarsInExp (bound, CaseExp (span, exp, ty, matches)) = let val acc = freeTyVarsInExp (bound, exp)
                                                                     val acc = USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
@@ -254,13 +269,8 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, SConExp _) = USyntax.TyVarSet
                                                                 end
   | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
   | freeTyVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, recordTy), freeTyVarsInTy (bound, fieldTy))
-  | freeTyVarsInExp (bound, ListExp (xs, ty)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInTy (bound, ty)) xs
-  | freeTyVarsInExp (bound, VectorExp (xs, ty)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInTy (bound, ty)) xs
   | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
-  | freeTyVarsInExp (bound, RecordEqualityExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty fields
-  | freeTyVarsInExp (bound, DataTagExp exp) = freeTyVarsInExp (bound, exp)
-  | freeTyVarsInExp (bound, DataPayloadExp exp) = freeTyVarsInExp (bound, exp)
   | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, SProjectionExp (exp, label)) = freeTyVarsInExp (bound, exp)
 and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
@@ -297,7 +307,7 @@ fun varsInPat WildcardPat = USyntax.VIdSet.empty
   | varsInPat (LayeredPat (vid, ty, innerPat)) = USyntax.VIdSet.add (varsInPat innerPat, vid)
   | varsInPat (VectorPat (pats, wildcard, ty)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, varsInPat pat)) USyntax.VIdSet.empty pats
 
-fun freeVarsInExp (bound : USyntax.VIdSet.set, SConExp _) = USyntax.VIdSet.empty
+fun freeVarsInExp (bound : USyntax.VIdSet.set, PrimExp (primOp, exps)) = Vector.foldl (fn (exp, acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps
   | freeVarsInExp (bound, VarExp vid) = if USyntax.VIdSet.member (bound, vid) then
                                             USyntax.VIdSet.empty
                                         else
@@ -308,18 +318,12 @@ fun freeVarsInExp (bound : USyntax.VIdSet.set, SConExp _) = USyntax.VIdSet.empty
                                                end
   | freeVarsInExp (bound, AppExp (exp1, exp2)) = USyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2))
   | freeVarsInExp (bound, HandleExp { body, exnName, handler }) = USyntax.VIdSet.union (freeVarsInExp (bound, body), freeVarsInExp (USyntax.VIdSet.add (bound, exnName), handler))
-  | freeVarsInExp (bound, RaiseExp (span, exp)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = USyntax.VIdSet.union (USyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2)), freeVarsInExp (bound, exp3))
   | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (USyntax.VIdSet.union (bound, varsInPat pat), exp))) (freeVarsInExp (bound, exp)) matches
   | freeVarsInExp (bound, FnExp (vid, ty, exp)) = freeVarsInExp (USyntax.VIdSet.add (bound, vid), exp)
   | freeVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.VIdSet.empty
-  | freeVarsInExp (bound, ListExp (exps, ty)) = Vector.foldl (fn (exp, acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps
-  | freeVarsInExp (bound, VectorExp (exps, ty)) = Vector.foldl (fn (exp, acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty exps
   | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, TyAppExp (exp, ty)) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, RecordEqualityExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty fields
-  | freeVarsInExp (bound, DataTagExp exp) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, DataPayloadExp exp) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = let fun addPath (path, set) = USyntax.VIdSet.add (set, rootOfPath path)
                                                                                   in List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
                                                                                                 [Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty valMap
@@ -381,7 +385,14 @@ fun print_Pat WildcardPat = "WildcardPat"
                                       )
   | print_Pat (RecordPat(x, true)) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
   | print_Pat (VectorPat _) = "VectorPat"
-fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
+fun print_PrimOp (SConOp scon) = "SConOp " ^ Syntax.print_SCon scon
+  | print_PrimOp (RaiseOp ty) = "RaiseOp"
+  | print_PrimOp (ListOp ty) = "ListOp"
+  | print_PrimOp (VectorOp ty) = "VectorOp"
+  | print_PrimOp RecordEqualityOp = "RecordEqualityOp"
+  | print_PrimOp DataTagOp = "DataTagOp"
+  | print_PrimOp DataPayloadOp = "DataPayloadOp"
+fun print_Exp (PrimExp (primOp, x)) = "PrimExp(<primOp>," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] x) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
@@ -390,18 +401,12 @@ fun print_Exp (SConExp x) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (LetExp(dec,x)) = "LetExp(" ^ print_Dec dec ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (HandleExp{body,exnName,handler}) = "HandleExp{body=" ^ print_Exp body ^ ",exnName=" ^ USyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler ^ ")"
-  | print_Exp (RaiseExp(span,x)) = "RaiseExp(" ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
-  | print_Exp (ListExp _) = "ListExp"
-  | print_Exp (VectorExp _) = "VectorExp"
   | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
-  | print_Exp (RecordEqualityExp(fields)) = "RecordEqualityExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ ")"
-  | print_Exp (DataTagExp exp) = "DataTagExp(" ^ print_Exp exp ^ ")"
-  | print_Exp (DataPayloadExp exp) = "DataPayloadExp(" ^ print_Exp exp ^ ")"
   | print_Exp (StructExp _) = "StructExp"
   | print_Exp (SProjectionExp _) = "SProjectionExp"
 and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
@@ -640,13 +645,13 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
           val matches'' = if List.exists (fn (pat, _) => isExhaustive pat) matches' then
                               matches'
                           else
-                              matches' @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, F.VarExp(exnName)))]
+                              matches' @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, (* TODO: type of raise *) F.RecordType [], F.VarExp(exnName)))]
       in F.HandleExp { body = toFExp(ctx, env, exp)
                      , exnName = exnName
                      , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(exnName), exnTy, matches'')
                      }
       end
-  | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, toFExp(ctx, env, exp))
+  | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType [], toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
 and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))

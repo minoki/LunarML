@@ -15,6 +15,9 @@ local table = table
 local table_pack = table.pack
 local table_unpack = table.unpack
 
+local function _Unit_EQUAL(t)
+  return true
+end
 local function _Record_EQUAL(fields)
   return function(t)
     local a, b = t[1], t[2]
