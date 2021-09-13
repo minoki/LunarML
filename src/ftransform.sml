@@ -392,7 +392,7 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp))) = [F.ValDec (F.SimpleBind (vi
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
 
-structure EliminateVariables = struct
+structure Inliner = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref }
 datatype InlineExp = Path of F.Path
@@ -469,34 +469,10 @@ fun uninlineExp (Path path) = F.PathToExp path
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
-fun tryInlineExp (F.VarExp vid) = SOME (Path (F.Root vid))
-  | tryInlineExp (F.SProjectionExp (exp, label)) = (case tryInlineExp exp of
-                                                        SOME (Path path) => SOME (Path (F.Child (path, label)))
-                                                      | _ => NONE
-                                                   )
-  | tryInlineExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = SOME (StructExp { valMap = valMap
-                                                                                            , strMap = strMap
-                                                                                            , exnTagMap = exnTagMap
-                                                                                            , equalityMap = equalityMap
-                                                                                            }
-                                                                                 )
-  | tryInlineExp (F.FnExp (vid, paramTy, body)) = if costOfExp body <= INLINE_THRESHOLD then
-                                                      SOME (FnExp (vid, paramTy, body))
-                                                  else
-                                                      NONE
-  | tryInlineExp (F.TyAbsExp (tv, kind, exp)) = (case tryInlineExp exp of
-                                                     SOME iexp => SOME (TyAbsExp (tv, kind, iexp))
-                                                   | NONE => NONE
-                                                )
-  | tryInlineExp (F.TyAppExp (exp, ty)) = (case tryInlineExp exp of
-                                               SOME iexp => SOME (TyAppExp (iexp, ty))
-                                             | NONE => NONE
-                                          )
-  | tryInlineExp _ = NONE
-fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
-                                         , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
-                                         , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
-                                         }
+fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
+                          , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
+                          , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
+                          }
     = let fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#vidMap env, vid) of
                                                              SOME (Path path) => doPath env path
                                                            | SOME iexp => (path, SOME iexp)
@@ -656,7 +632,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
          }
       end
 end (* local *)
-end (* structure EliminateVariables *)
+end (* structure Inliner *)
 
 structure Fuse = struct
 local structure F = FSyntax in
@@ -789,19 +765,19 @@ end (* structure FlattenLet *)
 
 structure FTransform = struct
 type Env = { desugarPatternMatches : DesugarPatternMatches.Env
-           , eliminateVariables : EliminateVariables.Env
+           , inliner : Inliner.Env
            , fuse : Fuse.Env
            }
 val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEnv
-                       , eliminateVariables = EliminateVariables.emptyEnv
+                       , inliner = Inliner.emptyEnv
                        , fuse = Fuse.emptyEnv
                        }
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
                                       val decs = DecomposeValRec.doDecs decs
                                       val decs = FlattenLet.doDecs decs
-                                      val (evEnv, decs) = #doDecs (EliminateVariables.eliminateVariables ctx) (#eliminateVariables env) decs
+                                      val (inlinerEnv, decs) = #doDecs (Inliner.run ctx) (#inliner env) decs
                                       val (fuseEnv, decs) = #doDecs (Fuse.fuse ctx) (#fuse env) decs
-                              in ({desugarPatternMatches = dpEnv, eliminateVariables = evEnv, fuse = fuseEnv}, decs)
+                              in ({desugarPatternMatches = dpEnv, inliner = inlinerEnv, fuse = fuseEnv}, decs)
                               end
 end (* structure FTransform *)
 
