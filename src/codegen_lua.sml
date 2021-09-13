@@ -936,6 +936,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                                                                                      | F.EqualityLabel (Syntax.MkTyCon name) => name ^ ".="
                                                                    in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
                                                                    end
+  | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
@@ -957,6 +958,11 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
                                                                                        end
                                                ) ([], []) valbinds
       in decs @ assignments
+      end
+  | doDec ctx env (F.UnpackDec (tv, kind, vid, ty, exp))
+    = let val luavid = VIdToLua vid
+          val (env', dec) = declareIfNotHoisted (env, [luavid])
+      in dec @ doExpTo ctx env' exp (AssignTo luavid)
       end
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)

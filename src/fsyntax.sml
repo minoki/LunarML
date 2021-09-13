@@ -18,7 +18,7 @@ datatype Ty = TyVar of TyVar
             | AppType of { applied : Ty, arg : Ty }
             | FnType of Ty * Ty
             | ForallType of TyVar * Kind * Ty
-            (* ExistsType of TyVar * Kind * Ty *)
+            | ExistsType of TyVar * Kind * Ty
             | SigType of { valMap : Ty Syntax.VIdMap.map (* id status? *)
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
@@ -61,12 +61,12 @@ datatype Exp = PrimExp of PrimOp * Exp vector
                             , equalityMap : Path Syntax.TyConMap.map
                             }
              | SProjectionExp of Exp * SLabel
-     (* PackExp *)
+             | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
      and ValBind = SimpleBind of USyntax.VId * Ty * Exp
                  | TupleBind of (USyntax.VId * Ty) list * Exp
-                 (* UnpackingBind *)
      and Dec = ValDec of ValBind
              | RecValDec of (USyntax.VId * Ty * Exp) list
+             | UnpackDec of TyVar * Kind * USyntax.VId * Ty * Exp
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
@@ -122,6 +122,10 @@ fun occurCheck tv =
                                                     false
                                                 else
                                                     check ty
+          | check (ExistsType(tv', kind, ty)) = if USyntax.eqUTyVar(tv, tv') then
+                                                    false
+                                                else
+                                                    check ty
           | check (SigType { valMap, strMap, exnTags, equalityMap }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap orelse Syntax.TyConMap.exists check equalityMap
     in check
     end
@@ -144,6 +148,15 @@ fun substituteTy (tv, replacement) =
                                                         end
                                                     else
                                                         ForallType(tv', kind, go ty')
+          | go (ty as ExistsType(tv', kind, ty')) = if USyntax.eqUTyVar(tv, tv') then
+                                                        ty
+                                                    else if occurCheck tv' replacement then
+                                                        (* TODO: generate fresh type variable *)
+                                                        let val tv'' = raise Fail "FSyntax.substituteTy: not implemented yet"
+                                                        in ExistsType(tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
+                                                        end
+                                                    else
+                                                        ExistsType(tv', kind, go ty')
           | go (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map go valMap
                                                                             , strMap = Syntax.StrIdMap.map go strMap
                                                                             , exnTags = exnTags
@@ -165,6 +178,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                    ForallType (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
                                                else
                                                    ForallType (tv, kind, doTy ty)
+          | doTy (ExistsType (tv, kind, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                                   ExistsType (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
+                                               else
+                                                   ExistsType (tv, kind, doTy ty)
           | doTy (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
                                                                               , strMap = Syntax.StrIdMap.map doTy strMap
                                                                               , exnTags = exnTags
@@ -202,6 +219,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                    TyAbsExp (tv, kind, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
                                                else
                                                    TyAbsExp (tv, kind, doExp exp)
+          | doExp (PackExp { payloadTy, exp, packageTy }) = PackExp { payloadTy = doTy payloadTy, exp = doExp exp, packageTy = doTy packageTy }
           | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
           | doExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = StructExp { valMap = valMap
                                                                                      , strMap = strMap
@@ -211,6 +229,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doExp (SProjectionExp (exp, label)) = SProjectionExp (doExp exp, label)
         and doDec (ValDec valbind) = ValDec (doValBind valbind)
           | doDec (RecValDec valbinds) = RecValDec (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp)) valbinds)
+          | doDec (UnpackDec (tv, kind, vid, ty, exp)) = UnpackDec (tv, kind, vid, if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                                                                       #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty
+                                                                                   else
+                                                                                       doTy ty, doExp exp)
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
@@ -237,6 +259,7 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
   | freeTyVarsInTy (bound, AppType { applied, arg }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, applied), freeTyVarsInTy (bound, arg))
   | freeTyVarsInTy (bound, FnType (ty1, ty2)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
   | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
+  | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags, equalityMap }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
                                                                                    val acc = Syntax.StrIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
                                                                                in Syntax.TyConMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc equalityMap
@@ -259,7 +282,9 @@ fun freeTyVarsInPrimOp (bound, SConOp _) = USyntax.TyVarSet.empty
 fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, exps)) = Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) (freeTyVarsInPrimOp (bound, primOp)) exps
   | freeTyVarsInExp (bound, VarExp _) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty fields
-  | freeTyVarsInExp (bound, LetExp (dec, exp)) = USyntax.TyVarSet.union (freeTyVarsInDec (bound, dec), freeTyVarsInExp (bound, exp))
+  | freeTyVarsInExp (bound, LetExp (dec, exp)) = let val (bound, set) = freeTyVarsInDec (bound, dec)
+                                                 in USyntax.TyVarSet.union (set, freeTyVarsInExp (bound, exp))
+                                                 end
   | freeTyVarsInExp (bound, AppExp (exp1, exp2)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), freeTyVarsInExp (bound, exp2))
   | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, body), freeTyVarsInExp (bound, handler))
   | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp2), freeTyVarsInExp (bound, exp3)))
@@ -273,30 +298,40 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, exps)) = Vec
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
   | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, SProjectionExp (exp, label)) = freeTyVarsInExp (bound, exp)
+  | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = USyntax.TyVarSet.union (USyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInTy (bound, packageTy)), freeTyVarsInExp (bound, exp))
 and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
   | freeTyVarsInValBind (bound, TupleBind (binds, exp)) = List.foldl (fn ((vid, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) (freeTyVarsInExp (bound, exp)) binds
-and freeTyVarsInDec (bound, ValDec valbind) = freeTyVarsInValBind (bound, valbind)
-  | freeTyVarsInDec (bound, RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => USyntax.TyVarSet.union (USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty)), freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty valbinds
-  | freeTyVarsInDec (bound, IgnoreDec exp) = freeTyVarsInExp (bound, exp)
-  | freeTyVarsInDec (bound, DatatypeDec datbinds) = List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
-                                                                   let val bound = USyntax.TyVarSet.addList (bound, tyvars)
-                                                                   in List.foldl (fn (ConBind (vid, NONE), acc) => acc
-                                                                                 | (ConBind (vid, SOME ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
-                                                                                 ) acc conbinds
-                                                                   end
-                                                               ) USyntax.TyVarSet.empty datbinds
-  | freeTyVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (case payloadTy of
-                                                                                 NONE => USyntax.TyVarSet.empty
-                                                                               | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
+and freeTyVarsInDec (bound, ValDec valbind) = (bound, freeTyVarsInValBind (bound, valbind))
+  | freeTyVarsInDec (bound, RecValDec valbinds) = (bound, List.foldl (fn ((vid, ty, exp), acc) => USyntax.TyVarSet.union (USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty)), freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty valbinds)
+  | freeTyVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = let val set1 = freeTyVarsInExp (bound, exp)
+                                                                      val bound = USyntax.TyVarSet.add (bound, tv)
+                                                                  in (bound, USyntax.TyVarSet.union (set1, freeTyVarsInTy (bound, ty)))
+                                                                  end
+  | freeTyVarsInDec (bound, IgnoreDec exp) = (bound, freeTyVarsInExp (bound, exp))
+  | freeTyVarsInDec (bound, DatatypeDec datbinds) = let val bound = List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => USyntax.TyVarSet.add (bound, tyNameToTyVar tyname)) bound datbinds
+                                                    in (bound, List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
+                                                                              let val bound = USyntax.TyVarSet.addList (bound, tyvars)
+                                                                              in List.foldl (fn (ConBind (vid, NONE), acc) => acc
+                                                                                            | (ConBind (vid, SOME ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
+                                                                                            ) acc conbinds
+                                                                              end
+                                                                          ) USyntax.TyVarSet.empty datbinds)
+                                                    end
+  | freeTyVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (bound, case payloadTy of
+                                                                                        NONE => USyntax.TyVarSet.empty
+                                                                                      | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
                                                                             )
-  | freeTyVarsInDec (bound, ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = (case payloadTy of
-                                                                                             NONE => USyntax.TyVarSet.empty
-                                                                                           | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
+  | freeTyVarsInDec (bound, ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = (bound, case payloadTy of
+                                                                                                    NONE => USyntax.TyVarSet.empty
+                                                                                                  | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
                                                                                         )
-  | freeTyVarsInDec (bound, ExportValue exp) = freeTyVarsInExp (bound, exp)
-  | freeTyVarsInDec (bound, ExportModule exports) = Vector.foldl (fn ((name, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty exports
+  | freeTyVarsInDec (bound, ExportValue exp) = (bound, freeTyVarsInExp (bound, exp))
+  | freeTyVarsInDec (bound, ExportModule exports) = (bound, Vector.foldl (fn ((name, exp), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty exports)
   | freeTyVarsInDec (bound, GroupDec (v, decs)) = freeTyVarsInDecs (bound, decs)
-and freeTyVarsInDecs (bound, decs) = List.foldl (fn (dec, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInDec (bound, dec))) USyntax.TyVarSet.empty decs
+and freeTyVarsInDecs (bound, decs) = List.foldl (fn (dec, (bound, acc)) => let val (bound, vars) = freeTyVarsInDec (bound, dec)
+                                                                           in (bound, USyntax.TyVarSet.union (acc, vars))
+                                                                           end
+                                                ) (bound, USyntax.TyVarSet.empty) decs
 
 fun varsInPat WildcardPat = USyntax.VIdSet.empty
   | varsInPat (SConPat _) = USyntax.VIdSet.empty
@@ -333,11 +368,13 @@ fun freeVarsInExp (bound : USyntax.VIdSet.set, PrimExp (primOp, exps)) = Vector.
                                                                                                 ]
                                                                                   end
   | freeVarsInExp (bound, SProjectionExp (exp, label)) = freeVarsInExp (bound, exp)
+  | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = freeVarsInExp (bound, exp)
 and freeVarsInDec (bound, ValDec (SimpleBind (vid, ty, exp))) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, ValDec (TupleBind (binds, exp))) = (List.foldl (fn ((vid, ty), bound) => USyntax.VIdSet.add (bound, vid)) bound binds, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, RecValDec valbinds) = let val bound = List.foldl (fn ((vid, _, _), bound) => USyntax.VIdSet.add (bound, vid)) bound valbinds
                                                 in (bound, List.foldl (fn ((_, _, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty valbinds)
                                                 end
+  | freeVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, IgnoreDec exp) = (bound, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, DatatypeDec datbinds) = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => USyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, USyntax.VIdSet.empty)
   | freeVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (USyntax.VIdSet.add (USyntax.VIdSet.add (bound, conName), tagName), USyntax.VIdSet.empty)
@@ -373,6 +410,7 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (AppType { applied, arg }) = "AppType{applied=" ^ print_Ty applied ^ ",arg=" ^ print_Ty arg ^ "}"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,kind,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
+  | print_Ty (ExistsType(tv,kind,x)) = "ExistsType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (SigType _) = "SigType"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
@@ -409,10 +447,12 @@ fun print_Exp (PrimExp (primOp, x)) = "PrimExp(<primOp>," ^ String.concatWith ",
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (StructExp _) = "StructExp"
   | print_Exp (SProjectionExp _) = "SProjectionExp"
+  | print_Exp (PackExp { payloadTy, exp, packageTy }) = "PackExp{payloadTy=" ^ print_Ty payloadTy ^ ",exp=" ^ print_Exp exp ^ ",packageTy=" ^ print_Ty packageTy ^ "}"
 and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec valbinds) = "RecValDec(" ^ Syntax.print_list (fn (vid, ty, exp) => "(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")") valbinds ^ ")"
+  | print_Dec (UnpackDec (tv, kind, vid, ty, exp)) = "UnpackDec"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"

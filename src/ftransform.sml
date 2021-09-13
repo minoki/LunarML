@@ -120,6 +120,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                                                            , equalityMap = equalityMap
                                                                                            }
                    | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
+                   | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }
                    | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (vid'))]) =>
                                               if USyntax.eqVId(vid, vid') then
                                                   doExp env exp
@@ -158,6 +159,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | doDec env (F.RecValDec valbinds) = let val env = List.foldl (fn ((v, ty, _), env) => addVar(env, v, ty)) env valbinds
                                                  in (env, F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp env exp)) valbinds))
                                                  end
+            | doDec env (F.UnpackDec (tv, kind, vid, ty, exp)) = let val env' = addVar(env, vid, ty)
+                                                                 in (env', F.UnpackDec (tv, kind, vid, ty, doExp env exp))
+                                                                 end
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (List.foldl doDatBind env datbinds, dec) (* TODO: equality *)
             | doDec env (dec as F.ExceptionDec { conName, tagName, payloadTy })
@@ -327,6 +331,7 @@ fun doExp (F.PrimExp (primOp, exps)) = F.PrimExp (primOp, Vector.map doExp exps)
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
   | doExp (F.StructExp maps) = F.StructExp maps
   | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
+  | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
 and doDec (F.ValDec (F.SimpleBind (vid, ty, exp))) = [F.ValDec (F.SimpleBind (vid, ty, doExp exp))]
   | doDec (F.ValDec (F.TupleBind (binds, exp))) = [F.ValDec (F.TupleBind (binds, doExp exp))]
   | doDec (F.RecValDec valbinds)
@@ -376,6 +381,7 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp))) = [F.ValDec (F.SimpleBind (vi
                                        end
                     ) [] sccs
       end
+  | doDec (F.UnpackDec (tv, kind, vid, ty, exp)) = [F.UnpackDec (tv, kind, vid, ty, doExp exp)]
   | doDec (F.IgnoreDec exp) = [F.IgnoreDec (doExp exp)]
   | doDec (F.DatatypeDec datbinds) = [F.DatatypeDec datbinds]
   | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
@@ -433,8 +439,10 @@ fun costOfExp (F.PrimExp (primOp, exps)) = Vector.foldl (fn (exp, acc) => acc + 
   | costOfExp (F.TyAppExp (exp, ty)) = costOfExp exp
   | costOfExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = 1
   | costOfExp (F.SProjectionExp (exp, _)) = costOfExp exp
+  | costOfExp (F.PackExp { payloadTy, exp, packageTy }) = costOfExp exp
 and costOfDec (F.ValDec valbind) = costOfValBind valbind
   | costOfDec (F.RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => acc + costOfExp exp) 0 valbinds
+  | costOfDec (F.UnpackDec (tv, kind, vid, ty, exp)) = costOfExp exp
   | costOfDec (F.IgnoreDec exp) = costOfExp exp
   | costOfDec (F.DatatypeDec datbinds) = List.length datbinds
   | costOfDec (F.ExceptionDec { conName, tagName, payloadTy }) = 1
@@ -602,6 +610,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                         )
                                                          | (exp, _) => (F.SProjectionExp (exp, label), NONE)
                                                       )
+                   | F.PackExp { payloadTy, exp, packageTy } => (F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }, NONE)
                 )
           and doDec (env : Env) (F.ValDec valbind) = let val (env, valbind) = doValBind env valbind
                                                      in (env, F.ValDec valbind)
@@ -613,6 +622,7 @@ fun eliminateVariables (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                                      end
                                                  in go (env, [], valbinds)
                                                  end
+            | doDec env (F.UnpackDec (tv, kind, vid, ty, exp)) = (removeFromEnv (vid, env), F.UnpackDec (tv, kind, vid, ty, doExp env exp))
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, dec) (* TODO *)
@@ -696,9 +706,11 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                            , equalityMap = equalityMap
                                                                                            }
                    | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
+                   | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }
                 )
           and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
             | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp env exp)) valbinds))
+            | doDec env (F.UnpackDec (tv, kind, vid, ty, exp)) = (env, F.UnpackDec (tv, kind, vid, ty, doExp env exp))
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
             | doDec env (dec as F.ExceptionDec _) = (env, dec)
@@ -747,6 +759,7 @@ fun doExp (F.PrimExp (primOp, xs)) = F.PrimExp (primOp, Vector.map doExp xs)
                                                                                  , equalityMap = equalityMap
                                                                                  }
   | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
+  | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
 and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
                                                           val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
                                                       in if List.null decs then
@@ -762,6 +775,7 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = ext
                                                           F.GroupDec (NONE, decs @ [dec])
                                                    end
   | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn (vid, ty, exp) => (vid, ty, doExp exp)) valbinds)
+  | doDec (F.UnpackDec (tv, kind, vid, ty, exp)) = F.UnpackDec (tv, kind, vid, ty, doExp exp)
   | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
   | doDec (dec as F.DatatypeDec _) = dec
   | doDec (dec as F.ExceptionDec _) = dec
@@ -815,6 +829,7 @@ fun isDiscardable (F.PrimExp (primOp, xs)) = isDiscardablePrimOp primOp andalso 
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
   | isDiscardable (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = true
   | isDiscardable (F.SProjectionExp (exp, label)) = isDiscardable exp
+  | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
 (* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
 fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.SConPat _) = USyntax.VIdSet.empty
@@ -882,6 +897,9 @@ fun doExp (F.PrimExp (primOp, xs) : F.Exp) : USyntax.VIdSet.set * F.Exp
   | doExp (F.SProjectionExp (exp, label)) = let val (used, exp) = doExp exp
                                             in (used, F.SProjectionExp (exp, label))
                                             end
+  | doExp (F.PackExp { payloadTy, exp, packageTy }) = let val (used, exp) = doExp exp
+                                                      in (used, F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy })
+                                                      end
 and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
                             in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                             end
@@ -945,6 +963,11 @@ and doIgnoredExp (exp as F.PrimExp (primOp, xs))
                                           end
   | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = (USyntax.VIdSet.empty, [])
   | doIgnoredExp (F.SProjectionExp (exp, label)) = doIgnoredExp exp
+  | doIgnoredExp (F.PackExp { payloadTy, exp, packageTy }) = let val (used, exp) = doIgnoredExpAsExp exp
+                                                             in case exp of
+                                                                    F.RecordExp [] => (used, [])
+                                                                  | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
+                                                             end
 (* doDec : USyntax.VIdSet.set * F.Dec -> USyntax.VIdSet.set * F.Dec *)
 and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : USyntax.VIdSet.set * F.Dec list
     = if not (USyntax.VIdSet.member (used, vid)) then
@@ -985,6 +1008,18 @@ and doDec (used : USyntax.VIdSet.set, F.ValDec (F.SimpleBind (vid, ty, exp))) : 
              in (used, [F.RecValDec valbinds])
              end
       end
+  | doDec (used, F.UnpackDec (tv, kind, vid, ty, exp))
+    = if not (USyntax.VIdSet.member (used, vid)) then
+          if isDiscardable exp then
+              (used, [])
+          else
+              let val (used', exps) = doIgnoredExp exp
+              in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+              end
+      else
+          let val (used', exp') = doExp exp
+          in (USyntax.VIdSet.union (used, used'), [F.UnpackDec (tv, kind, vid, ty, exp')])
+          end
   | doDec (used, F.IgnoreDec exp) = let val (used', exps) = doIgnoredExp exp
                                     in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
                                     end
@@ -1019,6 +1054,7 @@ and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, d
 and definedInDecs decs = List.foldl (fn (dec, s) => USyntax.VIdSet.union(definedInDec dec, s)) USyntax.VIdSet.empty decs
 and definedInDec (F.ValDec valbind) = definedInValBind valbind
   | definedInDec (F.RecValDec valbinds) = List.foldl (fn ((vid, _, _), s) => USyntax.VIdSet.add(s, vid)) USyntax.VIdSet.empty valbinds
+  | definedInDec (F.UnpackDec (tv, kind, vid, ty, exp)) = USyntax.VIdSet.singleton vid
   | definedInDec (F.IgnoreDec _) = USyntax.VIdSet.empty
   | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind(vid, _), s) => USyntax.VIdSet.add(s, vid)) s conbinds) USyntax.VIdSet.empty datbinds
   | definedInDec (F.ExceptionDec { conName, tagName, ... }) = USyntax.VIdSet.add(USyntax.VIdSet.singleton conName, tagName)
