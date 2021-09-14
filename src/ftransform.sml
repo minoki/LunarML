@@ -585,7 +585,11 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                        in (uninlineExp iexp, SOME iexp)
                                                                                        end
                                                   | SOME iexp => (F.TyAppExp (exp, ty), SOME (TyAppExp (iexp, ty)))
-                                                  | NONE => (F.TyAppExp (exp, ty), NONE)
+                                                  | NONE => (case exp of
+                                                                 F.TyAbsExp (tv, kind, exp') => let val substExp = #doExp (F.substTy (USyntax.TyVarMap.singleton (tv, ty)))
+                                                                                                in substExp exp'
+                                                                                                end
+                                                               | _ => F.TyAppExp (exp, ty), NONE)
                                              end
                    | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
                                                                                              , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
