@@ -40,6 +40,7 @@ datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
                 | DataTagOp (* value argument: the data *)
                 | DataPayloadOp (* value argument: the data *)
                 | VectorFromListOp (* type argument: element type, value argument: none *)
+                | ExnInstanceofOp (* type argument: none, value arguments: exception, exception tag *)
 datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
              | VarExp of USyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
@@ -418,6 +419,7 @@ fun print_PrimOp (SConOp scon) = "SConOp " ^ Syntax.print_SCon scon
   | print_PrimOp DataTagOp = "DataTagOp"
   | print_PrimOp DataPayloadOp = "DataPayloadOp"
   | print_PrimOp VectorFromListOp = "VectorFromListOp"
+  | print_PrimOp ExnInstanceofOp = "ExnInstanceofOp"
 fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Ty x :: xs) [] tyargs) ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of

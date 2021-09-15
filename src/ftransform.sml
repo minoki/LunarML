@@ -235,7 +235,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                        | F.Child (parent, F.ValueLabel vid) => F.PathToExp (F.Child (parent, F.ExnTagLabel vid))
                                        | _ => raise Fail ("internal error: invalid exception constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val (env, payload) = genMatcher env (F.DataPayloadExp exp) payloadTy innerPat
-                       in (env, F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_exn_instanceof), F.TupleExp [exp, tag]), payload))
+                       in (env, F.SimplifyingAndalsoExp(F.PrimExp(F.ExnInstanceofOp, vector [], vector [exp, tag]), payload))
                        end
                    else
                        let val tag = case path of
@@ -259,7 +259,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                     )
                                     | F.Child (parent, F.ValueLabel vid) => F.PathToExp (F.Child (parent, F.ExnTagLabel vid))
                                     | _ => raise Fail ("internal error: invalid exception constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
-                    in (env, F.AppExp(F.LongVarExp(InitialEnv.VId_exn_instanceof), F.TupleExp [exp, tag]))
+                    in (env, F.PrimExp(F.ExnInstanceofOp, vector [], vector [exp, tag]))
                     end
                 else
                     let val tag = case path of
@@ -1016,6 +1016,7 @@ fun isDiscardablePrimOp (F.SConOp _) = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
   | isDiscardablePrimOp F.VectorFromListOp = true
+  | isDiscardablePrimOp F.ExnInstanceofOp = true
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields

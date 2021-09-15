@@ -121,7 +121,6 @@ val builtins
                     ,(VId_EQUAL_ref, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_array, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_vector, "_Vector_EQUAL")
-                    ,(VId_exn_instanceof, "_exn_instanceof")
                     (* int *)
                     ,(VId_Int_PLUS, "_Int_add") (* may raise Overflow *)
                     ,(VId_Int_MINUS, "_Int_sub") (* may raise Overflow *)
@@ -241,7 +240,6 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
                     ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
-                    ,(VId_exn_instanceof, (NamedBinaryFn "__exn_instanceof", true))
                     ,(VId_Int_PLUS,     (NamedBinaryFn "__Int_add", false))
                     ,(VId_Int_MINUS,    (NamedBinaryFn "__Int_sub", false))
                     ,(VId_Int_TIMES,    (NamedBinaryFn "__Int_mul", false))
@@ -941,6 +939,18 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_VectorOrArray_fromList" ] })
       else
           raise CodeGenError "PrimExp.VectorFromListOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
+    = if Vector.length args = 2 then
+          let val a0 = Vector.sub (args, 0)
+              val a1 = Vector.sub (args, 1)
+          in doExpCont ctx env a0 (fn (stmts0, env, a0') =>
+                                      doExpCont ctx env a1 (fn (stmts1, env, a1') =>
+                                                               putPureTo ctx env dest (stmts0 @ stmts1, { prec = ~2, exp = Fragment "__exn_instanceof(" :: #exp a0' @ [ Fragment "," ] @ #exp a1' @ [ Fragment ")" ] })
+                                                           )
+                                  )
+          end
+      else
+          raise CodeGenError "PrimExp.ExnInstanceofOp: invalid number of arguments"
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))

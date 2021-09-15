@@ -127,9 +127,6 @@ end
 local function __exn_instanceof(e, tag)
   return getmetatable(e) == _exn_meta and e.tag == tag
 end
-local function _exn_instanceof(a)
-  return __exn_instanceof(a[1], a[2])
-end
 
 local function _raise(x, location)
   local e = setmetatable({ tag = x.tag, payload = x.payload, location = location }, _exn_meta)

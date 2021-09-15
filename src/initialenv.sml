@@ -145,7 +145,6 @@ val VId_Overflow_tag = newShortVId "Overflow"
 val VId_Size_tag = newShortVId "Size"
 val VId_Subscript_tag = newShortVId "Subscript"
 val VId_Fail_tag = newShortVId "Fail"
-val VId_exn_instanceof = newShortVId "exn-instanceof"
 
 (* Overloaded *)
 val VId_abs = newVId "abs"
