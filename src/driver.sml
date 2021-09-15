@@ -98,7 +98,7 @@ type Context = { typingContext : Typing.ProgramContext
                }
 fun newContext() : Context = let val typingContext = Typing.newContext()
                              in { typingContext = typingContext
-                                , toFContext = { nextVId = #nextVId typingContext }
+                                , toFContext = typingContext
                                 }
                              end
 

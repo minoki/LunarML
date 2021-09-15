@@ -5,6 +5,7 @@
 structure DesugarPatternMatches = struct
 structure F = FSyntax
 type Context = { nextVId : int ref
+               , nextTyVar : int ref
                }
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
@@ -392,9 +393,209 @@ and doDec (F.ValDec (F.SimpleBind (vid, ty, exp))) = [F.ValDec (F.SimpleBind (vi
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
 
+structure RefreshBoundNames = struct
+local structure F = FSyntax in
+type Context = { nextVId : int ref, nextTyVar : int ref }
+type Env = { valMap : USyntax.VId USyntax.VIdMap.map
+           , tyMap : USyntax.TyVar USyntax.TyVarMap.map
+           }
+val emptyEnv : Env = { valMap = USyntax.VIdMap.empty, tyMap = USyntax.TyVarMap.empty }
+fun mergeEnv ({ valMap = valMap1, tyMap = tyMap1 } : Env, { valMap = valMap2, tyMap = tyMap2 } : Env)
+    = { valMap = USyntax.VIdMap.unionWith #2 (valMap1, valMap2)
+      , tyMap = USyntax.TyVarMap.unionWith #2 (tyMap1, tyMap2)
+      }
+fun insertVId ({ valMap, tyMap } : Env, vid, vid')
+    = { valMap = USyntax.VIdMap.insert (valMap, vid, vid')
+      , tyMap = tyMap
+      }
+fun insertTyVar ({ valMap, tyMap } : Env, tv, tv')
+    = { valMap = valMap
+      , tyMap = USyntax.TyVarMap.insert (tyMap, tv, tv')
+      }
+fun refreshVId (ctx : Context) (USyntax.MkVId (name, _)) = let val n = !(#nextVId ctx)
+                                                           in #nextVId ctx := n + 1
+                                                            ; USyntax.MkVId(name, n)
+                                                           end
+fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
+                          , doPat : Env -> F.Pat -> (* created environment *) Env * F.Pat
+                          , doExp : Env -> F.Exp -> F.Exp
+                          , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
+                          , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
+                          }
+    = let val refreshVId = refreshVId ctx
+          fun refreshTyVar (USyntax.NamedTyVar (name, eq, _)) = let val n = !(#nextTyVar ctx)
+                                                                in #nextTyVar ctx := n + 1
+                                                                 ; USyntax.NamedTyVar (name, eq, n)
+                                                                end
+            | refreshTyVar (USyntax.AnonymousTyVar _) = let val n = !(#nextTyVar ctx)
+                                                        in #nextTyVar ctx := n + 1
+                                                         ; USyntax.AnonymousTyVar n
+                                                        end
+          fun doTy env (ty as F.TyVar tv) = (case USyntax.TyVarMap.find (#tyMap env, tv) of
+                                                 SOME tv => F.TyVar tv
+                                               | NONE => ty
+                                            )
+            | doTy env (F.RecordType fields) = F.RecordType (List.map (fn (label, ty) => (label, doTy env ty)) fields)
+            | doTy env (F.AppType { applied, arg }) = F.AppType { applied = doTy env applied, arg = doTy env arg }
+            | doTy env (F.FnType (ty1, ty2)) = F.FnType (doTy env ty1, doTy env ty2)
+            | doTy env (F.ForallType (tv, kind, ty)) = let val tv' = refreshTyVar tv
+                                                       in F.ForallType (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
+                                                       end
+            | doTy env (F.ExistsType (tv, kind, ty)) = let val tv' = refreshTyVar tv
+                                                       in F.ExistsType (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
+                                                       end
+            | doTy env (F.SigType { valMap, strMap, exnTags, equalityMap }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
+                                                                                        , strMap = Syntax.StrIdMap.map (doTy env) strMap
+                                                                                        , exnTags = exnTags
+                                                                                        , equalityMap = Syntax.TyConMap.map (doTy env) equalityMap
+                                                                                        }
+          fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+                                                             SOME vid => F.Root vid
+                                                           | NONE => path
+                                                        )
+            | doPath env (F.Child (parent, label)) = F.Child (doPath env parent, label)
+          fun doPat env (pat as F.WildcardPat) = (emptyEnv, pat)
+            | doPat env (pat as F.SConPat scon) = (emptyEnv, pat)
+            | doPat env (F.VarPat (vid, ty)) = let val vid' = refreshVId vid
+                                               in (insertVId (emptyEnv, vid, vid'), F.VarPat (vid', doTy env ty))
+                                               end
+            | doPat env (F.RecordPat (fields, wildcard))
+              = let val (env', fields) = List.foldr (fn ((label, pat), (env', fields)) => let val (env'', pat) = doPat env pat
+                                                                                          in (mergeEnv (env', env''), (label, pat) :: fields)
+                                                                                          end
+                                                    ) (emptyEnv, []) fields
+                in (env', F.RecordPat (fields, wildcard))
+                end
+            | doPat env (F.ConPat (path, NONE, tyargs)) = (emptyEnv, F.ConPat (doPath env path, NONE, List.map (doTy env) tyargs))
+            | doPat env (F.ConPat (path, SOME pat, tyargs)) = let val (env', pat) = doPat env pat
+                                                              in (env', F.ConPat (doPath env path, SOME pat, List.map (doTy env) tyargs))
+                                                              end
+            | doPat env (F.LayeredPat (vid, ty, pat)) = let val vid' = refreshVId vid
+                                                            val (env', pat) = doPat env pat
+                                                        in (insertVId (env', vid, vid'), F.LayeredPat (vid', doTy env ty, pat))
+                                                        end
+            | doPat env (F.VectorPat (pats, ellipsis, ty))
+              = let val (env', pats) = Vector.foldr (fn (pat, (env', pats)) => let val (env'', pat) = doPat env pat
+                                                                               in (mergeEnv (env', env''), pat :: pats)
+                                                                               end
+                                                    ) (emptyEnv, []) pats
+                in (env', F.VectorPat (Vector.fromList pats, ellipsis, doTy env ty))
+                end
+          fun doPrimOp env (primOp as F.SConOp scon) = primOp
+            | doPrimOp env (F.RaiseOp (span, ty)) = F.RaiseOp (span, doTy env ty)
+            | doPrimOp env (F.ListOp ty) = F.ListOp (doTy env ty)
+            | doPrimOp env (F.VectorOp ty) = F.VectorOp (doTy env ty)
+            | doPrimOp env (primOp as F.RecordEqualityOp) = primOp
+            | doPrimOp env (primOp as F.DataTagOp) = primOp
+            | doPrimOp env (primOp as F.DataPayloadOp) = primOp
+          fun doExp (env : Env) (F.PrimExp (primOp, xs)) = F.PrimExp (doPrimOp env primOp, Vector.map (doExp env) xs)
+            | doExp env (exp as F.VarExp vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+                                                     SOME vid => F.VarExp vid
+                                                   | NONE => exp
+                                                )
+            | doExp env (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
+            | doExp env (F.LetExp (dec, exp)) = let val (env, dec) = doDec env dec
+                                                in F.LetExp (dec, doExp env exp)
+                                                end
+            | doExp env (F.AppExp (exp1, exp2)) = F.AppExp (doExp env exp1, doExp env exp2)
+            | doExp env (F.HandleExp { body, exnName, handler }) = let val exnName' = refreshVId exnName
+                                                                   in F.HandleExp { body = doExp env body
+                                                                                  , exnName = exnName'
+                                                                                  , handler = doExp (insertVId (env, exnName, exnName')) handler
+                                                                                  }
+                                                                   end
+            | doExp env (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp env exp1, doExp env exp2, doExp env exp3)
+            | doExp env (F.CaseExp (span, exp, ty, matches))
+              = F.CaseExp (span, doExp env exp, doTy env ty, List.map (fn (pat, exp) => let val (env', pat) = doPat env pat
+                                                                                        in (pat, doExp (mergeEnv (env, env')) exp)
+                                                                                        end) matches)
+            | doExp env (F.FnExp (vid, ty, exp)) = let val vid' = refreshVId vid
+                                                   in F.FnExp (vid', doTy env ty, doExp (insertVId (env, vid, vid')) exp)
+                                                   end
+            | doExp env (F.ProjectionExp { label, recordTy, fieldTy }) = F.ProjectionExp { label = label, recordTy = doTy env recordTy, fieldTy = doTy env fieldTy }
+            | doExp env (F.TyAbsExp (tv, kind, exp)) = let val tv' = refreshTyVar tv
+                                                       in F.TyAbsExp (tv', kind, doExp (insertTyVar (env, tv, tv')) exp)
+                                                       end
+            | doExp env (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp env exp, doTy env ty)
+            | doExp env (exp as F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = exp
+            | doExp env (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp env exp, label)
+            | doExp env (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = doTy env payloadTy
+                                                                              , exp = doExp env exp
+                                                                              , packageTy = doTy env packageTy
+                                                                              }
+          and doDec env (F.ValDec (F.SimpleBind (vid, ty, exp))) = let val vid' = refreshVId vid
+                                                                   in (insertVId (env, vid, vid'), F.ValDec (F.SimpleBind (vid', doTy env ty, doExp env exp)))
+                                                                   end
+            | doDec env (F.ValDec (F.TupleBind (binds, exp))) = let val binds' = List.map (fn (vid, ty) => (vid, refreshVId vid, doTy env ty)) binds
+                                                                in (List.foldl (fn ((vid, vid', _), env) => insertVId (env, vid, vid')) env binds', F.ValDec (F.TupleBind (List.map (fn (_, vid', ty) => (vid', ty)) binds', doExp env exp)))
+                                                                end
+            | doDec env (F.RecValDec valbinds) = let val valbinds' = List.map (fn (vid, ty, exp) => (vid, refreshVId vid, ty, exp)) valbinds
+                                                     val env = List.foldl (fn ((vid, vid', _, _), env) => insertVId (env, vid, vid')) env valbinds'
+                                                 in (env, F.RecValDec (List.map (fn (_, vid', ty, exp) => (vid', doTy env ty, doExp env exp)) valbinds'))
+                                                 end
+            | doDec env (F.UnpackDec (tv, kind, vid, ty, exp)) = let val exp = doExp env exp
+                                                                     val tv' = refreshTyVar tv
+                                                                     val env = insertTyVar (env, tv, tv')
+                                                                     val ty = doTy env ty
+                                                                     val vid' = refreshVId vid
+                                                                     val env = insertVId (env, vid, vid')
+                                                                 in (env, F.UnpackDec (tv', kind, vid', ty, exp))
+                                                                 end
+            | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
+            | doDec env (F.DatatypeDec datbinds)
+              = let fun doDatBind (F.DatBind (tyvars, tyname, conbinds), (env, datbinds))
+                        = let val tyname' = refreshTyVar tyname
+                              val (env, conbinds) = List.foldr (fn (F.ConBind (vid, optTy), (env, conbinds)) =>
+                                                                   let val vid' = refreshVId vid
+                                                                   in (insertVId (env, vid, vid'), (vid', optTy) :: conbinds)
+                                                                   end
+                                                               ) (env, []) conbinds
+                          in (insertTyVar (env, tyname, tyname'), (tyvars, tyname', conbinds) :: datbinds)
+                          end
+                    val (env, datbinds) = List.foldr doDatBind (env, []) datbinds
+                in (env, F.DatatypeDec (List.map (fn (tyvars, tyname, conbinds) =>
+                                                     let val tyvars = List.map (fn tv => (tv, refreshTyVar tv)) tyvars
+                                                         val env' = List.foldl (fn ((tv, tv'), env) => insertTyVar (env, tv, tv')) env tyvars
+                                                         fun doConBind (vid', optTy) = F.ConBind (vid', Option.map (doTy env') optTy)
+                                                     in F.DatBind (List.map #2 tyvars, tyname, List.map doConBind conbinds)
+                                                     end
+                                                 ) datbinds))
+                end
+            | doDec env (F.ExceptionDec { conName, tagName, payloadTy })
+              = let val conName' = refreshVId conName
+                    val tagName' = refreshVId tagName
+                    val payloadTy = Option.map (doTy env) payloadTy
+                in (insertVId (insertVId (env, conName, conName'), tagName, tagName'), F.ExceptionDec { conName = conName', tagName = tagName', payloadTy = payloadTy })
+                end
+            | doDec env (F.ExceptionRepDec { conName, conPath, tagPath, payloadTy })
+              = let val conName' = refreshVId conName
+                    val payloadTy = Option.map (doTy env) payloadTy
+                in (insertVId (env, conName, conName'), F.ExceptionRepDec { conName = conName', conPath = doPath env conPath, tagPath = doPath env tagPath, payloadTy = payloadTy })
+                end
+            | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
+            | doDec env (F.ExportModule xs) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) xs))
+            | doDec env (F.GroupDec (set, decs)) = let val (env, decs) = doDecs env decs
+                                                   in (env, F.GroupDec (NONE, decs))
+                                                   end
+          and doDecs env decs = let val (env, decs) = List.foldl (fn (dec, (env, decs)) => let val (env, dec) = doDec env dec
+                                                                                           in (env, dec :: decs)
+                                                                                           end
+                                                                 ) (env, []) decs
+                                in (env, List.rev decs)
+                                end
+      in { doTy = doTy
+         , doPat = doPat
+         , doExp = doExp
+         , doDec = doDec
+         , doDecs = doDecs
+         }
+      end
+end
+end
+
 structure Inliner = struct
 local structure F = FSyntax in
-type Context = { nextVId : int ref }
+type Context = { nextVId : int ref, nextTyVar : int ref }
 datatype InlineExp = VarExp of USyntax.VId
                    | StructExp of { valMap : F.Path Syntax.VIdMap.map
                                   , strMap : F.Path Syntax.StrIdMap.map
@@ -525,7 +726,10 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                             end
                    | F.AppExp (exp1, exp2) => let val (exp1, iexp1) = doExp' env exp1
                                               in case iexp1 of
-                                                     SOME (FnExp (vid, paramTy, body)) => doExp' env (F.LetExp (F.ValDec (F.SimpleBind (vid, paramTy, exp2)), body))
+                                                     SOME (FnExp (vid, paramTy, body)) => let val vid' = RefreshBoundNames.refreshVId ctx vid
+                                                                                              val body = #doExp (RefreshBoundNames.run ctx) (RefreshBoundNames.insertVId (RefreshBoundNames.emptyEnv, vid, vid')) body
+                                                                                          in doExp' env (F.LetExp (F.ValDec (F.SimpleBind (vid', paramTy, exp2)), body))
+                                                                                          end
                                                    | _ => (F.AppExp (exp1, doExp env exp2), NONE)
                                               end
                    | F.HandleExp { body, exnName, handler } => ( F.HandleExp { body = doExp env body
@@ -582,7 +786,8 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.TyAppExp (exp, ty) => let val (exp, iexp) = doExp' env exp
                                              in case iexp of
                                                     SOME (TyAbsExp (tv, kind, exp)) => let val iexp = substTyInInlineExp (USyntax.TyVarMap.singleton (tv, ty)) exp
-                                                                                       in (uninlineExp iexp, SOME iexp)
+                                                                                           val exp = #doExp (RefreshBoundNames.run ctx) RefreshBoundNames.emptyEnv (uninlineExp iexp)
+                                                                                       in (exp, SOME iexp)
                                                                                        end
                                                   | SOME iexp => (F.TyAppExp (exp, ty), SOME (TyAppExp (iexp, ty)))
                                                   | NONE => (case exp of
@@ -663,7 +868,7 @@ end (* structure Inliner *)
 
 structure Fuse = struct
 local structure F = FSyntax in
-type Context = { nextVId : int ref }
+type Context = { nextVId : int ref, nextTyVar : int ref }
 type Env = {}
 val emptyEnv : Env = {}
 fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp

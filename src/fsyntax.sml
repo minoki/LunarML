@@ -470,6 +470,7 @@ fun LongVIdToPath(USyntax.MkLongVId(strid0, strids, vid)) = FSyntax.Child (List.
 fun LongStrIdToPath(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (strid, p) => FSyntax.Child(p, FSyntax.StructLabel strid)) (FSyntax.Root (FSyntax.strIdToVId strid0)) strids
 
 type Context = { nextVId : int ref
+               , nextTyVar : int ref
                }
 type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
            , equalityForTyNameMap : USyntax.LongVId USyntax.TyNameMap.map
