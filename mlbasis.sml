@@ -197,7 +197,8 @@ structure Vector : sig
               val all : ('a -> bool) -> 'a vector -> bool
           end = struct
 datatype vector = datatype vector
-open Vector (* fromList, tabulate, length, sub *)
+open Vector (* tabulate, length, sub *)
+val fromList = _primCall "Vector.fromList" ()
 (* maxLen *)
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x

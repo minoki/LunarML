@@ -176,7 +176,6 @@ val builtins
                     ,(VId_Array_length, "_VectorOrArray_length")
                     ,(VId_Array_sub, "_VectorOrArray_sub")
                     ,(VId_Array_update, "_Array_update")
-                    ,(VId_Vector_fromList, "_VectorOrArray_fromList")
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")

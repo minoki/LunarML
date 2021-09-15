@@ -877,8 +877,8 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                             in F.LetExp (dec', doExp env' exp)
                                             end
                    | F.AppExp (exp1, exp2) => (case (doExp env exp1, doExp env exp2) of
-                                                   (exp1 as F.TyAppExp (exp1', ty1), exp2 as F.PrimExp (F.ListOp, ty2, xs)) =>
-                                                   if F.isLongVId(exp1', InitialEnv.VId_Vector_fromList) andalso Vector.length ty2 = 1 then
+                                                   (exp1 as F.PrimExp (F.VectorFromListOp, ty1, args), exp2 as F.PrimExp (F.ListOp, ty2, xs)) =>
+                                                   if Vector.length args = 0 andalso Vector.length ty2 = 1 then
                                                        F.VectorExp (xs, Vector.sub (ty2, 0))
                                                    else
                                                        F.AppExp (exp1, exp2)

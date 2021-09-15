@@ -243,7 +243,6 @@ end
 (* Vector *)
 local val newVId = newLongVId (StrId_Vector, [])
 in
-val VId_Vector_fromList = newVId "fromList"
 val VId_Vector_tabulate = newVId "tabulate"
 val VId_Vector_length = newVId "length"
 val VId_Vector_sub = newVId "sub"
@@ -500,8 +499,7 @@ val initialEnv : Typing.Env
                           }
           val sig_Vector = { tyConMap = mkTyMap []
                            , valMap = mkValMap
-                                          [("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
-                                          ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
+                                          [("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
                                           ,("length", TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int))
                                           ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
                                           ]
