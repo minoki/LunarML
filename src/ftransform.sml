@@ -193,7 +193,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
           and doDatBind (F.DatBind (tyvars, tycon, conbinds), { valMap, exnTagMap })
               = let fun doConBind(F.ConBind (vid, payloadTy), valMap)
-                        = let val ty = F.TyCon(List.map FSyntax.TyVar tyvars, tycon)
+                        = let val ty = List.foldl (fn (arg, applied) => F.AppType { applied = applied, arg = F.TyVar arg }) (F.TyVar tycon) tyvars
                               val ty = case payloadTy of
                                            NONE => ty
                                          | SOME payloadTy => F.FnType(payloadTy, ty)

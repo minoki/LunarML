@@ -4,7 +4,6 @@
  *)
 structure FSyntax = struct
 type TyVar = USyntax.TyVar
-type TyName = USyntax.TyName
 datatype SLabel = ValueLabel of Syntax.VId
                 | StructLabel of Syntax.StrId
                 | ExnTagLabel of Syntax.VId (* of constructor *)
@@ -32,7 +31,7 @@ datatype Pat = WildcardPat
              | LayeredPat of USyntax.VId * Ty * Pat
              | VectorPat of Pat vector * bool * Ty
 datatype ConBind = ConBind of USyntax.VId * Ty option
-datatype DatBind = DatBind of TyVar list * TyName * ConBind list
+datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
 datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
                 | RaiseOp of SourcePos.span * Ty (* unary *)
                 | ListOp of Ty (* The arguments are the elements *)
@@ -308,7 +307,7 @@ and freeTyVarsInDec (bound, ValDec valbind) = (bound, freeTyVarsInValBind (bound
                                                                   in (bound, USyntax.TyVarSet.union (set1, freeTyVarsInTy (bound, ty)))
                                                                   end
   | freeTyVarsInDec (bound, IgnoreDec exp) = (bound, freeTyVarsInExp (bound, exp))
-  | freeTyVarsInDec (bound, DatatypeDec datbinds) = let val bound = List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => USyntax.TyVarSet.add (bound, tyNameToTyVar tyname)) bound datbinds
+  | freeTyVarsInDec (bound, DatatypeDec datbinds) = let val bound = List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => USyntax.TyVarSet.add (bound, tyname)) bound datbinds
                                                     in (bound, List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
                                                                               let val bound = USyntax.TyVarSet.addList (bound, tyvars)
                                                                               in List.foldl (fn (ConBind (vid, NONE), acc) => acc
@@ -399,7 +398,6 @@ structure PrettyPrint = struct
 val print_TyVar = USyntax.print_TyVar
 val print_VId = USyntax.print_VId
 val print_LongVId = USyntax.print_LongVId
-val print_TyName = USyntax.print_TyName
 fun print_Path (Root vid) = USyntax.print_VId vid
   | print_Path (Child (parent, label)) = print_Path parent ^ "/.." (* TODO *)
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
@@ -811,7 +809,7 @@ and toFDecs(ctx, env, []) = (env, [])
                                                                     | _ => F.GroupDec(NONE, decs) :: decs'
                                                             )
                                                          end
-and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
+and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, F.tyNameToTyVar tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
 and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * F.Exp) list
