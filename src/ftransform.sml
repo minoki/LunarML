@@ -723,7 +723,18 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                               val body = #doExp (RefreshBoundNames.run ctx) (RefreshBoundNames.insertVId (RefreshBoundNames.emptyEnv, vid, vid')) body
                                                                                           in doExp' env (F.LetExp (F.ValDec (F.SimpleBind (vid', paramTy, exp2)), body))
                                                                                           end
-                                                   | _ => (F.AppExp (exp1, doExp env exp2), NONE)
+                                                   | _ => let val exp2 = doExp env exp2
+                                                              val vectorFromListRule = case (exp1, exp2) of
+                                                                                           (F.PrimExp (F.VectorFromListOp, ty1, args), F.PrimExp (F.ListOp, ty2, xs)) =>
+                                                                                           if Vector.length args = 0 andalso Vector.length ty2 = 1 then
+                                                                                               SOME (F.VectorExp (xs, Vector.sub (ty2, 0)), NONE)
+                                                                                           else
+                                                                                               NONE
+                                                                                         | _ => NONE
+                                                          in case vectorFromListRule of
+                                                                 SOME result => result
+                                                               | NONE => (F.AppExp (exp1, exp2), NONE)
+                                                          end
                                               end
                    | F.HandleExp { body, exnName, handler } => ( F.HandleExp { body = doExp env body
                                                                              , exnName = exnName
@@ -859,83 +870,6 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
 end (* local *)
 end (* structure Inliner *)
 
-structure Fuse = struct
-local structure F = FSyntax in
-type Context = { nextVId : int ref, nextTyVar : int ref }
-type Env = {}
-val emptyEnv : Env = {}
-fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
-                           , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
-                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
-                           }
-    = let fun doExp (env : Env) exp0
-              = (case exp0 of
-                     F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, Vector.map (doExp env) args)
-                   | F.VarExp _ => exp0
-                   | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
-                   | F.LetExp (dec, exp) => let val (env', dec') = doDec env dec
-                                            in F.LetExp (dec', doExp env' exp)
-                                            end
-                   | F.AppExp (exp1, exp2) => (case (doExp env exp1, doExp env exp2) of
-                                                   (exp1 as F.PrimExp (F.VectorFromListOp, ty1, args), exp2 as F.PrimExp (F.ListOp, ty2, xs)) =>
-                                                   if Vector.length args = 0 andalso Vector.length ty2 = 1 then
-                                                       F.VectorExp (xs, Vector.sub (ty2, 0))
-                                                   else
-                                                       F.AppExp (exp1, exp2)
-                                                 | (exp1, exp2) => F.AppExp (exp1, exp2)
-                                              )
-                   | F.HandleExp { body, exnName, handler } => F.HandleExp { body = doExp env body
-                                                                           , exnName = exnName
-                                                                           , handler = doExp env handler
-                                                                           }
-                   | F.IfThenElseExp (exp1, exp2, exp3) => F.IfThenElseExp (doExp env exp1, doExp env exp2, doExp env exp3)
-                   | F.CaseExp (span, exp, ty, matches) => let fun doMatch (pat, exp) = (pat, doExp env exp)
-                                                           in F.CaseExp (span, doExp env exp, ty, List.map doMatch matches)
-                                                           end
-                   | F.FnExp (vid, ty, exp) => F.FnExp (vid, ty, doExp env exp)
-                   | F.ProjectionExp { label, recordTy, fieldTy } => exp0
-                   | F.TyAbsExp (tyvar, kind, exp) => F.TyAbsExp (tyvar, kind, doExp env exp)
-                   | F.TyAppExp (exp, ty) => (case doExp env exp of
-                                                  F.TyAbsExp(tyvar, kind, exp') => let val substExp = #doExp (F.substTy (USyntax.TyVarMap.singleton (tyvar, ty)))
-                                                                                   in substExp exp'
-                                                                                   end
-                                                | exp => F.TyAppExp (doExp env exp, ty)
-                                             )
-                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => F.StructExp { valMap = valMap
-                                                                                           , strMap = strMap
-                                                                                           , exnTagMap = exnTagMap
-                                                                                           , equalityMap = equalityMap
-                                                                                           }
-                   | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
-                   | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }
-                )
-          and doDec (env : Env) (F.ValDec valbind) = (env, F.ValDec (doValBind env valbind))
-            | doDec env (F.RecValDec valbinds) = (env, F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp env exp)) valbinds))
-            | doDec env (F.UnpackDec (tv, kind, vid, ty, exp)) = (env, F.UnpackDec (tv, kind, vid, ty, doExp env exp))
-            | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
-            | doDec env (dec as F.DatatypeDec datbinds) = (env, dec)
-            | doDec env (dec as F.ExceptionDec _) = (env, dec)
-            | doDec env (dec as F.ExceptionRepDec _) = (env, dec)
-            | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
-            | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
-            | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
-                                                 in (env, F.GroupDec (v, decs))
-                                                 end
-          and doValBind env (F.SimpleBind (v, ty, exp)) = F.SimpleBind (v, ty, doExp env exp)
-            | doValBind env (F.TupleBind (vars, exp)) = F.TupleBind (vars, doExp env exp)
-          and doDecs env [] = (env, [])
-            | doDecs env (dec :: decs) = let val (env', dec') = doDec env dec
-                                             val (env'', decs') = doDecs env' decs
-                                         in (env'', dec' :: decs')
-                                         end
-      in { doExp = doExp
-         , doDec = doDec
-         , doDecs = doDecs
-         }
-      end
-end (* local *)
-end (* structure Fuse *)
-
 structure FlattenLet = struct
 local structure F = FSyntax in
 fun extractLet (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet exp
@@ -991,18 +925,15 @@ end (* structure FlattenLet *)
 structure FTransform = struct
 type Env = { desugarPatternMatches : DesugarPatternMatches.Env
            , inliner : Inliner.Env
-           , fuse : Fuse.Env
            }
 val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEnv
                        , inliner = Inliner.emptyEnv
-                       , fuse = Fuse.emptyEnv
                        }
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
                                       val decs = DecomposeValRec.doDecs decs
                                       val decs = FlattenLet.doDecs decs
                                       val (inlinerEnv, decs) = #doDecs (Inliner.run ctx) (#inliner env) decs
-                                      val (fuseEnv, decs) = #doDecs (Fuse.fuse ctx) (#fuse env) decs
-                              in ({desugarPatternMatches = dpEnv, inliner = inlinerEnv, fuse = fuseEnv}, decs)
+                              in ({desugarPatternMatches = dpEnv, inliner = inlinerEnv }, decs)
                               end
 end (* structure FTransform *)
 
