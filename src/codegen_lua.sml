@@ -604,10 +604,10 @@ and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "
                                                        in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], env, { prec = ~1, exp = [ Fragment dest ] })
                                                        end
 and doExpCont ctx env exp (cont : Fragment list * Env * Exp -> Fragment list)  = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Vector.length xs = 0 then
-                                                                               putPureTo ctx env dest ([], doLiteral scon)
-                                                                           else
-                                                                               raise CodeGenError "PrimExp.SConOp: non-empty argument"
+and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if Vector.length xs = 0 then
+                                                                                  putPureTo ctx env dest ([], doLiteral scon)
+                                                                              else
+                                                                                  raise CodeGenError "PrimExp.SConOp: non-empty argument"
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] }) (* TODO: prec for true, false, nil *)
   | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "nil" ] })
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
@@ -704,7 +704,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                                        )
                                      | _ => NONE
           val doLuaCall = case (exp1, exp2) of
-                              (F.AppExp(vid_luacall, f), F.PrimExp(F.VectorOp _, xs)) =>
+                              (F.AppExp(vid_luacall, f), F.PrimExp(F.VectorOp, _, xs)) =>
                               if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
                                   SOME (fn () => doExpCont ctx env f
                                                            (fn (stmts1, env, f) =>
@@ -723,7 +723,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                                   NONE
                             | _ => NONE
           val doLuaMethod = case (exp1, exp2) of
-                                (F.AppExp(vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.SConOp(Syntax.StringConstant method), _))]), F.PrimExp(F.VectorOp _, xs)) =>
+                                (F.AppExp(vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.SConOp(Syntax.StringConstant method), _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
                                 if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
                                     SOME (fn () => doExpCont ctx env self
                                                              (fn (stmts1, env, self) =>
@@ -776,7 +776,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                         ]
       in putPureTo ctx env dest (stmts, { prec = ~1, exp = [ Fragment result ] })
       end
-  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start = { file, line, column }, ... }, _), xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start = { file, line, column }, ... }), _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp
@@ -787,7 +787,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                        )
           end
       else
-          raise CodeGenError "PrimExp.RaisOp: invalid number of arguments"
+          raise CodeGenError "PrimExp.RaiseOp: invalid number of arguments"
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
                 (fn (stmts1, env, exp1') =>
@@ -836,7 +836,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx env exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
   | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(x) return x[" ^ LabelToLua label ^ "] end") ] })
-  | doExpTo ctx env (F.PrimExp (F.ListOp _, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
           putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_nil" ] })
       else
@@ -846,7 +846,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
                             in putPureTo ctx env dest (stmts, { prec = ~2, exp = Fragment ("_list{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
                             end
                   )
-  | doExpTo ctx env (F.PrimExp (F.VectorOp _, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.VectorOp, _, xs)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
               (Vector.foldr (op ::) [] xs)
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
@@ -855,7 +855,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
               )
   | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.RecordEqualityOp, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.RecordEqualityOp, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in case exp of
@@ -867,14 +867,14 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, xs)) dest : Fragment list = if Ve
           end
       else
           raise CodeGenError "PrimExp.RecordEqualityOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataTagOp, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.DataTagOp, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
           end
       else
           raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))

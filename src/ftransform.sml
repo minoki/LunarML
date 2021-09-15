@@ -95,7 +95,7 @@ fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = split
 fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValBind: Env -> F.ValBind -> F.ValBind, doDec : Env -> F.Dec -> Env * F.Dec, doDecs : Env -> F.Dec list -> Env * F.Dec list }
     = let fun doExp (env: Env) exp0
               = (case exp0 of
-                     F.PrimExp (primOp, exps) => F.PrimExp (primOp, Vector.map (doExp env) exps)
+                     F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, Vector.map (doExp env) args)
                    | F.VarExp longvid => exp0
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, e) => (label, doExp env e)) fields)
                    | F.LetExp (dec, exp) => let val (env', dec') = doDec env dec
@@ -313,7 +313,7 @@ end (* structure DesugarPatternMatches *)
 structure DecomposeValRec = struct
 structure F = FSyntax
 type Context = {}
-fun doExp (F.PrimExp (primOp, exps)) = F.PrimExp (primOp, Vector.map doExp exps)
+fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map doExp args)
   | doExp (exp as F.VarExp _) = exp
   | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
   | doExp (F.LetExp (dec, exp)) = let val decs = doDec dec
@@ -481,14 +481,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                     ) (emptyEnv, []) pats
                 in (env', F.VectorPat (Vector.fromList pats, ellipsis, doTy env ty))
                 end
-          fun doPrimOp env (primOp as F.SConOp scon) = primOp
-            | doPrimOp env (F.RaiseOp (span, ty)) = F.RaiseOp (span, doTy env ty)
-            | doPrimOp env (F.ListOp ty) = F.ListOp (doTy env ty)
-            | doPrimOp env (F.VectorOp ty) = F.VectorOp (doTy env ty)
-            | doPrimOp env (primOp as F.RecordEqualityOp) = primOp
-            | doPrimOp env (primOp as F.DataTagOp) = primOp
-            | doPrimOp env (primOp as F.DataPayloadOp) = primOp
-          fun doExp (env : Env) (F.PrimExp (primOp, xs)) = F.PrimExp (doPrimOp env primOp, Vector.map (doExp env) xs)
+          fun doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, Vector.map (doTy env) tyargs, Vector.map (doExp env) args)
             | doExp env (exp as F.VarExp vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
                                                      SOME vid => F.VarExp vid
                                                    | NONE => exp
@@ -627,7 +620,7 @@ fun removeFromEnv (vid, env as { valMap } : Env) = if USyntax.VIdMap.inDomain (v
                                                        { valMap = #1 (USyntax.VIdMap.remove (valMap, vid)) }
                                                    else
                                                        env
-fun costOfExp (F.PrimExp (primOp, exps)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 exps
+fun costOfExp (F.PrimExp (primOp, tyargs, args)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
   | costOfExp (F.VarExp _) = 0
   | costOfExp (F.RecordExp fields) = List.foldl (fn ((label, exp), acc) => acc + costOfExp exp) 1 fields
   | costOfExp (F.LetExp (dec, exp)) = costOfDec dec + costOfExp exp
@@ -714,7 +707,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
           fun doExp env exp = #1 (doExp' env exp)
           and doExp' (env : Env) exp0 : F.Exp * InlineExp option
               = (case exp0 of
-                     F.PrimExp (primOp, exps) => (F.PrimExp (primOp, Vector.map (doExp env) exps), NONE)
+                     F.PrimExp (primOp, tyargs, args) => (F.PrimExp (primOp, tyargs, Vector.map (doExp env) args), NONE)
                    | F.VarExp vid => (case USyntax.VIdMap.find (#valMap env, vid) of
                                           SOME (VarExp vid) => (F.VarExp vid, SOME (evalPath env (F.Root vid)))
                                         | iexpOpt as SOME _ => (exp0, iexpOpt)
@@ -877,16 +870,16 @@ fun fuse (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                            }
     = let fun doExp (env : Env) exp0
               = (case exp0 of
-                     F.PrimExp (primOp, xs) => F.PrimExp (primOp, Vector.map (doExp env) xs)
+                     F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, Vector.map (doExp env) args)
                    | F.VarExp _ => exp0
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields)
                    | F.LetExp (dec, exp) => let val (env', dec') = doDec env dec
                                             in F.LetExp (dec', doExp env' exp)
                                             end
                    | F.AppExp (exp1, exp2) => (case (doExp env exp1, doExp env exp2) of
-                                                   (exp1 as F.TyAppExp (exp1', ty1), exp2 as F.PrimExp (F.ListOp ty2, xs)) =>
-                                                   if F.isLongVId(exp1', InitialEnv.VId_Vector_fromList) then
-                                                       F.VectorExp (xs, ty2)
+                                                   (exp1 as F.TyAppExp (exp1', ty1), exp2 as F.PrimExp (F.ListOp, ty2, xs)) =>
+                                                   if F.isLongVId(exp1', InitialEnv.VId_Vector_fromList) andalso Vector.length ty2 = 1 then
+                                                       F.VectorExp (xs, Vector.sub (ty2, 0))
                                                    else
                                                        F.AppExp (exp1, exp2)
                                                  | (exp1, exp2) => F.AppExp (exp1, exp2)
@@ -949,7 +942,7 @@ fun extractLet (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet exp
                                        in (dec :: decs, exp)
                                        end
   | extractLet exp = ([], exp)
-fun doExp (F.PrimExp (primOp, xs)) = F.PrimExp (primOp, Vector.map doExp xs)
+fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map doExp args)
   | doExp (exp as F.VarExp _) = exp
   | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
   | doExp (F.LetExp (dec, exp2)) = F.LetExp (doDec dec, doExp exp2)
@@ -1017,12 +1010,12 @@ structure DeadCodeElimination = struct
 structure F = FSyntax
 fun isDiscardablePrimOp (F.SConOp _) = true
   | isDiscardablePrimOp (F.RaiseOp _) = false
-  | isDiscardablePrimOp (F.ListOp _) = true
-  | isDiscardablePrimOp (F.VectorOp _) = true
+  | isDiscardablePrimOp F.ListOp = true
+  | isDiscardablePrimOp F.VectorOp = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
-fun isDiscardable (F.PrimExp (primOp, xs)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable xs
+fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
@@ -1049,9 +1042,9 @@ fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
   | doPat (F.VectorPat (pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty pats
 (* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
-fun doExp (F.PrimExp (primOp, xs) : F.Exp) : USyntax.VIdSet.set * F.Exp
-    = let val xs' = Vector.map doExp xs
-      in (Vector.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (Vector.map #1 xs'), F.PrimExp (primOp, Vector.map #2 xs'))
+fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Exp
+    = let val args' = Vector.map doExp args
+      in (Vector.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (Vector.map #1 args'), F.PrimExp (primOp, tyargs, Vector.map #2 args'))
       end
   | doExp (exp as F.VarExp vid) = (USyntax.VIdSet.singleton vid, exp)
   | doExp (F.RecordExp fields) = let val fields = List.map (fn (label, exp) => (label, doExp exp)) fields
@@ -1112,10 +1105,10 @@ and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
                             in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                             end
 (* doIgnoredExp : F.Exp -> USyntax.VIdSet.set * F.Exp list *)
-and doIgnoredExp (exp as F.PrimExp (primOp, xs))
+and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args))
     = if isDiscardablePrimOp primOp then
-          let val xs' = Vector.map doIgnoredExp xs
-          in (Vector.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty xs', Vector.foldr (fn ((_, e), xs) => e @ xs) [] xs')
+          let val args' = Vector.map doIgnoredExp args
+          in (Vector.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty args', Vector.foldr (fn ((_, e), xs) => e @ xs) [] args')
           end
       else
           let val (used, exp) = doExp exp
