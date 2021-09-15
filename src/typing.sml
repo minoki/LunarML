@@ -826,6 +826,17 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
                                          end) xs
       in (U.TyCon(span, [elemTy], primTyName_vector), U.VectorExp(span, xs, elemTy))
       end
+  | typeCheckExp(ctx, env, S.PrimExp(span, primOp as S.PrimOp_Vector_fromList, tyargs, args))
+    = let val elemTy = case Vector.length tyargs of
+                           0 => USyntax.TyVar(span, freshTyVar(ctx))
+                         | 1 => evalTy(ctx, env, Vector.sub(tyargs, 0))
+                         | _ => emitError(ctx, [span], "invalid number of type arguments to _primCall \"Vector.fromList\"")
+          val () = if Vector.length args = 0 then
+                       ()
+                   else
+                       emitError(ctx, [span], "invalid number of arguments to _primCall \"Vector.fromList\"")
+      in (U.FnType(span, U.TyCon(span, [elemTy], primTyName_list), U.TyCon(span, [elemTy], primTyName_vector)), U.PrimExp(span, primOp, vector [elemTy], vector []))
+      end
 (* typeCheckDec : Context * Env * S.Dec -> (* created environment *) Env * U.Dec list *)
 and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
     = let val valbinds = let val env = { valMap = #valMap env
@@ -1318,6 +1329,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
             | goExp (U.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
             | goExp (U.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
             | goExp (U.VectorExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
+            | goExp (U.PrimExp (span, primOp, tyargs, args)) = ( Vector.app goTy tyargs ; Vector.app goExp args )
           and goDec (U.ValDec (span, valbinds)) = ( List.app goValBind valbinds
                                                   ; tynameset
                                                   )

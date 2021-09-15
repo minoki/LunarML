@@ -937,6 +937,11 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                    in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
                                                                    end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
+  | doExpTo ctx env (F.PrimExp (F.VectorFromListOp, _, xs)) dest
+    = if Vector.length xs = 0 then
+          putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_VectorOrArray_fromList" ] })
+      else
+          raise CodeGenError "PrimExp.VectorFromListOp: invalid number of arguments"
 
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))

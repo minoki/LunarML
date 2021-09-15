@@ -157,6 +157,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of SourcePos.span * Exp vector * Ty
              | VectorExp of SourcePos.span * Exp vector * Ty
+             | PrimExp of SourcePos.span * Syntax.PrimOp * Ty vector * Exp vector
      and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
@@ -185,7 +186,7 @@ type Program = (TopDec list) list
 local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
-in 
+in
 fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, wildcard = false }
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 end
@@ -209,6 +210,7 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(ProjectionExp{sourceSpan, ...}) = sourceSpan
   | getSourceSpanOfExp(ListExp(span, _, _)) = span
   | getSourceSpanOfExp(VectorExp(span, _, _)) = span
+  | getSourceSpanOfExp(PrimExp(span, _, _, _)) = span
 
 (* pretty printing *)
 structure PrettyPrint = struct
@@ -271,6 +273,7 @@ fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy, ... }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
   | print_Exp (VectorExp _) = "VectorExp"
+  | print_Exp (PrimExp _) = "PrimExp"
 and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (RecValDec(_,valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
@@ -367,6 +370,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
             | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
             | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
             | doExp(VectorExp(span, xs, ty)) = VectorExp(span, Vector.map doExp xs, doTy ty)
+            | doExp(PrimExp(span, primOp, tyargs, args)) = PrimExp(span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
           and doDec(ValDec(span, valbind)) = ValDec(span, List.map doValBind valbind)
             | doDec(RecValDec(span, valbind)) = RecValDec(span, List.map doValBind valbind)
             | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
@@ -453,6 +457,9 @@ fun freeTyVarsInExp(bound, exp)
          | ProjectionExp { recordTy = recordTy, fieldTy = fieldTy, ... } => TyVarSet.union(freeTyVarsInTy(bound, recordTy), freeTyVarsInTy(bound, fieldTy))
          | ListExp(_, xs, ty) => Vector.foldl (fn (x, set) => TyVarSet.union(freeTyVarsInExp(bound, x), set)) (freeTyVarsInTy(bound, ty)) xs
          | VectorExp(_, xs, ty) => Vector.foldl (fn (x, set) => TyVarSet.union(freeTyVarsInExp(bound, x), set)) (freeTyVarsInTy(bound, ty)) xs
+         | PrimExp(_, _, tyargs, args) => let val set = Vector.foldl (fn (ty, set) => TyVarSet.union(set, freeTyVarsInTy(bound, ty))) TyVarSet.empty tyargs
+                                          in Vector.foldl (fn (x, set) => TyVarSet.union(set, freeTyVarsInExp(bound, x))) set args
+                                          end
       )
 and freeTyVarsInMatches(bound, nil, acc) = acc
   | freeTyVarsInMatches(bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))

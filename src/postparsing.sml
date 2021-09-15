@@ -286,6 +286,12 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
   | doExp(ctx, env, UnfixedSyntax.ListExp(span, xs)) = Syntax.ListExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
   | doExp(ctx, env, UnfixedSyntax.VectorExp(span, xs)) = Syntax.VectorExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
+  | doExp(ctx, env, UnfixedSyntax.PrimExp(span, name, tyargs, args)) = let val primOp = case name of
+                                                                                            "Vector.fromList" => Syntax.PrimOp_Vector_fromList
+                                                                                          | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
+                                                                           val args = Vector.map (fn e => doExp(ctx, env, e)) args
+                                                                       in Syntax.PrimExp(span, primOp, tyargs, args)
+                                                                       end
 and doDecs(ctx, env, nil) = (emptyEnv, nil)
   | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
@@ -579,6 +585,9 @@ local
       | collectExp(bound, ProjectionExp(_, lab)) = TyVarSet.empty
       | collectExp(bound, ListExp(_, xs)) = Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
       | collectExp(bound, VectorExp(_, xs)) = Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
+      | collectExp(bound, PrimExp(_, _, tyargs, args)) = let val acc = Vector.foldl (fn (ty, set) => TyVarSet.union(set, TyVarSet.difference(freeTyVarsInTy(bound, ty), bound))) TyVarSet.empty tyargs
+                                                         in Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) acc args
+                                                         end
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(_, pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
     and collectFRule(bound, (pats, optTy, exp)) = let val tyVarsInPats = List.foldl TyVarSet.union TyVarSet.empty (List.map (fn pat => freeTyVarsInPat(bound, pat)) pats)
@@ -646,6 +655,7 @@ local
       | doExp(bound, exp as ProjectionExp _) = exp
       | doExp(bound, ListExp(span, xs)) = ListExp(span, Vector.map (fn x => doExp(bound, x)) xs)
       | doExp(bound, VectorExp(span, xs)) = VectorExp(span, Vector.map (fn x => doExp(bound, x)) xs)
+      | doExp(bound, PrimExp(span, name, tyargs, args)) = PrimExp(span, name, tyargs, Vector.map (fn x => doExp(bound, x)) args)
     and doMatch(bound, xs) = List.map (fn (pat, exp) => (pat, doExp(bound, exp))) xs
     fun doStrExp(StructExp(span, strdecs)) = StructExp(span, List.map doStrDec strdecs)
       | doStrExp(StrIdExp(span, longstrid)) = StrIdExp(span, longstrid)
@@ -755,6 +765,7 @@ fun doExp (env : S.TyVarSet.set, S.SConExp span) = ()
   | doExp (env, S.ProjectionExp (span, label)) = ()
   | doExp (env, S.ListExp (span, exps)) = Vector.app (fn exp => doExp (env, exp)) exps
   | doExp (env, S.VectorExp (span, exps)) = Vector.app (fn exp => doExp (env, exp)) exps
+  | doExp (env, S.PrimExp (span, primOp, tyargs, args)) = ( Vector.app doTy tyargs ; Vector.app (fn exp => doExp (env, exp)) args )
 and doMatches (env, matches) = List.app (fn (pat, exp) => ( doPat pat ; doExp (env, exp) )) matches
 and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val tyvars = S.TyVarSet.fromList tyvarseq
                                                                         in if S.TyVarSet.disjoint (env, S.TyVarSet.fromList tyvarseq) then
