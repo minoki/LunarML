@@ -18,6 +18,7 @@ datatype Ty = TyVar of TyVar
             | FnType of Ty * Ty
             | ForallType of TyVar * Kind * Ty
             | ExistsType of TyVar * Kind * Ty
+            | TypeFn of TyVar * Kind * Ty (* type-level function *)
             | SigType of { valMap : Ty Syntax.VIdMap.map (* id status? *)
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
@@ -127,6 +128,10 @@ fun occurCheck tv =
                                                     false
                                                 else
                                                     check ty
+          | check (TypeFn(tv', kind, ty)) = if USyntax.eqUTyVar(tv, tv') then
+                                                false
+                                            else
+                                                check ty
           | check (SigType { valMap, strMap, exnTags, equalityMap }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap orelse Syntax.TyConMap.exists check equalityMap
     in check
     end
@@ -158,6 +163,15 @@ fun substituteTy (tv, replacement) =
                                                         end
                                                     else
                                                         ExistsType(tv', kind, go ty')
+          | go (ty as TypeFn(tv', kind, ty')) = if USyntax.eqUTyVar(tv, tv') then
+                                                    ty
+                                                else if occurCheck tv' replacement then
+                                                    (* TODO: generate fresh type variable *)
+                                                    let val tv'' = raise Fail "FSyntax.substituteTy: not implemented yet"
+                                                    in TypeFn(tv'', kind, go (substituteTy (tv', TyVar tv'') ty'))
+                                                    end
+                                                else
+                                                    TypeFn(tv', kind, go ty')
           | go (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map go valMap
                                                                             , strMap = Syntax.StrIdMap.map go strMap
                                                                             , exnTags = exnTags
@@ -183,6 +197,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                    ExistsType (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
                                                else
                                                    ExistsType (tv, kind, doTy ty)
+          | doTy (TypeFn (tv, kind, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
+                                               TypeFn (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
+                                           else
+                                               TypeFn (tv, kind, doTy ty)
           | doTy (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
                                                                               , strMap = Syntax.StrIdMap.map doTy strMap
                                                                               , exnTags = exnTags
@@ -254,6 +272,7 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
   | freeTyVarsInTy (bound, FnType (ty1, ty2)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
   | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
+  | freeTyVarsInTy (bound, TypeFn (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags, equalityMap }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
                                                                                    val acc = Syntax.StrIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
                                                                                in Syntax.TyConMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc equalityMap
@@ -399,6 +418,7 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,kind,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (ExistsType(tv,kind,x)) = "ExistsType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
+  | print_Ty (TypeFn(tv,kind,x)) = "TypeFn(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (SigType _) = "SigType"
 fun print_Pat WildcardPat = "WildcardPat"
   | print_Pat (SConPat x) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
