@@ -1373,6 +1373,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                 end
           fun goStrExp (U.StructExp _) = tynameset
             | goStrExp (U.StrIdExp _) = tynameset
+            | goStrExp (U.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = ( goStrExp strExp ; List.foldl (fn ({ tyname, ... }, set) => U.TyNameSet.add (set, tyname)) U.TyNameSet.empty (#bound packageSig) )
             | goStrExp (U.LetInStrExp (span, strdecs, strexp)) = let val tynameset = goStrDecs strdecs
                                                                      val { goStrExp, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                  in goStrExp strexp
@@ -1423,6 +1424,49 @@ fun mergeQSignature(s1 : U.QSignature, s2 : U.QSignature) : U.QSignature
     = { s = mergeSignature(#s s1, #s s2)
       , bound = U.TyNameMap.unionWith #2 (#bound s1, #bound s2)
       }
+
+fun canonicalOrderForQSignature ({ s, bound } : U.QSignature) : U.TyName list
+    = let val bound' = U.TyNameMap.mapi (fn (tyname, { arity, admitsEquality, longtycon }) => Option.getOpt (canonicalPathForTyName (s, tyname), longtycon)) bound
+          fun insert ([], key, value) = [(key, value)]
+            | insert (xs0 as ((k, v) :: xs), key, value) = case Syntax.LongTyCon.compare (k, key) of
+                                                               LESS => (k, v) :: insert (xs, key, value)
+                                                             | GREATER => (key, value) :: xs0
+                                                             | EQUAL => (key, value) :: xs (* cannot happen *)
+      in List.map #2 (U.TyNameMap.foldli (fn (tyname, longtycon, acc) => insert (acc, longtycon, tyname)) [] bound')
+      end
+and canonicalPathForTyName ({ valMap, tyConMap, strMap } : U.Signature, tyname : U.TyName) : Syntax.LongTyCon option
+    = let val t = Syntax.TyConMap.filter (fn { typeFunction = U.TypeFunction (tyvars, ty), valEnv } =>
+                                             case ty of
+                                                 U.TyCon (span, tyargs, tyname') =>
+                                                 U.eqTyName (tyname, tyname') andalso ListPair.allEq (fn (tv, U.TyVar (_, tv')) => U.eqUTyVar (tv, tv')
+                                                                                                     | _ => false
+                                                                                                     ) (tyvars, tyargs)
+                                               | _ => false
+                                         ) tyConMap
+      in case Option.map #1 (Syntax.TyConMap.firsti t) of
+             SOME tycon => SOME (Syntax.MkQualified ([], tycon))
+           | NONE => let val t = Syntax.StrIdMap.mapPartiali (fn (strid, U.MkSignature s) => Option.map (fn Syntax.MkQualified (strids, tycon) => Syntax.MkQualified (strid :: strids, tycon)) (canonicalPathForTyName (s, tyname))) strMap
+                     in Syntax.StrIdMap.first t
+                     end
+      end
+
+fun valEnvForTyName ({ valMap, tyConMap, strMap } : U.Signature, tyname : U.TyName) : U.ValEnv option
+    = let val t = Syntax.TyConMap.filter (fn { typeFunction = U.TypeFunction (tyvars, ty), valEnv } =>
+                                             case ty of
+                                                 U.TyCon (span, tyargs, tyname') =>
+                                                 U.eqTyName (tyname, tyname')
+                                                 andalso ListPair.allEq (fn (tv, U.TyVar (_, tv')) => U.eqUTyVar (tv, tv')
+                                                                        | _ => false
+                                                                        ) (tyvars, tyargs)
+                                                 andalso not (Syntax.VIdMap.isEmpty valEnv)
+                                               | _ => false
+                                         ) tyConMap
+      in case Option.map #valEnv (Syntax.TyConMap.first t) of
+             SOME valEnv => SOME valEnv
+           | NONE => let val t = Syntax.StrIdMap.mapPartiali (fn (strid, U.MkSignature s) => valEnvForTyName (s, tyname)) strMap
+                     in Syntax.StrIdMap.first t
+                     end
+      end
 
 fun addSignatureToEnv(env : SigEnv, s : U.Signature) : SigEnv
     = { valMap = #valMap env (* not used *)
@@ -1903,7 +1947,7 @@ and matchSignature(ctx, env, span, expected : U.Signature, longstrid : U.LongStr
                                    ) (#valMap expected)
           val (decs, strMap) = Syntax.StrIdMap.foldli (fn (strid, (s, strexp), (decs, strMap)) =>
                                                            let val strid' = newStrId(ctx, strid)
-                                                               val decs = U.StrBindDec(span, strid', strexp, s) :: decs
+                                                               val decs = U.StrBindDec(span, strid', strexp, { s = s, bound = [] }) :: decs
                                                            in (decs, Syntax.StrIdMap.insert(strMap, strid, U.MkLongStrId(strid', [])))
                                                            end
                                                        ) ([], Syntax.StrIdMap.empty) strMap
@@ -1967,13 +2011,13 @@ and matchValDesc(ctx, env, span, expected : U.TypeScheme, longvid : U.LongVId, a
            end
       )
 
-fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSignature * TyNameAttr U.TyNameMap.map * U.StrExp
+fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.PackedSignature * TyNameAttr U.TyNameMap.map * U.StrExp
     = let val ({ valMap, tyConMap, tyNameMap, strMap, ... }, decs) = typeCheckStrDecs(ctx, env, decs)
           val s = { s = { valMap = Syntax.VIdMap.map (fn (tysc, ids, _) => (tysc, ids)) valMap
                         , tyConMap = tyConMap
                         , strMap = Syntax.StrIdMap.map (fn (s, _) => U.MkSignature s) strMap
                         }
-                  , bound = U.TyNameMap.empty
+                  , bound = []
                   }
           val e = U.StructExp { sourceSpan = span
                               , valMap = Syntax.VIdMap.map (fn (_, ids, longvid) => (longvid, ids)) valMap
@@ -1989,11 +2033,11 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSign
   | typeCheckStrExp(ctx, env, S.StrIdExp(span, longstrid))
     = (case longstrid of
            Syntax.MkQualified([], strid) => (case Syntax.StrIdMap.find(#strMap env, strid) of
-                                                 SOME (s, longstrid) => ({ s = s, bound = USyntax.TyNameMap.empty }, USyntax.TyNameMap.empty, U.StrIdExp(span, longstrid))
+                                                 SOME (s, longstrid) => ({ s = s, bound = [] }, USyntax.TyNameMap.empty, U.StrIdExp(span, longstrid))
                                                | NONE => emitError(ctx, [span], "structure not found")
                                             )
          | Syntax.MkQualified(strid0 :: strids, strid') => (case Syntax.StrIdMap.find(#strMap env, strid0) of
-                                                                SOME (s, U.MkLongStrId(strid0, strids0)) => ({ s = s, bound = USyntax.TyNameMap.empty }, USyntax.TyNameMap.empty, U.StrIdExp(span, U.MkLongStrId(strid0, strids0 @ strids @ [strid'])))
+                                                                SOME (s, U.MkLongStrId(strid0, strids0)) => ({ s = s, bound = [] }, USyntax.TyNameMap.empty, U.StrIdExp(span, U.MkLongStrId(strid0, strids0 @ strids @ [strid'])))
                                                               | NONE => emitError(ctx, [span], "structure not found")
                                                            )
       )
@@ -2009,12 +2053,56 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSign
                      , boundTyVars = #boundTyVars env
                      }
           val (s, strexp') = matchQSignature(ctx, env', span, sE, strid, #s sA)
-      in ({ s = s, bound = U.TyNameMap.empty }, tyNameMap, U.LetInStrExp(span, [U.StrBindDec(span, strid, strexp, #s sA (* ? *))], strexp'))
+      in ({ s = s, bound = [] }, tyNameMap, U.LetInStrExp(span, [U.StrBindDec(span, strid, strexp, sA)], strexp'))
       end
   | typeCheckStrExp(ctx, env, S.OpaqueConstraintExp(span, strexp, sigexp))
-    = let val (s, tyNameMap, strexp) = typeCheckStrExp(ctx, env, strexp)
-          val s' = evalSignature(ctx, envToSigEnv env, sigexp)
-      in emitError(ctx, [span], "opaque constraint: not implemented yet") (* TODO *)
+    = let val (sA, tyNameMap, strexp) = typeCheckStrExp(ctx, env, strexp)
+          val sE = evalSignature(ctx, envToSigEnv env, sigexp)
+          val env' = { valMap = #valMap env
+                     , tyConMap = #tyConMap env
+                     , tyNameMap = USyntax.TyNameMap.unionWith #2 (#tyNameMap env, tyNameMap)
+                     , strMap = #strMap env
+                     , sigMap = #sigMap env
+                     , boundTyVars = #boundTyVars env
+                     }
+          val strid = newStrId(ctx, Syntax.MkStrId "tmp")
+          val (s, strexp') = matchQSignature(ctx, env', span, sE, strid, #s sA)
+          val tynames = canonicalOrderForQSignature sE
+          fun refreshTyName (U.MkTyName (name, _)) = U.MkTyName (name, genTyVarId ctx)
+          val tynames' = List.map (fn tyname => (tyname, refreshTyName tyname)) tynames
+          val tyNameMap = List.foldl U.TyNameMap.insert' U.TyNameMap.empty tynames'
+          val tyNameSubst = U.TyNameMap.mapi (fn (tyname, newtyname) =>
+                                                 let val { arity, ... } = U.TyNameMap.lookup (#bound sE, tyname)
+                                                     val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
+                                                 in U.TypeFunction (tyvars, U.TyCon(span, List.map (fn tv => U.TyVar (span, tv)) tyvars, newtyname))
+                                                 end
+                                             ) tyNameMap
+          val s' = applySubstTyConInSig (ctx, tyNameSubst) (#s sE)
+          val bound' = List.foldl (fn ((tyname, newtyname), map) => let val info = U.TyNameMap.lookup (#bound sE, tyname)
+                                                                    in U.TyNameMap.insert (map, newtyname, info)
+                                                                    end) U.TyNameMap.empty tynames'
+          val packageSig = { s = s'
+                           , bound = List.map (fn tyname => let val { arity, admitsEquality, longtycon } = U.TyNameMap.lookup(#bound sE, tyname)
+                                                            in { tyname = tyname, arity = arity, admitsEquality = admitsEquality }
+                                                            end
+                                              ) tynames
+                           }
+          val tyNameMapOutside = U.TyNameMap.foldli (fn (tyname, { arity, admitsEquality, longtycon }, acc) =>
+                                                        let val valEnv = case valEnvForTyName (#s sE, tyname) of
+                                                                             NONE => Syntax.VIdMap.empty
+                                                                           | SOME valEnv => Syntax.VIdMap.map (fn (U.TypeScheme (typarams, ty), ids) => let val tysc = U.TypeScheme (typarams, applySubstTyConInTy (ctx, tyNameSubst) ty)
+                                                                                                                                                        in (tysc, ids)
+                                                                                                                                                        end) valEnv
+                                                        in U.TyNameMap.insert (acc, U.TyNameMap.lookup (tyNameMap, tyname), { valEnv = valEnv, admitsEquality = admitsEquality })
+                                                        end
+                                                    ) U.TyNameMap.empty (#bound sE)
+          val payloadTypes = List.map (fn tyname => let val { longtycon = Syntax.MkQualified (strids, tycon), ... } = U.TyNameMap.lookup (#bound sE, tyname)
+                                                        val { tyConMap, ... } = lookupStr (ctx, #s sE, span, strids)
+                                                    in case Syntax.TyConMap.find (tyConMap, tycon) of
+                                                           SOME { typeFunction, valEnv } => typeFunction
+                                                         | NONE => emitError (ctx, [span], "unknown type constructor")
+                                                    end) tynames
+      in (packageSig, tyNameMapOutside, U.PackedStrExp { sourceSpan = span, strExp = strexp', payloadTypes = payloadTypes, packageSig = packageSig })
       end
   | typeCheckStrExp(ctx, env, S.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs) = typeCheckStrDecs(ctx, env, strdecs)
                                                                           val (s, tyNameMap, strexp) = typeCheckStrExp(ctx, mergeEnv(env, env'), strexp)
@@ -2025,11 +2113,11 @@ and typeCheckStrDec(ctx : Context, env : Env, S.CoreDec(span, dec)) : Env * USyn
       in (env', List.map (fn dec => U.CoreDec(span, dec)) decs)
       end
   | typeCheckStrDec(ctx, env, S.StrBindDec(span, binds))
-    = let val (strMap, tyNameMap, binds) = List.foldr (fn ((strid, strexp), (strMap, tyNameMap, binds)) => let val ({ s, bound }, tc, strexp) = typeCheckStrExp(ctx, env, strexp)
-                                                                                                                   val strid' = newStrId(ctx, strid)
-                                                                                                                   (* TODO: unpack variables *)
-                                                                                                               in (S.StrIdMap.insert(strMap, strid, (s, U.MkLongStrId(strid', []))), USyntax.TyNameMap.unionWith #2 (tyNameMap, tc), (strid', strexp, s) :: binds)
-                                                                                                               end
+    = let val (strMap, tyNameMap, binds) = List.foldr (fn ((strid, strexp), (strMap, tyNameMap, binds)) =>
+                                                          let val (ps, tc, strexp) = typeCheckStrExp(ctx, env, strexp)
+                                                              val strid' = newStrId(ctx, strid)
+                                                          in (S.StrIdMap.insert(strMap, strid, (#s ps, U.MkLongStrId(strid', []))), USyntax.TyNameMap.unionWith #2 (tyNameMap, tc), (strid', strexp, ps) :: binds)
+                                                          end
                                                  ) (Syntax.StrIdMap.empty, USyntax.TyNameMap.empty, []) binds
           val env' = { valMap = Syntax.VIdMap.empty
                      , tyConMap = Syntax.TyConMap.empty

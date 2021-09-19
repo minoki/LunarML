@@ -65,7 +65,7 @@ datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
                  | TupleBind of (USyntax.VId * Ty) list * Exp
      and Dec = ValDec of ValBind
              | RecValDec of (USyntax.VId * Ty * Exp) list
-             | UnpackDec of TyVar * Kind * USyntax.VId * Ty * Exp
+             | UnpackDec of TyVar * Kind * USyntax.VId * (* the type of the new identifier *) Ty * Exp
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : USyntax.VId, tagName : USyntax.VId, payloadTy : Ty option }
@@ -516,6 +516,10 @@ fun updateEqualityForTyVarMap(f, env : Env) = { equalityForTyVarMap = f (#equali
                                               , exnTagMap = #exnTagMap env
                                               }
 
+fun freshTyVar(ctx : Context) = let val n = !(#nextTyVar ctx)
+                                in #nextTyVar ctx := n + 1
+                                 ; USyntax.AnonymousTyVar n
+                                end
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
                                              ; USyntax.MkVId(name, n)
@@ -897,7 +901,7 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
                      *)
                    } (* TODO: pack existentials *)
       end
-fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap })
+fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap }) : Env * F.Exp
     = let (* val equalities = Syntax.TyConMap.foldli (fn (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
                                                       let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                           val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
@@ -929,14 +933,48 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
       in (env, exp)
       end
   | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, LongStrIdExp longstrid)
+  | strExpToFExp(ctx, env, U.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig })
+    = let val (env', exp) = strExpToFExp(ctx, env, strExp)
+          val packageTy = signatureToTy (ctx, env, #s packageSig)
+          fun arityToKind 0 = F.TypeKind
+            | arityToKind n = F.ArrowKind (F.TypeKind, arityToKind (n - 1))
+          val (exp, packageTy) = ListPair.foldrEq (fn (U.TypeFunction (tyvars, payloadTy), { tyname, arity, admitsEquality }, (exp, packageTy)) =>
+                                                      let val kind = arityToKind arity
+                                                          val payloadTy' = List.foldr (fn (tv, ty) => F.TypeFn (tv, F.TypeKind, ty)) (toFTy (ctx, env', payloadTy)) tyvars
+                                                      in if admitsEquality then
+                                                             let fun EqualityTyForArity 0 xs t = List.foldl F.FnType (F.EqualityType t) xs
+                                                                   | EqualityTyForArity n xs t = let val tv = freshTyVar ctx
+                                                                                                 in F.ForallType (tv, F.TypeKind, EqualityTyForArity (n - 1) (F.EqualityType (F.TyVar tv) :: xs) (F.AppType { applied = t, arg = F.TyVar tv }))
+                                                                                                 end
+                                                                 val packageTy = F.ExistsType (F.tyNameToTyVar tyname, kind, F.PairType(EqualityTyForArity arity [] (F.TyVar (F.tyNameToTyVar tyname)), packageTy)) (* exists 'a. ('a * 'a -> bool) * packageTy / exists t. (forall 'a. forall 'b. ... ('a * 'a -> bool) -> ('b * 'b -> bool) -> ... -> (t 'a 'b ... * t 'a 'b ... -> bool)) * packageTy *)
+                                                                 val tyvars' = List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
+                                                                 val equalityEnv = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env') tyvars'
+                                                                                   , equalityForTyNameMap = #equalityForTyNameMap env'
+                                                                                   , exnTagMap = #exnTagMap env'
+                                                                                   }
+                                                                 val equality = getEquality (ctx, equalityEnv, payloadTy)
+                                                                 val equality = List.foldr (fn ((tv, eqParam), body) => F.FnExp (eqParam, F.EqualityType (F.TyVar tv), body)) equality tyvars'
+                                                                 val equality = List.foldr (fn (tv, body) => F.TyAbsExp (tv, F.TypeKind, body)) equality tyvars
+                                                             in (F.PackExp { payloadTy = payloadTy', exp = F.TupleExp [equality, exp], packageTy = packageTy }, packageTy)
+                                                             end
+                                                         else
+                                                             let val packageTy = F.ExistsType (F.tyNameToTyVar tyname, kind, packageTy)
+                                                             in (F.PackExp { payloadTy = payloadTy', exp = exp, packageTy = packageTy }, packageTy)
+                                                             end
+                                                      end
+                                                  ) (exp, packageTy) (payloadTypes, #bound packageSig)
+      in (env', exp)
+      end
   | strExpToFExp(ctx, env, U.LetInStrExp(span, strdecs, strexp)) = let val (env', decs) = strDecsToFDecs(ctx, env, strdecs)
                                                                        val (env', exp) = strExpToFExp(ctx, env', strexp)
                                                                    in (env', List.foldr F.LetExp exp decs)
                                                                    end
 and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec])
-  | strDecToFDecs(ctx, env, U.StrBindDec(span, strid, strexp, s))
+  | strDecToFDecs(ctx, env, U.StrBindDec(span, strid, strexp, { s, bound }))
     = let val vid = F.strIdToVId strid
-          val ty = signatureToTy(ctx, env, s)
+          val bound' = List.map (fn { tyname, arity, admitsEquality } => { tyname = tyname, newtyname = freshTyVar ctx, arity = arity, admitsEquality = admitsEquality }) bound
+          val subst = List.foldl (fn ({ tyname, newtyname, ... }, map) => U.TyVarMap.insert (map, F.tyNameToTyVar tyname, F.TyVar newtyname)) U.TyVarMap.empty bound'
+          val ty = #doTy (F.substTy subst) (signatureToTy (ctx, env, s))
           val (env', exp) = strExpToFExp(ctx, env, strexp)
           fun updateExnTagMap (strids, { valMap, strMap, ... }, path, exnTagMap)
               = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert(m, U.MkLongVId(strid, strids, vid), F.Child(path, F.ExnTagLabel vid))
@@ -948,7 +986,26 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                       , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, #equalityForTyNameMap env')
                       , exnTagMap = updateExnTagMap ([], s, F.Root vid, #exnTagMap env)
                       }
-      in (env'', [F.ValDec(F.SimpleBind(vid, ty, exp))]) (* TODO: unpack existentials *)
+          fun arityToKind 0 = F.TypeKind
+            | arityToKind n = F.ArrowKind (F.TypeKind, arityToKind (n - 1))
+          val (decs, exp, env) = List.foldl (fn ({ tyname = _, newtyname = tyname, arity, admitsEquality }, (decs, exp, env)) =>
+                                                let val vid = freshVId(ctx, case vid of U.MkVId(name,_) => name)
+                                                in if admitsEquality then
+                                                       let val equalityVId = freshVId(ctx, "eq")
+                                                           val strVId = freshVId(ctx, case vid of U.MkVId(name,_) => name)
+                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType []), (strVId, (* TODO *) F.RecordType [])], F.VarExp vid)) :: F.UnpackDec (tyname, arityToKind arity, vid, (* TODO *) F.RecordType [], exp) :: decs
+                                                          , F.VarExp strVId
+                                                          , { equalityForTyVarMap = #equalityForTyVarMap env
+                                                            , equalityForTyNameMap = U.TyNameMap.insert (#equalityForTyNameMap env, case tyname of U.NamedTyVar (name, _, n) => U.MkTyName (name, n) | U.AnonymousTyVar n => U.MkTyName ("", n), U.MkShortVId equalityVId)
+                                                            , exnTagMap = #exnTagMap env
+                                                            }
+                                                          )
+                                                       end
+                                                   else
+                                                       (F.UnpackDec (tyname, arityToKind arity, vid, (* TODO *) F.RecordType [], exp) :: decs, F.VarExp vid, env)
+                                                end
+                                            ) ([], exp, env'') bound'
+      in (env, List.rev (F.ValDec(F.SimpleBind(vid, ty, exp)) :: decs))
       end
   | strDecToFDecs(ctx, env, U.GroupStrDec(span, decs)) = let val (env, decs) = strDecsToFDecs(ctx, env, decs)
                                                          in (env, case decs of

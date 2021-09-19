@@ -91,6 +91,24 @@ end : ORD_KEY
 structure TyConSet = RedBlackSetFn(TyConKey)
 structure TyConMap = RedBlackMapFn(TyConKey)
 
+structure LongTyCon : sig
+              type t
+              val compare : t * t -> order
+              val min : t * t -> t
+              end = struct
+type t = LongTyCon
+fun compare (MkQualified ([], tycon), MkQualified ([], tycon')) = TyConKey.compare (tycon, tycon')
+  | compare (MkQualified ([], _), MkQualified (_ :: _, _)) = LESS
+  | compare (MkQualified (_ :: _, _), MkQualified ([], _)) = GREATER
+  | compare (MkQualified (s :: ss, tycon), MkQualified (s' :: ss', tycon')) = case StrIdKey.compare (s, s') of
+                                                                                  EQUAL => compare (MkQualified (ss, tycon), MkQualified (ss', tycon'))
+                                                                                | x => x
+fun min (x, y) = case compare (x, y) of
+                     LESS => x
+                   | EQUAL => x
+                   | GREATER => y
+end
+
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Label * Ty) list (* record type expression *)
             | TyCon of SourcePos.span * Ty list * LongTyCon (* type construction *)

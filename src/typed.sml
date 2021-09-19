@@ -127,6 +127,9 @@ withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
 type QSignature = { s : Signature
                   , bound : { arity : int, admitsEquality : bool, longtycon : Syntax.LongTyCon } TyNameMap.map
                   }
+type PackedSignature = { s : Signature
+                       , bound : { tyname : TyName, arity : int, admitsEquality : bool } list
+                       }
 
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
@@ -173,10 +176,11 @@ datatype StrExp = StructExp of { sourceSpan : SourcePos.span
                                , strMap : LongStrId Syntax.StrIdMap.map
                                }
                 | StrIdExp of SourcePos.span * LongStrId
+                | PackedStrExp of { sourceSpan : SourcePos.span, strExp : StrExp, payloadTypes : TypeFunction list, packageSig : PackedSignature }
                 (* TODO: functor application *)
                 | LetInStrExp of SourcePos.span * StrDec list * StrExp
      and StrDec = CoreDec of SourcePos.span * Dec
-                | StrBindDec of SourcePos.span * StrId * StrExp * Signature
+                | StrBindDec of SourcePos.span * StrId * StrExp * PackedSignature
                 | GroupStrDec of SourcePos.span * StrDec list
 
 datatype TopDec = StrDec of StrDec
@@ -412,9 +416,16 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                       }
           fun doStrExp(StructExp { sourceSpan, valMap, tyConMap, strMap }) = StructExp { sourceSpan = sourceSpan, valMap = valMap, tyConMap = Syntax.TyConMap.map doTypeStructure tyConMap, strMap = strMap }
             | doStrExp(exp as StrIdExp _) = exp
+            | doStrExp(PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = PackedStrExp { sourceSpan = sourceSpan
+                                                                                                     , strExp = doStrExp strExp
+                                                                                                     , payloadTypes = List.map (fn TypeFunction (tyvars, ty) => TypeFunction (tyvars, doTy ty)) payloadTypes
+                                                                                                     , packageSig = { s = doSignature (#s packageSig)
+                                                                                                                    , bound = #bound packageSig
+                                                                                                                    }
+                                                                                                     }
             | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, List.map doStrDec strdecs, doStrExp strexp)
           and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec dec)
-            | doStrDec(StrBindDec(span, strid, strexp, s)) = StrBindDec(span, strid, doStrExp strexp, doSignature s)
+            | doStrDec(StrBindDec(span, strid, strexp, { s, bound })) = StrBindDec(span, strid, doStrExp strexp, { s = doSignature s, bound = bound })
             | doStrDec(GroupStrDec(span, decs)) = GroupStrDec(span, List.map doStrDec decs)
           fun doTopDec(StrDec strdec) = StrDec(doStrDec strdec)
       in { doExp = doExp
@@ -502,9 +513,10 @@ and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
 fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)
 fun freeTyVarsInStrExp(bound, StructExp { ... }) = TyVarSet.empty (* TODO: tyConMap *)
   | freeTyVarsInStrExp(bound, StrIdExp _) = TyVarSet.empty
+  | freeTyVarsInStrExp(bound, PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = freeTyVarsInStrExp(bound, strExp) (* TODO *)
   | freeTyVarsInStrExp(bound, LetInStrExp(_, strdecs, strexp)) = TyVarSet.union(freeTyVarsInStrDecs(bound, strdecs), freeTyVarsInStrExp(bound, strexp))
 and freeTyVarsInStrDec(bound, CoreDec(_, dec)) = freeTyVarsInDec(bound, dec)
-  | freeTyVarsInStrDec(bound, StrBindDec(_, _, strexp, s)) = TyVarSet.union(freeTyVarsInStrExp(bound, strexp), freeTyVarsInSignature(bound, s))
+  | freeTyVarsInStrDec(bound, StrBindDec(_, _, strexp, { s, bound = _ })) = TyVarSet.union(freeTyVarsInStrExp(bound, strexp), freeTyVarsInSignature(bound, s))
   | freeTyVarsInStrDec(bound, GroupStrDec(_, decs)) = freeTyVarsInStrDecs(bound, decs)
 and freeTyVarsInStrDecs(bound, decs) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInStrDec(bound, dec))) TyVarSet.empty decs
 
