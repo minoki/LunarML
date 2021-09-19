@@ -113,6 +113,7 @@ fun SimplifyingAndalsoExp(a as VarExp(vid), b) = if USyntax.eqVId(vid, InitialEn
                                                  else
                                                      AndalsoExp(a, b)
   | SimplifyingAndalsoExp(a, b) = AndalsoExp(a, b)
+fun EqualityType t = FnType (PairType (t, t), TyVar (tyNameToTyVar (Typing.primTyName_bool))) (* t * t -> bool *)
 
 (* occurCheck : TyVar -> Ty -> bool *)
 fun occurCheck tv =
@@ -712,7 +713,7 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
                                        [] => F.ForallType (tv, F.TypeKind, ty1)
-                                     | [U.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool))), ty1))
+                                     | [U.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
@@ -721,9 +722,8 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
               = (case cts of
                      [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
                    | [U.IsEqType _] => let val vid = freshVId(ctx, "eq")
-                                           val eqTy = F.FnType (F.PairType (F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
                                            val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
-                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, eqTy, doExp(env'', rest)))
+                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, F.EqualityType(F.TyVar tv), doExp(env'', rest)))
                                        end
                    | _ => raise Fail "invalid type constraint"
                 )
@@ -735,8 +735,7 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
                                         in F.ForallType(tv, F.TypeKind, go env' xs)
                                         end
             | go env ((tv, [U.IsEqType _]) :: xs) = let val env' = env (* TODO *)
-                                                        val eqTy = F.FnType(F.PairType(F.TyVar tv, F.TyVar tv), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
-                                                    in F.ForallType(tv, F.TypeKind, F.FnType(eqTy, go env' xs))
+                                                    in F.ForallType(tv, F.TypeKind, F.FnType(F.EqualityType(F.TyVar tv), go env' xs))
                                                     end
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
@@ -835,9 +834,8 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * 
                      }
           fun doDatBind(U.DatBind(span, tyvars, tyname, conbinds, true), valbinds)
               = let val vid = USyntax.TyNameMap.lookup(nameMap, tyname)
-                    fun eqTy t = F.FnType (F.PairType (t, t), F.TyVar(F.tyNameToTyVar(Typing.primTyName_bool)))
                     val tyvars'' = List.map F.TyVar tyvars
-                    val ty = List.foldr (fn (tv, ty) => F.FnType(eqTy (F.TyVar tv), ty)) (eqTy (F.TyCon(tyvars'', tyname))) tyvars
+                    val ty = List.foldr (fn (tv, ty) => F.FnType(F.EqualityType (F.TyVar tv), ty)) (F.EqualityType (F.TyCon(tyvars'', tyname))) tyvars
                     val ty = List.foldr (fn (tv, ty) => F.ForallType(tv, F.TypeKind, ty)) ty tyvars
                     val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                     val eqForTyVars = List.foldl USyntax.TyVarMap.insert' USyntax.TyVarMap.empty tyvars'
@@ -875,12 +873,11 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * 
                                                       )
                                           )
                                end
-                    val body = List.foldr (fn ((tv, eqParam), ty) => let val paramTy = eqTy (F.TyVar tv)
-                                                                     in F.FnExp ( eqParam
-                                                                                , paramTy
-                                                                                , body
-                                                                                )
-                                                                     end) body tyvars'
+                    val body = List.foldr (fn ((tv, eqParam), ty) => F.FnExp ( eqParam
+                                                                             , F.EqualityType (F.TyVar tv)
+                                                                             , body
+                                                                             )
+                                          ) body tyvars'
                     val body = List.foldr (fn (tv, body) => F.TyAbsExp(tv, F.TypeKind, body)) body tyvars
                 in (vid, ty, body) :: valbinds
                 end
