@@ -878,11 +878,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           end
       else
           raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) dest
+  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
     = let val valMap' = Syntax.VIdMap.listItemsi valMap
           val strMap' = Syntax.StrIdMap.listItemsi strMap
           val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
-          val equalityMap' = Syntax.TyConMap.listItemsi equalityMap
       in mapCont (fn ((label, path), cont) => doExpCont ctx env (F.PathToExp path) (fn (stmts, env, e) => cont (stmts, (label, e))))
                  valMap'
                  (fn valMap' =>
@@ -895,19 +894,12 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                exnTagMap'
                                                (fn exnTagMap' =>
                                                    let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
-                                                   in mapCont (fn ((label, path), cont) => doExpCont ctx env (F.PathToExp path) (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                                              equalityMap'
-                                                              (fn equalityMap' =>
-                                                                  let val (stmts''', equalityFields) = ListPair.unzip equalityMap'
-                                                                      val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
-                                                                      val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
-                                                                      val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
-                                                                      val equalityFields = List.map (fn (Syntax.MkTyCon name, e) => [ Fragment ("[" ^ toLuaStringLit (name ^ ".=") ^ "] = ") ] @ #exp e) equalityFields
-                                                                  in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts'
-                                                                                            , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields @ equalityFields) @ [ Fragment "}" ] }
-                                                                                            )
-                                                                  end
-                                                              )
+                                                       val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
+                                                       val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
+                                                       val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
+                                                   in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts' @ List.concat stmts''
+                                                                             , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields) @ [ Fragment "}" ] }
+                                                                             )
                                                    end
                                                )
                                     end
@@ -930,7 +922,6 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                                        F.ValueLabel vid => Syntax.getVIdName vid
                                                                                      | F.StructLabel (Syntax.MkStrId name) => "_" ^ name
                                                                                      | F.ExnTagLabel vid => Syntax.getVIdName vid ^ ".tag"
-                                                                                     | F.EqualityLabel (Syntax.MkTyCon name) => name ^ ".="
                                                                    in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
                                                                    end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest

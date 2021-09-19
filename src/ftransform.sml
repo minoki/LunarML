@@ -69,7 +69,7 @@ fun splitPath (components, F.Child(parent, label)) = splitPath (label :: compone
   | splitPath (components, F.Root vid) = (vid, components)
 fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = splitPath ([], path)
                                                in case USyntax.VIdMap.find(valMap, vid) of
-                                                      SOME ty => List.foldl (fn (label, F.SigType { valMap, strMap, equalityMap, ... }) =>
+                                                      SOME ty => List.foldl (fn (label, F.SigType { valMap, strMap, ... }) =>
                                                                                 (case label of
                                                                                      F.ValueLabel vid => (case Syntax.VIdMap.find(valMap, vid) of
                                                                                                               SOME ty => ty
@@ -83,10 +83,6 @@ fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = split
                                                                                                               SOME ty => ty
                                                                                                             | NONE => raise Fail ("child not found: " ^ Syntax.print_VId vid)
                                                                                                           )
-                                                                                   | F.EqualityLabel tycon => (case Syntax.TyConMap.find(equalityMap, tycon) of
-                                                                                                                   SOME ty => ty
-                                                                                                                 | NONE => raise Fail ("child not found: " ^ Syntax.print_TyCon tycon)
-                                                                                                              )
                                                                                 )
                                                                             | (label, _) => raise Fail "lookupPath: invalid type"
                                                                             ) ty components
@@ -115,11 +111,10 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    | F.ProjectionExp _ => exp0
                    | F.TyAbsExp(tv, kind, exp) => F.TyAbsExp(tv, kind, doExp env exp) (* TODO: update type environment? *)
                    | F.TyAppExp(exp, ty) => F.TyAppExp(exp, ty)
-                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => F.StructExp { valMap = valMap
-                                                                                           , strMap = strMap
-                                                                                           , exnTagMap = exnTagMap
-                                                                                           , equalityMap = equalityMap
-                                                                                           }
+                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = valMap
+                                                                              , strMap = strMap
+                                                                              , exnTagMap = exnTagMap
+                                                                              }
                    | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                    | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }
                    | F.CaseExp(span, exp, ty, [(F.VarPat (vid, ty'), exp2 as F.VarExp (vid'))]) =>
@@ -447,11 +442,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doTy env (F.TypeFn (tv, kind, ty)) = let val tv' = refreshTyVar tv
                                                    in F.TypeFn (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
                                                    end
-            | doTy env (F.SigType { valMap, strMap, exnTags, equalityMap }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
-                                                                                        , strMap = Syntax.StrIdMap.map (doTy env) strMap
-                                                                                        , exnTags = exnTags
-                                                                                        , equalityMap = Syntax.TyConMap.map (doTy env) equalityMap
-                                                                                        }
+            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
+                                                                           , strMap = Syntax.StrIdMap.map (doTy env) strMap
+                                                                           , exnTags = exnTags
+                                                                           }
           fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
                                                              SOME vid => F.Root vid
                                                            | NONE => path
@@ -513,7 +507,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                        in F.TyAbsExp (tv', kind, doExp (insertTyVar (env, tv, tv')) exp)
                                                        end
             | doExp env (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp env exp, doTy env ty)
-            | doExp env (exp as F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = exp
+            | doExp env (exp as F.StructExp { valMap, strMap, exnTagMap }) = exp
             | doExp env (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp env exp, label)
             | doExp env (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = doTy env payloadTy
                                                                               , exp = doExp env exp
@@ -596,17 +590,15 @@ datatype InlineExp = VarExp of USyntax.VId
                    | StructExp of { valMap : F.Path Syntax.VIdMap.map
                                   , strMap : F.Path Syntax.StrIdMap.map
                                   , exnTagMap : F.Path Syntax.VIdMap.map
-                                  , equalityMap : F.Path Syntax.TyConMap.map
                                   }
                    | SProjectionExp of InlineExp * F.SLabel
                    | FnExp of USyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
-fun lookupSLabel ({ valMap, strMap, exnTagMap, equalityMap }, label) = case label of
-                                                                           F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
-                                                                         | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
-                                                                         | F.ExnTagLabel vid => Syntax.VIdMap.find(exnTagMap, vid)
-                                                                         | F.EqualityLabel tycon => Syntax.TyConMap.find(equalityMap, tycon)
+fun lookupSLabel ({ valMap, strMap, exnTagMap }, label) = case label of
+                                                              F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
+                                                            | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
+                                                            | F.ExnTagLabel vid => Syntax.VIdMap.find(exnTagMap, vid)
 type Env = { valMap : InlineExp USyntax.VIdMap.map }
 val emptyEnv : Env = { valMap = USyntax.VIdMap.empty }
 fun freeVarsInPat F.WildcardPat = USyntax.VIdSet.empty
@@ -635,7 +627,7 @@ fun costOfExp (F.PrimExp (primOp, tyargs, args)) = Vector.foldl (fn (exp, acc) =
   | costOfExp (F.ProjectionExp { label, recordTy, fieldTy }) = 1
   | costOfExp (F.TyAbsExp (tv, kind, exp)) = costOfExp exp
   | costOfExp (F.TyAppExp (exp, ty)) = costOfExp exp
-  | costOfExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = 1
+  | costOfExp (F.StructExp { valMap, strMap, exnTagMap }) = 1
   | costOfExp (F.SProjectionExp (exp, _)) = costOfExp exp
   | costOfExp (F.PackExp { payloadTy, exp, packageTy }) = costOfExp exp
 and costOfDec (F.ValDec valbind) = costOfValBind valbind
@@ -664,13 +656,13 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                in doInlineExp
                                end
 fun freeTyVarsInInlineExp (bound, VarExp _) = USyntax.TyVarSet.empty
-  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = USyntax.TyVarSet.empty
+  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) = freeTyVarsInInlineExp (bound, exp)
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
 fun uninlineExp (VarExp vid) = F.VarExp vid
-  | uninlineExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = F.StructExp { valMap = valMap, strMap = strMap, exnTagMap = exnTagMap, equalityMap = equalityMap }
+  | uninlineExp (StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap, strMap = strMap, exnTagMap = exnTagMap }
   | uninlineExp (SProjectionExp (exp, label)) = F.SProjectionExp (uninlineExp exp, label)
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
@@ -803,18 +795,16 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                                 end
                                                                | _ => F.TyAppExp (exp, ty), NONE)
                                              end
-                   | F.StructExp { valMap, strMap, exnTagMap, equalityMap } => ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
-                                                                                             , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
-                                                                                             , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
-                                                                                             , equalityMap = Syntax.TyConMap.map (#1 o doPath env) equalityMap
-                                                                                             }
-                                                                               , SOME (StructExp { valMap = valMap
-                                                                                                 , strMap = strMap
-                                                                                                 , exnTagMap = exnTagMap
-                                                                                                 , equalityMap = equalityMap
-                                                                                                 }
-                                                                                      )
-                                                                               )
+                   | F.StructExp { valMap, strMap, exnTagMap } => ( F.StructExp { valMap = Syntax.VIdMap.map (#1 o doPath env) valMap
+                                                                                , strMap = Syntax.StrIdMap.map (#1 o doPath env) strMap
+                                                                                , exnTagMap = Syntax.VIdMap.map (#1 o doPath env) exnTagMap
+                                                                                }
+                                                                  , SOME (StructExp { valMap = valMap
+                                                                                    , strMap = strMap
+                                                                                    , exnTagMap = exnTagMap
+                                                                                    }
+                                                                         )
+                                                                  )
                    | F.SProjectionExp (exp, label) => (case doExp' env exp of
                                                            (exp, SOME (StructExp m)) => (case lookupSLabel(m, label) of
                                                                                              SOME path => let val iexp = evalPath env path
@@ -891,11 +881,10 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector
   | doExp (exp as F.ProjectionExp _) = exp
   | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
-  | doExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = F.StructExp { valMap = valMap
-                                                                                 , strMap = strMap
-                                                                                 , exnTagMap = exnTagMap
-                                                                                 , equalityMap = equalityMap
-                                                                                 }
+  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap
+                                                                    , strMap = strMap
+                                                                    , exnTagMap = exnTagMap
+                                                                    }
   | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
 and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
@@ -964,7 +953,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.ProjectionExp { label, recordTy, fieldTy }) = true
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
-  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = true
+  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap }) = true
   | isDiscardable (F.SProjectionExp (exp, label)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
 (* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
@@ -1020,17 +1009,15 @@ fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Ex
   | doExp (F.TyAppExp (exp, ty)) = let val (used, exp) = doExp exp
                                    in (used, F.TyAppExp (exp, ty))
                                    end
-  | doExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = let val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) USyntax.VIdSet.empty valMap
-                                                                         val used = Syntax.StrIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used strMap
-                                                                         val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used exnTagMap
-                                                                         val used = Syntax.TyConMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used equalityMap
-                                                                     in (used, F.StructExp { valMap = valMap
-                                                                                           , strMap = strMap
-                                                                                           , exnTagMap = exnTagMap
-                                                                                           , equalityMap = equalityMap
-                                                                                           }
-                                                                        )
-                                                                     end
+  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = let val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) USyntax.VIdSet.empty valMap
+                                                            val used = Syntax.StrIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used strMap
+                                                            val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used exnTagMap
+                                                        in (used, F.StructExp { valMap = valMap
+                                                                              , strMap = strMap
+                                                                              , exnTagMap = exnTagMap
+                                                                              }
+                                                           )
+                                                        end
   | doExp (F.SProjectionExp (exp, label)) = let val (used, exp) = doExp exp
                                             in (used, F.SProjectionExp (exp, label))
                                             end
@@ -1098,7 +1085,7 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args))
                                                  F.RecordExp [] => (used, [])
                                                | exp => (used, [F.TyAppExp (exp, ty)])
                                           end
-  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap, equalityMap }) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) = (USyntax.VIdSet.empty, [])
   | doIgnoredExp (F.SProjectionExp (exp, label)) = doIgnoredExp exp
   | doIgnoredExp (F.PackExp { payloadTy, exp, packageTy }) = let val (used, exp) = doIgnoredExpAsExp exp
                                                              in case exp of

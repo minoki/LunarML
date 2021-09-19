@@ -7,7 +7,6 @@ type TyVar = USyntax.TyVar
 datatype SLabel = ValueLabel of Syntax.VId
                 | StructLabel of Syntax.StrId
                 | ExnTagLabel of Syntax.VId (* of constructor *)
-                | EqualityLabel of Syntax.TyCon
 datatype Path = Root of USyntax.VId
               | Child of Path * SLabel
 datatype Kind = TypeKind
@@ -22,7 +21,6 @@ datatype Ty = TyVar of TyVar
             | SigType of { valMap : Ty Syntax.VIdMap.map (* id status? *)
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
-                         , equalityMap : Ty Syntax.TyConMap.map
                          }
 datatype Pat = WildcardPat
              | SConPat of Syntax.SCon
@@ -60,7 +58,6 @@ datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
              | StructExp of { valMap : Path Syntax.VIdMap.map
                             , strMap : Path Syntax.StrIdMap.map
                             , exnTagMap : Path Syntax.VIdMap.map
-                            , equalityMap : Path Syntax.TyConMap.map
                             }
              | SProjectionExp of Exp * SLabel
              | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
@@ -133,7 +130,7 @@ fun occurCheck tv =
                                                 false
                                             else
                                                 check ty
-          | check (SigType { valMap, strMap, exnTags, equalityMap }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap orelse Syntax.TyConMap.exists check equalityMap
+          | check (SigType { valMap, strMap, exnTags }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap
     in check
     end
 
@@ -173,11 +170,10 @@ fun substituteTy (tv, replacement) =
                                                     end
                                                 else
                                                     TypeFn(tv', kind, go ty')
-          | go (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map go valMap
-                                                                            , strMap = Syntax.StrIdMap.map go strMap
-                                                                            , exnTags = exnTags
-                                                                            , equalityMap = Syntax.TyConMap.map go equalityMap
-                                                                            }
+          | go (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map go valMap
+                                                               , strMap = Syntax.StrIdMap.map go strMap
+                                                               , exnTags = exnTags
+                                                               }
     in go
     end
 
@@ -202,11 +198,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                TypeFn (tv, kind, #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty)
                                            else
                                                TypeFn (tv, kind, doTy ty)
-          | doTy (SigType { valMap, strMap, exnTags, equalityMap }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
-                                                                              , strMap = Syntax.StrIdMap.map doTy strMap
-                                                                              , exnTags = exnTags
-                                                                              , equalityMap = Syntax.TyConMap.map doTy equalityMap
-                                                                              }
+          | doTy (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
+                                                                 , strMap = Syntax.StrIdMap.map doTy strMap
+                                                                 , exnTags = exnTags
+                                                                 }
         fun doPat (pat as WildcardPat) = pat
           | doPat (pat as SConPat _) = pat
           | doPat (VarPat (vid, ty)) = VarPat (vid, doTy ty)
@@ -234,11 +229,10 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                    TyAbsExp (tv, kind, doExp exp)
           | doExp (PackExp { payloadTy, exp, packageTy }) = PackExp { payloadTy = doTy payloadTy, exp = doExp exp, packageTy = doTy packageTy }
           | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
-          | doExp (StructExp { valMap, strMap, exnTagMap, equalityMap }) = StructExp { valMap = valMap
-                                                                                     , strMap = strMap
-                                                                                     , exnTagMap = exnTagMap
-                                                                                     , equalityMap = equalityMap
-                                                                                     }
+          | doExp (StructExp { valMap, strMap, exnTagMap }) = StructExp { valMap = valMap
+                                                                        , strMap = strMap
+                                                                        , exnTagMap = exnTagMap
+                                                                        }
           | doExp (SProjectionExp (exp, label)) = SProjectionExp (doExp exp, label)
         and doDec (ValDec valbind) = ValDec (doValBind valbind)
           | doDec (RecValDec valbinds) = RecValDec (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp)) valbinds)
@@ -274,10 +268,9 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
   | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
   | freeTyVarsInTy (bound, TypeFn (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
-  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags, equalityMap }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
-                                                                                   val acc = Syntax.StrIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
-                                                                               in Syntax.TyConMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc equalityMap
-                                                                               end
+  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags }) = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty valMap
+                                                                  in Syntax.StrIdMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
+                                                                  end
 fun freeTyVarsInPat (bound, WildcardPat) = USyntax.TyVarSet.empty
   | freeTyVarsInPat (bound, SConPat _) = USyntax.TyVarSet.empty
   | freeTyVarsInPat (bound, VarPat (vid, ty)) = freeTyVarsInTy (bound, ty)
@@ -305,7 +298,7 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, tyargs, args
   | freeTyVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, recordTy), freeTyVarsInTy (bound, fieldTy))
   | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
-  | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = USyntax.TyVarSet.empty
+  | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, SProjectionExp (exp, label)) = freeTyVarsInExp (bound, exp)
   | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = USyntax.TyVarSet.union (USyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInTy (bound, packageTy)), freeTyVarsInExp (bound, exp))
 and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
@@ -368,14 +361,13 @@ fun freeVarsInExp (bound : USyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) =
   | freeVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.VIdSet.empty
   | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, TyAppExp (exp, ty)) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap, equalityMap }) = let fun addPath (path, set) = USyntax.VIdSet.add (set, rootOfPath path)
-                                                                                  in List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
-                                                                                                [Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty valMap
-                                                                                                ,Syntax.StrIdMap.foldl addPath USyntax.VIdSet.empty strMap
-                                                                                                ,Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty exnTagMap
-                                                                                                ,Syntax.TyConMap.foldl addPath USyntax.VIdSet.empty equalityMap
-                                                                                                ]
-                                                                                  end
+  | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = let fun addPath (path, set) = USyntax.VIdSet.add (set, rootOfPath path)
+                                                                     in List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
+                                                                                   [Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty valMap
+                                                                                   ,Syntax.StrIdMap.foldl addPath USyntax.VIdSet.empty strMap
+                                                                                   ,Syntax.VIdMap.foldl addPath USyntax.VIdSet.empty exnTagMap
+                                                                                   ]
+                                                                     end
   | freeVarsInExp (bound, SProjectionExp (exp, label)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = freeVarsInExp (bound, exp)
 and freeVarsInDec (bound, ValDec (SimpleBind (vid, ty, exp))) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
@@ -893,21 +885,20 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
       in F.SigType { valMap = Syntax.VIdMap.map (fn (tysc, ids) => typeSchemeToTy(ctx, env, tysc)) valMap
                    , strMap = Syntax.StrIdMap.map (fn U.MkSignature s => signatureToTy(ctx, env, s)) strMap
                    , exnTags = exnTags
-                   , equalityMap = Syntax.TyConMap.mapPartial (fn _ => NONE
-                                                               (* { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
+                     (*
+                   , equalityMap = Syntax.TyConMap.mapPartial (fn { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... } =>
                                                                   let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                                       val ty = toFTy(ctx, env, ty)
                                                                       val ty = List.foldr (fn (tv, ty) => F.FnType (eqTy (F.TyVar tv), ty)) (eqTy ty) tyvars
                                                                   in SOME (List.foldr F.ForallType ty tyvars)
                                                                   end
                                                               | { admitsEquality = false, ... } => NONE (* TODO: ref and array *)
-*)
                                                               ) tyConMap
+                     *)
                    } (* TODO: pack existentials *)
       end
 fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap })
-    = let val equalities = Syntax.TyConMap.foldli (fn (_, _, xs) => xs
-                                                  (* (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
+    = let (* val equalities = Syntax.TyConMap.foldli (fn (tycon, { typeFunction = U.TypeFunction(tyvars, ty), admitsEquality = true, ... }, xs) =>
                                                       let fun eqTy ty = F.FnType (F.PairType (ty, ty), F.TyCon ([], Typing.primTyName_bool))
                                                           val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                                                           val env' = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
@@ -923,8 +914,8 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                                       in (tycon, vid, body, ty) :: xs
                                                       end
                                                   | (_, { admitsEquality = false, ... }, xs) => xs
-*)
                                                   ) [] tyConMap
+           *)
           val exp = F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, ids) => LongVIdToPath(longvid)) valMap
                                 , strMap = Syntax.StrIdMap.map LongStrIdToPath strMap
                                 , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, ids) => if ids = Syntax.ExceptionConstructor then
@@ -934,9 +925,8 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                                                                              else
                                                                                                  NONE
                                                                        ) valMap
-                                , equalityMap = List.foldl (fn ((tycon, vid, _, _), m) => Syntax.TyConMap.insert(m, tycon, F.Root vid)) Syntax.TyConMap.empty equalities
                                 }
-      in (env, List.foldl (fn ((_, vid, fnBody, ty), exp) => F.LetExp(F.ValDec(F.SimpleBind(vid, ty, fnBody)), exp)) exp equalities)
+      in (env, exp)
       end
   | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, LongStrIdExp longstrid)
   | strExpToFExp(ctx, env, U.LetInStrExp(span, strdecs, strexp)) = let val (env', decs) = strDecsToFDecs(ctx, env, strdecs)
