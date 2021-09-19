@@ -412,7 +412,7 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
                   unify(ctx, env, ctrs)
               else if admitsEquality then
                   unify(ctx, env, List.map (fn tyarg => U.UnaryConstraint(span1, tyarg, U.IsEqType span3)) tyargs @ ctrs)
-              else 
+              else
                   emitError(ctx, [span1, span2, span3], USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
            end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsIntegral span3) =>
@@ -1550,7 +1550,7 @@ fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.Q
                    end
           val tystr = lookupLongTyConInQSignature(ctx, span, s, longtycon)
       in case getTypeNameFromTypeStructure(ctx, tystr) of
-             SOME (tyname, arity) => 
+             SOME (tyname, arity) =>
              if List.length tyvars = arity then
                  case U.TyNameMap.find(#bound s, tyname) of
                      SOME { admitsEquality, ... } =>
@@ -1981,9 +1981,9 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.QSign
                               , strMap = Syntax.StrIdMap.map (fn (_, longstrid) => longstrid) strMap
                               }
       in (s, tyNameMap, if List.null decs then
-                              e
-                          else
-                              U.LetInStrExp(span, decs, e)
+                            e
+                        else
+                            U.LetInStrExp(span, decs, e)
          )
       end
   | typeCheckStrExp(ctx, env, S.StrIdExp(span, longstrid))
