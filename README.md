@@ -30,7 +30,7 @@ Successor ML features:
 
 * [x] Monomorphic non-exhaustive bindings
 * [x] Simplified recursive value bindings
-    * SML '97-compatible declaration for type variables are also supported: `val <tyvarseq> rec <valbind>`
+    * SML '97-compatible ordering for type variables are also supported: `val <tyvarseq> rec <valbind>`
 * [ ] Abstype as derived form
 * [x] Fixed manifest type specifications
 * [x] Abolish sequenced type realizations

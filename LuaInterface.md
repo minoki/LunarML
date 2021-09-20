@@ -148,7 +148,6 @@ end
   Foo = <constructor of Foo>,
   ["Foo.tag"] = <tag of Foo>, -- suffixed with '.tag'
   T = <constructor of T>,
-  ["t.="] = <equality for t>, -- suffixed with '.='
 }
 ```
 
