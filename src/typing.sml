@@ -1290,13 +1290,13 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
               = if U.TyVarSet.member(tvset, tv) then
                     ()
                 else
-                    emitErrorP(ctx, [span], "type variable scope violation " ^ USyntax.PrettyPrint.print_TyVar tv)
+                    emitErrorP(ctx, [span], "type variable scope violation: " ^ USyntax.PrettyPrint.print_TyVar tv)
             | goTy (U.RecordType(span, fields)) = List.app (fn (label, ty) => goTy ty) fields
             | goTy (U.TyCon(span, tyargs, tyname))
               = if U.TyNameSet.member(tynameset, tyname) then
                     List.app goTy tyargs
                 else
-                    emitErrorP(ctx, [span], "type constructor scope violation")
+                    emitErrorP(ctx, [span], "type constructor scope violation: " ^ USyntax.PrettyPrint.print_TyName tyname)
             | goTy (U.FnType(span, ty1, ty2)) = ( goTy ty1; goTy ty2 )
           fun goUnaryConstraint (U.HasField { sourceSpan, label, fieldTy }) = goTy fieldTy
             | goUnaryConstraint _ = ()
@@ -1379,7 +1379,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                                                                  in goStrExp strexp
                                                                  end
           and goStrDec (U.CoreDec(_, dec)) = goDec dec
-            | goStrDec (U.StrBindDec(_, strid, strexp, s)) = goStrExp strexp (* TODO: signature *)
+            | goStrDec (U.StrBindDec(_, strid, strexp, { s, bound })) = List.foldl (fn ({ tyname, ... }, set) => U.TyNameSet.add (set, tyname)) (goStrExp strexp) bound
             | goStrDec (U.GroupStrDec(_, decs)) = goStrDecs decs
           and goStrDecs decs = List.foldl (fn (dec, tynameset) => let val { goStrDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                   in goStrDec dec
@@ -2042,7 +2042,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                            )
       )
   | typeCheckStrExp(ctx, env, S.TransparentConstraintExp(span, strexp, sigexp))
-    = let val (sA, tyNameMap, strexp) = typeCheckStrExp(ctx, env, strexp) (* TODO: unpack? *)
+    = let val (sA, tyNameMap, strexp) = typeCheckStrExp(ctx, env, strexp)
           val sE = evalSignature(ctx, envToSigEnv env, sigexp)
           val strid = newStrId(ctx, Syntax.MkStrId "tmp")
           val env' = { valMap = #valMap env
@@ -2090,9 +2090,11 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
           val tyNameMapOutside = U.TyNameMap.foldli (fn (tyname, { arity, admitsEquality, longtycon }, acc) =>
                                                         let val valEnv = case valEnvForTyName (#s sE, tyname) of
                                                                              NONE => Syntax.VIdMap.empty
-                                                                           | SOME valEnv => Syntax.VIdMap.map (fn (U.TypeScheme (typarams, ty), ids) => let val tysc = U.TypeScheme (typarams, applySubstTyConInTy (ctx, tyNameSubst) ty)
-                                                                                                                                                        in (tysc, ids)
-                                                                                                                                                        end) valEnv
+                                                                           | SOME valEnv => Syntax.VIdMap.map (fn (U.TypeScheme (typarams, ty), ids) =>
+                                                                                                                  let val tysc = U.TypeScheme (typarams, applySubstTyConInTy (ctx, tyNameSubst) ty)
+                                                                                                                  in (tysc, ids)
+                                                                                                                  end
+                                                                                                              ) valEnv
                                                         in U.TyNameMap.insert (acc, U.TyNameMap.lookup (tyNameMap, tyname), { valEnv = valEnv, admitsEquality = admitsEquality })
                                                         end
                                                     ) U.TyNameMap.empty (#bound sE)
@@ -2102,7 +2104,12 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                            SOME { typeFunction, valEnv } => typeFunction
                                                          | NONE => emitError (ctx, [span], "unknown type constructor")
                                                     end) tynames
-      in (packageSig, tyNameMapOutside, U.PackedStrExp { sourceSpan = span, strExp = strexp', payloadTypes = payloadTypes, packageSig = packageSig })
+      in (packageSig, tyNameMapOutside, U.PackedStrExp { sourceSpan = span
+                                                       , strExp = U.LetInStrExp(span, [U.StrBindDec(span, strid, strexp, sA)], strexp')
+                                                       , payloadTypes = payloadTypes
+                                                       , packageSig = packageSig
+                                                       }
+         )
       end
   | typeCheckStrExp(ctx, env, S.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs) = typeCheckStrDecs(ctx, env, strdecs)
                                                                           val (s, tyNameMap, strexp) = typeCheckStrExp(ctx, mergeEnv(env, env'), strexp)

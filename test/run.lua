@@ -106,6 +106,7 @@ should_run "should_run/" {
   "signature3.sml",
   "signature4.sml",
   "signature5.sml",
+  "opaque1.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
@@ -144,6 +145,8 @@ should_not_compile "should_not_compile/" {
   "syntax_datbind.sml",
   "syntax_datbind2.sml",
   "syntax_exbind.sml",
+  "opaque1.sml",
+  "opaque2.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

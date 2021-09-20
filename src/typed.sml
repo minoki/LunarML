@@ -219,8 +219,10 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
 (* pretty printing *)
 structure PrettyPrint = struct
 fun print_VId(MkVId(name, n)) = "MkVId(\"" ^ String.toString name ^ "\"," ^ Int.toString n ^ ")"
+fun print_StrId(MkStrId(name,n)) = name ^ "@" ^ Int.toString n
 fun print_LongVId(MkShortVId(vid)) = print_VId vid
-  | print_LongVId(MkLongVId(MkStrId(strid, n), strids, vid)) = "MkLongVId(" ^ strid ^ "@" ^ Int.toString n ^ "," ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ Syntax.print_VId vid ^ ")"
+  | print_LongVId(MkLongVId(strid, strids, vid)) = "MkLongVId(" ^ print_StrId strid ^ "," ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ Syntax.print_VId vid ^ ")"
+fun print_LongStrId(MkLongStrId(strid, strids)) = String.concatWith "." (print_StrId strid :: List.map (fn Syntax.MkStrId name => name) strids)
 fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
@@ -307,8 +309,14 @@ fun print_TyNameMap print_elem x = Syntax.print_list (Syntax.print_pair (print_T
 val print_Decs = Syntax.print_list print_Dec
 fun print_Constraint(EqConstr(span,ty1,ty2)) = "EqConstr(" ^ print_Ty ty1 ^ "," ^ print_Ty ty2 ^ ")"
   | print_Constraint(UnaryConstraint(span,ty,ct)) = "Unary(" ^ print_Ty ty ^ "," ^ print_UnaryConstraint ct ^ ")"
-fun print_TopDec (StrDec (CoreDec (span,dec))) = print_Dec dec
-  | print_TopDec _ = "StrDec"
+fun print_StrExp (StructExp { sourceSpan, valMap, tyConMap, strMap }) = "StructExp"
+  | print_StrExp (StrIdExp (span, longstrid)) = "StrIdExp(" ^ print_LongStrId longstrid ^ ")"
+  | print_StrExp (PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = "PackedStrExp(" ^ print_StrExp strExp ^ ")"
+  | print_StrExp (LetInStrExp (span, strdecs, strexp)) = "LetInStrExp(" ^ Syntax.print_list print_StrDec strdecs ^ "," ^ print_StrExp strexp ^ ")"
+and print_StrDec (CoreDec (span, dec)) = print_Dec dec
+  | print_StrDec (StrBindDec (span, strid, strexp, ps)) = "StrBindDec(" ^ print_StrId strid ^ "," ^ print_StrExp strexp ^ ")"
+  | print_StrDec (GroupStrDec (span, strdecs)) = "GroupStrDec" ^ Syntax.print_list print_StrDec strdecs
+fun print_TopDec (StrDec strdec) = print_StrDec strdec
 end (* structure PrettyPrint *)
 open PrettyPrint
 

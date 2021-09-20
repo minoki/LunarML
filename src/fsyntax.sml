@@ -448,14 +448,14 @@ fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
-  | print_Exp (StructExp _) = "StructExp"
+  | print_Exp (StructExp { valMap, strMap, exnTagMap }) = "StructExp{valMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" valMap ^ "},strMap={" ^ Syntax.StrIdMap.foldri (fn (strid,path,acc) => Syntax.print_StrId strid ^ ":" ^ print_Path path ^ ";" ^ acc) "" strMap ^ "},exnTagMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" exnTagMap ^ "}}"
   | print_Exp (SProjectionExp _) = "SProjectionExp"
   | print_Exp (PackExp { payloadTy, exp, packageTy }) = "PackExp{payloadTy=" ^ print_Ty payloadTy ^ ",exp=" ^ print_Exp exp ^ ",packageTy=" ^ print_Ty packageTy ^ "}"
 and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
 and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
   | print_Dec (RecValDec valbinds) = "RecValDec(" ^ Syntax.print_list (fn (vid, ty, exp) => "(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")") valbinds ^ ")"
-  | print_Dec (UnpackDec (tv, kind, vid, ty, exp)) = "UnpackDec"
+  | print_Dec (UnpackDec (tv, kind, vid, ty, exp)) = "UnpackDec(" ^ USyntax.print_TyVar tv ^ "," ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
@@ -993,7 +993,9 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                 in if admitsEquality then
                                                        let val equalityVId = freshVId(ctx, "eq")
                                                            val strVId = freshVId(ctx, case vid of U.MkVId(name,_) => name)
-                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType []), (strVId, (* TODO *) F.RecordType [])], F.VarExp vid)) :: F.UnpackDec (tyname, arityToKind arity, vid, (* TODO *) F.RecordType [], exp) :: decs
+                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType []), (strVId, (* TODO *) F.RecordType [])], F.VarExp vid))
+                                                            :: F.UnpackDec (tyname, arityToKind arity, vid, (* TODO *) F.RecordType [], exp)
+                                                            :: decs
                                                           , F.VarExp strVId
                                                           , { equalityForTyVarMap = #equalityForTyVarMap env
                                                             , equalityForTyNameMap = U.TyNameMap.insert (#equalityForTyNameMap env, case tyname of U.NamedTyVar (name, _, n) => U.MkTyName (name, n) | U.AnonymousTyVar n => U.MkTyName ("", n), U.MkShortVId equalityVId)
