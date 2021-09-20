@@ -107,6 +107,7 @@ should_run "should_run/" {
   "signature4.sml",
   "signature5.sml",
   "opaque1.sml",
+  "opaque2.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",

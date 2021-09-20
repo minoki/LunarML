@@ -2068,20 +2068,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
           val strid = newStrId(ctx, Syntax.MkStrId "tmp")
           val (s, strexp') = matchQSignature(ctx, env', span, sE, strid, #s sA)
           val tynames = canonicalOrderForQSignature sE
-          fun refreshTyName (U.MkTyName (name, _)) = U.MkTyName (name, genTyVarId ctx)
-          val tynames' = List.map (fn tyname => (tyname, refreshTyName tyname)) tynames
-          val tyNameMap = List.foldl U.TyNameMap.insert' U.TyNameMap.empty tynames'
-          val tyNameSubst = U.TyNameMap.mapi (fn (tyname, newtyname) =>
-                                                 let val { arity, ... } = U.TyNameMap.lookup (#bound sE, tyname)
-                                                     val tyvars = List.tabulate (arity, fn _ => freshTyVar ctx)
-                                                 in U.TypeFunction (tyvars, U.TyCon(span, List.map (fn tv => U.TyVar (span, tv)) tyvars, newtyname))
-                                                 end
-                                             ) tyNameMap
-          val s' = applySubstTyConInSig (ctx, tyNameSubst) (#s sE)
-          val bound' = List.foldl (fn ((tyname, newtyname), map) => let val info = U.TyNameMap.lookup (#bound sE, tyname)
-                                                                    in U.TyNameMap.insert (map, newtyname, info)
-                                                                    end) U.TyNameMap.empty tynames'
-          val packageSig = { s = s'
+          val packageSig = { s = #s sE
                            , bound = List.map (fn tyname => let val { arity, admitsEquality, longtycon } = U.TyNameMap.lookup(#bound sE, tyname)
                                                             in { tyname = tyname, arity = arity, admitsEquality = admitsEquality }
                                                             end
@@ -2091,15 +2078,15 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                         let val valEnv = case valEnvForTyName (#s sE, tyname) of
                                                                              NONE => Syntax.VIdMap.empty
                                                                            | SOME valEnv => Syntax.VIdMap.map (fn (U.TypeScheme (typarams, ty), ids) =>
-                                                                                                                  let val tysc = U.TypeScheme (typarams, applySubstTyConInTy (ctx, tyNameSubst) ty)
+                                                                                                                  let val tysc = U.TypeScheme (typarams, ty)
                                                                                                                   in (tysc, ids)
                                                                                                                   end
                                                                                                               ) valEnv
-                                                        in U.TyNameMap.insert (acc, U.TyNameMap.lookup (tyNameMap, tyname), { valEnv = valEnv, admitsEquality = admitsEquality })
+                                                        in U.TyNameMap.insert (acc, tyname, { valEnv = valEnv, admitsEquality = admitsEquality })
                                                         end
                                                     ) U.TyNameMap.empty (#bound sE)
           val payloadTypes = List.map (fn tyname => let val { longtycon = Syntax.MkQualified (strids, tycon), ... } = U.TyNameMap.lookup (#bound sE, tyname)
-                                                        val { tyConMap, ... } = lookupStr (ctx, #s sE, span, strids)
+                                                        val { tyConMap, ... } = lookupStr (ctx, #s sA, span, strids)
                                                     in case Syntax.TyConMap.find (tyConMap, tycon) of
                                                            SOME { typeFunction, valEnv } => typeFunction
                                                          | NONE => emitError (ctx, [span], "unknown type constructor")
