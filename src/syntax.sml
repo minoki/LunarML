@@ -154,7 +154,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | TypeDec of SourcePos.span * TypBind list
              | DatatypeDec of SourcePos.span * DatBind list * TypBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
-             | AbstypeDec of SourcePos.span * DatBind list * Dec list (* not implemented yet *)
+             | AbstypeDec of SourcePos.span * DatBind list * TypBind list * Dec list
              | ExceptionDec of SourcePos.span * ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
@@ -362,7 +362,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | TypeDec of SourcePos.span * Syntax.TypBind list
              | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
              | DatatypeRepDec of SourcePos.span * Syntax.TyCon * Syntax.LongTyCon
-             | AbstypeDec of SourcePos.span * Syntax.DatBind list * Dec list
+             | AbstypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list * Dec list
              | ExceptionDec of SourcePos.span * Syntax.ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * Syntax.LongStrId list

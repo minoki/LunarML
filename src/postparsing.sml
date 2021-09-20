@@ -323,9 +323,21 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                                                                                   }
                                                                             in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeRepDec(span, tycon, longtycon)]) (* copy tyConMap's ValEnv into valMap *)
                                                                             end
-  | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, decs)) = let val (_, decs') = doDecs(ctx, env, decs) (* not really implemented yet *)
-                                                                      in (emptyEnv, [Syntax.AbstypeDec(span, datbinds, decs')])
-                                                                      end
+  | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, typbinds, decs))
+    = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
+              = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
+                               (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
+                               Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
+          val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
+          val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
+          val idStatusMap = { valMap = valMap
+                            , tyConMap = tyConMap
+                            , strMap = Syntax.StrIdMap.empty
+                            }
+          val innerEnv = mergeEnv(env, envWithIdStatusMap idStatusMap)
+          val (env, decs') = doDecs(ctx, innerEnv, decs) (* not really implemented yet *)
+      in (env, [Syntax.AbstypeDec(span, datbinds, typbinds, decs')])
+      end
   | doDec(ctx, env, UnfixedSyntax.ExceptionDec(span, exbinds)) = let val valMap = List.foldl (fn (Syntax.ExBind(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor)
                                                                                              | (Syntax.ExReplication(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor) (* RHS should be an exception constructor *)
                                                                                              ) Syntax.VIdMap.empty exbinds
@@ -601,7 +613,10 @@ local
       | collectDec(bound, TypeDec(_, typbinds)) = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
       | collectDec(bound, DatatypeDec(_, datbinds, typbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) (List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds) datbinds
       | collectDec(bound, DatatypeRepDec(_, _, _)) = TyVarSet.empty
-      | collectDec(bound, AbstypeDec(_, _, _)) = TyVarSet.empty (* not implemeted yet *)
+      | collectDec(bound, AbstypeDec(_, datbinds, typbinds, decs)) = let val acc = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
+                                                                         val acc = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) acc datbinds
+                                                                     in List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) acc decs
+                                                                     end
       | collectDec(bound, ExceptionDec(span, exbinds)) = List.foldl (fn (ExBind(span, vid, SOME ty), acc) => TyVarSet.union(freeTyVarsInTy(bound, ty), acc)
                                                                     | (ExBind(span, vid, NONE), acc) => acc
                                                                     | (ExReplication(_, _, _), acc) => acc) TyVarSet.empty exbinds
@@ -635,7 +650,7 @@ local
       | doDec(bound, dec as TypeDec _) = dec
       | doDec(bound, dec as DatatypeDec _) = dec
       | doDec(bound, dec as DatatypeRepDec _) = dec
-      | doDec(bound, dec as AbstypeDec _) = dec
+      | doDec(bound, AbstypeDec(span, datbinds, typbinds, decs)) = AbstypeDec(span, datbinds, typbinds, doDecList(bound, decs))
       | doDec(bound, dec as ExceptionDec _) = dec
       | doDec(bound, LocalDec(span, xs, ys)) = LocalDec(span, doDecList(bound, xs), doDecList(bound, ys))
       | doDec(bound, dec as OpenDec _) = dec
@@ -817,25 +832,35 @@ and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val 
                             ) set withtypebinds)
       end
   | doDec (env, S.DatatypeRepDec (span, tycon, longtycon)) = ()
-  | doDec (env, S.AbstypeDec (span, datbinds, decs)) = ( ignore (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, conbinds), { v, ty }) =>
-                                                                                ( checkTyVarSeq (span, tyvarseq)
-                                                                                ; { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
-                                                                                                       ( Option.app doTy optTy
-                                                                                                       ; if Syntax.VIdSet.member (set, vid) then
-                                                                                                             raise S.SyntaxError ([span], "duplicate value identifier in datatype declaration")
-                                                                                                         else
-                                                                                                             Syntax.VIdSet.add (set, vid)
-                                                                                                       )
-                                                                                                   ) v conbinds
-                                                                                  , ty = if Syntax.TyConSet.member (ty, tycon) then
-                                                                                             raise S.SyntaxError ([span], "duplicate type constructor in datatype declaration")
-                                                                                         else
-                                                                                             Syntax.TyConSet.add (ty, tycon)
-                                                                                  }
-                                                                                )
-                                                                            ) { v = Syntax.VIdSet.empty, ty = Syntax.TyConSet.empty } datbinds)
-                                                       ; List.app (fn dec => doDec (env, dec)) decs
-                                                       )
+  | doDec (env, S.AbstypeDec (span, datbinds, withtypebinds, decs))
+    = let val set = #ty (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, conbinds), { v, ty }) =>
+                                        ( checkTyVarSeq (span, tyvarseq)
+                                        ; { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
+                                                               ( Option.app doTy optTy
+                                                               ; if Syntax.VIdSet.member (set, vid) then
+                                                                     raise S.SyntaxError ([span], "duplicate value identifier in datatype declaration")
+                                                                 else
+                                                                     Syntax.VIdSet.add (set, vid)
+                                                               )
+                                                           ) v conbinds
+                                          , ty = if Syntax.TyConSet.member (ty, tycon) then
+                                                     raise S.SyntaxError ([span], "duplicate type constructor in datatype declaration")
+                                                 else
+                                                     Syntax.TyConSet.add (ty, tycon)
+                                          }
+                                        )
+                                    ) { v = Syntax.VIdSet.empty, ty = Syntax.TyConSet.empty } datbinds)
+          val _ = List.foldl (fn (S.TypBind (span, tyvarseq, tycon, ty), set) =>
+                                 ( doTy ty
+                                 ; checkTyVarSeq (span, tyvarseq)
+                                 ; if Syntax.TyConSet.member (set, tycon) then
+                                       raise S.SyntaxError ([span], "duplicate type constructor in withtype declaration")
+                                   else
+                                       Syntax.TyConSet.add (set, tycon)
+                                 )
+                             ) set withtypebinds
+      in List.app (fn dec => doDec (env, dec)) decs
+      end
   | doDec (env, S.ExceptionDec (span, exbinds)) = ignore (List.foldl (fn (S.ExBind (span, vid, optTy), set) =>
                                                                          ( Option.app doTy optTy
                                                                          ; if Syntax.VIdSet.member (set, vid) then

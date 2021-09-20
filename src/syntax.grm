@@ -413,7 +413,7 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | DATATYPE TyVar TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(TyVarleft, ConBindright), [TyVar], TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
             | DATATYPE LPAREN TyVar TyVarSeqRest RPAREN TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(LPARENleft, ConBindright), TyVar :: TyVarSeqRest, TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
             | DATATYPE TyCon EQUALS DATATYPE LongTyCon (UnfixedSyntax.DatatypeRepDec (span(DATATYPEleft, LongTyConright), TyCon, LongTyCon)) (* datatype replication *)
-            | ABSTYPE DatBind WITH Decs END (UnfixedSyntax.AbstypeDec (span(ABSTYPEleft, ENDright), DatBind, Decs)) (* abstype declaration *)
+            | ABSTYPE DatBind Withtype WITH Decs END (UnfixedSyntax.AbstypeDec (span(ABSTYPEleft, ENDright), DatBind, Withtype, Decs)) (* abstype declaration *)
             | EXCEPTION ExBind (UnfixedSyntax.ExceptionDec(span(EXCEPTIONleft, ExBindright), ExBind)) (* exception declaration *)
             | OPEN LongStrIds (UnfixedSyntax.OpenDec(span(OPENleft, LongStrIdsright), LongStrIds)) (* open declaration *)
             | INFIX IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXleft, VIdsright), Syntax.Infix (Syntax.LeftAssoc IntConst), VIds)) (* infix (L) directive *)

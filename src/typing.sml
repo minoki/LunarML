@@ -1137,7 +1137,18 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                      }
       in (env', [])
       end
-  | typeCheckDec(ctx, env, S.AbstypeDec(span, _, _)) = emitError(ctx, [span], "abstype: not implemented yet")
+  | typeCheckDec(ctx, env, S.AbstypeDec(span, datbinds, typbinds, decs))
+    = let val (env', datbinds') = typeCheckDec(ctx, env, S.DatatypeDec(span, datbinds, typbinds))
+          val (env'', decs') = typeCheckDecs(ctx, mergeEnv(env, env'), decs)
+          val resultingEnv = { valMap = #valMap env''
+                             , tyConMap = Syntax.TyConMap.unionWith #2 (Syntax.TyConMap.map (fn { typeFunction, valEnv = _ } => { typeFunction = typeFunction, valEnv = U.emptyValEnv }) (#tyConMap env'), #tyConMap env'')
+                             , tyNameMap = USyntax.TyNameMap.unionWith #2 (#tyNameMap env', #tyNameMap env'') (* should be disjoint *)
+                             , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env', #strMap env'') (* should be empty *)
+                             , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env', #sigMap env'') (* should be empty *)
+                             , boundTyVars = Syntax.TyVarMap.unionWith #2 (#boundTyVars env', #boundTyVars env'') (* should be empty *)
+                             }
+      in (resultingEnv, datbinds' @ decs')
+      end
   | typeCheckDec(ctx, env, S.ExceptionDec(span, exbinds))
     = let fun doExBind(S.ExBind(span, vid, optTy), (valMap, exbinds))
               = let val optTy = Option.map (fn ty => evalTy(ctx, env, ty)) optTy

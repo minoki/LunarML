@@ -21,7 +21,6 @@ Hello world!
 
 The following SML '97 features are not implemented yet:
 
-* `abstype`
 * Signatures
     * Work in progress
 * Functors
@@ -30,8 +29,8 @@ Successor ML features:
 
 * [x] Monomorphic non-exhaustive bindings
 * [x] Simplified recursive value bindings
-    * SML '97-compatible ordering for type variables are also supported: `val <tyvarseq> rec <valbind>`
-* [ ] Abstype as derived form
+    * SML '97-compatible ordering for type variables is also supported: `val <tyvarseq> rec <valbind>`
+* [x] Abstype as derived form
 * [x] Fixed manifest type specifications
 * [x] Abolish sequenced type realizations
 * [ ] Line comments

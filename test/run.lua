@@ -108,6 +108,7 @@ should_run "should_run/" {
   "signature5.sml",
   "opaque1.sml",
   "opaque2.sml",
+  "abstype.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
@@ -148,6 +149,7 @@ should_not_compile "should_not_compile/" {
   "syntax_exbind.sml",
   "opaque1.sml",
   "opaque2.sml",
+  "abstype.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
@@ -161,6 +163,7 @@ should_run "lua/should_run/" {
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
   "withtype_in_signature.sml",
+  "abstype.sml",
 }
 should_not_compile "successor_ml/should_not_compile/" {
   "nonexhaustive_bind.sml",
