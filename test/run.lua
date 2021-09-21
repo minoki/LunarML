@@ -115,6 +115,7 @@ should_compile "should_compile/" {
   "signature_sharing2.sml",
   "signature_sharing3.sml",
   "withtype.sml",
+  "sharing_structures.sml",
 }
 should_not_compile "should_not_compile/" {
   "fixity.sml",
@@ -150,6 +151,8 @@ should_not_compile "should_not_compile/" {
   "opaque1.sml",
   "opaque2.sml",
   "abstype.sml",
+  "sharing_structures1.sml",
+  "sharing_structures2.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

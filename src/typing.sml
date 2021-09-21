@@ -1805,7 +1805,54 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
   | addSpec(ctx, env, S.Include(span, sigexp)) = evalSignature(ctx, env, sigexp)
   | addSpec(ctx, env, S.Sharing(span, specs, longtycon0 :: longtycons))
     = let val s = evalSpecs(ctx, env, specs)
-          val tystr0 = lookupLongTyConInQSignature(ctx, span, s, longtycon0)
+      in shareLongTyCons(ctx, span, s, longtycon0, longtycons)
+      end
+  | addSpec(ctx, env, S.Sharing(span, specs, [])) = emitError(ctx, [span], "sharing: empty longtycons (internal error)")
+  | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids))
+    = let val s = evalSpecs(ctx, env, specs)
+          val strs = List.map (fn Syntax.MkQualified(strids, strid) =>
+                                  let val strids = strids @ [strid]
+                                  in (strids, collectLongTyCons(ctx, [], lookupStr(ctx, #s s, span, strids)))
+                                  end
+                              ) longstrids
+          fun doStructure(s, (longstrid0, longtycons0) :: strs)
+              = let val s = List.foldl (fn ((longstrid1, longtycons1), s) =>
+                                           let val longtycons = Syntax.LongTyConSet.intersection (longtycons0, longtycons1)
+                                           in Syntax.LongTyConSet.foldl (fn (Syntax.MkQualified(strids', tycon), s) =>
+                                                                            shareLongTyCons(ctx, span, s, Syntax.MkQualified(longstrid0 @ strids', tycon), [Syntax.MkQualified(longstrid1 @ strids', tycon)])
+                                                                        ) s longtycons
+                                           end
+                                       ) s strs
+                in doStructure(s, strs)
+                end
+            | doStructure(s, []) = s
+      in doStructure(s, strs)
+      end
+  | addSpec(ctx, env, S.TypeAliasDesc(span, descs))
+    = { s = { valMap = Syntax.VIdMap.empty
+            , tyConMap = List.foldl (fn ((tyvars, tycon, ty), tyConMap) =>
+                                        let val tyvars = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
+                                            val ty = let val env = { valMap = #valMap env
+                                                                   , tyConMap = #tyConMap env (* not accumulated (Successor ML) *)
+                                                                   , tyNameMap = #tyNameMap env
+                                                                   , strMap = #strMap env
+                                                                   , sigMap = #sigMap env
+                                                                   , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars env) tyvars
+                                                                   }
+                                                     in evalTy(ctx, env, ty)
+                                                     end
+                                            val tystr = { typeFunction = U.TypeFunction(List.map #2 tyvars, ty)
+                                                        , valEnv = Syntax.VIdMap.empty
+                                                        }
+                                        in Syntax.TyConMap.insert(tyConMap, tycon, tystr)
+                                        end
+                                    ) Syntax.TyConMap.empty descs
+            , strMap = Syntax.StrIdMap.empty
+            }
+      , bound = USyntax.TyNameMap.empty
+      }
+and shareLongTyCons(ctx, span, s : U.QSignature, longtycon0, longtycons) : U.QSignature
+    = let val tystr0 = lookupLongTyConInQSignature(ctx, span, s, longtycon0)
           val tystrs = List.map (fn longtycon => lookupLongTyConInQSignature(ctx, span, s, longtycon)) longtycons
       in case getTypeNameFromTypeStructure(ctx, tystr0) of
              SOME (tyname0, arity0) =>
@@ -1850,33 +1897,14 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
              )
            | NONE => emitError(ctx, [span], "sharing: type alias is invalid")
       end
-  | addSpec(ctx, env, S.Sharing(span, specs, [])) = emitError(ctx, [span], "sharing: empty longtycons (internal error)")
-  | addSpec(ctx, env, S.SharingStructure(span, specs, longstrids)) = let val s = evalSpecs(ctx, env, specs)
-                                                                     in raise Fail "sharing: not implemented yet"
-                                                                     end
-  | addSpec(ctx, env, S.TypeAliasDesc(span, descs))
-    = { s = { valMap = Syntax.VIdMap.empty
-            , tyConMap = List.foldl (fn ((tyvars, tycon, ty), tyConMap) =>
-                                        let val tyvars = List.map (fn tv => (tv, genTyVar(ctx, tv))) tyvars
-                                            val ty = let val env = { valMap = #valMap env
-                                                                   , tyConMap = #tyConMap env (* not accumulated (Successor ML) *)
-                                                                   , tyNameMap = #tyNameMap env
-                                                                   , strMap = #strMap env
-                                                                   , sigMap = #sigMap env
-                                                                   , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars env) tyvars
-                                                                   }
-                                                     in evalTy(ctx, env, ty)
-                                                     end
-                                            val tystr = { typeFunction = U.TypeFunction(List.map #2 tyvars, ty)
-                                                        , valEnv = Syntax.VIdMap.empty
-                                                        }
-                                        in Syntax.TyConMap.insert(tyConMap, tycon, tystr)
-                                        end
-                                    ) Syntax.TyConMap.empty descs
-            , strMap = Syntax.StrIdMap.empty
-            }
-      , bound = USyntax.TyNameMap.empty
-      }
+and collectLongTyCons(ctx, strids : Syntax.StrId list, { valMap = _, tyConMap, strMap } : U.Signature) : Syntax.LongTyConSet.set
+    = let val set = Syntax.TyConMap.foldli (fn (tycon, _, set) => Syntax.LongTyConSet.add(set, Syntax.MkQualified(strids, tycon))) Syntax.LongTyConSet.empty tyConMap
+      in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, set) =>
+                                    let val set' = collectLongTyCons(ctx, strids @ [strid], s)
+                                    in Syntax.LongTyConSet.union (set, set')
+                                    end
+                                ) set strMap
+      end
 
 fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
   | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = List.all (fn (label, ty) => case List.find (fn (label', _) => label = label') fields' of

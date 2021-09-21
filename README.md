@@ -19,10 +19,8 @@ Hello world!
 * [A subset of SML Basis Library](BasisLibrary.md)
 * [Interface to Lua](LuaInterface.md)
 
-The following SML '97 features are not implemented yet:
+The following SML '97 feature is not implemented yet:
 
-* Signatures
-    * Work in progress
 * Functors
 
 Successor ML features:

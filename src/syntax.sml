@@ -93,10 +93,12 @@ structure TyConMap = RedBlackMapFn(TyConKey)
 
 structure LongTyCon : sig
               type t
+              type ord_key = t
               val compare : t * t -> order
               val min : t * t -> t
-              end = struct
+          end = struct
 type t = LongTyCon
+type ord_key = t
 fun compare (MkQualified ([], tycon), MkQualified ([], tycon')) = TyConKey.compare (tycon, tycon')
   | compare (MkQualified ([], _), MkQualified (_ :: _, _)) = LESS
   | compare (MkQualified (_ :: _, _), MkQualified ([], _)) = GREATER
@@ -108,6 +110,7 @@ fun min (x, y) = case compare (x, y) of
                    | EQUAL => x
                    | GREATER => y
 end
+structure LongTyConSet = RedBlackSetFn(LongTyCon)
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Label * Ty) list (* record type expression *)
