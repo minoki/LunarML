@@ -1384,7 +1384,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                 end
           fun goStrExp (U.StructExp _) = tynameset
             | goStrExp (U.StrIdExp _) = tynameset
-            | goStrExp (U.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = ( goStrExp strExp ; List.foldl (fn ({ tyname, ... }, set) => U.TyNameSet.add (set, tyname)) U.TyNameSet.empty (#bound packageSig) )
+            | goStrExp (U.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = ( goStrExp strExp ; List.foldl (fn ({ tyname, ... }, set) => U.TyNameSet.add (set, tyname)) tynameset (#bound packageSig) )
             | goStrExp (U.LetInStrExp (span, strdecs, strexp)) = let val tynameset = goStrDecs strdecs
                                                                      val { goStrExp, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                  in goStrExp strexp
