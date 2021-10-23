@@ -178,6 +178,7 @@ val builtins
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
+                    ,(VId_Vector_concat, "_Vector_concat")
                     (* Lua interface *)
                     ,(VId_Lua_sub, "_Lua_sub")
                     ,(VId_Lua_set, "_Lua_set")

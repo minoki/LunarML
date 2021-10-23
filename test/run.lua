@@ -159,6 +159,7 @@ should_run "mlbasis/should_run/" {
   "string.sml",
   "word.sml",
   "word_law.sml",
+  "vector.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",

@@ -180,33 +180,48 @@ end;
 
 structure Vector : sig
               datatype vector = datatype vector
+              (* val maxLen : int; defined later *)
               val fromList : 'a list -> 'a vector
               val tabulate : int * (int -> 'a) -> 'a vector
               val length : 'a vector -> int
               val sub : 'a vector * int -> 'a
               val update : 'a vector * int * 'a -> 'a vector
+              val concat : 'a vector list -> 'a vector
               val appi : (int * 'a -> unit) -> 'a vector -> unit
               val app : ('a -> unit) -> 'a vector -> unit
               val mapi : (int * 'a -> 'b) -> 'a vector -> 'b vector
               val map : ('a -> 'b) -> 'a vector -> 'b vector
+              val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a vector -> 'b
               val foldl : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
               val foldr : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
               val findi : (int * 'a -> bool) -> 'a vector -> (int * 'a) option
               val find : ('a -> bool) -> 'a vector -> 'a option
               val exists : ('a -> bool) -> 'a vector -> bool
               val all : ('a -> bool) -> 'a vector -> bool
+              (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 datatype vector = datatype vector
-open Vector (* tabulate, length, sub *)
+open Vector (* tabulate, length, sub, concat *)
 val fromList = _primCall "Vector.fromList" ()
-(* maxLen *)
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
                                                        else
                                                            sub (vec, i)
                                   )
-(* concat : 'a vector list -> 'a vector *)
-(* foldli, foldri *)
+local
+    fun foldli' (f, acc, vec, i) = if i >= length vec then
+                                       acc
+                                   else
+                                       foldli' (f, f (i, sub (vec, i), acc), vec, i + 1)
+    fun foldri' (f, acc, vec, i) = if i < 0 then
+                                       acc
+                                   else
+                                       foldri' (f, f (i, sub (vec, i), acc), vec, i - 1)
+in
+fun foldli f init vec : 'b = foldli' (f, init, vec, 0)
+fun foldri f init vec : 'b = foldri' (f, init, vec, length vec - 1)
+end
 local
     fun foldl' (f, acc, vec, i) = if i >= length vec then
                                       acc
@@ -278,7 +293,6 @@ fun all f vec = let val n = length vec
                                    f (sub (vec, i)) andalso go (i + 1)
                 in go 0
                 end
-(* collate *)
 end
 val vector : 'a list -> 'a vector = Vector.fromList;
 
@@ -846,6 +860,44 @@ val map : ('a -> 'b) -> 'a list -> 'b list = List.map
 val null : 'a list -> bool = List.null
 val rev : 'a list -> 'a list = List.rev
 val tl : 'a list -> 'a list = List.tl;
+
+structure Vector : sig
+              datatype vector = datatype vector
+              val maxLen : int
+              val fromList : 'a list -> 'a vector
+              val tabulate : int * (int -> 'a) -> 'a vector
+              val length : 'a vector -> int
+              val sub : 'a vector * int -> 'a
+              val update : 'a vector * int * 'a -> 'a vector
+              val concat : 'a vector list -> 'a vector
+              val appi : (int * 'a -> unit) -> 'a vector -> unit
+              val app : ('a -> unit) -> 'a vector -> unit
+              val mapi : (int * 'a -> 'b) -> 'a vector -> 'b vector
+              val map : ('a -> 'b) -> 'a vector -> 'b vector
+              val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a vector -> 'b
+              val findi : (int * 'a -> bool) -> 'a vector -> (int * 'a) option
+              val find : ('a -> bool) -> 'a vector -> 'a option
+              val exists : ('a -> bool) -> 'a vector -> bool
+              val all : ('a -> bool) -> 'a vector -> bool
+              val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order
+          end = struct
+open Vector
+val maxLen = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
+fun collate compare (xs, ys) = let val xl = length xs
+                                   val yl = length ys
+                                   fun go i = case (xl = i, yl = i) of
+                                                  (true, true) => EQUAL
+                                                | (true, false) => LESS
+                                                | (false, true) => GREATER
+                                                | (false, false) => case compare (sub (xs, i), sub (ys, i)) of
+                                                                        EQUAL => go (i + 1)
+                                                                      | t => t
+                               in go 0
+                               end
+end
 
 structure Option : sig
               datatype 'a option = NONE | SOME of 'a

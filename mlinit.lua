@@ -445,6 +445,22 @@ local function _Vector_EQUAL(eq)
     return go(t[1], t[2])
   end
 end
+local function _Vector_concat(xs)
+  local n = 0
+  local t = {}
+  while xs.tag == "::" do
+    local p = xs.payload
+    local u = p[1]
+    local m = u.n
+    for i = 1,m do
+      t[n + i] = u[i]
+    end
+    n = n + m
+    xs = p[2]
+  end
+  t.n = n
+  return t
+end
 
 -- Lua interface
 local function _Lua_sub(t)

@@ -245,6 +245,7 @@ in
 val VId_Vector_tabulate = newVId "tabulate"
 val VId_Vector_length = newVId "length"
 val VId_Vector_sub = newVId "sub"
+val VId_Vector_concat = newVId "concat"
 end
 
 (* Array *)
@@ -501,6 +502,7 @@ val initialEnv : Typing.Env
                                           [("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
                                           ,("length", TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int))
                                           ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
+                                          ,("concat", TypeScheme ([(tyVarA, [])], listOf (vectorOf tyA) --> vectorOf tyA))
                                           ]
                            , strMap = mkStrMap []
                            }
