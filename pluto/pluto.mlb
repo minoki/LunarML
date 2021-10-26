@@ -1,0 +1,8 @@
+$(SML_LIB)/basis/basis.mlb
+token-stream.sig
+string-stream.sig
+string-stream.sml
+parser-combinator.sig
+parser-combinator.fun
+char-parser.sig
+char-parser.fun
