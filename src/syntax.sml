@@ -16,6 +16,7 @@ datatype Label = NumericLabel of int
                | IdentifierLabel of string
 datatype StrId = MkStrId of string
 datatype SigId = MkSigId of string
+datatype FunId = MkFunId of string
 datatype 'a Qualified = MkQualified of StrId list * 'a
 type LongVId = VId Qualified
 type LongTyCon = TyCon Qualified
@@ -61,6 +62,12 @@ fun compare (MkSigId x, MkSigId y) = String.compare (x,y)
 end
 structure SigIdSet = RedBlackSetFn(SigIdKey)
 structure SigIdMap = RedBlackMapFn(SigIdKey)
+structure FunIdKey = struct
+type ord_key = FunId
+fun compare (MkFunId x, MkFunId y) = String.compare (x,y)
+end
+structure FunIdSet = RedBlackSetFn(FunIdKey)
+structure FunIdMap = RedBlackMapFn(FunIdKey)
 structure TyVarKey = struct
 type ord_key = TyVar
 fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
@@ -178,20 +185,22 @@ datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
                 | SigIdExp of SourcePos.span * SigId
                 | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty
 
-type SigBind = SigId * SigExp
-
 datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
                          | StrIdExp of SourcePos.span * LongStrId
                          | TransparentConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
                          | OpaqueConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
-                         (* TODO: functor application *)
+                         | FunctorAppExp of SourcePos.span * FunId * 'coreDec StrExp
                          | LetInStrExp of SourcePos.span * ('coreDec StrDec) list * 'coreDec StrExp
      and 'coreDec StrDec = CoreDec of SourcePos.span * 'coreDec
                          | StrBindDec of SourcePos.span * (StrId * 'coreDec StrExp) list
                          | LocalStrDec of SourcePos.span * ('coreDec StrDec) list * ('coreDec StrDec) list
 
+datatype 'coreDec FunExp = NamedFunExp of StrId * SigExp * 'coreDec StrExp
+                         | AnonymousFunExp of SigExp * 'coreDec StrExp
+
 datatype 'coreDec TopDec = StrDec of 'coreDec StrDec
-                         | SigDec of SigBind list
+                         | SigDec of (SigId * SigExp) list
+                         | FunDec of (FunId * 'coreDec FunExp) list
 
 type Program = ((Dec TopDec) list) list
 
@@ -269,6 +278,7 @@ fun print_Label (NumericLabel x) = "NumericLabel " ^ Int.toString x
   | print_Label (IdentifierLabel x) = "IdentifierLabel \"" ^ String.toString x ^ "\""
 fun print_StrId (MkStrId x) = "MkStrId \"" ^ String.toString x ^ "\""
 fun print_SigId (MkSigId x) = "MkSigId \"" ^ String.toString x ^ "\""
+fun print_FunId (MkFunId x) = "MkFunId \"" ^ String.toString x ^ "\""
 fun print_LongVId (MkQualified(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^ "," ^ print_VId y ^ ")"
 fun print_LongTyCon (MkQualified(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkQualified(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"

@@ -2137,6 +2137,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                        }
          )
       end
+  | typeCheckStrExp(ctx, env, S.FunctorAppExp(span, funid, strexp)) = emitError(ctx, [span], "functor application: not implemented yet")
   | typeCheckStrExp(ctx, env, S.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs) = typeCheckStrDecs(ctx, env, strdecs)
                                                                           val (s, tyNameMap, strexp) = typeCheckStrExp(ctx, mergeEnv(env, env'), strexp)
                                                                       in (s, U.TyNameMap.unionWith #2 (#tyNameMap env', tyNameMap), U.LetInStrExp(span, strdecs, strexp))
@@ -2197,6 +2198,7 @@ fun typeCheckTopDec(ctx, env, S.StrDec strdec) = let val (env', strdec) = typeCh
                                                               }
                                                 in (env, [])
                                                 end
+  | typeCheckTopDec(ctx, env, S.FunDec binds) = emitError(ctx, [], "functor declaration: not implemented yet")
 fun typeCheckTopDecs(ctx, env, []) = (emptyEnv, [])
   | typeCheckTopDecs(ctx, env, dec :: decs) = let val (env', dec) = typeCheckTopDec(ctx, env, dec)
                                                   val (env'', decs) = typeCheckTopDecs(ctx, mergeEnv(env, env'), decs)

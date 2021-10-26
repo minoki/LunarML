@@ -19,6 +19,7 @@ withtype IdStatusMap = { valMap : Syntax.IdStatus Syntax.VIdMap.map
 type Env = { fixityMap : FixityStatusMap
            , idStatusMap : IdStatusMap
            , sigMap : IdStatusMap Syntax.SigIdMap.map
+           , funMap : IdStatusMap Syntax.FunIdMap.map
            }
 
 val emptyIdStatusMap : IdStatusMap = { valMap = Syntax.VIdMap.empty
@@ -29,23 +30,33 @@ val emptyIdStatusMap : IdStatusMap = { valMap = Syntax.VIdMap.empty
 val emptyEnv : Env = { fixityMap = Syntax.VIdMap.empty
                      , idStatusMap = emptyIdStatusMap
                      , sigMap = Syntax.SigIdMap.empty
+                     , funMap = Syntax.FunIdMap.empty
                      }
 
 (* used by fixity declaration *)
 fun envWithFixityMap fixityMap : Env = { fixityMap = fixityMap
                                        , idStatusMap = emptyIdStatusMap
                                        , sigMap = Syntax.SigIdMap.empty
+                                       , funMap = Syntax.FunIdMap.empty
                                        }
 
 fun envWithIdStatusMap idStatusMap : Env = { fixityMap = Syntax.VIdMap.empty
                                            , idStatusMap = idStatusMap
                                            , sigMap = Syntax.SigIdMap.empty
+                                           , funMap = Syntax.FunIdMap.empty
                                            }
 
 (* used by signature binding *)
 fun envWithSigMap sigMap : Env = { fixityMap = Syntax.VIdMap.empty
                                  , idStatusMap = emptyIdStatusMap
                                  , sigMap = sigMap
+                                 , funMap = Syntax.FunIdMap.empty
+                                 }
+
+fun envWithFunMap funMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , idStatusMap = emptyIdStatusMap
+                                 , sigMap = Syntax.SigIdMap.empty
+                                 , funMap = funMap
                                  }
 
 fun mergeIdStatusMap(env1 : IdStatusMap, env2 : IdStatusMap) : IdStatusMap
@@ -58,6 +69,7 @@ fun mergeEnv(env1 : Env, env2 : Env) : Env
     = { fixityMap = Syntax.VIdMap.unionWith #2 (#fixityMap env1, #fixityMap env2)
       , idStatusMap = mergeIdStatusMap(#idStatusMap env1, #idStatusMap env2)
       , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env1, #sigMap env2)
+      , funMap = Syntax.FunIdMap.unionWith #2 (#funMap env1, #funMap env2)
       }
 
 fun getFixityStatus ({ fixityMap, ... } : Env, vid)
@@ -496,11 +508,17 @@ fun doStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = let val (env', strdecs
                                                            in (env', Syntax.StrIdExp(span, longstrid))
                                                            end
   | doStrExp(ctx, env, Syntax.TransparentConstraintExp(span, strexp, sigexp)) = let val env' = doSigExp(ctx, env, sigexp)
-                                                                                in (env', Syntax.TransparentConstraintExp(span, #2 (doStrExp(ctx, env, strexp)), sigexp)) 
+                                                                                in (env', Syntax.TransparentConstraintExp(span, #2 (doStrExp(ctx, env, strexp)), sigexp))
                                                                                 end
   | doStrExp(ctx, env, Syntax.OpaqueConstraintExp(span, strexp, sigexp)) = let val env' = doSigExp(ctx, env, sigexp)
                                                                            in (env', Syntax.OpaqueConstraintExp(span, #2 (doStrExp(ctx, env, strexp)), sigexp))
                                                                            end
+  | doStrExp(ctx, env, Syntax.FunctorAppExp(span, funid, strexp)) = let val (_, strexp') = doStrExp(ctx, env, strexp)
+                                                                        val env' = case Syntax.FunIdMap.find(#funMap env, funid) of
+                                                                                       SOME m => m
+                                                                                     | NONE => emitError(ctx, [span], "functor not found: " ^ Syntax.print_FunId funid)
+                                                                    in (env', Syntax.FunctorAppExp(span, funid, strexp'))
+                                                                    end
   | doStrExp(ctx, env, Syntax.LetInStrExp(span, strdecs, strexp)) = let val (env', strdecs) = doStrDecs(ctx, env, strdecs)
                                                                         val (env'', strexp) = doStrExp(ctx, mergeEnv(env, env'), strexp)
                                                                     in (env'', Syntax.LetInStrExp(span, strdecs, strexp))
@@ -533,6 +551,26 @@ fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdecs) = doStrDe
   | doTopDec(ctx, env, Syntax.SigDec(sigbinds)) = let val sigMap = List.foldl (fn ((sigid, sigexp), m) => Syntax.SigIdMap.insert(m, sigid, doSigExp(ctx, env, sigexp))) Syntax.SigIdMap.empty sigbinds
                                                   in (envWithSigMap sigMap, [Syntax.SigDec(sigbinds)])
                                                   end
+  | doTopDec(ctx, env, Syntax.FunDec funbinds)
+    = let val funbinds' : (Syntax.FunId * IdStatusMap * Syntax.Dec Syntax.FunExp) list
+              = List.map (fn (funid, Syntax.NamedFunExp (strid, sigexp, strexp)) =>
+                             let val sigexp' : IdStatusMap = doSigExp(ctx, env, sigexp)
+                                 val (ids, strexp') = doStrExp(ctx, mergeEnv(env, envWithIdStatusMap { valMap = Syntax.VIdMap.empty
+                                                                                                     , tyConMap = Syntax.TyConMap.empty
+                                                                                                     , strMap = Syntax.StrIdMap.singleton (strid, MkIdStatusMap sigexp')
+                                                                                                     }
+                                                                            ), strexp)
+                             in (funid, ids, Syntax.NamedFunExp (strid, sigexp, strexp'))
+                             end
+                         | (funid, Syntax.AnonymousFunExp (sigexp, strexp)) =>
+                           let val sigexp' : IdStatusMap = doSigExp(ctx, env, sigexp)
+                               val (ids, strexp') = doStrExp(ctx, mergeEnv(env, envWithIdStatusMap sigexp'), strexp)
+                           in (funid, ids, Syntax.AnonymousFunExp (sigexp, strexp'))
+                           end
+                         ) funbinds
+         val env' = envWithFunMap (List.foldl (fn ((funid, ids, _), m) => Syntax.FunIdMap.insert(m, funid, ids)) Syntax.FunIdMap.empty funbinds')
+      in (env', [Syntax.FunDec (List.map (fn (funid, _, exp) => (funid, exp)) funbinds')])
+      end
 fun doTopDecs(ctx, env, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])
   | doTopDecs(ctx, env, dec :: decs) = let val (env', dec) = doTopDec(ctx, env, dec)
                                            val (env'', decs) = doTopDecs(ctx, mergeEnv(env, env'), decs)
@@ -676,18 +714,23 @@ local
       | doStrExp(StrIdExp(span, longstrid)) = StrIdExp(span, longstrid)
       | doStrExp(TransparentConstraintExp(span, strexp, sigexp)) = TransparentConstraintExp(span, doStrExp strexp, sigexp)
       | doStrExp(OpaqueConstraintExp(span, strexp, sigexp)) = OpaqueConstraintExp(span, doStrExp strexp, sigexp)
+      | doStrExp(FunctorAppExp(span, funid, strexp)) = FunctorAppExp(span, funid, doStrExp strexp)
       | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, doStrDecs strdecs, doStrExp strexp)
     and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec(TyVarSet.empty, dec))
       | doStrDec(StrBindDec(span, binds)) = StrBindDec(span, List.map (fn (strid, strexp) => (strid, doStrExp strexp)) binds)
       | doStrDec(LocalStrDec(span, decs1, decs2)) = LocalStrDec(span, doStrDecs decs1, List.map doStrDec decs2)
     and doStrDecs(strdecs) = List.map doStrDec strdecs
+    fun doFunExp(NamedFunExp(strid, sigexp, strexp)) = NamedFunExp(strid, sigexp, doStrExp strexp)
+      | doFunExp(AnonymousFunExp(sigexp, strexp)) = AnonymousFunExp(sigexp, doStrExp strexp)
 in
 val scopeTyVarsInDecs: TyVarSet.set * Dec list -> Dec list = doDecList
 val scopeTyVarsInDec: TyVarSet.set * Dec -> Dec = doDec
 val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
 val scopeTyVarsInStrDec: Dec StrDec -> Dec StrDec = doStrDec
 val scopeTyVarsInTopDecs = List.map (fn StrDec(strdec) => StrDec(scopeTyVarsInStrDec(strdec))
-                                    | topdec as SigDec _ => topdec)
+                                    | topdec as SigDec _ => topdec
+                                    | FunDec funbinds => FunDec (List.map (fn (funid, funexp) => (funid, doFunExp funexp)) funbinds)
+                                    )
 val scopeTyVarsInProgram = List.map scopeTyVarsInTopDecs
 end (* local *)
 end (* local *)
@@ -973,6 +1016,7 @@ fun doStrExp (S.StructExp (span, strdecs)) = List.app doStrDec strdecs
   | doStrExp (S.StrIdExp (span, longstrid)) = ()
   | doStrExp (S.TransparentConstraintExp (span, strexp, sigexp)) = ( doSigExp sigexp ; doStrExp strexp )
   | doStrExp (S.OpaqueConstraintExp (span, strexp, sigexp)) = ( doSigExp sigexp ; doStrExp strexp )
+  | doStrExp (S.FunctorAppExp (span, funid, strexp)) = doStrExp strexp
   | doStrExp (S.LetInStrExp (span, strdecs, strexp)) = ( List.app doStrDec strdecs ; doStrExp strexp )
 and doStrDec (S.CoreDec (span, dec)) = doDec (S.TyVarSet.empty, dec)
   | doStrDec (S.StrBindDec (span, strbinds)) = ignore (List.foldl (fn ((strid, strexp), set) =>
@@ -985,6 +1029,9 @@ and doStrDec (S.CoreDec (span, dec)) = doDec (S.TyVarSet.empty, dec)
                                                                   ) Syntax.StrIdSet.empty strbinds)
   | doStrDec (S.LocalStrDec (span, strdecs1, strdecs2)) = ( List.app doStrDec strdecs1 ; List.app doStrDec strdecs2 )
 
+fun doFunExp (S.NamedFunExp (strid, sigexp, strexp)) = ( doSigExp sigexp ; doStrExp strexp )
+  | doFunExp (S.AnonymousFunExp (sigexp, strexp)) = ( doSigExp sigexp ; doStrExp strexp )
+
 fun doTopDec (S.StrDec strdec) = doStrDec strdec
   | doTopDec (S.SigDec sigbinds) = ignore (List.foldl (fn ((sigid, sigexp), set) =>
                                                           ( doSigExp sigexp
@@ -994,5 +1041,13 @@ fun doTopDec (S.StrDec strdec) = doStrDec strdec
                                                                 Syntax.SigIdSet.add (set, sigid)
                                                           )
                                                       ) Syntax.SigIdSet.empty sigbinds)
+  | doTopDec (S.FunDec funbinds) = ignore (List.foldl (fn ((funid, funexp), set) =>
+                                                          ( doFunExp funexp
+                                                          ; if Syntax.FunIdSet.member (set, funid) then
+                                                                raise S.SyntaxError ([], "duplicate functor binding") (* TODO: location info *)
+                                                            else
+                                                                Syntax.FunIdSet.add (set, funid)
+                                                          )
+                                                      ) Syntax.FunIdSet.empty funbinds)
 val checkProgram = List.app (List.app doTopDec)
 end (* structure CheckSyntacticRestrictions *)

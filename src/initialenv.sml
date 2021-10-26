@@ -74,6 +74,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                                                            ]
                                                        }
                                        , sigMap = Syntax.SigIdMap.empty
+                                       , funMap = Syntax.FunIdMap.empty
                                        }
                                     end
 
