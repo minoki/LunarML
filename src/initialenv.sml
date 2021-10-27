@@ -674,6 +674,7 @@ val initialEnv : Typing.Env
                                ,("LunarML", StrId_LunarML, sig_LunarML)
                                ]
          , sigMap = Syntax.SigIdMap.empty
+         , funMap = Syntax.FunIdMap.empty
          , boundTyVars = Syntax.TyVarMap.empty
          }
       end
