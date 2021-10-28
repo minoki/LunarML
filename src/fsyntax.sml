@@ -12,7 +12,7 @@ datatype Path = Root of USyntax.VId
 datatype Kind = TypeKind
               | ArrowKind of Kind * Kind
 datatype Ty = TyVar of TyVar
-            | RecordType of (Syntax.Label * Ty) list
+            | RecordType of Ty Syntax.LabelMap.map
             | AppType of { applied : Ty, arg : Ty }
             | FnType of Ty * Ty
             | ForallType of TyVar * Kind * Ty
@@ -80,7 +80,7 @@ fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
 fun RecordEqualityExp fields = PrimExp (RecordEqualityOp, vector [], vector [RecordExp fields])
 fun DataTagExp exp = PrimExp (DataTagOp, vector [], vector [exp])
 fun DataPayloadExp exp = PrimExp (DataPayloadOp, vector [], vector [exp])
-fun PairType(a, b) = RecordType [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)]
+fun PairType(a, b) = RecordType (Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
 fun TuplePat xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordPat (doFields 1 xs, false)
@@ -117,7 +117,7 @@ fun arityToKind 0 = TypeKind
 (* occurCheck : TyVar -> Ty -> bool *)
 fun occurCheck tv =
     let fun check (TyVar tv') = USyntax.eqUTyVar(tv, tv')
-          | check (RecordType xs) = List.exists (fn (label, ty) => check ty) xs
+          | check (RecordType xs) = Syntax.LabelMap.exists check xs
           | check (AppType { applied, arg }) = check applied orelse check arg
           | check (FnType(ty1, ty2)) = check ty1 orelse check ty2
           | check (ForallType(tv', kind, ty)) = if USyntax.eqUTyVar(tv, tv') then
@@ -142,7 +142,7 @@ fun substituteTy (tv, replacement) =
                                        replacement
                                    else
                                        ty
-          | go (RecordType fields) = RecordType (Syntax.mapRecordRow go fields)
+          | go (RecordType fields) = RecordType (Syntax.LabelMap.map go fields)
           | go (AppType { applied, arg }) = AppType { applied = go applied, arg = go arg }
           | go (FnType(ty1, ty2)) = FnType(go ty1, go ty2)
           | go (ty as ForallType(tv', kind, ty')) = if USyntax.eqUTyVar(tv, tv') then
@@ -185,7 +185,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                          NONE => ty
                                        | SOME replacement => replacement
                                     )
-          | doTy (RecordType fields) = RecordType (List.map (fn (label, ty) => (label, doTy ty)) fields)
+          | doTy (RecordType fields) = RecordType (Syntax.LabelMap.map doTy fields)
           | doTy (AppType { applied, arg }) = AppType { applied = doTy applied, arg = doTy arg }
           | doTy (FnType (ty1, ty2)) = FnType (doTy ty1, doTy ty2)
           | doTy (ForallType (tv, kind, ty)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
@@ -264,7 +264,7 @@ fun freeTyVarsInTy (bound : USyntax.TyVarSet.set, TyVar tv) = if USyntax.TyVarSe
                                                                   USyntax.TyVarSet.empty
                                                               else
                                                                   USyntax.TyVarSet.singleton tv
-  | freeTyVarsInTy (bound, RecordType fields) = List.foldl (fn ((label, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty fields
+  | freeTyVarsInTy (bound, RecordType fields) = Syntax.LabelMap.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) USyntax.TyVarSet.empty fields
   | freeTyVarsInTy (bound, AppType { applied, arg }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, applied), freeTyVarsInTy (bound, arg))
   | freeTyVarsInTy (bound, FnType (ty1, ty2)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
   | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (USyntax.TyVarSet.add (bound, tv), ty)
@@ -405,10 +405,11 @@ val print_LongVId = USyntax.print_LongVId
 fun print_Path (Root vid) = USyntax.print_VId vid
   | print_Path (Child (parent, label)) = print_Path parent ^ "/.." (* TODO *)
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
-  | print_Ty (RecordType xs) = (case Syntax.extractTuple (1, xs) of
-                                    NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
-                                  | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
-                               )
+  | print_Ty (RecordType xs) = let val xs = Syntax.LabelMap.listItemsi xs
+                               in case Syntax.extractTuple (1, xs) of
+                                      NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+                                    | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
+                               end
   | print_Ty (AppType { applied, arg }) = "AppType{applied=" ^ print_Ty applied ^ ",arg=" ^ print_Ty arg ^ "}"
   | print_Ty (FnType(x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
   | print_Ty (ForallType(tv,kind,x)) = "ForallType(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
@@ -603,9 +604,7 @@ local structure U = USyntax
                       end
 in
 fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
-  | toFTy(ctx, env, U.RecordType(span, fields)) = let fun doField(label, ty) = (label, toFTy(ctx, env, ty))
-                                                  in F.RecordType (List.map doField fields)
-                                                  end
+  | toFTy(ctx, env, U.RecordType(span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy(ctx, env, ty)) fields)
   | toFTy(ctx, env, U.TyCon(span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy(ctx, env, arg)) tyargs, tyname)
   | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
                                                          in F.FnType(doTy paramTy, doTy resultTy)
@@ -695,13 +694,13 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
           val matches'' = if List.exists (fn (pat, _) => isExhaustive pat) matches' then
                               matches'
                           else
-                              matches' @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, (* TODO: type of raise *) F.RecordType [], F.VarExp(exnName)))]
+                              matches' @ [(F.WildcardPat, F.RaiseExp(SourcePos.nullSpan, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, F.VarExp(exnName)))]
       in F.HandleExp { body = toFExp(ctx, env, exp)
                      , exnName = exnName
                      , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(exnName), exnTy, matches'')
                      }
       end
-  | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType [], toFExp(ctx, env, exp))
+  | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.PrimExp(span, Syntax.PrimOp_Vector_fromList, tyargs, args)) = F.PrimExp(F.VectorFromListOp, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)
@@ -758,9 +757,7 @@ and getEquality(ctx, env, U.TyCon(span, [tyarg], tyname))
                                                      NONE => raise Fail ("equality for the type variable not found: " ^ USyntax.PrettyPrint.print_TyVar tv)
                                                    | SOME vid => F.VarExp(vid)
                                                 )
-  | getEquality (ctx, env, U.RecordType(span, fields)) = let fun doField (label, ty) = (label, getEquality(ctx, env, ty))
-                                                         in F.RecordEqualityExp (List.map doField fields)
-                                                         end
+  | getEquality (ctx, env, U.RecordType(span, fields)) = F.RecordEqualityExp (Syntax.LabelMap.foldli (fn (label, ty, xs) => (label, getEquality(ctx, env, ty)) :: xs) [] fields)
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs(ctx, env, []) = (env, [])
   | toFDecs(ctx, env, U.ValDec(span, valbinds) :: decs)
@@ -981,8 +978,8 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                 in if admitsEquality then
                                                        let val equalityVId = freshVId(ctx, "eq")
                                                            val strVId = freshVId(ctx, case vid of U.MkVId(name,_) => name)
-                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType []), (strVId, (* TODO *) F.RecordType [])], F.VarExp vid))
-                                                            :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType [], exp)
+                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType Syntax.LabelMap.empty), (strVId, (* TODO *) F.RecordType Syntax.LabelMap.empty)], F.VarExp vid))
+                                                            :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp)
                                                             :: decs
                                                           , F.VarExp strVId
                                                           , { equalityForTyVarMap = #equalityForTyVarMap env
@@ -992,7 +989,7 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                           )
                                                        end
                                                    else
-                                                       (F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType [], exp) :: decs, F.VarExp vid, env)
+                                                       (F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp) :: decs, F.VarExp vid, env)
                                                 end
                                             ) ([], exp, env'') bound
       in (env, List.rev (F.ValDec(F.SimpleBind(vid, ty, exp)) :: decs))
@@ -1025,7 +1022,7 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.
           val funexp = F.FnExp (case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n), signatureToTy (ctx, env, paramSig), body)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)
           val funexp = List.foldr (fn ({ tyname, arity, admitsEquality = _ }, funexp) => F.TyAbsExp (F.tyNameToTyVar tyname, F.arityToKind arity, funexp)) funexp types (* type parameters *)
-      in F.ValDec (F.SimpleBind (funid, F.RecordType [] (* TODO *), funexp))
+      in F.ValDec (F.SimpleBind (funid, F.RecordType Syntax.LabelMap.empty (* TODO *), funexp))
       end
 fun programToFDecs(ctx, env : Env, []) = (env, [])
   | programToFDecs(ctx, env, USyntax.StrDec dec :: topdecs) = let val (env, decs) = strDecToFDecs(ctx, env, dec)

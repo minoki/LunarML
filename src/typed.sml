@@ -35,14 +35,14 @@ structure TyVarSet = RedBlackSetFn(TyVarKey)
 structure TyVarMap = RedBlackMapFn(TyVarKey)
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
-            | RecordType of SourcePos.span * (Syntax.Label * Ty) list (* record type expression *)
+            | RecordType of SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
             | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
 
-fun PairType(span, a, b) = RecordType(span, [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
-fun TupleType(span, xs) = let fun doFields i nil = nil
-                                | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
-                          in RecordType (span, doFields 1 xs)
+fun PairType(span, a, b) = RecordType(span, Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
+fun TupleType(span, xs) = let fun doFields (i, nil, m) = m
+                                | doFields (i, x :: xs, m) = doFields (i + 1, xs, Syntax.LabelMap.insert (m, Syntax.NumericLabel i, x))
+                          in RecordType (span, doFields (1, xs, Syntax.LabelMap.empty))
                           end
 
 structure VIdKey = struct
@@ -243,10 +243,11 @@ fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
   | print_TyName (MkTyName ("list", 8)) = "primTyName_list"
   | print_TyName (MkTyName(tyconname, n)) = "MkTyName(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
-  | print_Ty (RecordType(_,xs)) = (case Syntax.extractTuple (1, xs) of
-                                       NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
-                                     | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
-                                  )
+  | print_Ty (RecordType(_,xs)) = let val xs = Syntax.LabelMap.listItemsi xs
+                                  in case Syntax.extractTuple (1, xs) of
+                                         NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
+                                       | SOME ys => "TupleType " ^ Syntax.print_list print_Ty ys
+                                  end
   | print_Ty (TyCon(_,[],MkTyName("int", 0))) = "primTy_int"
   | print_Ty (TyCon(_,[],MkTyName("word", 1))) = "primTy_word"
   | print_Ty (TyCon(_,[],MkTyName("real", 2))) = "primTy_real"
@@ -339,7 +340,7 @@ fun freeTyVarsInTy(bound, ty)
                               TyVarSet.empty
                           else
                               TyVarSet.singleton tv
-         | RecordType(_,xs) => List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+         | RecordType(_,xs) => Syntax.LabelMap.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
          | TyCon(_,xs,_) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
          | FnType(_,s,t) => TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
       )
@@ -351,7 +352,7 @@ fun applySubstTy subst
                      NONE => ty
                    | SOME replacement => replacement
                 )
-            | substTy (RecordType(span, fields)) = RecordType (span, Syntax.mapRecordRow substTy fields)
+            | substTy (RecordType(span, fields)) = RecordType (span, Syntax.LabelMap.map substTy fields)
             | substTy (TyCon(span, tyargs, tycon)) = TyCon(span, List.map substTy tyargs, tycon)
             | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
       in substTy

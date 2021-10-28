@@ -219,7 +219,7 @@ val primTyName_array  = USyntax.MkTyName("array", 9)
 val primTyName_vector = USyntax.MkTyName("vector", 10)
 val primTyName_exntag = USyntax.MkTyName("exntag", 11)
 (* primTyName_Lua_value : 12 *)
-val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, [])
+val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_word)
 val primTy_real   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_real)
@@ -289,7 +289,7 @@ local
 in
 (* occurCheck : U.TyVar -> U.Ty -> bool; returns true if the type variable occurs in the type *)
 fun occurCheck tv = let fun check (U.TyVar(_, tv')) = U.eqUTyVar(tv, tv')
-                          | check (U.RecordType(_, xs)) = List.exists (fn (label, ty) => check ty) xs
+                          | check (U.RecordType(_, xs)) = Syntax.LabelMap.exists check xs
                           | check (U.TyCon(_, tyargs, tycon)) = List.exists check tyargs
                           | check (U.FnType(_, ty1, ty2)) = check ty1 orelse check ty2
                     in check
@@ -301,7 +301,7 @@ fun substituteTy (tv, replacement) =
                                                   replacement
                                               else
                                                   ty
-          | substTy (U.RecordType(span, fields)) = U.RecordType (span, Syntax.mapRecordRow substTy fields)
+          | substTy (U.RecordType(span, fields)) = U.RecordType (span, Syntax.LabelMap.map substTy fields)
           | substTy (U.TyCon(span, tyargs, tycon)) = U.TyCon(span, List.map substTy tyargs, tycon)
           | substTy (U.FnType(span, ty1, ty2)) = U.FnType(span, substTy ty1, substTy ty2)
     in substTy
@@ -373,13 +373,14 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
          | U.EqConstr(span1, ty, U.TyVar(span2, U.NamedTyVar (name, eq, _))) => emitError(ctx, [span1, span2], "cannot unify named type variable: " ^ name)
          | U.EqConstr(span, U.FnType(_, s0, s1), U.FnType(_, t0, t1)) => unify(ctx, env, U.EqConstr(span, s0, t0) :: U.EqConstr(span, s1, t1) :: ctrs)
          | U.EqConstr(span1, U.RecordType(span2, fields), U.RecordType(span3, fields')) =>
-           if List.length fields <> List.length fields then
+           if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields then
                emitError(ctx, [span1, span2, span3], "unification failed: incompatible record types (different number of fields)")
            else
-               unify(ctx, env, List.foldl (fn ((label, ty), acc) => case List.find (fn (label', _) => label = label') fields' of
-                                                                        NONE => emitError(ctx, [span1, span2, span3], "unification failed: incompatible record types")
-                                                                      | SOME(_,ty') => U.EqConstr(span1, ty, ty') :: acc)
-                                          ctrs fields)
+               unify(ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
+                                                          case Syntax.LabelMap.find (fields', label) of
+                                                              NONE => emitError(ctx, [span1, span2, span3], "unification failed: incompatible record types")
+                                                            | SOME ty' => U.EqConstr(span1, ty, ty') :: acc)
+                                                      ctrs fields)
          | U.EqConstr(span1, t1 as U.TyCon(span2, tyarg, con), t2 as U.TyCon(span3, tyarg', con')) =>
            if U.eqTyName(con, con') then
                unify(ctx, env, (ListPair.mapEq (fn (x, y) => U.EqConstr(span1, x, y)) (tyarg, tyarg')
@@ -391,9 +392,9 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
          | U.UnaryConstraint(span1, recordTy, U.HasField{sourceSpan = span3, label = label, fieldTy = fieldTy}) =>
            (case recordTy of
                 U.RecordType(span2, fields) =>
-                (case List.find (fn (label', _) => label = label') fields of
+                (case Syntax.LabelMap.find (fields, label) of
                      NONE => emitError(ctx, [span1, span2, span3], "unification failed: no field")
-                   | SOME(_, ty') => unify(ctx, env, U.EqConstr(span1, fieldTy, ty') :: ctrs)
+                   | SOME ty' => unify(ctx, env, U.EqConstr(span1, fieldTy, ty') :: ctrs)
                 )
               | U.TyCon(span2, _, _) => emitError(ctx, [span1, span2, span3], "record field for a non-record type")
               | U.FnType(span2, _, _) => emitError(ctx, [span1, span2, span3], "record field for a function type")
@@ -405,7 +406,7 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
                              )
                 )
            )
-         | U.UnaryConstraint(span1, U.RecordType(span2, fields), U.IsEqType span3) => unify(ctx, env, List.map (fn (label, ty) => U.UnaryConstraint(span1, ty, U.IsEqType span3)) fields @ ctrs)
+         | U.UnaryConstraint(span1, U.RecordType(span2, fields), U.IsEqType span3) => unify(ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => U.UnaryConstraint(span1, ty, U.IsEqType span3) :: acc) ctrs fields)
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsIntegral span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsSignedReal span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsRing span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
@@ -503,7 +504,7 @@ fun evalTy(ctx : Context, env : ('val,'str) Env', S.TyVar(span, tv)) : U.Ty
            SOME tv => U.TyVar(span, tv)
          | NONE => emitError(ctx, [span], "unknown type varibale `" ^ Syntax.print_TyVar tv ^ "`")
       )
-  | evalTy(ctx, env, S.RecordType(span, fields)) = U.RecordType(span, List.map (fn (label, ty) => (label, evalTy(ctx, env, ty))) fields)
+  | evalTy(ctx, env, S.RecordType(span, fields)) = U.RecordType(span, List.foldl (fn ((label, ty), m) => Syntax.LabelMap.insert(m, label, evalTy(ctx, env, ty))) Syntax.LabelMap.empty fields)
   | evalTy(ctx, env, S.TyCon(span, args, tycon))
     = let val { typeFunction = U.TypeFunction(tyvars, ty), ... } = lookupTyConInEnv(ctx, env, span, tycon)
           val subst = (ListPair.foldlEq (fn (tv, arg, m) => USyntax.TyVarMap.insert (m, tv, evalTy(ctx, env, arg))) USyntax.TyVarMap.empty (tyvars, args))
@@ -547,7 +548,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
               ; (recordTy, vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, wildcard=wildcard})
              end
          else
-             (U.RecordType(sourceSpan, fieldTypes), vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, wildcard=wildcard})
+             (U.RecordType(sourceSpan, Syntax.LabelMapFromList fieldTypes), vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, wildcard=wildcard})
       end
   | typeCheckPat(ctx, env, S.ConPat(span, longvid, optInnerPat))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
@@ -684,7 +685,7 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
                                                                                                                              NONE
                                                                                              | _ => NONE (* error *)
                                                                               )
-                                               | doUTy (U.RecordType (span, fields)) = doUTypes (List.map #2 fields)
+                                               | doUTy (U.RecordType (span, fields)) = doUTypes (Syntax.LabelMap.foldl (op ::) [] fields)
                                                | doUTy (U.TyCon (span, tyargs, tyname)) = if isRefOrArray tyname then
                                                                                               SOME []
                                                                                           else
@@ -757,7 +758,7 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
     = let fun oneField(label, exp) = case typeCheckExp(ctx, env, exp) of
                                          (ty, exp) => ((label, ty), (label, exp))
           val (fieldTypes, fields) = ListPair.unzip (List.map oneField fields)
-      in (U.RecordType(span, fieldTypes), U.RecordExp(span, fields))
+      in (U.RecordType(span, Syntax.LabelMapFromList fieldTypes), U.RecordExp(span, fields))
       end
   | typeCheckExp(ctx, env, S.LetInExp(span, decs, innerExp))
     = let val (env', decs) = typeCheckDecs(ctx, env, decs)
@@ -1328,7 +1329,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                     ()
                 else
                     emitErrorP(ctx, [span], "type variable scope violation: " ^ USyntax.PrettyPrint.print_TyVar tv)
-            | goTy (U.RecordType(span, fields)) = List.app (fn (label, ty) => goTy ty) fields
+            | goTy (U.RecordType(span, fields)) = Syntax.LabelMap.app goTy fields
             | goTy (U.TyCon(span, tyargs, tyname))
               = if U.TyNameSet.member(tynameset, tyname) then
                     List.app goTy tyargs
@@ -1527,7 +1528,7 @@ fun addSignatureToEnv(env : SigEnv, s : U.Signature) : SigEnv
 
 fun applySubstTyConInTy (ctx : Context, subst : U.TypeFunction U.TyNameMap.map) : U.Ty -> U.Ty
     = let fun goTy (ty as U.TyVar _) = ty
-            | goTy (U.RecordType(span, fields)) = U.RecordType(span, Syntax.mapRecordRow goTy fields)
+            | goTy (U.RecordType(span, fields)) = U.RecordType(span, Syntax.LabelMap.map goTy fields)
             | goTy (U.TyCon(span, tyargs, tycon)) = (case U.TyNameMap.find(subst, tycon) of
                                                          NONE => U.TyCon(span, List.map goTy tyargs, tycon)
                                                        | SOME (U.TypeFunction (tyvars, ty)) =>
@@ -1556,7 +1557,7 @@ fun applySubstTyConInSig (ctx : Context, subst : U.TypeFunction U.TyNameMap.map)
 
 fun refreshTyNameInTy (ctx : Context, subst : U.TyName U.TyNameMap.map) : U.Ty -> U.Ty
     = let fun goTy (ty as U.TyVar _) = ty
-            | goTy (U.RecordType(span, fields)) = U.RecordType(span, Syntax.mapRecordRow goTy fields)
+            | goTy (U.RecordType(span, fields)) = U.RecordType(span, Syntax.LabelMap.map goTy fields)
             | goTy (U.TyCon(span, tyargs, tycon)) = let val tyargs = List.map goTy tyargs
                                                     in case U.TyNameMap.find(subst, tycon) of
                                                            NONE => U.TyCon(span, tyargs, tycon)
@@ -1588,7 +1589,7 @@ fun checkEquality(ctx : Context, env : ('val,'str) Env', tyvars : U.TyVarSet.set
                                                    U.NamedTyVar (_, eq, _) => eq
                                                  | _ => false (* error *)
                                               )
-            | goTy (U.RecordType (span, fields)) = List.all (fn (label, ty) => goTy ty) fields
+            | goTy (U.RecordType (span, fields)) = Syntax.LabelMap.all goTy fields
             | goTy (U.TyCon (span, tyargs, tyname)) = isRefOrArray tyname
                                                       orelse (let val { admitsEquality, ... } = lookupTyNameInEnv (ctx, env, span, tyname)
                                                               in admitsEquality andalso List.all goTy tyargs
@@ -1950,11 +1951,11 @@ and collectLongTyCons(ctx, strids : Syntax.StrId list, { valMap = _, tyConMap, s
       end
 
 fun sameType(U.TyVar(span1, tv), U.TyVar(span2, tv')) = tv = tv'
-  | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = List.all (fn (label, ty) => case List.find (fn (label', _) => label = label') fields' of
-                                                                                                          SOME (_, ty') => sameType(ty, ty')
-                                                                                                        | NONE => false
-                                                                                   ) fields
-                                                                          andalso List.all (fn (label, ty) => List.exists (fn (label', _) => label = label') fields') fields
+  | sameType(U.RecordType(span1, fields), U.RecordType(span2, fields')) = Syntax.LabelMap.numItems fields = Syntax.LabelMap.numItems fields'
+                                                                          andalso Syntax.LabelMap.alli (fn (label, ty) => case Syntax.LabelMap.find (fields', label) of
+                                                                                                                              SOME ty' => sameType(ty, ty')
+                                                                                                                            | NONE => false
+                                                                                                       ) fields
   | sameType(U.TyCon(span1, tyargs, tycon), U.TyCon(span2, tyargs', tycon')) = U.eqTyName(tycon, tycon') andalso (ListPair.allEq sameType (tyargs, tyargs') handle ListPair.UnequalLengths => false)
   | sameType(U.FnType(span1, ty1, ty2), U.FnType(span2, ty1', ty2')) = sameType(ty1, ty1') andalso sameType(ty2, ty2')
   | sameType(_, _) = false

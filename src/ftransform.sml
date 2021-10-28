@@ -131,7 +131,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                           | NONE => let val examinedVId = freshVId(ctx, "exp")
                                         val examinedExp = F.VarExp(examinedVId)
                                         val env = addVar(env, examinedVId, ty)
-                                        fun go [] = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType [], F.VarExp(InitialEnv.VId_Match))
+                                        fun go [] = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, F.VarExp(InitialEnv.VId_Match))
                                           | go ((pat, innerExp) :: rest)
                                             = let val binders = genBinders env examinedExp pat
                                                   val (env', matcher) = genMatcher env examinedExp ty pat
@@ -209,10 +209,10 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genMatcher env exp ty (F.VarPat(vid, _)) = (addVar(env, vid, ty), F.VarExp(InitialEnv.VId_true)) (* always match *)
             | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat (fields, _))
               = List.foldr (fn ((label, pat), (env, e)) =>
-                               case List.find (fn (label', _) => label = label') fieldTypes of
-                                   SOME (_, fieldTy) => let val (env, exp) = genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }, exp)) fieldTy pat
-                                                        in (env, F.SimplifyingAndalsoExp(exp, e))
-                                                        end
+                               case Syntax.LabelMap.find (fieldTypes, label) of
+                                   SOME fieldTy => let val (env, exp) = genMatcher env (F.AppExp (F.ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }, exp)) fieldTy pat
+                                                   in (env, F.SimplifyingAndalsoExp(exp, e))
+                                                   end
                                  | NONE => raise Fail ("internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
                            )
                            (env, F.VarExp(InitialEnv.VId_true))
@@ -275,7 +275,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
           and genBinders env exp F.WildcardPat = [] : F.ValBind list
             | genBinders env exp (F.SConPat _) = []
             | genBinders env exp (F.VarPat (vid, ty)) = [F.SimpleBind (vid, ty, exp)]
-            | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType [], fieldTy = F.RecordType [] }, exp)) innerPat) fields)
+            | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.AppExp (F.ProjectionExp { label = label, recordTy = F.RecordType Syntax.LabelMap.empty (* TODO *), fieldTy = F.RecordType Syntax.LabelMap.empty (* TODO *) }, exp)) innerPat) fields)
             | genBinders env exp (F.ConPat(path, SOME innerPat, tyargs)) = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
                                                                                case tyargs of
                                                                                    [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_EXCLAM), tyarg), exp)) innerPat
@@ -430,7 +430,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                  SOME tv => F.TyVar tv
                                                | NONE => ty
                                             )
-            | doTy env (F.RecordType fields) = F.RecordType (List.map (fn (label, ty) => (label, doTy env ty)) fields)
+            | doTy env (F.RecordType fields) = F.RecordType (Syntax.LabelMap.map (doTy env) fields)
             | doTy env (F.AppType { applied, arg }) = F.AppType { applied = doTy env applied, arg = doTy env arg }
             | doTy env (F.FnType (ty1, ty2)) = F.FnType (doTy env ty1, doTy env ty2)
             | doTy env (F.ForallType (tv, kind, ty)) = let val tv' = refreshTyVar tv

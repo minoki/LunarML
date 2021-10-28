@@ -90,6 +90,8 @@ fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
   | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
 end
 structure LabelSet = RedBlackSetFn(LabelKey)
+structure LabelMap = RedBlackMapFn(LabelKey)
+fun LabelMapFromList (xs : (Label * 'a) list) : 'a LabelMap.map = List.foldl LabelMap.insert' LabelMap.empty xs
 
 structure TyConKey = struct
 type ord_key = TyCon
