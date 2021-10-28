@@ -79,7 +79,7 @@ fun getFixityStatus ({ fixityMap, ... } : Env, vid)
 
 fun isConstructor ({ idStatusMap = { valMap, ... }, ... } : Env, vid)
     = case Syntax.VIdMap.find (valMap, vid) of
-          SOME Syntax.ValueConstructor => true
+          SOME (Syntax.ValueConstructor _) => true
         | SOME Syntax.ExceptionConstructor => true
         | _ => false
 
@@ -315,9 +315,15 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
   | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
   | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds, typbinds))
     = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
-              = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
-                               (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
-                               Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
+              = fn conbinds =>
+                   let val isSoleConstructor = case conbinds of
+                                                   [_] => true
+                                                 | _ => false
+                       val idstatus = Syntax.ValueConstructor isSoleConstructor
+                   in List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
+                                     (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
+                                     Syntax.VIdMap.insert(map, vid, idstatus)) Syntax.VIdMap.empty conbinds
+                   end
           val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
           val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
           val idStatusMap = { valMap = valMap
@@ -337,9 +343,15 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                                                             end
   | doDec(ctx, env, UnfixedSyntax.AbstypeDec(span, datbinds, typbinds, decs))
     = let val doConBinds : Syntax.ConBind list -> Syntax.IdStatus Syntax.VIdMap.map
-              = List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
-                               (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
-                               Syntax.VIdMap.insert(map, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty
+              = fn conbinds =>
+                   let val isSoleConstructor = case conbinds of
+                                                   [_] => true
+                                                 | _ => false
+                       val idstatus = Syntax.ValueConstructor isSoleConstructor
+                   in List.foldl (fn (Syntax.ConBind(_, vid, _), map) =>
+                                     (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
+                                     Syntax.VIdMap.insert(map, vid, idstatus)) Syntax.VIdMap.empty conbinds
+                   end
           val tyConMap = List.foldl (fn (Syntax.DatBind(span, tyvars, tycon, conbinds), map) => Syntax.TyConMap.insert(map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
           val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
           val idStatusMap = { valMap = valMap
@@ -468,7 +480,11 @@ and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.EqtypeDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.DatDesc(span, descs, typbinds)) = List.foldl (fn ((tyvars, tycon, condescs), { valMap, tyConMap, strMap }) =>
-                                                                             let val valMap' = List.foldl (fn (Syntax.ConBind(_, vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ValueConstructor)) Syntax.VIdMap.empty condescs
+                                                                             let val isSoleConstructor = case condescs of
+                                                                                                             [_] => true
+                                                                                                           | _ => false
+                                                                                 val idstatus = Syntax.ValueConstructor isSoleConstructor
+                                                                                 val valMap' = List.foldl (fn (Syntax.ConBind(_, vid, _), m) => Syntax.VIdMap.insert(m, vid, idstatus)) Syntax.VIdMap.empty condescs
                                                                              in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
                                                                                 , tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, valMap')
                                                                                 , strMap = strMap }

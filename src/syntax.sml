@@ -34,8 +34,11 @@ datatype FixityStatus = Nonfix
                       | Infix of InfixAssociativity
 
 datatype IdStatus = ValueVariable
-                  | ValueConstructor
+                  | ValueConstructor of bool (* is it the sole constructor? *)
                   | ExceptionConstructor
+fun isValueConstructor ValueVariable = false
+  | isValueConstructor (ValueConstructor _) = true
+  | isValueConstructor ExceptionConstructor = false
 
 (* RedBlackMapFn, RedBlackSetFn: from smlnj-lib *)
 structure VIdKey = struct
@@ -285,7 +288,7 @@ fun print_LongVId (MkQualified(x,y)) = "MkLongVId(" ^ print_list print_StrId x ^
 fun print_LongTyCon (MkQualified(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkQualified(x,y)) = "MkLongStrId(" ^ print_list print_StrId x ^ "," ^ print_StrId y ^ ")"
 fun print_IdStatus ValueVariable = "ValueVariable"
-  | print_IdStatus ValueConstructor = "ValueConstructor"
+  | print_IdStatus (ValueConstructor sole) = "ValueConstructor " ^ Bool.toString sole
   | print_IdStatus ExceptionConstructor = "ExceptionConstructor"
 
 (* pretty printing *)

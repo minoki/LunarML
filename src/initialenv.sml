@@ -36,7 +36,7 @@ val initialFixity = let open Syntax
                                   ,(MkVId "before",InfixL 3)
                                   ]
                     end
-val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ValueConstructor)) Syntax.VIdMap.empty xs
+val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n, isSoleConstructor), m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ValueConstructor isSoleConstructor)) Syntax.VIdMap.empty xs
                                         fun mkExConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty xs
                                         fun mkTyConMap xs = List.foldl (fn ((n, y), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon n, y)) Syntax.TyConMap.empty xs
                                         fun mkStrMap xs = List.foldl (fn ((n, y), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId n, Fixity.MkIdStatusMap y)) Syntax.StrIdMap.empty xs
@@ -45,12 +45,12 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                                              , strMap = mkStrMap xs
                                                              }
                                     in { fixityMap = initialFixity
-                                       , idStatusMap = { valMap = Syntax.VIdMap.unionWith #2 (mkValConMap ["ref", "true", "false", "nil", "::"]
+                                       , idStatusMap = { valMap = Syntax.VIdMap.unionWith #2 (mkValConMap [("ref", true), ("true", false), ("false", false), ("nil", false), ("::", false)]
                                                                                              ,mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail"]
                                                                                              )
-                                                       , tyConMap = mkTyConMap [("bool", mkValConMap ["true", "false"])
-                                                                               ,("ref", mkValConMap ["ref"])
-                                                                               ,("list", mkValConMap ["nil", "::"])
+                                                       , tyConMap = mkTyConMap [("bool", mkValConMap [("true", false), ("false", false)])
+                                                                               ,("ref", mkValConMap [("ref", true)])
+                                                                               ,("list", mkValConMap [("nil", false), ("::", false)])
                                                                                ]
                                                        , strMap = mkStrMap [("General", mkSubstrMap [])
                                                                            ,("Bool", mkSubstrMap [])
@@ -340,7 +340,12 @@ val initialEnv : Typing.Env
     = let open Typing
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
           val mkValMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueVariable))) Syntax.VIdMap.empty
-          val mkValConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueConstructor))) Syntax.VIdMap.empty
+          val mkValConMap = fn cons => let val isSoleConstructor = case cons of
+                                                                       [_] => true
+                                                                     | _ => false
+                                           val idstatus = Syntax.ValueConstructor isSoleConstructor
+                                       in List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, idstatus))) Syntax.VIdMap.empty cons
+                                       end
           val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
           val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, USyntax.MkSignature str)) Syntax.StrIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
@@ -595,13 +600,13 @@ val initialEnv : Typing.Env
                             }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
-                               [List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueConstructor, vid)))
+                               [List.foldl (fn ((name, isSoleConstructor, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueConstructor isSoleConstructor, vid)))
                                            Syntax.VIdMap.empty
-                                           [("ref", LongVId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
-                                           ,("true", LongVId_true, TypeScheme ([], primTy_bool))
-                                           ,("false", LongVId_false, TypeScheme ([], primTy_bool))
-                                           ,("nil", LongVId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
-                                           ,("::", LongVId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
+                                           [("ref", true, LongVId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
+                                           ,("true", false, LongVId_true, TypeScheme ([], primTy_bool))
+                                           ,("false", false, LongVId_false, TypeScheme ([], primTy_bool))
+                                           ,("nil", false, LongVId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
+                                           ,("::", false, LongVId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ExceptionConstructor, vid)))
                                            Syntax.VIdMap.empty
@@ -646,18 +651,18 @@ val initialEnv : Typing.Env
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty
-                                  [(primTyName_bool, { arity = 0, admitsEquality = true, valEnv = #valEnv tyStr_bool })
-                                  ,(primTyName_int, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
-                                  ,(primTyName_word, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
-                                  ,(primTyName_real, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
-                                  ,(primTyName_string, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
-                                  ,(primTyName_char, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
-                                  ,(primTyName_list, { arity = 1, admitsEquality = true, valEnv = #valEnv tyStr_list })
-                                  ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), valEnv = emptyValEnv })
-                                  ,(primTyName_exn, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
-                                  ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), valEnv = emptyValEnv })
-                                  ,(primTyName_vector, { arity = 1, admitsEquality = true, valEnv = emptyValEnv })
-                                  ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
+                                  [(primTyName_bool, { arity = 0, admitsEquality = true })
+                                  ,(primTyName_int, { arity = 0, admitsEquality = true })
+                                  ,(primTyName_word, { arity = 0, admitsEquality = true })
+                                  ,(primTyName_real, { arity = 0, admitsEquality = false })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = true })
+                                  ,(primTyName_char, { arity = 0, admitsEquality = true })
+                                  ,(primTyName_list, { arity = 1, admitsEquality = true })
+                                  ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *) })
+                                  ,(primTyName_exn, { arity = 0, admitsEquality = false })
+                                  ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *) })
+                                  ,(primTyName_vector, { arity = 1, admitsEquality = true })
+                                  ,(primTyName_Lua_value, { arity = 0, admitsEquality = false })
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
