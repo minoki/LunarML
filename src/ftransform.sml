@@ -507,7 +507,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                        in F.TyAbsExp (tv', kind, doExp (insertTyVar (env, tv, tv')) exp)
                                                        end
             | doExp env (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp env exp, doTy env ty)
-            | doExp env (exp as F.StructExp { valMap, strMap, exnTagMap }) = exp
+            | doExp env (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = Syntax.VIdMap.map (doPath env) valMap
+                                                                                  , strMap = Syntax.StrIdMap.map (doPath env) strMap
+                                                                                  , exnTagMap = Syntax.VIdMap.map (doPath env) exnTagMap
+                                                                                  }
             | doExp env (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp env exp, label)
             | doExp env (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = doTy env payloadTy
                                                                               , exp = doExp env exp
