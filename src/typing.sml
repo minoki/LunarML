@@ -4,8 +4,9 @@
  *)
 structure Typing = struct
 
-type TyNameAttr = { valEnv : USyntax.ValEnv
+type TyNameAttr = { arity : int
                   , admitsEquality : bool
+                  , valEnv : USyntax.ValEnv
                   }
 
 type ('val,'str) Env' = { valMap : (USyntax.TypeScheme * Syntax.IdStatus * 'val) Syntax.VIdMap.map
@@ -1061,8 +1062,9 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tycon'))
                                                                            , valEnv = U.emptyValEnv
                                                                            }
-                                                               val tynameattr = { valEnv = U.emptyValEnv
+                                                               val tynameattr = { arity = List.length tyvars
                                                                                 , admitsEquality = S.TyConMap.lookup(equalityMap, tycon)
+                                                                                , valEnv = U.emptyValEnv
                                                                                 }
                                                            in (Syntax.TyConMap.insert(m, tycon, tystr), USyntax.TyNameMap.insert(m', tycon', tynameattr))
                                                            end
@@ -1095,8 +1097,9 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                               val tystr = { typeFunction = U.TypeFunction(tyvars, U.TyCon(span, List.map (fn tv => U.TyVar(span, tv)) tyvars, tyname))
                                           , valEnv = Syntax.VIdMap.map (fn (tysc, ids, _) => (tysc, ids)) valEnv
                                           }
-                              val tynameattr = { valEnv = Syntax.VIdMap.map (fn (tysc, ids, _) => (tysc, ids)) valEnv
+                              val tynameattr = { arity = List.length tyvars
                                                , admitsEquality = Syntax.TyConMap.lookup(equalityMap, tycon)
+                                               , valEnv = Syntax.VIdMap.map (fn (tysc, ids, _) => (tysc, ids)) valEnv
                                                }
                           in (Syntax.TyConMap.insert(tyConMap, tycon, tystr), USyntax.TyNameMap.insert(tyNameMap, tyname, tynameattr), Syntax.VIdMap.unionWith #2 (accValEnv, valEnv) (* TODO: check for duplicate *), datbind :: datbinds)
                           end
@@ -1740,8 +1743,9 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                                                    , valEnv = Syntax.VIdMap.empty (* filled later *)
                                                                                    }
                                                                        val tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, tystr)
-                                                                       val tyNameMap = USyntax.TyNameMap.insert(tyNameMap, tyname, { valEnv = Syntax.VIdMap.empty
+                                                                       val tyNameMap = USyntax.TyNameMap.insert(tyNameMap, tyname, { arity = List.length tyvars
                                                                                                                                    , admitsEquality = S.TyConMap.lookup(equalityMap, tycon)
+                                                                                                                                   , valEnv = Syntax.VIdMap.empty
                                                                                                                                    }
                                                                                                                )
                                                                    in (tyConMap, tyNameMap, (tycon, tyname, tyvarPairs, tystr, condescs) :: descs)
@@ -2158,7 +2162,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                         let val valEnv = case valEnvForTyName (#s sE, tyname) of
                                                                              NONE => Syntax.VIdMap.empty
                                                                            | SOME valEnv => valEnv
-                                                        in U.TyNameMap.insert (acc, tyname, { valEnv = valEnv, admitsEquality = admitsEquality })
+                                                        in U.TyNameMap.insert (acc, tyname, { arity = arity, admitsEquality = admitsEquality, valEnv = valEnv })
                                                         end
                                                     ) U.TyNameMap.empty (#bound sE)
           val payloadTypes = List.map (fn tyname => let val { longtycon = Syntax.MkQualified (strids, tycon), ... } = U.TyNameMap.lookup (#bound sE, tyname)
@@ -2222,7 +2226,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                      let val valEnv = case valEnvForTyName (#s resultSig, tyname) of
                                                                           NONE => Syntax.VIdMap.empty
                                                                         | SOME valEnv => valEnv
-                                                     in U.TyNameMap.insert (map, tyname, { valEnv = valEnv, admitsEquality = admitsEquality })
+                                                     in U.TyNameMap.insert (map, tyname, { arity = arity, admitsEquality = admitsEquality, valEnv = valEnv })
                                                      end
                                                  ) tyNameMap (#bound resultSig)
            in (resultSig, tyNameMapOutside, U.LetInStrExp ( span
@@ -2291,10 +2295,11 @@ fun typeCheckFunExp(ctx, env, S.NamedFunExp (strid, sigexp, strexp)) : USyntax.F
           val tynamesInParam = canonicalOrderForQSignature paramSig
           val tyNameMap : TyNameAttr U.TyNameMap.map
               = U.TyNameMap.mapi (fn (tyname, { arity, admitsEquality, longtycon }) =>
-                                     { valEnv = case valEnvForTyName (#s paramSig, tyname) of
+                                     { arity = arity
+                                     , admitsEquality = admitsEquality
+                                     , valEnv = case valEnvForTyName (#s paramSig, tyname) of
                                                     NONE => Syntax.VIdMap.empty
                                                   | SOME valEnv => valEnv
-                                     , admitsEquality = admitsEquality
                                      }
                                 ) (#bound paramSig)
           val env' = { valMap = #valMap env
@@ -2327,10 +2332,11 @@ fun typeCheckFunExp(ctx, env, S.NamedFunExp (strid, sigexp, strexp)) : USyntax.F
           val tynamesInParam = canonicalOrderForQSignature paramSig
           val tyNameMap : TyNameAttr U.TyNameMap.map
               = U.TyNameMap.mapi (fn (tyname, { arity, admitsEquality, longtycon }) =>
-                                     { valEnv = case valEnvForTyName (#s paramSig, tyname) of
+                                     { arity = arity
+                                     , admitsEquality = admitsEquality
+                                     , valEnv = case valEnvForTyName (#s paramSig, tyname) of
                                                     NONE => Syntax.VIdMap.empty
                                                   | SOME valEnv => valEnv
-                                     , admitsEquality = admitsEquality
                                      }
                                  ) (#bound paramSig)
           val paramEnv = { valMap = Syntax.VIdMap.mapi (fn (vid, (tysc, ids)) => (tysc, ids, USyntax.MkLongVId (strid0, [], vid))) (#valMap (#s paramSig))

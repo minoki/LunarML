@@ -646,18 +646,18 @@ val initialEnv : Typing.Env
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty
-                                  [(primTyName_bool, { valEnv = #valEnv tyStr_bool, admitsEquality = true })
-                                  ,(primTyName_int, { valEnv = emptyValEnv, admitsEquality = true })
-                                  ,(primTyName_word, { valEnv = emptyValEnv, admitsEquality = true })
-                                  ,(primTyName_real, { valEnv = emptyValEnv, admitsEquality = false })
-                                  ,(primTyName_string, { valEnv = emptyValEnv, admitsEquality = true })
-                                  ,(primTyName_char, { valEnv = emptyValEnv, admitsEquality = true })
-                                  ,(primTyName_list, { valEnv = #valEnv tyStr_list, admitsEquality = true })
-                                  ,(primTyName_ref, { valEnv = emptyValEnv, admitsEquality = false (* must be handled specially *) })
-                                  ,(primTyName_exn, { valEnv = emptyValEnv, admitsEquality = false })
-                                  ,(primTyName_array, { valEnv = emptyValEnv, admitsEquality = false (* must be handled specially *) })
-                                  ,(primTyName_vector, { valEnv = emptyValEnv, admitsEquality = true })
-                                  ,(primTyName_Lua_value, { valEnv = emptyValEnv, admitsEquality = false })
+                                  [(primTyName_bool, { arity = 0, admitsEquality = true, valEnv = #valEnv tyStr_bool })
+                                  ,(primTyName_int, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
+                                  ,(primTyName_word, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
+                                  ,(primTyName_real, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
+                                  ,(primTyName_char, { arity = 0, admitsEquality = true, valEnv = emptyValEnv })
+                                  ,(primTyName_list, { arity = 1, admitsEquality = true, valEnv = #valEnv tyStr_list })
+                                  ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), valEnv = emptyValEnv })
+                                  ,(primTyName_exn, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
+                                  ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), valEnv = emptyValEnv })
+                                  ,(primTyName_vector, { arity = 1, admitsEquality = true, valEnv = emptyValEnv })
+                                  ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, valEnv = emptyValEnv })
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
