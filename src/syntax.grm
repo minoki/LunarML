@@ -153,9 +153,9 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | SigExp of Syntax.SigExp
        | SigBinds of (Syntax.SigId * Syntax.SigExp) list
        | SigDec of (Syntax.SigId * Syntax.SigExp) list
-       | FunDec of (Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
-       | FunBind of (Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
-       | FunBindRest of (Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
+       | FunDec of (SourcePos.span * Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
+       | FunBind of (SourcePos.span * Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
+       | FunBindRest of (SourcePos.span * Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
        | TopDecs of (UnfixedSyntax.Dec Syntax.TopDec) list
        | Program of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
 
@@ -599,12 +599,12 @@ SigDec : SIGNATURE SigBinds (SigBinds)
 
 FunDec : FUNCTOR FunBind (FunBind)
 
-FunBind : FunId LPAREN StrId COLON SigExp RPAREN EQUALS StrExp FunBindRest ((FunId, Syntax.NamedFunExp (StrId, SigExp, StrExp)) :: FunBindRest)
-        | FunId LPAREN StrId COLON SigExp RPAREN COLON SigExp EQUALS StrExp FunBindRest ((FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp2))) :: FunBindRest)
-        | FunId LPAREN StrId COLON SigExp RPAREN COLONGT SigExp EQUALS StrExp FunBindRest ((FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp2))) :: FunBindRest)
-        | FunId LPAREN Specs RPAREN EQUALS StrExp FunBindRest ((FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), StrExp)) :: FunBindRest)
-        | FunId LPAREN Specs RPAREN COLON SigExp EQUALS StrExp FunBindRest ((FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp))) :: FunBindRest)
-        | FunId LPAREN Specs RPAREN COLONGT SigExp EQUALS StrExp FunBindRest ((FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp))) :: FunBindRest)
+FunBind : FunId LPAREN StrId COLON SigExp RPAREN EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp, StrExp)) :: FunBindRest)
+        | FunId LPAREN StrId COLON SigExp RPAREN COLON SigExp EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp2))) :: FunBindRest)
+        | FunId LPAREN StrId COLON SigExp RPAREN COLONGT SigExp EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp2))) :: FunBindRest)
+        | FunId LPAREN Specs RPAREN EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), StrExp)) :: FunBindRest)
+        | FunId LPAREN Specs RPAREN COLON SigExp EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp))) :: FunBindRest)
+        | FunId LPAREN Specs RPAREN COLONGT SigExp EQUALS StrExp FunBindRest ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp))) :: FunBindRest)
 
 FunBindRest : AND FunBind (FunBind)
             | ([])

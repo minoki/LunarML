@@ -205,7 +205,7 @@ datatype 'coreDec FunExp = NamedFunExp of StrId * SigExp * 'coreDec StrExp
 
 datatype 'coreDec TopDec = StrDec of 'coreDec StrDec
                          | SigDec of (SigId * SigExp) list
-                         | FunDec of (FunId * 'coreDec FunExp) list
+                         | FunDec of (SourcePos.span * FunId * 'coreDec FunExp) list
 
 type Program = ((Dec TopDec) list) list
 

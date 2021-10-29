@@ -568,24 +568,24 @@ fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdecs) = doStrDe
                                                   in (envWithSigMap sigMap, [Syntax.SigDec(sigbinds)])
                                                   end
   | doTopDec(ctx, env, Syntax.FunDec funbinds)
-    = let val funbinds' : (Syntax.FunId * IdStatusMap * Syntax.Dec Syntax.FunExp) list
-              = List.map (fn (funid, Syntax.NamedFunExp (strid, sigexp, strexp)) =>
+    = let val funbinds' : (SourcePos.span * Syntax.FunId * IdStatusMap * Syntax.Dec Syntax.FunExp) list
+              = List.map (fn (span, funid, Syntax.NamedFunExp (strid, sigexp, strexp)) =>
                              let val sigexp' : IdStatusMap = doSigExp(ctx, env, sigexp)
                                  val (ids, strexp') = doStrExp(ctx, mergeEnv(env, envWithIdStatusMap { valMap = Syntax.VIdMap.empty
                                                                                                      , tyConMap = Syntax.TyConMap.empty
                                                                                                      , strMap = Syntax.StrIdMap.singleton (strid, MkIdStatusMap sigexp')
                                                                                                      }
                                                                             ), strexp)
-                             in (funid, ids, Syntax.NamedFunExp (strid, sigexp, strexp'))
+                             in (span, funid, ids, Syntax.NamedFunExp (strid, sigexp, strexp'))
                              end
-                         | (funid, Syntax.AnonymousFunExp (sigexp, strexp)) =>
+                         | (span, funid, Syntax.AnonymousFunExp (sigexp, strexp)) =>
                            let val sigexp' : IdStatusMap = doSigExp(ctx, env, sigexp)
                                val (ids, strexp') = doStrExp(ctx, mergeEnv(env, envWithIdStatusMap sigexp'), strexp)
-                           in (funid, ids, Syntax.AnonymousFunExp (sigexp, strexp'))
+                           in (span, funid, ids, Syntax.AnonymousFunExp (sigexp, strexp'))
                            end
                          ) funbinds
-         val env' = envWithFunMap (List.foldl (fn ((funid, ids, _), m) => Syntax.FunIdMap.insert(m, funid, ids)) Syntax.FunIdMap.empty funbinds')
-      in (env', [Syntax.FunDec (List.map (fn (funid, _, exp) => (funid, exp)) funbinds')])
+         val env' = envWithFunMap (List.foldl (fn ((_, funid, ids, _), m) => Syntax.FunIdMap.insert(m, funid, ids)) Syntax.FunIdMap.empty funbinds')
+      in (env', [Syntax.FunDec (List.map (fn (span, funid, _, exp) => (span, funid, exp)) funbinds')])
       end
 fun doTopDecs(ctx, env, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])
   | doTopDecs(ctx, env, dec :: decs) = let val (env', dec) = doTopDec(ctx, env, dec)
@@ -745,7 +745,7 @@ val scopeTyVarsInExp: TyVarSet.set * Exp -> Exp = doExp
 val scopeTyVarsInStrDec: Dec StrDec -> Dec StrDec = doStrDec
 val scopeTyVarsInTopDecs = List.map (fn StrDec(strdec) => StrDec(scopeTyVarsInStrDec(strdec))
                                     | topdec as SigDec _ => topdec
-                                    | FunDec funbinds => FunDec (List.map (fn (funid, funexp) => (funid, doFunExp funexp)) funbinds)
+                                    | FunDec funbinds => FunDec (List.map (fn (span, funid, funexp) => (span, funid, doFunExp funexp)) funbinds)
                                     )
 val scopeTyVarsInProgram = List.map scopeTyVarsInTopDecs
 end (* local *)
@@ -1057,7 +1057,7 @@ fun doTopDec (S.StrDec strdec) = doStrDec strdec
                                                                 Syntax.SigIdSet.add (set, sigid)
                                                           )
                                                       ) Syntax.SigIdSet.empty sigbinds)
-  | doTopDec (S.FunDec funbinds) = ignore (List.foldl (fn ((funid, funexp), set) =>
+  | doTopDec (S.FunDec funbinds) = ignore (List.foldl (fn ((span, funid, funexp), set) =>
                                                           ( doFunExp funexp
                                                           ; if Syntax.FunIdSet.member (set, funid) then
                                                                 raise S.SyntaxError ([], "duplicate functor binding") (* TODO: location info *)
