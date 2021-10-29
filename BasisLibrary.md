@@ -178,7 +178,10 @@ structure Char : sig
   val isSpace : char -> bool
   val isPunct : char -> bool
   val isUpper : char -> bool
+  val toString : char -> String.string
 end
+val ord = Char.ord
+val chr = Char.chr
 
 structure String : sig
   type string = string
@@ -203,6 +206,17 @@ end
 val size = String.size
 val ^ = String.^
 val str = String.str
+
+structure Substring :> sig
+  type substring
+  type char = char
+  type string = string
+  val sub : substring * int -> char
+  val size : substring -> int
+  val base : substring -> string * int * int
+  val full : string -> substring
+  val getc : substring -> (char * substring) option
+end
 
 structure List : sig
   datatype list = datatype list

@@ -583,93 +583,6 @@ val tanh : real -> real
 *)
 end; (* structure Math *)
 
-structure Char : sig
-              type char = char
-              type string = string
-              val minChar : char
-              val maxChar : char
-              val maxOrd : int
-              val ord : char -> int
-              val chr : int -> char
-              val succ : char -> char
-              val pred : char -> char
-              val compare : char * char -> order
-              val < : char * char -> bool
-              val <= : char * char -> bool
-              val > : char * char -> bool
-              val >= : char * char -> bool
-              val contains : string -> char -> bool
-              val notContains : string -> char -> bool
-              val isAscii : char -> bool
-              val toLower : char -> char
-              val toUpper : char -> char
-              val isAlpha : char -> bool
-              val isAlphaNum : char -> bool
-              val isCntrl : char -> bool
-              val isDigit : char -> bool
-              val isGraph : char -> bool
-              val isHexDigit : char -> bool
-              val isLower : char -> bool
-              val isPrint : char -> bool
-              val isSpace : char -> bool
-              val isPunct : char -> bool
-              val isUpper : char -> bool
-          end = struct
-type char = char
-type string = string
-val minChar = #"\000"
-val maxChar = #"\255"
-val maxOrd = 255
-val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
-val chr : int -> char = fn x => if x < 0 orelse x > 255 then
-                                    raise Chr
-                                else
-                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char #[Lua.fromInt x], 0))
-fun succ c = chr (ord c + 1)
-fun pred c = chr (ord c - 1)
-fun compare (x : char, y : char) = if x = y then
-                                       EQUAL
-                                   else if x < y then
-                                       LESS
-                                   else
-                                       GREATER
-fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
-                                                 in Lua.isNil (Vector.sub (result, 0))
-                                                 end
-fun contains s c = not (notContains s c)
-local
-    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match #[Lua.fromChar c, Lua.fromString pattern], 0)))
-in
-val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
-val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
-val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
-val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
-val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
-val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
-val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
-val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
-val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
-val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
-val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
-val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
-end
-(* string.lower and string.upper depends on the locale *)
-val toLower = fn (c : char) => let val x = ord c
-                               in if ord #"A" <= x andalso x <= ord #"Z" then
-                                      chr (x - ord #"A" + ord #"a")
-                                  else
-                                      c
-                               end
-val toUpper = fn (c : char) => let val x = ord c
-                               in if ord #"a" <= x andalso x <= ord #"z" then
-                                      chr (x - ord #"a" + ord #"A")
-                                  else
-                                      c
-                               end
-open Char (* <, <=, >, >= *)
-(* toString, scan, fromString, toCString, fromCString *)
-end; (* structure Char *)
-
 structure String : sig
               type string = string
               type char = char
@@ -737,6 +650,144 @@ end (* structure String *)
 val op ^ : string * string -> string = String.^
 val size : string -> int = String.size
 val str : char -> string = String.str;
+
+structure Substring :> sig
+              type substring
+              type char = char
+              type string = string
+              val sub : substring * int -> char
+              val size : substring -> int
+              val base : substring -> string * int * int
+              val full : string -> substring
+              val getc : substring -> (char * substring) option
+          end = struct
+type char = char
+type string = string
+type substring = string * int * int (* the underlying string, the starting index, the size *)
+fun sub ((s, i, z), j) = if 0 <= j andalso j < z then
+                             String.sub (s, i + j)
+                         else
+                             raise Subscript
+fun size (_, _, z) = z
+fun base x = x
+fun full s = (s, 0, String.size s)
+fun getc (s, i, z) = if z = 0 then
+                         NONE
+                     else
+                         SOME (String.sub (s, i), (s, i + 1, z - 1))
+end;
+
+structure Char : sig
+              type char = char
+              type string = string
+              val minChar : char
+              val maxChar : char
+              val maxOrd : int
+              val ord : char -> int
+              val chr : int -> char
+              val succ : char -> char
+              val pred : char -> char
+              val compare : char * char -> order
+              val < : char * char -> bool
+              val <= : char * char -> bool
+              val > : char * char -> bool
+              val >= : char * char -> bool
+              val contains : string -> char -> bool
+              val notContains : string -> char -> bool
+              val isAscii : char -> bool
+              val toLower : char -> char
+              val toUpper : char -> char
+              val isAlpha : char -> bool
+              val isAlphaNum : char -> bool
+              val isCntrl : char -> bool
+              val isDigit : char -> bool
+              val isGraph : char -> bool
+              val isHexDigit : char -> bool
+              val isLower : char -> bool
+              val isPrint : char -> bool
+              val isSpace : char -> bool
+              val isPunct : char -> bool
+              val isUpper : char -> bool
+              val toString : char -> String.string
+          end = struct
+type char = char
+type string = string
+val minChar = #"\000"
+val maxChar = #"\255"
+val maxOrd = 255
+val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
+val chr : int -> char = fn x => if x < 0 orelse x > 255 then
+                                    raise Chr
+                                else
+                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char #[Lua.fromInt x], 0))
+fun succ c = chr (ord c + 1)
+fun pred c = chr (ord c - 1)
+fun compare (x : char, y : char) = if x = y then
+                                       EQUAL
+                                   else if x < y then
+                                       LESS
+                                   else
+                                       GREATER
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
+                                                 in Lua.isNil (Vector.sub (result, 0))
+                                                 end
+fun contains s c = not (notContains s c)
+local
+    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match #[Lua.fromChar c, Lua.fromString pattern], 0)))
+in
+val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
+val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
+val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
+val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
+val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
+val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
+val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
+val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
+val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
+val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
+val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
+val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
+end
+(* string.lower and string.upper depends on the locale *)
+val toLower = fn (c : char) => let val x = ord c
+                               in if ord #"A" <= x andalso x <= ord #"Z" then
+                                      chr (x - ord #"A" + ord #"a")
+                                  else
+                                      c
+                               end
+val toUpper = fn (c : char) => let val x = ord c
+                               in if ord #"a" <= x andalso x <= ord #"z" then
+                                      chr (x - ord #"a" + ord #"A")
+                                  else
+                                      c
+                               end
+fun toString #"\\" = "\\\\"
+  | toString #"\"" = "\\\""
+  | toString c = if isPrint c then
+                     String.str c
+                 else
+                     case c of
+                         #"\\a" => "\\a"
+                       | #"\\b" => "\\b"
+                       | #"\\t" => "\\t"
+                       | #"\\n" => "\\n"
+                       | #"\\v" => "\\v"
+                       | #"\\f" => "\\f"
+                       | #"\\r" => "\\r"
+                       | _ => let val x = ord c
+                              in if x < 32 then
+                                     "\\^" ^ String.str (chr (x + 64))
+                                 else if x < 100 then
+                                     "\\0" ^ Int.toString x
+                                 else
+                                     "\\" ^ Int.toString x
+                                 (* TODO: x >= 1000 *)
+                              end
+open Char (* <, <=, >, >= *)
+(* scan, fromString, toCString, fromCString *)
+end (* structure Char *)
+val chr = Char.chr
+val ord = Char.ord;
 
 structure List : sig
               datatype list = datatype list
