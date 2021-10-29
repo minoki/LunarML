@@ -16,12 +16,9 @@ Hello world!
 
 ## Features
 
+* Most of SML '97 language, including signatures and functors
 * [A subset of SML Basis Library](BasisLibrary.md)
 * [Interface to Lua](LuaInterface.md)
-
-The following SML '97 feature is not implemented yet:
-
-* Functors
 
 Successor ML features:
 

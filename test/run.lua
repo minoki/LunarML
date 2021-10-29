@@ -109,6 +109,10 @@ should_run "should_run/" {
   "opaque1.sml",
   "opaque2.sml",
   "abstype.sml",
+  "functor1.sml",
+  "functor2.sml",
+  "functor3.sml",
+  "parser_combinator.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
@@ -153,6 +157,7 @@ should_not_compile "should_not_compile/" {
   "abstype.sml",
   "sharing_structures1.sml",
   "sharing_structures2.sml",
+  "functor1.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
