@@ -586,7 +586,7 @@ EQUAL_LongStrIds : EQUALS LongStrId EQUAL_LongStrIds (LongStrId :: EQUAL_LongStr
                  | EQUALS LongStrId (LongStrId :: nil)
 
 SigExp_NoSigId : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
-               | SigExp_NoSigId WHERE TYPE TyVarSeq LongTyCon EQUALS Ty (Syntax.TypeRealisationExp(span(SigExp_NoSigIdleft, Tyright), SigExp_NoSigId, TyVarSeq, LongTyCon, Ty))
+               | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty (Syntax.TypeRealisationExp(span(SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty))
 
 SigExp : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
        | SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
