@@ -1482,10 +1482,10 @@ and canonicalPathForTyName ({ valMap, tyConMap, strMap } : U.Signature, tyname :
                      end
       end
 
-fun addSignatureToEnv(env : SigEnv, s : U.Signature) : SigEnv
+fun addSignatureToEnv(env : SigEnv, s : U.Signature, tyNameMap : TyNameAttr U.TyNameMap.map) : SigEnv
     = { valMap = #valMap env (* not used *)
       , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env, #tyConMap s)
-      , tyNameMap = #tyNameMap env (* TODO *)
+      , tyNameMap = U.TyNameMap.unionWith #2 (#tyNameMap env, tyNameMap) (* should not overlap *)
       , strMap = Syntax.StrIdMap.unionWith #2 (#strMap env, Syntax.StrIdMap.map (fn U.MkSignature s => (s, ())) (#strMap s))
       , sigMap = #sigMap env
       , funMap = #funMap env
@@ -1627,7 +1627,7 @@ fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.Q
            | NONE => emitError(ctx, [span], "type realisation against a rigid type")
       end
 and evalSpecs(ctx : Context, env : SigEnv, specs) : U.QSignature
-    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s)
+    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s, U.TyNameMap.map (fn { arity, admitsEquality, longtycon } => { arity = arity, admitsEquality = admitsEquality }) (#bound s))
                                   in mergeQSignature(s, addSpec(ctx, env', spec))
                                   end) { s = emptySignature, bound = U.TyNameMap.empty } specs
 and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
@@ -2084,10 +2084,14 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                                  SOME (s, longstrid) => ({ s = s, bound = [] }, USyntax.TyNameMap.empty, [], U.StrIdExp(span, longstrid))
                                                | NONE => emitError(ctx, [span], "structure not found")
                                             )
-         | Syntax.MkQualified(strid0 :: strids, strid') => (case Syntax.StrIdMap.find(#strMap env, strid0) of
-                                                                SOME (s, U.MkLongStrId(strid0, strids0)) => ({ s = s, bound = [] }, USyntax.TyNameMap.empty, [], U.StrIdExp(span, U.MkLongStrId(strid0, strids0 @ strids @ [strid'])))
-                                                              | NONE => emitError(ctx, [span], "structure not found")
-                                                           )
+         | Syntax.MkQualified(strid0 :: strids, strid') =>
+           (case Syntax.StrIdMap.find(#strMap env, strid0) of
+                SOME (s, U.MkLongStrId(strid0, strids0)) =>
+                let val s' = lookupStr(ctx, s, span, strids @ [strid'])
+                in ({ s = s', bound = [] }, USyntax.TyNameMap.empty, [], U.StrIdExp(span, U.MkLongStrId(strid0, strids0 @ strids @ [strid'])))
+                end
+              | NONE => emitError(ctx, [span], "structure not found")
+           )
       )
   | typeCheckStrExp(ctx, env, S.TransparentConstraintExp(span, strexp, sigexp))
     = let val (sA, tyNameMap, decs, strexp) = typeCheckStrExp(ctx, env, strexp)
