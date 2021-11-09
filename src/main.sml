@@ -18,9 +18,13 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -mlib                  Produce a Lua module.\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
+                                                \  --dump                 Dump intermediate code.\n\
+                                                \  --dump-all             Dump intermediate code, including mlbasis.sml.\n\
                                                 \")
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
+               , dump : bool
+               , dumpAll : bool
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -33,7 +37,7 @@ fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
 fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
   | parseArgs opts (arg :: args)
     = let fun doOutput (outname, args) = case #output opts of
-                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts } args
+                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts, dumpAll = #dumpAll opts } args
                                            | SOME _ => showMessageAndFail "--output was given multiple times.\n"
       in if arg = "-o" orelse arg = "--output" then
              case args of
@@ -45,12 +49,12 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              doOutput (String.extract (arg, 9, NONE), args)
          else if arg = "-mexe" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts, dumpAll = #dumpAll opts } args
                | SOME Driver.ExecutableMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-mlib" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, dumpAll = #dumpAll opts } args
                | SOME Driver.LibraryMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-h" orelse arg = "--help" then
@@ -59,6 +63,10 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              ( showVersion (); OS.Process.exit OS.Process.success )
          else if arg = "--" then
              handleInputFile opts args
+         else if arg = "--dump" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = true, dumpAll = #dumpAll opts } args
+         else if arg = "--dump-all" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, dumpAll = true } args
          else if String.isPrefix "-" arg then
              showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
          else
@@ -79,8 +87,8 @@ and doCompile opts fileName = let val progDir = OS.Path.dir progName;
                                   val mlbasis = readFile mlbasis_sml
                                   val source = readFile fileName
                                   val ctx = Driver.newContext()
-                                  val (env, basisdecs) = Driver.compile(ctx, Driver.ExecutableMode, Driver.initialEnv, mlbasis_sml, mlbasis)
-                                  val (env', programdecs) = Driver.compile(ctx, Option.getOpt (#outputMode opts, Driver.ExecutableMode), env, fileName, source)
+                                  val (env, basisdecs) = Driver.compile(ctx, { outputMode = Driver.ExecutableMode, dump = #dumpAll opts }, Driver.initialEnv, mlbasis_sml, mlbasis)
+                                  val (env', programdecs) = Driver.compile(ctx, { outputMode = Option.getOpt (#outputMode opts, Driver.ExecutableMode), dump = #dump opts orelse #dumpAll opts }, env, fileName, source)
                                   val decs = Driver.wholeProgramOptimization (basisdecs @ programdecs)
                                   val luactx = { nextLuaId = ref 0 }
                                   val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
@@ -91,4 +99,4 @@ and doCompile opts fileName = let val progDir = OS.Path.dir progName;
                               in ()
                               end handle Driver.Abort => OS.Process.exit OS.Process.failure
                                        | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure );
-parseArgs { output = NONE, outputMode = NONE } (CommandLine.arguments ());
+parseArgs { output = NONE, outputMode = NONE, dump = false, dumpAll = false } (CommandLine.arguments ());

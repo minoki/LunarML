@@ -13,7 +13,9 @@ sources = \
   src/typed.sml \
   src/typing.sml \
   src/initialenv.sml \
+  src/printer.sml \
   src/fsyntax.sml \
+  src/fprinter.sml \
   src/ftransform.sml \
   src/codegen_lua.sml \
   src/driver.sml \

@@ -115,7 +115,7 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , fTransEnv = FTransform.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, typingEnv, tynameset, toFEnv, fTransEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, { outputMode, dump }, { fixity, typingEnv, tynameset, toFEnv, fTransEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
            val () = CheckSyntacticRestrictions.checkProgram ast1
@@ -125,6 +125,10 @@ fun compile({ typingContext, toFContext } : Context, outputMode, { fixity, typin
            val (toFEnv, fdecs) = case outputMode of
                                      ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
                                    | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, typingEnv', toFEnv, List.concat decs)
+           val () = if dump then
+                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
+                    else
+                        ()
            val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
            val modifiedEnv = { fixity = Fixity.mergeEnv (fixity, fixity')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
