@@ -617,4 +617,4 @@ TopDecs : Dec_NoLocal TopDecs (Syntax.StrDec(Syntax.CoreDec(span(Dec_NoLocalleft
 
 Program : TopDecs SEMICOLON Program (TopDecs :: Program)
         | Exp SEMICOLON Program ([Syntax.StrDec(Syntax.CoreDec(span(Expleft, Expright), UnfixedSyntax.ValDec(span(Expleft, Expright), nil, [UnfixedSyntax.PatBind(span(Expleft, Expright), UnfixedSyntax.NonInfixVIdPat(span(Expleft, Expleft), Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)])))] :: Program) (* val it = Exp *)
-        | (nil)
+        | TopDecs ([TopDecs]) (* topdecs without semicolon *)
