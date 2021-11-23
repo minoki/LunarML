@@ -598,6 +598,7 @@ structure String : sig
               val explode : string -> char list
               val map : (char -> char) -> string -> string
               val translate : (char -> string) -> string -> string
+              val compare : string * string -> order
               val < : string * string -> bool
               val <= : string * string -> bool
               val > : string * string -> bool
@@ -644,7 +645,13 @@ fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua
 fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
                                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                            end
-(* tokens, fields, isPrefix, isSubstring, isSuffix, compare, collate, toString, scan, fromString, toCString, fromCString *)
+(* tokens, fields, isPrefix, isSubstring, isSuffix, collate, toString, scan, fromString, toCString, fromCString *)
+fun compare (s, t) = if s = t then
+                         EQUAL
+                     else if String.< (s, t) then
+                         LESS
+                     else
+                         GREATER
 open String (* size, ^, str, <, <=, >, >= *)
 end (* structure String *)
 val op ^ : string * string -> string = String.^
