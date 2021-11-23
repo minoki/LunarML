@@ -1,5 +1,14 @@
 structure P = ParserCombinator (structure Stream = StringStream
                                 fun showToken c = Char.toString c
+                                fun showPos { file, line, column } = file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column
+                                fun comparePos (p : Stream.pos, q : Stream.pos)
+                                    = case String.compare (#file p, #file q) of
+                                          LESS => LESS
+                                        | GREATER => GREATER
+                                        | EQUAL => case Int.compare (#line p, #line q) of
+                                                       LESS => LESS
+                                                     | GREATER => GREATER
+                                                     | EQUAL => Int.compare (#column p, #column q)
                                 type state = unit
                                )
 structure CP = CharParser (P)
