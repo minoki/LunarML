@@ -3,6 +3,13 @@ LUA = lua
 all: lunarml
 
 sources = \
+  pluto/token-stream.sig \
+  pluto/string-stream.sig \
+  pluto/string-stream.sml \
+  pluto/parser-combinator.sig \
+  pluto/parser-combinator.fun \
+  pluto/char-parser.sig \
+  pluto/char-parser.fun \
   src/syntax.grm.sig \
   src/sourcepos.sml \
   src/tokenizer.sml \
@@ -18,7 +25,10 @@ sources = \
   src/fprinter.sml \
   src/ftransform.sml \
   src/codegen_lua.sml \
+  src/mlb-syntax.sml \
+  src/mlb-parser.sml \
   src/driver.sml \
+  src/mlb-eval.sml \
   src/main.sml
 
 lunarml: LunarML.mlb $(sources)

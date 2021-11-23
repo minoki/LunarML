@@ -60,6 +60,36 @@ fun envWithTyConEnv (tyConMap, tyNameMap) : ('val,'str) Env'
       , boundTyVars = Syntax.TyVarMap.empty
       }
 
+fun envWithStrMap strMap
+    = { valMap = Syntax.VIdMap.empty
+      , tyConMap = Syntax.TyConMap.empty
+      , tyNameMap = USyntax.TyNameMap.empty
+      , strMap = strMap
+      , sigMap = Syntax.SigIdMap.empty
+      , funMap = Syntax.FunIdMap.empty
+      , boundTyVars = Syntax.TyVarMap.empty
+      }
+
+fun envWithSigMap sigMap
+    = { valMap = Syntax.VIdMap.empty
+      , tyConMap = Syntax.TyConMap.empty
+      , tyNameMap = USyntax.TyNameMap.empty
+      , strMap = Syntax.StrIdMap.empty
+      , sigMap = sigMap
+      , funMap = Syntax.FunIdMap.empty
+      , boundTyVars = Syntax.TyVarMap.empty
+      }
+
+fun envWithFunMap funMap
+    = { valMap = Syntax.VIdMap.empty
+      , tyConMap = Syntax.TyConMap.empty
+      , tyNameMap = USyntax.TyNameMap.empty
+      , strMap = Syntax.StrIdMap.empty
+      , sigMap = Syntax.SigIdMap.empty
+      , funMap = funMap
+      , boundTyVars = Syntax.TyVarMap.empty
+      }
+
 fun envToSigEnv(env : Env) : SigEnv
     = { valMap = Syntax.VIdMap.map (fn (tysc, ids, longvid) => (tysc, ids, ())) (#valMap env)
       , tyConMap = #tyConMap env

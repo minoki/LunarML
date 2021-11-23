@@ -106,37 +106,27 @@ type Env = { fixity : Fixity.Env
            , typingEnv : Typing.Env
            , tynameset : USyntax.TyNameSet.set
            , toFEnv : ToFSyntax.Env
-           , fTransEnv : FTransform.Env
            }
 val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , typingEnv = InitialEnv.initialEnv
                        , tynameset = InitialEnv.initialTyNameSet
                        , toFEnv = ToFSyntax.initialEnv
-                       , fTransEnv = FTransform.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, { outputMode, dump }, { fixity, typingEnv, tynameset, toFEnv, fTransEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, { fixity, typingEnv, tynameset, toFEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
     in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
            val () = CheckSyntacticRestrictions.checkProgram ast1
            val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
            val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
-           val (toFEnv, fdecs) = case outputMode of
-                                     ExecutableMode => ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
-                                   | LibraryMode => ToFSyntax.libraryToFDecs(toFContext, typingEnv', toFEnv, List.concat decs)
-           val () = if dump then
-                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
-                    else
-                        ()
-           val (fTransEnv', fdecs') = FTransform.doDecs toFContext fTransEnv fdecs
+           val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
            val modifiedEnv = { fixity = Fixity.mergeEnv (fixity, fixity')
                              , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
                              , tynameset = tynameset
                              , toFEnv = toFEnv
-                             , fTransEnv = fTransEnv'
                              }
-       in (modifiedEnv, fdecs')
+       in (modifiedEnv, fdecs)
        end handle LunarMLParser.ParseError => raise Abort
                 | Syntax.SyntaxError ([], message) =>
                   ( print ("error: " ^ message ^ "\n")

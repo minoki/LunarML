@@ -1,6 +1,7 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
+pluto/pluto.mlb
 src/syntax.grm.sig
 src/sourcepos.sml
 src/tokenizer.sml
@@ -16,5 +17,8 @@ src/fsyntax.sml
 src/fprinter.sml
 src/ftransform.sml
 src/codegen_lua.sml
+src/mlb-syntax.sml
+src/mlb-parser.sml
 src/driver.sml
+src/mlb-eval.sml
 src/main.sml

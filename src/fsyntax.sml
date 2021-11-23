@@ -1034,12 +1034,10 @@ fun programToFDecs(ctx, env : Env, []) = (env, [])
                                                               in (env, dec :: decs)
                                                               end
 fun isAlphaNumName name = List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
-fun libraryToFDecs(ctx, tenv: Typing.Env, env, decs)
+fun addExport(ctx, tenv: Typing.Env, decs)
     = case (Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export"), Syntax.StrIdMap.find (#strMap tenv, Syntax.MkStrId "export")) of
           (NONE, NONE) => raise Fail "No value to export was found."
-        | (SOME (_, _, longvid), NONE) => let val (env, decs) = programToFDecs(ctx, env, decs)
-                                   in (env, decs @ [ F.ExportValue (F.LongVarExp longvid) ])
-                                   end
+        | (SOME (_, _, longvid), NONE) => decs @ [ F.ExportValue (F.LongVarExp longvid) ]
         | (NONE, SOME ({ valMap, ... }, U.MkLongStrId(strid0, strids))) =>
           let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (vid, _) => let val name = Syntax.getVIdName vid
                                                                                               in if isAlphaNumName name then
@@ -1055,8 +1053,7 @@ fun libraryToFDecs(ctx, tenv: Typing.Env, env, decs)
                                                                                                      NONE
                                                                                               end
                                                                               ) valMap)
-              val (env, decs) = programToFDecs(ctx, env, decs)
-          in (env, decs @ [ F.ExportModule (Vector.fromList fields) ])
+          in decs @ [ F.ExportModule (Vector.fromList fields) ]
           end
         | (SOME _, SOME _) => raise Fail "The value to export is ambiguous."
 end (* local *)
