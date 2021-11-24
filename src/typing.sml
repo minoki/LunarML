@@ -805,8 +805,9 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
       end
   | typeCheckExp(ctx, env, S.RaiseExp(span, exp))
     = let val (expTy, exp) = typeCheckExp(ctx, env, exp)
+          val resultTy = U.TyVar(span, freshTyVar(ctx))
       in addConstraint(ctx, env, U.EqConstr(span, expTy, primTy_exn)) (* expTy = exn *)
-       ; (U.TyVar(span, freshTyVar(ctx)), U.RaiseExp(span, exp))
+       ; (resultTy, U.RaiseExp(span, resultTy, exp))
       end
   | typeCheckExp(ctx, env, S.IfThenElseExp(span, cond, thenPart, elsePart))
     = let val (condTy, cond) = typeCheckExp(ctx, env, cond)
@@ -903,7 +904,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                                                                   [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))]
                                                                                                               else
                                                                                                                   [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))
-                                                                                                                  ,(U.WildcardPat span, U.RaiseExp(span, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
+                                                                                                                  ,(U.WildcardPat span, U.RaiseExp(span, ty, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
                                                                                                                   ]
                                                                                              )
                                                                                  end
@@ -924,7 +925,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                            [(pat', tup)]
                                                                        else
                                                                            [(pat', tup)
-                                                                           ,(U.WildcardPat span, U.RaiseExp(span, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
+                                                                           ,(U.WildcardPat span, U.RaiseExp(span, U.TupleType(span, List.map #2 vars), U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
                                                                            ]
                                                                      )
                                                           )
@@ -1375,7 +1376,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
             | goExp (U.AppExp (span, exp1, exp2)) = ( goExp exp1; goExp exp2 )
             | goExp (U.TypedExp (span, exp, ty)) = ( goExp exp; goTy ty )
             | goExp (U.HandleExp (span, exp, matches)) = ( goExp exp; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
-            | goExp (U.RaiseExp (span, exp)) = goExp exp
+            | goExp (U.RaiseExp (span, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (U.IfThenElseExp (span, exp1, exp2, exp3)) = ( goExp exp1; goExp exp2; goExp exp3 )
             | goExp (U.CaseExp (span, exp, ty, matches)) = ( goExp exp; goTy ty; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
             | goExp (U.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )

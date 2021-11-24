@@ -700,7 +700,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
                      , handler = F.CaseExp(SourcePos.nullSpan, F.VarExp(exnName), exnTy, matches'')
                      }
       end
-  | toFExp(ctx, env, U.RaiseExp(span, exp)) = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, toFExp(ctx, env, exp))
+  | toFExp(ctx, env, U.RaiseExp(span, ty, exp)) = F.RaiseExp(span, toFTy(ctx, env, ty), toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.PrimExp(span, Syntax.PrimOp_Vector_fromList, tyargs, args)) = F.PrimExp(F.VectorFromListOp, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)

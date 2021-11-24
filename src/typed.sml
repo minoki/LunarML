@@ -158,7 +158,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
              | TypedExp of SourcePos.span * Exp * Ty
              | HandleExp of SourcePos.span * Exp * (Pat * Exp) list
-             | RaiseExp of SourcePos.span * Exp
+             | RaiseExp of SourcePos.span * Ty * Exp (* result type, exception *)
              | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of SourcePos.span * VId * Ty * Exp (* parameter name, parameter type, body *)
@@ -193,6 +193,7 @@ datatype TopDec = StrDec of StrDec
                 | FunDec of FunId * FunExp
 type Program = (TopDec list) list
 
+fun TupleType(span, xs) = RecordType (span, #2 (List.foldl (fn (ty, (i, m)) => (i+1, Syntax.LabelMap.insert (m, Syntax.NumericLabel i, ty))) (1, Syntax.LabelMap.empty) xs))
 local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -213,7 +214,7 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(AppExp(span, _, _)) = span
   | getSourceSpanOfExp(TypedExp(span, _, _)) = span
   | getSourceSpanOfExp(HandleExp(span, _, _)) = span
-  | getSourceSpanOfExp(RaiseExp(span, _)) = span
+  | getSourceSpanOfExp(RaiseExp(span, _, _)) = span
   | getSourceSpanOfExp(IfThenElseExp(span, _, _, _)) = span
   | getSourceSpanOfExp(CaseExp(span, _, _, _)) = span
   | getSourceSpanOfExp(FnExp(span, _, _, _)) = span
@@ -280,7 +281,7 @@ fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (AppExp(_,x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (TypedExp(_,x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
   | print_Exp (HandleExp(_,x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat, print_Exp)) y ^ ")"
-  | print_Exp (RaiseExp(_,x)) = "RaiseExp(" ^ print_Exp x ^ ")"
+  | print_Exp (RaiseExp(_,ty,x)) = "RaiseExp(" ^ print_Ty ty ^ "," ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(_,x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(_,pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
@@ -388,7 +389,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
             | doExp(AppExp(span, e1, e2)) = AppExp(span, doExp e1, doExp e2)
             | doExp(TypedExp(span, e, ty)) = TypedExp(span, doExp e, doTy ty)
             | doExp(HandleExp(span, e, matches)) = HandleExp(span, doExp e, List.map doMatch matches)
-            | doExp(RaiseExp(span, e)) = RaiseExp(span, doExp e)
+            | doExp(RaiseExp(span, ty, e)) = RaiseExp(span, doTy ty, doExp e)
             | doExp(IfThenElseExp(span, e1, e2, e3)) = IfThenElseExp(span, doExp e1, doExp e2, doExp e3)
             | doExp(CaseExp(span, e, ty, matches)) = CaseExp(span, doExp e, doTy ty, List.map doMatch matches)
             | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
@@ -493,7 +494,7 @@ fun freeTyVarsInExp(bound, exp)
          | AppExp(_, exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
          | TypedExp(_, exp, ty) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInTy(bound, ty))
          | HandleExp(_, exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
-         | RaiseExp(_, exp) => freeTyVarsInExp(bound, exp)
+         | RaiseExp(_, ty, exp) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInExp(bound, exp))
          | IfThenElseExp(_, exp1, exp2, exp3) => TyVarSet.union(freeTyVarsInExp(bound, exp1), TyVarSet.union(freeTyVarsInExp(bound, exp2), freeTyVarsInExp(bound, exp3)))
          | CaseExp(_, exp, ty, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInMatches(bound, matches, TyVarSet.empty)))
          | FnExp(_, vid, ty, body) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInExp(bound, body))
