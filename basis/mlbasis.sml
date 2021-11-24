@@ -203,7 +203,7 @@ structure Vector : sig
           end = struct
 datatype vector = datatype vector
 open Vector (* tabulate, length, sub, concat *)
-val fromList = _primCall "Vector.fromList" ()
+val fromList = _primVal "Vector.fromList"
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
                                                        else

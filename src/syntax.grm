@@ -60,7 +60,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SHARING | SIG | SIGNATURE | STRUCT | STRUCTURE | THEN | TYPE | VAL | WITH
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
-    | PRIMCALL
+    | PRIMTYPE | PRIMVAL | PRIMCALL | OVERLOAD
     (* other *)
     | EOF
 %nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
@@ -90,6 +90,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | PatSeqRest of UnfixedSyntax.Pat list
        | PatSeqRestEllipsis of UnfixedSyntax.Pat list * bool
        | AtTy of Syntax.Ty
+       | LongTyConOrPrimTyCon of Syntax.LongTyCon
        | ConTy of Syntax.Ty
        | TupTy of Syntax.Ty list
        | Ty_NoARROW of Syntax.Ty
@@ -299,10 +300,13 @@ AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
      | LBRACE TyRow RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), TyRow)) (* record type expression *)
      | LPAREN Ty RPAREN (Ty)
 
+LongTyConOrPrimTyCon : LongTyCon (LongTyCon)
+                     | PRIMTYPE StringConst (Syntax.MkQualified([], Syntax.MkTyCon StringConst))
+
 ConTy : AtTy (AtTy)
-      | ConTy LongTyCon (Syntax.TyCon (span(ConTyleft, LongTyConright), [ConTy], LongTyCon)) (* type construction *)
-      | LongTyCon (Syntax.TyCon (span(LongTyConleft, LongTyConright), nil, LongTyCon)) (* type construction *)
-      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (span(LPARENleft, LongTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
+      | ConTy LongTyConOrPrimTyCon (Syntax.TyCon (span(ConTyleft, LongTyConOrPrimTyConright), [ConTy], LongTyConOrPrimTyCon)) (* type construction *)
+      | LongTyConOrPrimTyCon (Syntax.TyCon (span(LongTyConOrPrimTyConleft, LongTyConOrPrimTyConright), nil, LongTyConOrPrimTyCon)) (* type construction *)
+      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyConOrPrimTyCon (Syntax.TyCon (span(LPARENleft, LongTyConOrPrimTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyConOrPrimTyCon)) (* type construction *)
 
 TupTy : ConTy ([ConTy])
       | ConTy ASTERISK TupTy (ConTy :: TupTy)
@@ -350,6 +354,7 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
       | HASHLBRACK RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), [])) (* [extension] vector expression *)
       | HASHLBRACK Exp ExpCSeqRest RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [extension] vector expression *)
       | HASH Lab (UnfixedSyntax.ProjectionExp(span(HASHleft,Labright), Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
+      | PRIMVAL StringConst (UnfixedSyntax.PrimValExp(span(PRIMVALleft, StringConstright), StringConst)) (* [extension] _primVal "name" *)
       | PRIMCALL StringConst LBRACK Ty TySeqRest RBRACK LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector (Ty :: TySeqRest), vector [])) (* [extension] _primCall "name" [tyargs] () *)
       | PRIMCALL StringConst LBRACK Ty TySeqRest RBRACK LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector (Ty :: TySeqRest), vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" [tyargs] (args) *)
       | PRIMCALL StringConst LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector [], vector [])) (* [extension] _primCall "name" () *)

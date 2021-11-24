@@ -335,6 +335,8 @@ in
 val VId_assumePure = newVId "assumePure"
 val VId_assumeDiscardable = newVId "assumeDiscardable"
 end
+val VId_Vector_fromList = newVId "Vector.fromList"
+val LongVId_Vector_fromList = USyntax.MkShortVId VId_Vector_fromList
 
 val initialEnv : Typing.Env
     = let open Typing
@@ -349,6 +351,8 @@ val initialEnv : Typing.Env
           val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
           val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, USyntax.MkSignature str)) Syntax.StrIdMap.empty
           val tyVarA = USyntax.AnonymousTyVar(0)
+          val tyVarB = USyntax.AnonymousTyVar(1)
+          val tyVarC = USyntax.AnonymousTyVar(2)
           val TypeFunction = USyntax.TypeFunction
           val TypeScheme = USyntax.TypeScheme
           val IsEqType = USyntax.IsEqType
@@ -361,6 +365,8 @@ val initialEnv : Typing.Env
           val emptyValEnv = USyntax.emptyValEnv
           fun mkTyVar tv = USyntax.TyVar(SourcePos.nullSpan, tv)
           val tyA = mkTyVar tyVarA
+          val tyB = mkTyVar tyVarB
+          val tyC = mkTyVar tyVarC
           infixr -->
           fun mkFnType(a, b) = USyntax.FnType(SourcePos.nullSpan, a, b)
           val op --> = mkFnType
@@ -410,6 +416,9 @@ val initialEnv : Typing.Env
                              , valEnv = emptyValEnv
                              }
           val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
+                                , valEnv = emptyValEnv
+                                }
+          val tyStr_function2 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC], mkTyCon([tyA, tyB, tyC], primTyName_function2))
                                 , valEnv = emptyValEnv
                                 }
           val sig_General = { tyConMap = mkTyMap []
@@ -633,6 +642,7 @@ val initialEnv : Typing.Env
                                            ,(">", USyntax.MkShortVId VId_GT, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                            ,("<=", USyntax.MkShortVId VId_LE, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
                                            ,(">=", USyntax.MkShortVId VId_GE, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
+                                           ,("Vector.fromList", USyntax.MkShortVId VId_Vector_fromList, TypeScheme([(tyVarA, [])], listOf tyA --> vectorOf tyA))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
@@ -648,6 +658,7 @@ val initialEnv : Typing.Env
                                  ,("exn", tyStr_exn)
                                  ,("array", tyStr_array)
                                  ,("vector", tyStr_vector)
+                                 ,("Function2.function2", tyStr_function2)
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty

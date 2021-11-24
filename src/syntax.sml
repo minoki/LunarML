@@ -147,7 +147,7 @@ datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
 
-datatype PrimOp = PrimOp_Vector_fromList (* # of type arguments: 1 (optional), # of arguments: 0 *)
+datatype PrimOp = PrimOp_call2 (* # of type arguments: 3 (optional), # of arguments: 3 *)
 
 datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)
@@ -373,6 +373,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ProjectionExp of SourcePos.span * Syntax.Label
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
+             | PrimValExp of SourcePos.span * string
              | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * ValBind list
              | RecValDec of SourcePos.span * Syntax.TyVar list * ValBind list

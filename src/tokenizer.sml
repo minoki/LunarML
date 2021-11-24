@@ -108,7 +108,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                               SOME (recognizeKeyword (l, c, String.implode (rev accum)), l, c + length accum, x :: xs)
             and recognizeKeyword (l, c, name) = let val tok = case name of
                                                                   "_" => Tokens.UNDERSCORE
+                                                                | "_primType" => Tokens.PRIMTYPE (* extension *)
+                                                                | "_primVal" => Tokens.PRIMVAL (* extension *)
                                                                 | "_primCall" => Tokens.PRIMCALL (* extension *)
+                                                                | "_overload" => Tokens.OVERLOAD (* extension *)
                                                                 | "abstype" => Tokens.ABSTYPE
                                                                 | "and" => Tokens.AND
                                                                 | "andalso" => Tokens.ANDALSO

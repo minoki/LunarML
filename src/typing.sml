@@ -200,7 +200,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, USyntax.VectorExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
-  | isNonexpansive(env, USyntax.PrimExp(_, Syntax.PrimOp_Vector_fromList, _, args)) = Vector.length args = 0
+  | isNonexpansive(env, USyntax.PrimExp(_, Syntax.PrimOp_call2, _, args)) = false
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueVariable, _)) = false
@@ -233,6 +233,7 @@ val primTyName_array  = USyntax.MkTyName("array", 9)
 val primTyName_vector = USyntax.MkTyName("vector", 10)
 val primTyName_exntag = USyntax.MkTyName("exntag", 11)
 (* primTyName_Lua_value : 12 *)
+val primTyName_function2 = USyntax.MkTyName("function2", 13)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_word)
@@ -854,16 +855,25 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
                                          end) xs
       in (U.TyCon(span, [elemTy], primTyName_vector), U.VectorExp(span, xs, elemTy))
       end
-  | typeCheckExp(ctx, env, S.PrimExp(span, primOp as S.PrimOp_Vector_fromList, tyargs, args))
-    = let val elemTy = case Vector.length tyargs of
-                           0 => USyntax.TyVar(span, freshTyVar(ctx))
-                         | 1 => evalTy(ctx, env, Vector.sub(tyargs, 0))
-                         | _ => emitError(ctx, [span], "invalid number of type arguments to _primCall \"Vector.fromList\"")
-          val () = if Vector.length args = 0 then
+  | typeCheckExp(ctx, env, S.PrimExp(span, primOp as S.PrimOp_call2, tyargs, args))
+    = let val tyargs = Vector.map (fn ty => evalTy(ctx, env, ty)) tyargs
+          val (resultTy, argTy1, argTy2) = case Vector.length tyargs of
+                                               0 => (USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
+                                             | 1 => (Vector.sub(tyargs, 0), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
+                                             | 2 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), USyntax.TyVar(span, freshTyVar(ctx)))
+                                             | 3 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), Vector.sub(tyargs, 2))
+                                             | _ => emitError(ctx, [span], "invalid number of type arguments to _primCall \"call2\"")
+          val () = if Vector.length args = 3 then
                        ()
                    else
-                       emitError(ctx, [span], "invalid number of arguments to _primCall \"Vector.fromList\"")
-      in (U.FnType(span, U.TyCon(span, [elemTy], primTyName_list), U.TyCon(span, [elemTy], primTyName_vector)), U.PrimExp(span, primOp, vector [elemTy], vector []))
+                       emitError(ctx, [span], "invalid number of arguments to _primCall \"call2\"")
+          val (functionTy, function) = typeCheckExp(ctx, env, Vector.sub(args, 0))
+          val (argTy1', arg1) = typeCheckExp(ctx, env, Vector.sub(args, 1))
+          val (argTy2', arg2) = typeCheckExp(ctx, env, Vector.sub(args, 2))
+      in addConstraint(ctx, env, U.EqConstr(span, functionTy, U.TyCon(span, [resultTy, argTy1', argTy2'], primTyName_function2)))
+       ; addConstraint(ctx, env, U.EqConstr(span, argTy1, argTy1'))
+       ; addConstraint(ctx, env, U.EqConstr(span, argTy2, argTy2'))
+       ; (resultTy, U.PrimExp(span, primOp, vector [resultTy, argTy1, argTy2], vector [function, arg1, arg2]))
       end
 (* typeCheckDec : Context * Env * S.Dec -> (* created environment *) Env * U.Dec list *)
 and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))

@@ -179,6 +179,7 @@ val builtins
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
                     ,(VId_Vector_concat, "_Vector_concat")
+                    ,(LongVId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
                     ,(VId_Lua_sub, "_Lua_sub")
                     ,(VId_Lua_set, "_Lua_set")
@@ -373,7 +374,7 @@ type Exp = { prec : int
            }
 
 fun paren allowed { prec, exp } = if allowed < prec then
-                                      [ Fragment "(" ] @ exp @ [ Fragment ")" ] 
+                                      [ Fragment "(" ] @ exp @ [ Fragment ")" ]
                                   else
                                       exp
 
@@ -926,11 +927,21 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                    in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
                                                                    end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.VectorFromListOp, _, xs)) dest
-    = if Vector.length xs = 0 then
-          putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_VectorOrArray_fromList" ] })
+  | doExpTo ctx env (F.PrimExp (F.Call2Op, _, args)) dest
+    = if Vector.length args = 3 then
+          let val f = Vector.sub (args, 0)
+              val a0 = Vector.sub (args, 1)
+              val a1 = Vector.sub (args, 2)
+          in doExpCont ctx env f (fn (stmts0, env, f) =>
+                                     doExpCont ctx env a0 (fn (stmts1, env, a0) =>
+                                                              doExpCont ctx env a1 (fn (stmts2, env, a1) =>
+                                                                                       putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment "," :: #exp a1 @ [ Fragment ")" ] })
+                                                                                   )
+                                                          )
+                                 )
+          end
       else
-          raise CodeGenError "PrimExp.VectorFromListOp: invalid number of arguments"
+          raise CodeGenError "PrimExp.Call2Op: invalid number of arguments"
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then
           let val a0 = Vector.sub (args, 0)

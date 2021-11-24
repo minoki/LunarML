@@ -723,8 +723,8 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                           end
                                                    | _ => let val exp2 = doExp env exp2
                                                               val vectorFromListRule = case (exp1, exp2) of
-                                                                                           (F.PrimExp (F.VectorFromListOp, ty1, args), F.PrimExp (F.ListOp, ty2, xs)) =>
-                                                                                           if Vector.length args = 0 andalso Vector.length ty2 = 1 then
+                                                                                           (F.TyAppExp (F.VarExp vid, ty1), F.PrimExp (F.ListOp, ty2, xs)) =>
+                                                                                           if vid = InitialEnv.VId_Vector_fromList andalso Vector.length ty2 = 1 then
                                                                                                SOME (F.VectorExp (xs, Vector.sub (ty2, 0)), NONE)
                                                                                            else
                                                                                                NONE
@@ -941,7 +941,7 @@ fun isDiscardablePrimOp (F.SConOp _) = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
-  | isDiscardablePrimOp F.VectorFromListOp = true
+  | isDiscardablePrimOp F.Call2Op = false
   | isDiscardablePrimOp F.ExnInstanceofOp = true
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
   | isDiscardable (F.VarExp _) = true

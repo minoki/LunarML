@@ -38,7 +38,7 @@ datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
                 | RecordEqualityOp (* value argument: the record of equalities *)
                 | DataTagOp (* value argument: the data *)
                 | DataPayloadOp (* value argument: the data *)
-                | VectorFromListOp (* type argument: element type, value argument: none *)
+                | Call2Op (* type arguments: result, arg1, arg2, value argument: function, arg1, arg2 *)
                 | ExnInstanceofOp (* type argument: none, value arguments: exception, exception tag *)
 datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
              | VarExp of USyntax.VId
@@ -434,7 +434,7 @@ fun print_PrimOp (SConOp scon) = "SConOp " ^ Syntax.print_SCon scon
   | print_PrimOp RecordEqualityOp = "RecordEqualityOp"
   | print_PrimOp DataTagOp = "DataTagOp"
   | print_PrimOp DataPayloadOp = "DataPayloadOp"
-  | print_PrimOp VectorFromListOp = "VectorFromListOp"
+  | print_PrimOp Call2Op = "Call2Op"
   | print_PrimOp ExnInstanceofOp = "ExnInstanceofOp"
 fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Ty x :: xs) [] tyargs) ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
@@ -703,7 +703,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
   | toFExp(ctx, env, U.RaiseExp(span, ty, exp)) = F.RaiseExp(span, toFTy(ctx, env, ty), toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
-  | toFExp(ctx, env, U.PrimExp(span, Syntax.PrimOp_Vector_fromList, tyargs, args)) = F.PrimExp(F.VectorFromListOp, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)
+  | toFExp(ctx, env, U.PrimExp(span, Syntax.PrimOp_call2, tyargs, args)) = F.PrimExp(F.Call2Op, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)
 and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
   | doValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))
     = let val ty0 = toFTy (ctx, env, ty)
