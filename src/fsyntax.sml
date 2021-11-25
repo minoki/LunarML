@@ -512,32 +512,7 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                      end
                        , overloadMap = let open Syntax Typing InitialEnv
                                        in List.foldl (fn ((tyname, xs), m) => USyntax.TyNameMap.insert (m, tyname, List.foldl (fn ((key, vid), mm) => Syntax.OverloadKeyMap.insert (mm, key, FSyntax.LongVarExp vid)) Syntax.OverloadKeyMap.empty xs)) USyntax.TyNameMap.empty
-                                                     [(primTyName_int, [(OVERLOAD_abs, VId_Int_abs)
-                                                                       ,(OVERLOAD_TILDE, VId_Int_TILDE)
-                                                                       ,(OVERLOAD_div, VId_Int_div)
-                                                                       ,(OVERLOAD_mod, VId_Int_mod)
-                                                                       ,(OVERLOAD_TIMES, VId_Int_TIMES)
-                                                                       ,(OVERLOAD_PLUS, VId_Int_PLUS)
-                                                                       ,(OVERLOAD_MINUS, VId_Int_MINUS)
-                                                                       ,(OVERLOAD_LT, VId_Int_LT)
-                                                                       ,(OVERLOAD_LE, VId_Int_LE)
-                                                                       ,(OVERLOAD_GT, VId_Int_GT)
-                                                                       ,(OVERLOAD_GE, VId_Int_GE)
-                                                                       ]
-                                                      )
-                                                     ,(primTyName_word, [(OVERLOAD_TILDE, VId_Word_TILDE)
-                                                                        ,(OVERLOAD_div, VId_Word_div)
-                                                                        ,(OVERLOAD_mod, VId_Word_mod)
-                                                                        ,(OVERLOAD_TIMES, VId_Word_TIMES)
-                                                                        ,(OVERLOAD_PLUS, VId_Word_PLUS)
-                                                                        ,(OVERLOAD_MINUS, VId_Word_MINUS)
-                                                                        ,(OVERLOAD_LT, VId_Word_LT)
-                                                                        ,(OVERLOAD_LE, VId_Word_LE)
-                                                                        ,(OVERLOAD_GT, VId_Word_GT)
-                                                                        ,(OVERLOAD_GE, VId_Word_GE)
-                                                                        ]
-                                                      )
-                                                     ,(primTyName_real, [(OVERLOAD_abs, VId_Real_abs)
+                                                     [(primTyName_real, [(OVERLOAD_abs, VId_Real_abs)
                                                                         ,(OVERLOAD_TILDE, VId_Real_TILDE)
                                                                         ,(OVERLOAD_DIVIDE, VId_Real_DIVIDE)
                                                                         ,(OVERLOAD_TIMES, VId_Real_TIMES)

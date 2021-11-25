@@ -122,28 +122,25 @@ val builtins
                     ,(VId_EQUAL_array, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_vector, "_Vector_EQUAL")
                     (* int *)
-                    ,(VId_Int_PLUS, "_Int_add") (* may raise Overflow *)
-                    ,(VId_Int_MINUS, "_Int_sub") (* may raise Overflow *)
-                    ,(VId_Int_TIMES, "_Int_mul") (* may raise Overflow *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(VId_Int_div, "_Int_div") (* may raise Overflow/Div *)
-                    ,(VId_Int_mod, "_Int_mod") (* may raise Div *)
                     ,(VId_Int_LT, "_LT")
                     ,(VId_Int_GT, "_GT")
                     ,(VId_Int_LE, "_LE")
                     ,(VId_Int_GE, "_GE")
+                    ,(USyntax.MkShortVId VId_Int_add_bin, "__Int_add")
+                    ,(USyntax.MkShortVId VId_Int_sub_bin, "__Int_sub")
+                    ,(USyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
+                    ,(USyntax.MkShortVId VId_Int_div_bin, "__Int_div")
+                    ,(USyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
                     (* word *)
                     ,(VId_Word_PLUS, "_PLUS") (* Lua +; does not raise Overflow *)
                     ,(VId_Word_MINUS, "_MINUS") (* Lua - (binary); does not raise Overflow *)
                     ,(VId_Word_TIMES, "_TIMES") (* Lua *; does not raise Overflow *)
-                    ,(VId_Word_div, "_Word_div") (* may raise Div *)
-                    ,(VId_Word_mod, "_Word_mod") (* may raise Div *)
                     ,(VId_Word_TILDE, "_unm") (* Lua - (unary) *)
-                    ,(VId_Word_LT, "_Word_LT")
-                    ,(VId_Word_GT, "_Word_GT")
-                    ,(VId_Word_LE, "_Word_LE")
-                    ,(VId_Word_GE, "_Word_GE")
+                    ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
+                    ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
+                    ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_PLUS, "_PLUS") (* Lua + *)
                     ,(VId_Real_MINUS, "_MINUS") (* Lua - (binary) *)
@@ -179,7 +176,7 @@ val builtins
                     ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
                     ,(VId_Vector_concat, "_Vector_concat")
-                    ,(LongVId_Vector_fromList, "_VectorOrArray_fromList")
+                    ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
                     ,(VId_Lua_sub, "_Lua_sub")
                     ,(VId_Lua_set, "_Lua_set")
@@ -232,8 +229,6 @@ val builtins
       end
 datatype BinaryOp = InfixOp of (* prec *) int * string
                   | InfixOpR of (* prec *) int * string
-                  | NamedBinaryFn of string
-                  | WordCompare of { flip : bool, negate : bool }
 val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
     = let open InitialEnv
       in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
@@ -242,11 +237,6 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
                     ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
-                    ,(VId_Int_PLUS,     (NamedBinaryFn "__Int_add", false))
-                    ,(VId_Int_MINUS,    (NamedBinaryFn "__Int_sub", false))
-                    ,(VId_Int_TIMES,    (NamedBinaryFn "__Int_mul", false))
-                    ,(VId_Int_div,      (NamedBinaryFn "__Int_div", false))
-                    ,(VId_Int_mod,      (NamedBinaryFn "__Int_mod", false))
                     ,(VId_Int_LT,       (InfixOp (10, "<"), true))
                     ,(VId_Int_LE,       (InfixOp (10, "<="), true))
                     ,(VId_Int_GT,       (InfixOp (10, ">"), true))
@@ -254,12 +244,6 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
                     ,(VId_Word_PLUS,    (InfixOp (4, "+"), true))
                     ,(VId_Word_MINUS,   (InfixOp (4, "-"), true))
                     ,(VId_Word_TIMES,   (InfixOp (3, "*"), true))
-                    ,(VId_Word_div,     (NamedBinaryFn "__Word_div", false))
-                    ,(VId_Word_mod,     (NamedBinaryFn "__Word_mod", false))
-                    ,(VId_Word_LT,      (WordCompare { flip = false, negate = false }, true))
-                    ,(VId_Word_LE,      (WordCompare { flip = true, negate = true }, true))
-                    ,(VId_Word_GT,      (WordCompare { flip = true, negate = false }, true))
-                    ,(VId_Word_GE,      (WordCompare { flip = false, negate = true }, true))
                     ,(VId_Real_PLUS,    (InfixOp (4, "+"), true))
                     ,(VId_Real_MINUS,   (InfixOp (4, "-"), true))
                     ,(VId_Real_TIMES,   (InfixOp (3, "*"), true))
@@ -424,26 +408,15 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_Fail"
                                             , "_raise"
                                             , "__Int_add"
-                                            , "_Int_add"
                                             , "__Int_sub"
-                                            , "_Int_sub"
                                             , "__Int_mul"
-                                            , "_Int_mul"
                                             , "__Int_div"
-                                            , "_Int_div"
                                             , "__Int_mod"
-                                            , "_Int_mod"
                                             , "_Int_negate"
                                             , "_Int_abs"
                                             , "__Word_div"
-                                            , "_Word_div"
                                             , "__Word_mod"
-                                            , "_Word_mod"
                                             , "__Word_LT"
-                                            , "_Word_LT"
-                                            , "_Word_GT"
-                                            , "_Word_LE"
-                                            , "_Word_GE"
                                             , "_nil"
                                             , "_cons"
                                             , "_List_EQUAL"
@@ -642,16 +615,6 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                    let val e = case binop of
                                                                                    InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
                                                                                  | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' @ Fragment (" " ^ luaop ^ " ") :: paren prec e2' }
-                                                                                 | NamedBinaryFn luafn => { prec = ~2, exp = Fragment (luafn ^ "(") :: #exp e1' @ Fragment ", " :: #exp e2' @ [ Fragment ")" ] }
-                                                                                 | WordCompare { flip, negate } => let val (x, y) = if flip then
-                                                                                                                                        (e2', e1')
-                                                                                                                                    else
-                                                                                                                                        (e1', e2')
-                                                                                                                   in if negate then
-                                                                                                                          { prec = 2, exp = Fragment "not __Word_LT(" :: #exp x @ Fragment ", " :: #exp y @ [ Fragment ")" ] }
-                                                                                                                      else
-                                                                                                                          { prec = ~2, exp = Fragment "__Word_LT(" :: #exp x @ Fragment ", " :: #exp y @ [ Fragment ")" ] }
-                                                                                                                   end
                                                                    in if pure then
                                                                           putPureTo ctx env dest (stmts, e)
                                                                       else
@@ -935,7 +898,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           in doExpCont ctx env f (fn (stmts0, env, f) =>
                                      doExpCont ctx env a0 (fn (stmts1, env, a0) =>
                                                               doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                       putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment "," :: #exp a1 @ [ Fragment ")" ] })
+                                                                                       putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ [ Fragment ")" ] })
                                                                                    )
                                                           )
                                  )
@@ -952,7 +915,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                      doExpCont ctx env a0 (fn (stmts1, env, a0) =>
                                                               doExpCont ctx env a1 (fn (stmts2, env, a1) =>
                                                                                        doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment "," :: #exp a1 @ Fragment "," :: #exp a2 @ [ Fragment ")" ] })
+                                                                                                                putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ Fragment ", " :: #exp a2 @ [ Fragment ")" ] })
                                                                                                             )
                                                                                    )
                                                           )

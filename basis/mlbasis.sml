@@ -178,6 +178,48 @@ fun optString x : string option = let val t = typeof x
                                   end
 end;
 
+structure Int = struct
+open Int (* ~, abs, <, <=, >, >= *)
+fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
+fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
+fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
+fun x div y = _primCall "call2" (_primVal "Int.div", x, y)
+fun x mod y = _primCall "call2" (_primVal "Int.mod", x, y)
+end
+_overload "Int" [int] { + = Int.+
+                      , - = Int.-
+                      , * = Int.*
+                      , div = Int.div
+                      , mod = Int.mod
+                      , ~ = Int.~
+                      , abs = Int.abs
+                      , < = Int.<
+                      , <= = Int.<=
+                      , > = Int.>
+                      , >= = Int.>=
+                      };
+
+structure Word = struct
+open Word (* +, -, *, ~ *)
+fun x div y = _primCall "call2" (_primVal "Word.div", x, y)
+fun x mod y = _primCall "call2" (_primVal "Word.mod", x, y)
+fun x < y = _primCall "call2" (_primVal "Word.<", x, y)
+fun x > y = y < x
+fun x <= y = Bool.not (y < x)
+fun x >= y = Bool.not (x < y)
+end
+_overload "Word" [word] { + = Word.+
+                        , - = Word.-
+                        , * = Word.*
+                        , div = Word.div
+                        , mod = Word.mod
+                        , ~ = Word.~
+                        , < = Word.<
+                        , <= = Word.<=
+                        , > = Word.>
+                        , >= = Word.>=
+                        };
+
 structure Vector : sig
               datatype vector = datatype vector
               (* val maxLen : int; defined later *)

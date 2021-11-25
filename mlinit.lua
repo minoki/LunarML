@@ -146,9 +146,6 @@ local function __Int_add(x, y)
     return z
   end
 end
-local function _Int_add(t)
-  return __Int_add(t[1], t[2])
-end
 local function __Int_sub(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
@@ -161,9 +158,6 @@ local function __Int_sub(x, y)
     return z
   end
 end
-local function _Int_sub(t)
-  return __Int_sub(t[1], t[2])
-end
 local function __Int_mul(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
@@ -173,9 +167,6 @@ local function __Int_mul(x, y)
   else
     return z
   end
-end
-local function _Int_mul(t)
-  return __Int_mul(t[1], t[2])
 end
 local function __Int_div(x, y)
   assert(math_type(x) == "integer")
@@ -187,9 +178,6 @@ local function __Int_div(x, y)
   end
   return x // y
 end
-local function _Int_div(t)
-  return __Int_div(t[1], t[2])
-end
 local function __Int_mod(x, y)
   assert(math_type(x) == "integer")
   assert(math_type(y) == "integer")
@@ -197,9 +185,6 @@ local function __Int_mod(x, y)
     _raise(_Div, "Int.mod")
   end
   return x % y
-end
-local function _Int_mod(t)
-  return __Int_mod(t[1], t[2])
 end
 local function _Int_negate(x)
   assert(math_type(x) == "integer")
@@ -254,9 +239,6 @@ local function __Word_div(x, y)
       end
     end
   end
-end
-local function _Word_div(t)
-  return __Word_div(t[1], t[2])
 end
 local function __Word_mod(x, y)
   assert(math_type(x) == "integer")
@@ -316,22 +298,7 @@ local function __Word_mod(x, y)
     end
   end
 end
-local function _Word_mod(t)
-  return __Word_mod(t[1], t[2])
-end
 local __Word_LT = math.ult
-local function _Word_LT(t)
-  return __Word_LT(t[1], t[2])
-end
-local function _Word_GT(t)
-  return __Word_LT(t[2], t[1])
-end
-local function _Word_LE(t)
-  return not __Word_LT(t[2], t[1])
-end
-local function _Word_GE(t)
-  return not __Word_LT(t[1], t[2])
-end
 
 -- List
 local _nil = { tag = "nil" }
