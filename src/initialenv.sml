@@ -263,7 +263,7 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
-val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 12)
+val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 14)
 val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
 val VId_Lua_sub = newVId "sub"
 val VId_Lua_set = newVId "set"
@@ -353,6 +353,7 @@ val initialEnv : Typing.Env
           val tyVarA = USyntax.AnonymousTyVar(0)
           val tyVarB = USyntax.AnonymousTyVar(1)
           val tyVarC = USyntax.AnonymousTyVar(2)
+          val tyVarD = USyntax.AnonymousTyVar(3)
           val TypeFunction = USyntax.TypeFunction
           val TypeScheme = USyntax.TypeScheme
           val IsEqType = USyntax.IsEqType
@@ -367,6 +368,7 @@ val initialEnv : Typing.Env
           val tyA = mkTyVar tyVarA
           val tyB = mkTyVar tyVarB
           val tyC = mkTyVar tyVarC
+          val tyD = mkTyVar tyVarD
           infixr -->
           fun mkFnType(a, b) = USyntax.FnType(SourcePos.nullSpan, a, b)
           val op --> = mkFnType
@@ -377,6 +379,8 @@ val initialEnv : Typing.Env
           fun listOf(t) = mkTyCon([t], primTyName_list)
           fun arrayOf(t) = mkTyCon([t], primTyName_array)
           fun vectorOf(t) = mkTyCon([t], primTyName_vector)
+          fun function2(resultTy, arg1Ty, arg2Ty) = mkTyCon([resultTy, arg1Ty, arg2Ty], primTyName_function2)
+          fun function3(resultTy, arg1Ty, arg2Ty, arg3Ty) = mkTyCon([resultTy, arg1Ty, arg2Ty, arg3Ty], primTyName_function3)
           val tyStr_bool = { typeFunction = TypeFunction([], primTy_bool)
                            , valEnv = mkValConMap [("true", TypeScheme ([], primTy_bool))
                                                   ,("false", TypeScheme ([], primTy_bool))
@@ -418,7 +422,10 @@ val initialEnv : Typing.Env
           val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
                                 , valEnv = emptyValEnv
                                 }
-          val tyStr_function2 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC], mkTyCon([tyA, tyB, tyC], primTyName_function2))
+          val tyStr_function2 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
+                                , valEnv = emptyValEnv
+                                }
+          val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
                                 , valEnv = emptyValEnv
                                 }
           val sig_General = { tyConMap = mkTyMap []
@@ -659,6 +666,7 @@ val initialEnv : Typing.Env
                                  ,("array", tyStr_array)
                                  ,("vector", tyStr_vector)
                                  ,("Function2.function2", tyStr_function2)
+                                 ,("Function3.function3", tyStr_function3)
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty

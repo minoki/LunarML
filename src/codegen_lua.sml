@@ -942,6 +942,24 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           end
       else
           raise CodeGenError "PrimExp.Call2Op: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.Call3Op, _, args)) dest
+    = if Vector.length args = 4 then
+          let val f = Vector.sub (args, 0)
+              val a0 = Vector.sub (args, 1)
+              val a1 = Vector.sub (args, 2)
+              val a2 = Vector.sub (args, 3)
+          in doExpCont ctx env f (fn (stmts0, env, f) =>
+                                     doExpCont ctx env a0 (fn (stmts1, env, a0) =>
+                                                              doExpCont ctx env a1 (fn (stmts2, env, a1) =>
+                                                                                       doExpCont ctx env a2 (fn (stmts3, env, a2) =>
+                                                                                                                putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment "," :: #exp a1 @ Fragment "," :: #exp a2 @ [ Fragment ")" ] })
+                                                                                                            )
+                                                                                   )
+                                                          )
+                                 )
+          end
+      else
+          raise CodeGenError "PrimExp.Call2Op: invalid number of arguments"
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then
           let val a0 = Vector.sub (args, 0)

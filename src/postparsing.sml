@@ -301,6 +301,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.PrimValExp(span, name)) = Syntax.VarExp(span, Syntax.MkQualified([], Syntax.MkVId name))
   | doExp(ctx, env, UnfixedSyntax.PrimExp(span, name, tyargs, args)) = let val primOp = case name of
                                                                                             "call2" => Syntax.PrimOp_call2
+                                                                                          | "call3" => Syntax.PrimOp_call3
                                                                                           | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
                                                                            val args = Vector.map (fn e => doExp(ctx, env, e)) args
                                                                        in Syntax.PrimExp(span, primOp, tyargs, args)

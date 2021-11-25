@@ -148,6 +148,7 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
                 | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
 
 datatype PrimOp = PrimOp_call2 (* # of type arguments: 3 (optional), # of arguments: 3 *)
+                | PrimOp_call3 (* # of type arguments: 4 (optional), # of arguments: 4 *)
 
 datatype OverloadClass = CLASS_INT
                        | CLASS_WORD
