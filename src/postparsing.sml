@@ -385,6 +385,78 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
   | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = let val fixityMap = List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids
                                                                    in (envWithFixityMap fixityMap, [])
                                                                    end
+  | doDec(ctx, env, UnfixedSyntax.OverloadDec(span, class, longtycon, map))
+    = let val class = case class of
+                          "Int" => Syntax.CLASS_INT
+                        | "Word" => Syntax.CLASS_WORD
+                        | "Real" => Syntax.CLASS_REAL
+                        | "Char" => Syntax.CLASS_CHAR
+                        | "String" => Syntax.CLASS_STRING
+                        | _ => emitError(ctx, [span], "unknown overload class: " ^ class)
+          val keys = case class of
+                         Syntax.CLASS_INT => [("+", Syntax.OVERLOAD_PLUS)
+                                             ,("-", Syntax.OVERLOAD_MINUS)
+                                             ,("*", Syntax.OVERLOAD_TIMES)
+                                             ,("div", Syntax.OVERLOAD_div)
+                                             ,("mod", Syntax.OVERLOAD_mod)
+                                             ,("abs", Syntax.OVERLOAD_abs)
+                                             ,("~", Syntax.OVERLOAD_TILDE)
+                                             ,("<", Syntax.OVERLOAD_LT)
+                                             ,("<=", Syntax.OVERLOAD_LE)
+                                             ,(">", Syntax.OVERLOAD_GT)
+                                             ,(">=", Syntax.OVERLOAD_GE)
+                                             ]
+                       | Syntax.CLASS_WORD => [("+", Syntax.OVERLOAD_PLUS)
+                                              ,("-", Syntax.OVERLOAD_MINUS)
+                                              ,("*", Syntax.OVERLOAD_TIMES)
+                                              ,("div", Syntax.OVERLOAD_div)
+                                              ,("mod", Syntax.OVERLOAD_mod)
+                                              ,("~", Syntax.OVERLOAD_TILDE)
+                                              ,("<", Syntax.OVERLOAD_LT)
+                                              ,("<=", Syntax.OVERLOAD_LE)
+                                              ,(">", Syntax.OVERLOAD_GT)
+                                              ,(">=", Syntax.OVERLOAD_GE)
+                                              ]
+                       | Syntax.CLASS_REAL => [("+", Syntax.OVERLOAD_PLUS)
+                                              ,("-", Syntax.OVERLOAD_MINUS)
+                                              ,("*", Syntax.OVERLOAD_TIMES)
+                                              ,("/", Syntax.OVERLOAD_DIVIDE)
+                                              ,("abs", Syntax.OVERLOAD_abs)
+                                              ,("~", Syntax.OVERLOAD_TILDE)
+                                              ,("<", Syntax.OVERLOAD_LT)
+                                              ,("<=", Syntax.OVERLOAD_LE)
+                                              ,(">", Syntax.OVERLOAD_GT)
+                                              ,(">=", Syntax.OVERLOAD_GE)
+                                              ]
+                       | Syntax.CLASS_CHAR => [("<", Syntax.OVERLOAD_LT)
+                                              ,("<=", Syntax.OVERLOAD_LE)
+                                              ,(">", Syntax.OVERLOAD_GT)
+                                              ,(">=", Syntax.OVERLOAD_GE)
+                                              ]
+                       | Syntax.CLASS_STRING => [("<", Syntax.OVERLOAD_LT)
+                                                ,("<=", Syntax.OVERLOAD_LE)
+                                                ,(">", Syntax.OVERLOAD_GT)
+                                                ,(">=", Syntax.OVERLOAD_GE)
+                                                ]
+          fun isSimpleExp (Syntax.VarExp _) = true
+            | isSimpleExp (Syntax.TypedExp (_, exp, _)) = isSimpleExp exp
+            | isSimpleExp _ = false
+          val (keys, map) = List.foldl (fn ((name, exp), (keys, map)) =>
+                                           let val exp = doExp(ctx, env, exp)
+                                               val () = if isSimpleExp exp then
+                                                            ()
+                                                        else
+                                                            emitError(ctx, [span], "the RHS of an overload declaration must be a simple expression")
+                                           in case List.find (fn (name', _) => name = name') keys of
+                                                  NONE => emitError(ctx, [span], "invalid overload declaration")
+                                                | SOME (_, key) => (List.filter (fn (name', _) => name <> name') keys, Syntax.OverloadKeyMap.insert (map, key, exp))
+                                           end
+                                       ) (keys, Syntax.OverloadKeyMap.empty) map
+          val () = case keys of
+                       [] => ()
+                     | (name, _) :: _ => emitError(ctx, [span], "missing key: " ^ name)
+      in (emptyEnv, [Syntax.OverloadDec(span, class, longtycon, map)])
+      end
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
 and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
     = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
@@ -677,6 +749,7 @@ local
                                                                     | (ExReplication(_, _, _), acc) => acc) TyVarSet.empty exbinds
       | collectDec(bound, LocalDec(_, decs1, decs2)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) TyVarSet.empty decs1) decs2
       | collectDec(bound, OpenDec _) = TyVarSet.empty
+      | collectDec(bound, OverloadDec(_, _, _, map)) = OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, collectExp(bound, exp))) TyVarSet.empty map
     and collectDatBind(bound, DatBind (_, tyvars, _, conbinds)) = let val bound = TyVarSet.addList(bound, tyvars)
                                                                       fun doConBind(ConBind(_, _, NONE)) = TyVarSet.empty
                                                                         | doConBind(ConBind(_, _, SOME ty)) = freeTyVarsInTy(bound, ty)
@@ -709,6 +782,7 @@ local
       | doDec(bound, dec as ExceptionDec _) = dec
       | doDec(bound, LocalDec(span, xs, ys)) = LocalDec(span, doDecList(bound, xs), doDecList(bound, ys))
       | doDec(bound, dec as OpenDec _) = dec
+      | doDec(bound, dec as OverloadDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
     and doExp(bound, exp as SConExp _) = exp
@@ -938,6 +1012,7 @@ and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val 
                                                    ; List.app (fn dec => doDec (env, dec)) decs2
                                                    )
   | doDec (env, S.OpenDec (span, longstrids)) = ()
+  | doDec (env, S.OverloadDec _) = ()
 and doValBinds (env, valbinds) = List.app (fn (S.PatBind (_, pat, exp)) => ( doPat pat ; doExp (env, exp) )) valbinds (* duplicate identifiers are not checked here *)
 
 (* doSpec : Syntax.Spec -> unit *)

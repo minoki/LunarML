@@ -6,6 +6,7 @@ structure Typing = struct
 
 type TyNameAttr = { arity : int
                   , admitsEquality : bool
+                  , overloadClass : Syntax.OverloadClass option
                   }
 
 type ('val,'str) Env' = { valMap : (USyntax.TypeScheme * Syntax.IdStatus * 'val) Syntax.VIdMap.map
@@ -445,35 +446,74 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
                   emitError(ctx, [span1, span2, span3], USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
            end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsIntegral span3) =>
-           if U.eqTyName(tyname, primTyName_int) orelse U.eqTyName(tyname, primTyName_word) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isIntegral = case overloadClass of
+                                    SOME Syntax.CLASS_INT => true
+                                  | SOME Syntax.CLASS_WORD => true
+                                  | _ => false
+           in if isIntegral then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsSignedReal span3) =>
-           if U.eqTyName(tyname, primTyName_int) orelse U.eqTyName(tyname, primTyName_real) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isSignedReal = case overloadClass of
+                                      SOME Syntax.CLASS_INT => true
+                                    | SOME Syntax.CLASS_REAL => true
+                                    | _ => false
+           in if isSignedReal then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsRing span3) =>
-           if U.eqTyName(tyname, primTyName_int) orelse U.eqTyName(tyname, primTyName_word) orelse U.eqTyName(tyname, primTyName_real) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isRing = case overloadClass of
+                                SOME Syntax.CLASS_INT => true
+                              | SOME Syntax.CLASS_WORD => true
+                              | SOME Syntax.CLASS_REAL => true
+                              | _ => false
+           in if isRing then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsField span3) =>
-           if U.eqTyName(tyname, primTyName_real) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isField = case overloadClass of
+                                 SOME Syntax.CLASS_REAL => true
+                               | _ => false
+           in if isField then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsSigned span3) =>
-           if U.eqTyName(tyname, primTyName_int) orelse U.eqTyName(tyname, primTyName_real) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isSigned = case overloadClass of
+                                  SOME Syntax.CLASS_INT => true
+                                | SOME Syntax.CLASS_REAL => true
+                                | _ => false
+           in if isSigned then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsOrdered span3) =>
-           if U.eqTyName(tyname, primTyName_int) orelse U.eqTyName(tyname, primTyName_word) orelse U.eqTyName(tyname, primTyName_real) orelse U.eqTyName(tyname, primTyName_string) orelse U.eqTyName(tyname, primTyName_char) then
-               unify(ctx, env, ctrs) (* do nothing *)
-           else
-               emitError(ctx, [span1, span2, span3], "comparison operator on unsupported type")
+           let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               val isOrdered = case overloadClass of
+                                   SOME Syntax.CLASS_INT => true
+                                 | SOME Syntax.CLASS_WORD => true
+                                 | SOME Syntax.CLASS_REAL => true
+                                 | SOME Syntax.CLASS_CHAR => true
+                                 | SOME Syntax.CLASS_STRING => true
+                                 | NONE => false
+           in if isOrdered then
+                  unify(ctx, env, ctrs) (* do nothing *)
+              else
+                  emitError(ctx, [span1, span2, span3], "comparison operator on unsupported type")
+           end
          | U.UnaryConstraint(span1, U.TyVar(span2, tv), pred) =>
            (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
                 SOME replacement => unify(ctx, env, U.UnaryConstraint(span1, replacement, pred) :: ctrs)
@@ -1088,6 +1128,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                            }
                                                                val tynameattr = { arity = List.length tyvars
                                                                                 , admitsEquality = S.TyConMap.lookup(equalityMap, tycon)
+                                                                                , overloadClass = NONE
                                                                                 }
                                                            in (Syntax.TyConMap.insert(m, tycon, tystr), USyntax.TyNameMap.insert(m', tycon', tynameattr))
                                                            end
@@ -1126,6 +1167,7 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                           }
                               val tynameattr = { arity = List.length tyvars
                                                , admitsEquality = Syntax.TyConMap.lookup(equalityMap, tycon)
+                                               , overloadClass = NONE
                                                }
                           in (Syntax.TyConMap.insert(tyConMap, tycon, tystr), USyntax.TyNameMap.insert(tyNameMap, tyname, tynameattr), Syntax.VIdMap.unionWith #2 (accValEnv, valEnv) (* TODO: check for duplicate *), datbind :: datbinds)
                           end
@@ -1269,6 +1311,60 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                 )
           val env = List.foldl (fn (longstrid, acc) => mergeEnv(acc, getStructure longstrid)) emptyEnv longstrids
       in (env, [])
+      end
+  | typeCheckDec(ctx, env, S.OverloadDec(span, class, longtycon, map))
+    = let val { typeFunction = U.TypeFunction(tyvars, ty), ... } = lookupTyConInEnv(ctx, env, span, longtycon)
+          val tyname = if List.null tyvars then
+                           case ty of
+                               U.TyCon(_, [], tyname) => tyname
+                             | _ => emitError(ctx, [span], "overload declaration: longtycon must refer to a concrete type")
+                       else
+                           emitError(ctx, [span], "overload declaration: longtycon must refer to a concrete type")
+          val ty = U.TyCon(span, [], tyname)
+          val map : (U.Ty * U.Exp) Syntax.OverloadKeyMap.map = Syntax.OverloadKeyMap.map (fn exp => typeCheckExp(ctx, env, exp)) map
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_abs) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, ty, ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_TILDE) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, ty, ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_div) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_mod) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_TIMES) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_DIVIDE) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_PLUS) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_MINUS) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_LT) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), primTy_bool)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_LE) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), primTy_bool)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_GT) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), primTy_bool)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_GE) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), primTy_bool)))
+          val attr = lookupTyNameInEnv(ctx, env, span, tyname)
+          val attr = { arity = #arity attr
+                     , admitsEquality = #admitsEquality attr
+                     , overloadClass = SOME class
+                     }
+          val env' = envWithTyConEnv (Syntax.TyConMap.empty, USyntax.TyNameMap.singleton (tyname, attr))
+      in (env', [U.OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map #2 map)])
       end
 (* typeCheckDecs : Context * Env * S.Dec list -> (* created environment *) Env * U.Dec list *)
 and typeCheckDecs(ctx, env, []) : Env * U.Dec list = (emptyEnv, [])
@@ -1421,6 +1517,12 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                                                        ; tynameset
                                                        )
             | goDec (U.GroupDec (span, decs)) = goDecs decs
+            | goDec (U.OverloadDec (span, class, tyname, map)) = if U.TyNameSet.member (tynameset, tyname) then
+                                                                     ( Syntax.OverloadKeyMap.app goExp map
+                                                                     ; tynameset
+                                                                     )
+                                                                 else
+                                                                     emitErrorP (ctx, [span], "type constructor scope violation: " ^ USyntax.PrettyPrint.print_TyName tyname)
           and goDecs decs = List.foldl (fn (dec, tynameset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                in goDec dec
                                                                end)
@@ -1668,7 +1770,7 @@ fun evalSignature(ctx : Context, env : SigEnv, S.BasicSigExp(span, specs)) : U.Q
            | NONE => emitError(ctx, [span], "type realisation against a rigid type")
       end
 and evalSpecs(ctx : Context, env : SigEnv, specs) : U.QSignature
-    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s, U.TyNameMap.map (fn { arity, admitsEquality, longtycon } => { arity = arity, admitsEquality = admitsEquality }) (#bound s))
+    = List.foldl (fn (spec, s) => let val env' = addSignatureToEnv(env, #s s, U.TyNameMap.map (fn { arity, admitsEquality, longtycon } => { arity = arity, admitsEquality = admitsEquality, overloadClass = NONE }) (#bound s))
                                   in mergeQSignature(s, addSpec(ctx, env', spec))
                                   end) { s = emptySignature, bound = U.TyNameMap.empty } specs
 and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
@@ -1753,6 +1855,7 @@ and addSpec(ctx : Context, env : SigEnv, S.ValDesc(span, descs)) : U.QSignature
                                                                        val tyConMap = Syntax.TyConMap.insert(tyConMap, tycon, tystr)
                                                                        val tyNameMap = USyntax.TyNameMap.insert(tyNameMap, tyname, { arity = List.length tyvars
                                                                                                                                    , admitsEquality = S.TyConMap.lookup(equalityMap, tycon)
+                                                                                                                                   , overloadClass = NONE
                                                                                                                                    }
                                                                                                                )
                                                                    in (tyConMap, tyNameMap, (tycon, tyname, tyvarPairs, tystr, condescs) :: descs)
@@ -2170,7 +2273,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                               ) tynames
                            }
           val tyNameMapOutside = U.TyNameMap.foldli (fn (tyname, { arity, admitsEquality, longtycon }, acc) =>
-                                                        U.TyNameMap.insert (acc, tyname, { arity = arity, admitsEquality = admitsEquality })
+                                                        U.TyNameMap.insert (acc, tyname, { arity = arity, admitsEquality = admitsEquality, overloadClass = NONE })
                                                     ) U.TyNameMap.empty (#bound sE)
           val payloadTypes = List.map (fn tyname => let val { longtycon = Syntax.MkQualified (strids, tycon), ... } = U.TyNameMap.lookup (#bound sE, tyname)
                                                         val { tyConMap, ... } = lookupStr (ctx, #s sA, span, strids)
@@ -2230,7 +2333,7 @@ fun typeCheckStrExp(ctx : Context, env : Env, S.StructExp(span, decs)) : U.Packe
                                , bound = #bound resultSig
                                }
                val tyNameMapOutside = List.foldl (fn ({ tyname, arity, admitsEquality }, map) =>
-                                                     U.TyNameMap.insert (map, tyname, { arity = arity, admitsEquality = admitsEquality })
+                                                     U.TyNameMap.insert (map, tyname, { arity = arity, admitsEquality = admitsEquality, overloadClass = NONE })
                                                  ) tyNameMap (#bound resultSig)
            in ( resultSig
               , tyNameMapOutside
@@ -2302,7 +2405,7 @@ fun typeCheckFunExp'(ctx, span, paramEnv, paramSig, strid, strexp) : USyntax.Fun
     = let val (actualSignature : U.PackedSignature, bodyTyNameMap, strdecs, strexp) = typeCheckStrExp(ctx, paramEnv, strexp)
           val tynamesInParam = canonicalOrderForQSignature paramSig
           val stridTmp = newStrId(ctx, Syntax.MkStrId "tmp")
-          val additionalTyNames = U.TyNameMap.foldli (fn (tyname, { arity, admitsEquality }, xs) =>
+          val additionalTyNames = U.TyNameMap.foldli (fn (tyname, { arity, admitsEquality, overloadClass = _ }, xs) =>
                                                          if List.exists (fn { tyname = tyname', ... } => U.eqTyName(tyname, tyname')) (#bound actualSignature) then
                                                              xs
                                                          else
@@ -2346,6 +2449,7 @@ fun typeCheckFunExp(ctx, span, env, S.NamedFunExp (strid, sigexp, strexp)) : USy
               = U.TyNameMap.mapi (fn (tyname, { arity, admitsEquality, longtycon }) =>
                                      { arity = arity
                                      , admitsEquality = admitsEquality
+                                     , overloadClass = NONE
                                      }
                                 ) (#bound paramSig)
           val paramEnv = { valMap = #valMap env
@@ -2365,6 +2469,7 @@ fun typeCheckFunExp(ctx, span, env, S.NamedFunExp (strid, sigexp, strexp)) : USy
               = U.TyNameMap.mapi (fn (tyname, { arity, admitsEquality, longtycon }) =>
                                      { arity = arity
                                      , admitsEquality = admitsEquality
+                                     , overloadClass = NONE
                                      }
                                  ) (#bound paramSig)
           val paramEnv = { valMap = Syntax.VIdMap.mapi (fn (vid, (tysc, ids)) => (tysc, ids, USyntax.MkLongVId (strid0, [], vid))) (#valMap (#s paramSig))

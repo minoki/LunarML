@@ -111,6 +111,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
        | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
        | Dec_NoLocal of UnfixedSyntax.Dec
+       | OverloadSpec of string * UnfixedSyntax.Exp
+       | OverloadSpecs of (string * UnfixedSyntax.Exp) list
        | Dec of UnfixedSyntax.Dec
        | Decs of UnfixedSyntax.Dec list
        | LongStrIds of Syntax.LongStrId list
@@ -433,6 +435,14 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc IntConst), VIds)) (* infix (R) directive *)
             | INFIXR VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
             | NONFIX VIds (UnfixedSyntax.FixityDec (span(NONFIXleft, VIdsright), Syntax.Nonfix, VIds)) (* nonfix directive *)
+            | OVERLOAD StringConst LBRACK LongTyCon RBRACK LBRACE OverloadSpecs RBRACE (UnfixedSyntax.OverloadDec (span(OVERLOADleft, RBRACEright), StringConst, LongTyCon, OverloadSpecs)) (* [extension] _overload "class" [ty] { + = ..., - = ..., ... } *)
+
+OverloadSpec : AlnumIdent EQUALS Exp ((AlnumIdent, Exp))
+             | SymbolicIdent EQUALS Exp ((SymbolicIdent, Exp))
+             | ASTERISK EQUALS Exp (("*", Exp))
+
+OverloadSpecs : OverloadSpec COMMA OverloadSpecs (OverloadSpec :: OverloadSpecs)
+              | OverloadSpec ([OverloadSpec])
 
 Dec : Dec_NoLocal (Dec_NoLocal)
     | LOCAL Decs IN Decs END (UnfixedSyntax.LocalDec (span(LOCALleft, ENDright), Decs1, Decs2)) (* local declaration *)

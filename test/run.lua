@@ -181,6 +181,7 @@ should_not_compile "successor_ml/should_not_compile/" {
 }
 should_run "extension/should_run/" {
   "vector_exp.sml",
+  "overload.sml",
 }
 should_compile "extension/should_compile/" {
   "vector_exp_generalize.sml",

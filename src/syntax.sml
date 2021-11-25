@@ -149,6 +149,65 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
 
 datatype PrimOp = PrimOp_call2 (* # of type arguments: 3 (optional), # of arguments: 3 *)
 
+datatype OverloadClass = CLASS_INT
+                       | CLASS_WORD
+                       | CLASS_REAL
+                       | CLASS_CHAR
+                       | CLASS_STRING
+
+datatype OverloadKey = OVERLOAD_abs
+                     | OVERLOAD_TILDE
+                     | OVERLOAD_div
+                     | OVERLOAD_mod
+                     | OVERLOAD_TIMES
+                     | OVERLOAD_DIVIDE
+                     | OVERLOAD_PLUS
+                     | OVERLOAD_MINUS
+                     | OVERLOAD_LT
+                     | OVERLOAD_LE
+                     | OVERLOAD_GT
+                     | OVERLOAD_GE
+
+structure OverloadKey = struct
+type t = OverloadKey
+type ord_key = t
+fun compare (OVERLOAD_abs, OVERLOAD_abs) = EQUAL
+  | compare (OVERLOAD_abs, _) = LESS
+  | compare (_, OVERLOAD_abs) = GREATER
+  | compare (OVERLOAD_TILDE, OVERLOAD_TILDE) = EQUAL
+  | compare (OVERLOAD_TILDE, _) = LESS
+  | compare (_, OVERLOAD_TILDE) = GREATER
+  | compare (OVERLOAD_div, OVERLOAD_div) = EQUAL
+  | compare (OVERLOAD_div, _) = LESS
+  | compare (_, OVERLOAD_div) = GREATER
+  | compare (OVERLOAD_mod, OVERLOAD_mod) = EQUAL
+  | compare (OVERLOAD_mod, _) = LESS
+  | compare (_, OVERLOAD_mod) = GREATER
+  | compare (OVERLOAD_TIMES, OVERLOAD_TIMES) = EQUAL
+  | compare (OVERLOAD_TIMES, _) = LESS
+  | compare (_, OVERLOAD_TIMES) = GREATER
+  | compare (OVERLOAD_DIVIDE, OVERLOAD_DIVIDE) = EQUAL
+  | compare (OVERLOAD_DIVIDE, _) = LESS
+  | compare (_, OVERLOAD_DIVIDE) = GREATER
+  | compare (OVERLOAD_PLUS, OVERLOAD_PLUS) = EQUAL
+  | compare (OVERLOAD_PLUS, _) = LESS
+  | compare (_, OVERLOAD_PLUS) = GREATER
+  | compare (OVERLOAD_MINUS, OVERLOAD_MINUS) = EQUAL
+  | compare (OVERLOAD_MINUS, _) = LESS
+  | compare (_, OVERLOAD_MINUS) = GREATER
+  | compare (OVERLOAD_LT, OVERLOAD_LT) = EQUAL
+  | compare (OVERLOAD_LT, _) = LESS
+  | compare (_, OVERLOAD_LT) = GREATER
+  | compare (OVERLOAD_LE, OVERLOAD_LE) = EQUAL
+  | compare (OVERLOAD_LE, _) = LESS
+  | compare (_, OVERLOAD_LE) = GREATER
+  | compare (OVERLOAD_GT, OVERLOAD_GT) = EQUAL
+  | compare (OVERLOAD_GT, _) = LESS
+  | compare (_, OVERLOAD_GT) = GREATER
+  | compare (OVERLOAD_GE, OVERLOAD_GE) = EQUAL
+end
+structure OverloadKeyMap = RedBlackMapFn (OverloadKey)
+
 datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)
              | RecordExp of SourcePos.span * (Label * Exp) list (* record *)
@@ -173,6 +232,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | ExceptionDec of SourcePos.span * ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
+             | OverloadDec of SourcePos.span * OverloadClass * LongTyCon * Exp OverloadKeyMap.map
      and ValBind = PatBind of SourcePos.span * Pat * Exp
 
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
@@ -386,6 +446,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * Syntax.LongStrId list
              | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.VId list
+             | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
      and ValBind = PatBind of SourcePos.span * Pat * Exp
      and FValBind = FValBind of SourcePos.span * FMRule list
      and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp

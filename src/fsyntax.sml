@@ -483,6 +483,7 @@ type Context = { nextVId : int ref
 type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
            , equalityForTyNameMap : USyntax.LongVId USyntax.TyNameMap.map
            , exnTagMap : FSyntax.Path USyntax.LongVIdMap.map
+           , overloadMap : (FSyntax.Exp Syntax.OverloadKeyMap.map) USyntax.TyNameMap.map
            }
 val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                        , equalityForTyNameMap = let open Typing InitialEnv
@@ -507,17 +508,84 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                                    ,(LongVId_Fail, VId_Fail_tag)
                                                    ]
                                      end
+                       , overloadMap = let open Syntax Typing InitialEnv
+                                       in List.foldl (fn ((tyname, xs), m) => USyntax.TyNameMap.insert (m, tyname, List.foldl (fn ((key, vid), mm) => Syntax.OverloadKeyMap.insert (mm, key, FSyntax.LongVarExp vid)) Syntax.OverloadKeyMap.empty xs)) USyntax.TyNameMap.empty
+                                                     [(primTyName_int, [(OVERLOAD_abs, VId_Int_abs)
+                                                                       ,(OVERLOAD_TILDE, VId_Int_TILDE)
+                                                                       ,(OVERLOAD_div, VId_Int_div)
+                                                                       ,(OVERLOAD_mod, VId_Int_mod)
+                                                                       ,(OVERLOAD_TIMES, VId_Int_TIMES)
+                                                                       ,(OVERLOAD_PLUS, VId_Int_PLUS)
+                                                                       ,(OVERLOAD_MINUS, VId_Int_MINUS)
+                                                                       ,(OVERLOAD_LT, VId_Int_LT)
+                                                                       ,(OVERLOAD_LE, VId_Int_LE)
+                                                                       ,(OVERLOAD_GT, VId_Int_GT)
+                                                                       ,(OVERLOAD_GE, VId_Int_GE)
+                                                                       ]
+                                                      )
+                                                     ,(primTyName_word, [(OVERLOAD_TILDE, VId_Word_TILDE)
+                                                                        ,(OVERLOAD_div, VId_Word_div)
+                                                                        ,(OVERLOAD_mod, VId_Word_mod)
+                                                                        ,(OVERLOAD_TIMES, VId_Word_TIMES)
+                                                                        ,(OVERLOAD_PLUS, VId_Word_PLUS)
+                                                                        ,(OVERLOAD_MINUS, VId_Word_MINUS)
+                                                                        ,(OVERLOAD_LT, VId_Word_LT)
+                                                                        ,(OVERLOAD_LE, VId_Word_LE)
+                                                                        ,(OVERLOAD_GT, VId_Word_GT)
+                                                                        ,(OVERLOAD_GE, VId_Word_GE)
+                                                                        ]
+                                                      )
+                                                     ,(primTyName_real, [(OVERLOAD_abs, VId_Real_abs)
+                                                                        ,(OVERLOAD_TILDE, VId_Real_TILDE)
+                                                                        ,(OVERLOAD_DIVIDE, VId_Real_DIVIDE)
+                                                                        ,(OVERLOAD_TIMES, VId_Real_TIMES)
+                                                                        ,(OVERLOAD_PLUS, VId_Real_PLUS)
+                                                                        ,(OVERLOAD_MINUS, VId_Real_MINUS)
+                                                                        ,(OVERLOAD_LT, VId_Real_LT)
+                                                                        ,(OVERLOAD_LE, VId_Real_LE)
+                                                                        ,(OVERLOAD_GT, VId_Real_GT)
+                                                                        ,(OVERLOAD_GE, VId_Real_GE)
+                                                                        ]
+                                                      )
+                                                     ,(primTyName_char, [(OVERLOAD_LT, VId_Char_LT)
+                                                                        ,(OVERLOAD_LE, VId_Char_LE)
+                                                                        ,(OVERLOAD_GT, VId_Char_GT)
+                                                                        ,(OVERLOAD_GE, VId_Char_GE)
+                                                                        ]
+                                                      )
+                                                     ,(primTyName_string, [(OVERLOAD_LT, VId_String_LT)
+                                                                          ,(OVERLOAD_LE, VId_String_LE)
+                                                                          ,(OVERLOAD_GT, VId_String_GT)
+                                                                          ,(OVERLOAD_GE, VId_String_GE)
+                                                                          ]
+                                                      )
+                                                     ]
+                                       end
                        }
-fun mergeEnv(env1 : Env, env2 : Env)
-    = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env1, #equalityForTyVarMap env2)
-      , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env1, #equalityForTyNameMap env2)
-      , exnTagMap = USyntax.LongVIdMap.unionWith #2 (#exnTagMap env1, #exnTagMap env2)
-      }
 
-fun updateEqualityForTyVarMap(f, env : Env) = { equalityForTyVarMap = f (#equalityForTyVarMap env)
-                                              , equalityForTyNameMap = #equalityForTyNameMap env
-                                              , exnTagMap = #exnTagMap env
-                                              }
+fun updateEqualityForTyVarMap(f, env : Env) : Env = { equalityForTyVarMap = f (#equalityForTyVarMap env)
+                                                    , equalityForTyNameMap = #equalityForTyNameMap env
+                                                    , exnTagMap = #exnTagMap env
+                                                    , overloadMap = #overloadMap env
+                                                    }
+
+fun updateEqualityForTyNameMap(f, env : Env) : Env = { equalityForTyVarMap = #equalityForTyVarMap env
+                                                     , equalityForTyNameMap = f (#equalityForTyNameMap env)
+                                                     , exnTagMap = #exnTagMap env
+                                                     , overloadMap = #overloadMap env
+                                                     }
+
+fun updateExnTagMap(f, env : Env) : Env = { equalityForTyVarMap = #equalityForTyVarMap env
+                                          , equalityForTyNameMap = #equalityForTyNameMap env
+                                          , exnTagMap = f (#exnTagMap env)
+                                          , overloadMap = #overloadMap env
+                                          }
+
+fun updateOverloadMap(f, env : Env) : Env = { equalityForTyVarMap = #equalityForTyVarMap env
+                                            , equalityForTyNameMap = #equalityForTyNameMap env
+                                            , exnTagMap = #exnTagMap env
+                                            , overloadMap = f (#overloadMap env)
+                                            }
 
 fun freshTyVar(ctx : Context) = let val n = !(#nextTyVar ctx)
                                 in #nextTyVar ctx := n + 1
@@ -535,71 +603,20 @@ local structure U = USyntax
       (* toFExp : Context * Env * USyntax.Exp -> FSyntax.Exp *)
       (* toFDecs : Context * Env * USyntax.Dec list -> Env * FSyntax.Dec list *)
       (* getEquality : Context * Env * USyntax.Ty -> FSyntax.Exp *)
-      val overloads = let open Typing InitialEnv
-                      in List.foldl (fn ((vid, xs), m) => USyntax.VIdMap.insert (m, vid, List.foldl USyntax.TyNameMap.insert' USyntax.TyNameMap.empty xs)) USyntax.VIdMap.empty
-                                    [(VId_abs, [(primTyName_int, VId_Int_abs)
-                                               ,(primTyName_real, VId_Real_abs)
-                                               ]
-                                     )
-                                    ,(VId_TILDE, [(primTyName_int, VId_Int_TILDE)
-                                                 ,(primTyName_word, VId_Word_TILDE)
-                                                 ,(primTyName_real, VId_Real_TILDE)
-                                                 ]
-                                     )
-                                    ,(VId_div, [(primTyName_int, VId_Int_div)
-                                               ,(primTyName_word, VId_Word_div)
-                                               ]
-                                     )
-                                    ,(VId_mod, [(primTyName_int, VId_Int_mod)
-                                               ,(primTyName_word, VId_Word_mod)
-                                               ]
-                                     )
-                                    ,(VId_TIMES, [(primTyName_int, VId_Int_TIMES)
-                                                 ,(primTyName_word, VId_Word_TIMES)
-                                                 ,(primTyName_real, VId_Real_TIMES)
-                                                 ]
-                                     )
-                                    ,(VId_DIVIDE, [(primTyName_real, VId_Real_DIVIDE)
-                                                  ]
-                                     )
-                                    ,(VId_PLUS, [(primTyName_int, VId_Int_PLUS)
-                                                ,(primTyName_word, VId_Word_PLUS)
-                                                ,(primTyName_real, VId_Real_PLUS)
-                                                ]
-                                     )
-                                    ,(VId_MINUS, [(primTyName_int, VId_Int_MINUS)
-                                                 ,(primTyName_word, VId_Word_MINUS)
-                                                 ,(primTyName_real, VId_Real_MINUS)
-                                                 ]
-                                     )
-                                    ,(VId_LT, [(primTyName_int, VId_Int_LT)
-                                              ,(primTyName_word, VId_Word_LT)
-                                              ,(primTyName_real, VId_Real_LT)
-                                              ,(primTyName_string, VId_String_LT)
-                                              ,(primTyName_char, VId_Char_LT)
-                                              ]
-                                     )
-                                    ,(VId_LE, [(primTyName_int, VId_Int_LE)
-                                              ,(primTyName_word, VId_Word_LE)
-                                              ,(primTyName_real, VId_Real_LE)
-                                              ,(primTyName_string, VId_String_LE)
-                                              ,(primTyName_char, VId_Char_LE)
-                                              ]
-                                     )
-                                    ,(VId_GT, [(primTyName_int, VId_Int_GT)
-                                              ,(primTyName_word, VId_Word_GT)
-                                              ,(primTyName_real, VId_Real_GT)
-                                              ,(primTyName_string, VId_String_GT)
-                                              ,(primTyName_char, VId_Char_GT)
-                                              ]
-                                     )
-                                    ,(VId_GE, [(primTyName_int, VId_Int_GE)
-                                              ,(primTyName_word, VId_Word_GE)
-                                              ,(primTyName_real, VId_Real_GE)
-                                              ,(primTyName_string, VId_String_GE)
-                                              ,(primTyName_char, VId_Char_GE)
-                                              ]
-                                     )
+      val overloads = let open InitialEnv Syntax
+                      in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+                                    [(VId_abs, OVERLOAD_abs)
+                                    ,(VId_TILDE, OVERLOAD_TILDE)
+                                    ,(VId_div, OVERLOAD_div)
+                                    ,(VId_mod, OVERLOAD_mod)
+                                    ,(VId_TIMES, OVERLOAD_TIMES)
+                                    ,(VId_DIVIDE, OVERLOAD_DIVIDE)
+                                    ,(VId_PLUS, OVERLOAD_PLUS)
+                                    ,(VId_MINUS, OVERLOAD_MINUS)
+                                    ,(VId_LT, OVERLOAD_LT)
+                                    ,(VId_LE, OVERLOAD_LE)
+                                    ,(VId_GT, OVERLOAD_GT)
+                                    ,(VId_GE, OVERLOAD_GE)
                                     ]
                       end
 in
@@ -636,9 +653,12 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
           getEquality(ctx, env, tyarg)
       else
           (case USyntax.VIdMap.find(overloads, vid) of
-               SOME ov => (case tyarg of
-                               U.TyCon(_, [], tycon) => (case USyntax.TyNameMap.find (ov, tycon) of
-                                                             SOME vid' => F.LongVarExp(vid')
+               SOME key => (case tyarg of
+                               U.TyCon(_, [], tycon) => (case USyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                             SOME m => (case Syntax.OverloadKeyMap.find (m, key) of
+                                                                            SOME exp => exp
+                                                                          | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
+                                                                       )
                                                            | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
                                                         )
                              | _ => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
@@ -802,10 +822,7 @@ and toFDecs(ctx, env, []) = (env, [])
                                                      | NONE => raise Fail ("exception not found: " ^ USyntax.print_LongVId longvid)
                                                   )
                                                 ) (exnTagMap, []) exbinds
-          val env = { equalityForTyVarMap = #equalityForTyVarMap env
-                    , equalityForTyNameMap = #equalityForTyNameMap env
-                    , exnTagMap = exnTagMap
-                    }
+          val env = updateExnTagMap (fn _ => exnTagMap, env)
           val (env, decs) = toFDecs(ctx, env, decs)
       in (env, exbinds @ decs)
       end
@@ -817,16 +834,18 @@ and toFDecs(ctx, env, []) = (env, [])
                                                                     | _ => F.GroupDec(NONE, decs) :: decs'
                                                             )
                                                          end
+  | toFDecs(ctx, env, U.OverloadDec(span, class, tyname, map) :: decs) = let val map = Syntax.OverloadKeyMap.map (fn exp => toFExp(ctx, env, exp)) map
+                                                                             val env = updateOverloadMap (fn m => USyntax.TyNameMap.insert (m, tyname, map), env)
+                                                                             val (env, decs) = toFDecs(ctx, env, decs)
+                                                                         in (env, decs)
+                                                                         end
 and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, F.tyNameToTyVar tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))
 and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * F.Exp) list
     = let val nameMap = List.foldl (fn (U.DatBind(span, tyvars, tycon as USyntax.MkTyName(name, _), conbinds, true), map) => USyntax.TyNameMap.insert(map, tycon, freshVId(ctx, "EQUAL" ^ name))
                                    | (_, map) => map) USyntax.TyNameMap.empty datbinds
-          val env' = { equalityForTyVarMap = #equalityForTyVarMap env
-                     , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, USyntax.TyNameMap.map U.MkShortVId nameMap)
-                     , exnTagMap = #exnTagMap env
-                     }
+          val env' = updateEqualityForTyNameMap (fn m => USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, USyntax.TyNameMap.map U.MkShortVId nameMap), env)
           fun doDatBind(U.DatBind(span, tyvars, tyname, conbinds, true), valbinds)
               = let val vid = USyntax.TyNameMap.lookup(nameMap, tyname)
                     val tyvars'' = List.map F.TyVar tyvars
@@ -834,10 +853,7 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * 
                     val ty = List.foldr (fn (tv, ty) => F.ForallType(tv, F.TypeKind, ty)) ty tyvars
                     val tyvars' = List.map (fn tv => (tv, freshVId(ctx, "eq"))) tyvars
                     val eqForTyVars = List.foldl USyntax.TyVarMap.insert' USyntax.TyVarMap.empty tyvars'
-                    val env'' = { equalityForTyVarMap = USyntax.TyVarMap.unionWith #2 (#equalityForTyVarMap env', eqForTyVars)
-                                , equalityForTyNameMap = #equalityForTyNameMap env'
-                                , exnTagMap = #exnTagMap env'
-                                }
+                    val env'' = updateEqualityForTyVarMap (fn m => USyntax.TyVarMap.unionWith #2 (m, eqForTyVars), env')
                     val body = let val param = freshVId(ctx, "p")
                                    val paramTy = let val ty = F.TyCon(tyvars'', tyname)
                                                  in F.PairType(ty, ty)
@@ -892,10 +908,7 @@ fun signatureToTy(ctx, env, { valMap, tyConMap, strMap } : U.Signature)
       end
 fun getEqualityForTypeFunction (ctx, env, U.TypeFunction (tyvars, ty))
     = let val tyvars' = List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
-          val equalityEnv = { equalityForTyVarMap = List.foldl USyntax.TyVarMap.insert' (#equalityForTyVarMap env) tyvars'
-                            , equalityForTyNameMap = #equalityForTyNameMap env
-                            , exnTagMap = #exnTagMap env
-                            }
+          val equalityEnv = updateEqualityForTyVarMap (fn m => List.foldl USyntax.TyVarMap.insert' m tyvars', env)
           val equality = getEquality (ctx, equalityEnv, ty)
           val equality = List.foldr (fn ((tv, eqParam), body) => F.FnExp (eqParam, F.EqualityType (F.TyVar tv), body)) equality tyvars'
           val equality = List.foldr (fn (tv, body) => F.TyAbsExp (tv, F.TypeKind, body)) equality tyvars
@@ -963,16 +976,15 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
     = let val vid = F.strIdToVId strid
           val ty = signatureToTy (ctx, env, s)
           val (env', exp) = strExpToFExp(ctx, env, strexp)
-          fun updateExnTagMap (strids, { valMap, strMap, ... }, path, exnTagMap)
+          fun doExnTagMap (strids, { valMap, strMap, ... }, path) exnTagMap
               = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert(m, U.MkLongVId(strid, strids, vid), F.Child(path, F.ExnTagLabel vid))
                                                          | (_, (_, _), m) => m
                                                          ) exnTagMap valMap
-                in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, m) => updateExnTagMap(strids @ [strid], s, F.Child(path, F.StructLabel strid), m)) exnTagMap strMap
+                in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s, m) => doExnTagMap (strids @ [strid], s, F.Child(path, F.StructLabel strid)) m) exnTagMap strMap
                 end
-          val env'' = { equalityForTyVarMap = #equalityForTyVarMap env
-                      , equalityForTyNameMap = USyntax.TyNameMap.unionWith #2 (#equalityForTyNameMap env, #equalityForTyNameMap env')
-                      , exnTagMap = updateExnTagMap ([], s, F.Root vid, #exnTagMap env)
-                      }
+          val env'' = updateEqualityForTyNameMap ( fn m => USyntax.TyNameMap.unionWith #2 (m, #equalityForTyNameMap env')
+                                                 , updateExnTagMap (doExnTagMap ([], s, F.Root vid), env)
+                                                 )
           val (decs, exp, env) = List.foldl (fn ({ tyname, arity, admitsEquality }, (decs, exp, env)) =>
                                                 let val vid = freshVId(ctx, case vid of U.MkVId(name,_) => name)
                                                 in if admitsEquality then
@@ -982,10 +994,7 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                             :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp)
                                                             :: decs
                                                           , F.VarExp strVId
-                                                          , { equalityForTyVarMap = #equalityForTyVarMap env
-                                                            , equalityForTyNameMap = U.TyNameMap.insert (#equalityForTyNameMap env, tyname (* case tyname of U.NamedTyVar(name,_,n) => U.MkTyName(name,n) | U.AnonymousTyVar(n) => U.MkTyName("",n) *), U.MkShortVId equalityVId)
-                                                            , exnTagMap = #exnTagMap env
-                                                            }
+                                                          , updateEqualityForTyNameMap (fn m => U.TyNameMap.insert (m, tyname (* case tyname of U.NamedTyVar(name,_,n) => U.MkTyName(name,n) | U.AnonymousTyVar(n) => U.MkTyName("",n) *), U.MkShortVId equalityVId), env)
                                                           )
                                                        end
                                                    else
@@ -1014,10 +1023,7 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.
                                                                                       end
                            | ({ admitsEquality = false, ... }, acc) => acc
                            ) (#equalityForTyNameMap env, []) types
-          val env' = { equalityForTyVarMap = #equalityForTyVarMap env
-                     , equalityForTyNameMap = equalityForTyNameMap
-                     , exnTagMap = #exnTagMap env
-                     }
+          val env' = updateEqualityForTyNameMap (fn _ => equalityForTyNameMap, env)
           val (_, body) = strExpToFExp (ctx, env', bodyStr)
           val funexp = F.FnExp (case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n), signatureToTy (ctx, env, paramSig), body)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)

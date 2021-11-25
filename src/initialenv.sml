@@ -662,18 +662,18 @@ val initialEnv : Typing.Env
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty
-                                  [(primTyName_bool, { arity = 0, admitsEquality = true })
-                                  ,(primTyName_int, { arity = 0, admitsEquality = true })
-                                  ,(primTyName_word, { arity = 0, admitsEquality = true })
-                                  ,(primTyName_real, { arity = 0, admitsEquality = false })
-                                  ,(primTyName_string, { arity = 0, admitsEquality = true })
-                                  ,(primTyName_char, { arity = 0, admitsEquality = true })
-                                  ,(primTyName_list, { arity = 1, admitsEquality = true })
-                                  ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *) })
-                                  ,(primTyName_exn, { arity = 0, admitsEquality = false })
-                                  ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *) })
-                                  ,(primTyName_vector, { arity = 1, admitsEquality = true })
-                                  ,(primTyName_Lua_value, { arity = 0, admitsEquality = false })
+                                  [(primTyName_bool, { arity = 0, admitsEquality = true, overloadClass = NONE })
+                                  ,(primTyName_int, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_INT })
+                                  ,(primTyName_word, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_WORD })
+                                  ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = SOME Syntax.CLASS_REAL })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_STRING })
+                                  ,(primTyName_char, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_CHAR })
+                                  ,(primTyName_list, { arity = 1, admitsEquality = true, overloadClass = NONE })
+                                  ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
+                                  ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
+                                  ,(primTyName_vector, { arity = 1, admitsEquality = true, overloadClass = NONE })
+                                  ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
