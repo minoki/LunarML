@@ -603,11 +603,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
       in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doProjection = case exp1 of
-                                 F.ProjectionExp { label, ... } =>
-                                 SOME (fn () => doExpCont ctx env exp2 (fn (stmts, env, exp2') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp2' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] })))
-                               | _ => NONE
-          val doBinary = case (extractLongVId exp1, exp2) of
+    = let val doBinary = case (extractLongVId exp1, exp2) of
                              (SOME longvid, F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
                              let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, env, e1') => doExpCont ctx env e2 (fn (stmts2, env, e2') => f (stmts1 @ stmts2, env, e1', e2'))))
                              in case USyntax.LongVIdMap.find(builtinBinaryOps, longvid) of
@@ -708,7 +704,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse F.isLongVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | exp1 => F.isLongVId(exp1, InitialEnv.VId_String_str)
-      in case List.mapPartial (fn x => x) [doProjection, doBinary, doUnary, doPolymorphicUnary, doLuaCall, doLuaMethod] of
+      in case List.mapPartial (fn x => x) [doBinary, doUnary, doPolymorphicUnary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
@@ -797,7 +793,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
               )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx env exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, ... }) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(x) return x[" ^ LabelToLua label ^ "] end") ] })
+  | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 record' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] }))
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
           putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_nil" ] })

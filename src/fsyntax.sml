@@ -53,7 +53,7 @@ datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of USyntax.VId * Ty * Exp
-             | ProjectionExp of { label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
+             | ProjectionExp of { label : Syntax.Label, record : Exp }
              | TyAbsExp of TyVar * Kind * Exp
              | TyAppExp of Exp * Ty
              | StructExp of { valMap : Path Syntax.VIdMap.map
@@ -225,7 +225,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
           | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
           | doExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
-          | doExp (ProjectionExp { label, recordTy, fieldTy }) = ProjectionExp { label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
+          | doExp (ProjectionExp { label, record }) = ProjectionExp { label = label, record = doExp record }
           | doExp (TyAbsExp (tv, kind, exp)) = if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
                                                    TyAbsExp (tv, kind, #doExp (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) exp)
                                                else
@@ -298,7 +298,7 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, tyargs, args
                                                                 in List.foldl (fn ((pat, exp), acc) => USyntax.TyVarSet.union (USyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat)), freeTyVarsInExp (bound, exp))) acc matches
                                                                 end
   | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
-  | freeTyVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, recordTy), freeTyVarsInTy (bound, fieldTy))
+  | freeTyVarsInExp (bound, ProjectionExp { label, record }) = freeTyVarsInExp (bound, record)
   | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
   | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
@@ -361,7 +361,7 @@ fun freeVarsInExp (bound : USyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) =
   | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = USyntax.VIdSet.union (USyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2)), freeVarsInExp (bound, exp3))
   | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (USyntax.VIdSet.union (bound, varsInPat pat), exp))) (freeVarsInExp (bound, exp)) matches
   | freeVarsInExp (bound, FnExp (vid, ty, exp)) = freeVarsInExp (USyntax.VIdSet.add (bound, vid), exp)
-  | freeVarsInExp (bound, ProjectionExp { label, recordTy, fieldTy }) = USyntax.VIdSet.empty
+  | freeVarsInExp (bound, ProjectionExp { label, record }) = freeVarsInExp (bound, record)
   | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, TyAppExp (exp, ty)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = let fun addPath (path, set) = USyntax.VIdSet.add (set, rootOfPath path)
@@ -450,7 +450,7 @@ fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
-  | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_Exp (ProjectionExp { label, record }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",record=" ^ print_Exp record ^ "}"
   | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (StructExp { valMap, strMap, exnTagMap }) = "StructExp{valMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" valMap ^ "},strMap={" ^ Syntax.StrIdMap.foldri (fn (strid,path,acc) => Syntax.print_StrId strid ^ ":" ^ print_Path path ^ ";" ^ acc) "" strMap ^ "},exnTagMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" exnTagMap ^ "}}"
@@ -659,6 +659,7 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
     = let val (env, decs) = toFDecs(ctx, env, decs)
       in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
       end
+  | toFExp(ctx, env, U.AppExp(span, U.ProjectionExp { label, ... }, e2)) = F.ProjectionExp { label = label, record = toFExp(ctx, env, e2) }
   | toFExp(ctx, env, U.AppExp(span, e1, e2)) = F.AppExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2))
   | toFExp(ctx, env, U.TypedExp(span, exp, _)) = toFExp(ctx, env, exp)
   | toFExp(ctx, env, U.IfThenElseExp(span, e1, e2, e3)) = F.IfThenElseExp(toFExp(ctx, env, e1), toFExp(ctx, env, e2), toFExp(ctx, env, e3))
@@ -672,8 +673,10 @@ and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
     = let val env' = env (* TODO *)
       in F.FnExp(vid, toFTy(ctx, env, ty), toFExp(ctx, env', body))
       end
-  | toFExp(ctx, env, U.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
-    = F.ProjectionExp { label = label, recordTy = toFTy(ctx, env, recordTy), fieldTy = toFTy(ctx, env, fieldTy) }
+  | toFExp(ctx, env, U.ProjectionExp { sourceSpan = span, label, recordTy, fieldTy = _ })
+    = let val vid = freshVId(ctx, "tmp")
+      in F.FnExp(vid, toFTy(ctx, env, recordTy), F.ProjectionExp { label = label, record = F.VarExp vid })
+      end
   | toFExp(ctx, env, U.HandleExp(span, exp, matches))
     = let val exnName = freshVId(ctx, "exn")
           val exnTy = F.TyVar(F.tyNameToTyVar(Typing.primTyName_exn))
