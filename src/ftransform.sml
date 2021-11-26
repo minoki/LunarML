@@ -66,6 +66,7 @@ fun getPayloadTy ([], FSyntax.FnType(payloadTy, _)) = payloadTy
 fun isExnType (F.TyVar tv) = tv = F.tyNameToTyVar Typing.primTyName_exn
   | isExnType _ = false
 fun splitPath (components, F.Child(parent, label)) = splitPath (label :: components, parent)
+  | splitPath (components, F.Field(parent, label)) = raise Fail "lookupPath: invalid type"
   | splitPath (components, F.Root vid) = (vid, components)
 fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = splitPath ([], path)
                                                in case USyntax.VIdMap.find(valMap, vid) of
@@ -451,6 +452,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                            | NONE => path
                                                         )
             | doPath env (F.Child (parent, label)) = F.Child (doPath env parent, label)
+            | doPath env (F.Field (parent, label)) = F.Field (doPath env parent, label)
           fun doPat env (pat as F.WildcardPat) = (emptyEnv, pat)
             | doPat env (pat as F.SConPat scon) = (emptyEnv, pat)
             | doPat env (F.VarPat (vid, ty)) = let val vid' = refreshVId vid
@@ -590,6 +592,8 @@ structure Inliner = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref, nextTyVar : int ref }
 datatype InlineExp = VarExp of USyntax.VId
+                   | RecordExp of F.Path Syntax.LabelMap.map
+                   | ProjectionExp of { label : Syntax.Label, record : InlineExp }
                    | StructExp of { valMap : F.Path Syntax.VIdMap.map
                                   , strMap : F.Path Syntax.StrIdMap.map
                                   , exnTagMap : F.Path Syntax.VIdMap.map
@@ -648,6 +652,8 @@ and costOfValBind (F.SimpleBind (vid, ty, exp)) = costOfExp exp
 val INLINE_THRESHOLD = 10
 fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                    fun doInlineExp (iexp as VarExp vid) = iexp
+                                     | doInlineExp (iexp as RecordExp _) = iexp
+                                     | doInlineExp (ProjectionExp { label, record }) = ProjectionExp { label = label, record = doInlineExp record }
                                      | doInlineExp (iexp as StructExp _) = iexp
                                      | doInlineExp (SProjectionExp (exp, label)) = SProjectionExp (doInlineExp exp, label)
                                      | doInlineExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
@@ -659,12 +665,16 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                in doInlineExp
                                end
 fun freeTyVarsInInlineExp (bound, VarExp _) = USyntax.TyVarSet.empty
+  | freeTyVarsInInlineExp (bound, RecordExp map) = USyntax.TyVarSet.empty
+  | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) = freeTyVarsInInlineExp (bound, record)
   | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) = freeTyVarsInInlineExp (bound, exp)
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
 fun uninlineExp (VarExp vid) = F.VarExp vid
+  | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, F.PathToExp path) :: xs) [] map)
+  | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
   | uninlineExp (StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap, strMap = strMap, exnTagMap = exnTagMap }
   | uninlineExp (SProjectionExp (exp, label)) = F.SProjectionExp (uninlineExp exp, label)
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
@@ -672,6 +682,7 @@ fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
 fun PathToInlineExp (F.Root vid) = VarExp vid
   | PathToInlineExp (F.Child (parent, label)) = SProjectionExp (PathToInlineExp parent, label)
+  | PathToInlineExp (F.Field (parent, label)) = ProjectionExp { label = label, record = PathToInlineExp parent }
 fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                           , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
@@ -690,6 +701,15 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                         | (parent, SOME iexp) => (F.Child (parent, label), SOME (SProjectionExp (iexp, label)))
                                                         | (parent, NONE) => (F.Child (parent, label), NONE)
                                                      )
+            | doPath env (F.Field (parent, label)) = (case doPath env parent of
+                                                          (_, SOME (RecordExp m)) =>
+                                                          (case Syntax.LabelMap.find (m, label) of
+                                                               SOME path => doPath env path
+                                                             | NONE => (F.Field (parent, label), NONE) (* should be an error *)
+                                                          )
+                                                        | (parent, SOME iexp) => (F.Field (parent, label), SOME (ProjectionExp { label = label, record = iexp }))
+                                                        | (parent, NONE) => (F.Field (parent, label), NONE)
+                                                     )
           fun evalPath env (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
                                                        SOME iexp => iexp
                                                      | NONE => PathToInlineExp path
@@ -702,6 +722,24 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                             )
                                                           | iexp => SProjectionExp (iexp, label)
                                                        )
+            | evalPath env (F.Field (parent, label)) = (case evalPath env parent of
+                                                            RecordExp m =>
+                                                            (case Syntax.LabelMap.find (m, label) of
+                                                                 SOME path => evalPath env path
+                                                               | NONE => raise Fail "evalPath"
+                                                            )
+                                                          | iexp => ProjectionExp { label = label, record = iexp }
+                                                       )
+          fun tryInlineExpToPath (VarExp vid) = SOME (F.Root vid)
+            | tryInlineExpToPath (ProjectionExp { label, record }) = (case tryInlineExpToPath record of
+                                                                          SOME parent => SOME (F.Field (parent, label))
+                                                                        | NONE => NONE
+                                                                     )
+            | tryInlineExpToPath (SProjectionExp (exp, label)) = (case tryInlineExpToPath exp of
+                                                                      SOME parent => SOME (F.Child (parent, label))
+                                                                    | NONE => NONE
+                                                                 )
+            | tryInlineExpToPath _ = NONE
           fun doExp env exp = #1 (doExp' env exp)
           and doExp' (env : Env) exp0 : F.Exp * InlineExp option
               = (case exp0 of
@@ -711,7 +749,15 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                         | iexpOpt as SOME _ => (exp0, iexpOpt)
                                         | NONE => (exp0, SOME (VarExp vid))
                                      )
-                   | F.RecordExp fields => (F.RecordExp (List.map (fn (label, exp) => (label, doExp env exp)) fields), NONE)
+                   | F.RecordExp fields => let val fields = List.map (fn (label, exp) => (label, doExp' env exp)) fields
+                                               val ifields = List.foldr (fn ((label, (_, SOME iexp)), SOME acc) => (case tryInlineExpToPath iexp of
+                                                                                                                        SOME path => SOME (Syntax.LabelMap.insert (acc, label, path))
+                                                                                                                      | NONE => NONE
+                                                                                                                   )
+                                                                        | ((label, (_, _)), _) => NONE
+                                                                        ) (SOME Syntax.LabelMap.empty) fields
+                                           in (F.RecordExp (List.map (fn (label, (exp, _)) => (label, exp)) fields), Option.map RecordExp ifields)
+                                           end
                    | F.LetExp (dec, exp) => let val (env, dec) = doDec env dec
                                             in (F.LetExp (dec, doExp env exp), NONE)
                                             end
@@ -753,9 +799,16 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                    val exp' = doExp env' exp
                                                in (F.FnExp (vid, ty, exp'), if costOfExp exp' <= INLINE_THRESHOLD then SOME (FnExp (vid, ty, exp')) else NONE)
                                                end
-                   | F.ProjectionExp { label, record } => let val (exp, iexp) = doExp' env record
-                                                          in (F.ProjectionExp { label = label, record = exp }, NONE)
-                                                          end
+                   | F.ProjectionExp { label, record } => (case doExp' env record of
+                                                               (exp, SOME (RecordExp m)) => (case Syntax.LabelMap.find (m, label) of
+                                                                                                 SOME path => let val iexp = evalPath env path
+                                                                                                              in (uninlineExp iexp, SOME iexp)
+                                                                                                              end
+                                                                                               | NONE => (F.ProjectionExp { label = label, record = exp }, NONE) (* should be an error *)
+                                                                                            )
+                                                             | (exp, SOME iexp) => (F.ProjectionExp { label = label, record = exp }, SOME (ProjectionExp { label = label, record = iexp }))
+                                                             | (exp, NONE) => (F.ProjectionExp { label = label, record = exp }, NONE)
+                                                          )
                    | F.TyAbsExp (tv, kind, exp) => let val (exp, iexp) = doExp' env exp
                                                        val tryEtaReductionI = case iexp of
                                                                                   SOME (TyAppExp (exp', F.TyVar tv')) => if tv = tv' then
@@ -970,6 +1023,7 @@ fun doPat F.WildcardPat = USyntax.VIdSet.empty
   | doPat (F.ConPat (F.Root vid, NONE, tyargs)) = USyntax.VIdSet.singleton vid
   | doPat (F.ConPat (F.Root vid, SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
   | doPat (F.ConPat (F.Child _, _, tyargs)) = raise Fail "not implemented yet"
+  | doPat (F.ConPat (F.Field _, _, tyargs)) = raise Fail "not implemented yet"
   | doPat (F.LayeredPat (vid, ty, innerPat)) = doPat innerPat
   | doPat (F.VectorPat (pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty pats
 (* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)

@@ -9,6 +9,7 @@ datatype SLabel = ValueLabel of Syntax.VId
                 | ExnTagLabel of Syntax.VId (* of constructor *)
 datatype Path = Root of USyntax.VId
               | Child of Path * SLabel
+              | Field of Path * Syntax.Label (* record field *)
 datatype Kind = TypeKind
               | ArrowKind of Kind * Kind
 datatype Ty = TyVar of TyVar
@@ -97,8 +98,10 @@ fun LongVarExp(USyntax.MkShortVId vid) = VarExp vid
   | LongVarExp(USyntax.MkLongVId(strid0, strids, vid)) = SProjectionExp (List.foldl (fn (label, x) => SProjectionExp (x, StructLabel label)) (VarExp (strIdToVId strid0)) strids, ValueLabel vid)
 fun PathToExp(Root vid) = VarExp vid
   | PathToExp(Child (parent, label)) = SProjectionExp (PathToExp parent, label)
+  | PathToExp(Field (parent, label)) = ProjectionExp { label = label, record = PathToExp parent }
 fun rootOfPath(Root vid) = vid
   | rootOfPath(Child (parent, _)) = rootOfPath parent
+  | rootOfPath(Field (parent, _)) = rootOfPath parent
 fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(InitialEnv.VId_false))
 fun SimplifyingAndalsoExp(a as VarExp(vid), b) = if USyntax.eqVId(vid, InitialEnv.VId_true) then
                                                      b
@@ -405,6 +408,7 @@ val print_VId = USyntax.print_VId
 val print_LongVId = USyntax.print_LongVId
 fun print_Path (Root vid) = USyntax.print_VId vid
   | print_Path (Child (parent, label)) = print_Path parent ^ "/.." (* TODO *)
+  | print_Path (Field (parent, label)) = print_Path parent ^ "/.." (* TODO *)
 fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (RecordType xs) = let val xs = Syntax.LabelMap.listItemsi xs
                                in case Syntax.extractTuple (1, xs) of

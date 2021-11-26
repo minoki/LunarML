@@ -24,6 +24,7 @@ fun doSLabel (F.ValueLabel vid) = P.Fragment "v:" :: doVId vid
   | doSLabel (F.ExnTagLabel vid) = P.Fragment "e:" :: doVId vid
 fun doPath (F.Root vid) = [P.Fragment (USyntax.print_VId vid)]
   | doPath (F.Child (parent, label)) = doPath parent @ P.Fragment "." :: doSLabel label
+  | doPath (F.Field (parent, label)) = doPath parent @ P.Fragment "." :: doLabel label
 fun doPat prec F.WildcardPat = [P.Fragment "_"]
   | doPat prec (F.SConPat scon) = [P.Fragment (Syntax.print_SCon scon)]
   | doPat prec (F.VarPat (vid, ty)) = showParen (prec >= 1) (P.Fragment (USyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
