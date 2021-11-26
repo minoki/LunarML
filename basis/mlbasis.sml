@@ -100,7 +100,33 @@ val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
 val fromChar : char -> value = unsafeToValue
+fun sub (t, k) = _primCall "Lua.sub" (t, k)
 fun field (t : value, name : string) = sub (t, fromString name)
+fun set (t, k, v) = _primCall "Lua.set" (t, k, v)
+fun isNil x = _primCall "Lua.isNil" (x)
+fun isFalsy x = _primCall "Lua.isFalsy" (x)
+fun x + y = _primCall "Lua.+" (x, y)
+fun x - y = _primCall "Lua.-" (x, y)
+fun x * y = _primCall "Lua.*" (x, y)
+fun x / y = _primCall "Lua./" (x, y)
+fun // (x, y) = _primCall "Lua.//" (x, y)
+fun % (x, y) = _primCall "Lua.%" (x, y)
+fun pow (x, y) = _primCall "Lua.pow" (x, y)
+fun unm x = _primCall "Lua.unm" (x)
+fun andb (x, y) = _primCall "Lua.andb" (x, y)
+fun orb (x, y) = _primCall "Lua.orb" (x, y)
+fun xorb (x, y) = _primCall "Lua.xorb" (x, y)
+fun notb x = _primCall "Lua.notb" (x)
+fun << (x, y) = _primCall "Lua.<<" (x, y)
+fun >> (x, y) = _primCall "Lua.>>" (x, y)
+fun == (x, y) = _primCall "Lua.==" (x, y)
+fun ~= (x, y) = _primCall "Lua.~=" (x, y)
+fun x < y = _primCall "Lua.<" (x, y)
+fun x > y = _primCall "Lua.>" (x, y)
+fun x <= y = _primCall "Lua.<=" (x, y)
+fun x >= y = _primCall "Lua.>=" (x, y)
+fun concat (x, y) = _primCall "Lua.concat" (x, y)
+fun length x = _primCall "Lua.length" (x)
 structure Lib = struct
 open Lib
 val require = LunarML.assumeDiscardable (global "require")

@@ -252,42 +252,14 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
-val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 14)
-val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
-val VId_Lua_sub = newVId "sub"
-val VId_Lua_set = newVId "set"
 val VId_Lua_global = newVId "global"
 val VId_Lua_call = newVId "call"
 val VId_Lua_method = newVId "method"
 val VId_Lua_NIL = newVId "NIL"
-val VId_Lua_isNil = newVId "isNil"
-val VId_Lua_isFalsy = newVId "isFalsy"
 val VId_Lua_unsafeToValue = newVId "unsafeToValue"
 val VId_Lua_unsafeFromValue = newVId "unsafeFromValue"
 val VId_Lua_newTable = newVId "newTable"
 val VId_Lua_function = newVId "function"
-val VId_Lua_PLUS = newVId "+"
-val VId_Lua_MINUS = newVId "-"
-val VId_Lua_TIMES = newVId "*"
-val VId_Lua_DIVIDE = newVId "/"
-val VId_Lua_INTDIV = newVId "//"
-val VId_Lua_MOD = newVId "%"
-val VId_Lua_pow = newVId "pow" (* ^ *)
-val VId_Lua_unm = newVId "unm" (* unary minus *)
-val VId_Lua_andb = newVId "andb" (* & *)
-val VId_Lua_orb = newVId "orb" (* | *)
-val VId_Lua_xorb = newVId "xorb" (* binary ~ *)
-val VId_Lua_notb = newVId "notb" (* unary ~ *)
-val VId_Lua_LSHIFT = newVId "<<"
-val VId_Lua_RSHIFT = newVId ">>"
-val VId_Lua_EQUAL = newVId "=="
-val VId_Lua_NOTEQUAL = newVId "~="
-val VId_Lua_LT = newVId "<"
-val VId_Lua_GT = newVId ">"
-val VId_Lua_LE = newVId "<="
-val VId_Lua_GE = newVId ">="
-val VId_Lua_concat = newVId "concat" (* .. *)
-val VId_Lua_length = newVId "length" (* # *)
 local val newVId = newLongVId (StrId_Lua, ["Lib"])
 in
 val VId_Lua_Lib_assert = newVId "assert"
@@ -556,40 +528,14 @@ val initialEnv : Typing.Env
                             }
           val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
                         , valMap = mkValMap
-                                       [("sub", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("set", TypeScheme ([], mkTupleType[primTy_Lua_value, primTy_Lua_value, primTy_Lua_value] --> primTy_unit))
-                                       ,("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
+                                       [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
                                        ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
                                        ,("method", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
                                        ,("NIL", TypeScheme ([], primTy_Lua_value))
-                                       ,("isNil", TypeScheme ([], primTy_Lua_value --> primTy_bool))
-                                       ,("isFalsy", TypeScheme ([], primTy_Lua_value --> primTy_bool))
                                        ,("unsafeToValue", TypeScheme ([(tyVarA, [])], tyA --> primTy_Lua_value))
                                        ,("unsafeFromValue", TypeScheme ([(tyVarA, [])], primTy_Lua_value --> tyA))
                                        ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
                                        ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("+", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("-", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("*", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("/", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("//", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("%", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("pow", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("unm", TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
-                                       ,("andb", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("orb", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("xorb", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("notb", TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
-                                       ,("<<", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,(">>", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("==", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,("~=", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,("<", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,("<=", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,(">", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,(">=", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_bool))
-                                       ,("concat", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_Lua_value) --> primTy_Lua_value))
-                                       ,("length", TypeScheme ([], primTy_Lua_value --> primTy_Lua_value))
                                        ]
                         , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
                         }

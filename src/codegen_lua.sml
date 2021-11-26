@@ -178,34 +178,14 @@ val builtins
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
-                    ,(VId_Lua_sub, "_Lua_sub")
-                    ,(VId_Lua_set, "_Lua_set")
                     ,(VId_Lua_global, "_Lua_global")
                     ,(VId_Lua_call, "_Lua_call")
                     ,(VId_Lua_method, "_Lua_method")
                     ,(VId_Lua_NIL, "nil") (* literal *)
-                    ,(VId_Lua_isNil, "_Lua_isNil")
-                    ,(VId_Lua_isFalsy, "_not")
                     ,(VId_Lua_unsafeToValue, "_id") (* no-op *)
                     ,(VId_Lua_unsafeFromValue, "_id") (* no-op *)
                     ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
-                    ,(VId_Lua_PLUS, "_PLUS")
-                    ,(VId_Lua_MINUS, "_MINUS")
-                    ,(VId_Lua_TIMES, "_TIMES")
-                    ,(VId_Lua_DIVIDE, "_DIVIDE")
-                    ,(VId_Lua_INTDIV, "_INTDIV")
-                    ,(VId_Lua_MOD, "_MOD")
-                    ,(VId_Lua_pow, "_pow")
-                    ,(VId_Lua_unm, "_unm")
-                    ,(VId_Lua_andb, "_andb")
-                    ,(VId_Lua_orb, "_orb")
-                    ,(VId_Lua_xorb, "_xorb")
-                    ,(VId_Lua_notb, "_notb")
-                    ,(VId_Lua_LSHIFT, "_LSHIFT")
-                    ,(VId_Lua_RSHIFT, "_RSHIFT")
-                    ,(VId_Lua_concat, "_concat")
-                    ,(VId_Lua_length, "_length")
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
@@ -261,25 +241,6 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
                     ,(VId_String_GT,    (InfixOp (10, ">"), true))
                     ,(VId_String_GE,    (InfixOp (10, ">="), true))
                     ,(VId_String_HAT,   (InfixOpR (5, ".."), true))
-                    ,(VId_Lua_PLUS,     (InfixOp (4, "+"), false))
-                    ,(VId_Lua_MINUS,    (InfixOp (4, "-"), false))
-                    ,(VId_Lua_TIMES,    (InfixOp (3, "*"), false))
-                    ,(VId_Lua_DIVIDE,   (InfixOp (3, "/"), false))
-                    ,(VId_Lua_INTDIV,   (InfixOp (3, "//"), false))
-                    ,(VId_Lua_MOD,      (InfixOp (3, "%"), false))
-                    ,(VId_Lua_pow,      (InfixOpR (1, "^"), false))
-                    ,(VId_Lua_andb,     (InfixOp (7, "&"), false))
-                    ,(VId_Lua_orb,      (InfixOp (9, "|"), false))
-                    ,(VId_Lua_xorb,     (InfixOp (8, "~"), false))
-                    ,(VId_Lua_LSHIFT,   (InfixOp (6, "<<"), false))
-                    ,(VId_Lua_RSHIFT,   (InfixOp (6, ">>"), false))
-                    ,(VId_Lua_EQUAL,    (InfixOp (10, "=="), false))
-                    ,(VId_Lua_NOTEQUAL, (InfixOp (10, "~="), false))
-                    ,(VId_Lua_LT,       (InfixOp (10, "<"), false))
-                    ,(VId_Lua_GT,       (InfixOp (10, ">"), false))
-                    ,(VId_Lua_LE,       (InfixOp (10, "<="), false))
-                    ,(VId_Lua_GE,       (InfixOp (10, ">="), false))
-                    ,(VId_Lua_concat,   (InfixOpR (5, ".."), false))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
@@ -368,7 +329,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             [ "_Unit_EQUAL"
                                             , "_Record_EQUAL"
                                             , "_EQUAL"
-                                            , "_NOTEQUAL"
                                             , "_LT"
                                             , "_GT"
                                             , "_LE"
@@ -377,8 +337,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_MINUS"
                                             , "_TIMES"
                                             , "_DIVIDE"
-                                            , "_INTDIV"
-                                            , "_MOD"
                                             , "_pow"
                                             , "_unm"
                                             , "_andb"
@@ -430,25 +388,11 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_VectorOrArray_sub"
                                             , "_Vector_Array"
                                             , "_EQUAL_vector"
-                                            , "_Lua_sub"
-                                            , "_Lua_set"
                                             , "_Lua_global"
                                             , "_Lua_call"
                                             , "_Lua_method"
-                                            , "_Lua_isNil"
                                             , "_Lua_newTable"
                                             , "_Lua_function"
-                                            , "_General"
-                                            , "_Bool"
-                                            , "_Int"
-                                            , "_Word"
-                                            , "_Real"
-                                            , "_String"
-                                            , "_Char"
-                                            , "_Array"
-                                            , "_Vector"
-                                            , "_Lua"
-                                            , "_LunarML"
                                             , "assert"
                                             , "error"
                                             , "getmetatable"
@@ -617,30 +561,19 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                           putImpureTo ctx env dest (stmts, e)
                                                                    end
                                                                )
-                                  | NONE => if USyntax.eqULongVId(longvid, InitialEnv.VId_Lua_sub) then
-                                                wrap (fn (stmts, env, e1', e2') =>
-                                                         let val e = { prec = ~1, exp = paren ~1 e1' @ Fragment "[" :: #exp e2' @ [ Fragment "]" ] }
-                                                         in putImpureTo ctx env dest (stmts, e)
-                                                         end
-                                                     )
-                                            else
-                                                NONE
+                                  | NONE => NONE
                              end
                            | _ => NONE
           val doUnary = case extractLongVId exp1 of
                             SOME vid =>
                             let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
                                 open InitialEnv
-                            in if USyntax.eqULongVId(vid, VId_Real_TILDE) orelse USyntax.eqULongVId(vid, VId_Word_TILDE) orelse USyntax.eqULongVId(vid, VId_Lua_unm) then
+                            in if USyntax.eqULongVId(vid, VId_Real_TILDE) orelse USyntax.eqULongVId(vid, VId_Word_TILDE) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_Bool_not) orelse USyntax.eqULongVId(vid, VId_Lua_isFalsy) then
+                               else if USyntax.eqULongVId(vid, VId_Bool_not) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_String_size) orelse USyntax.eqULongVId(vid, VId_Lua_length) then
+                               else if USyntax.eqULongVId(vid, VId_String_size) then
                                    wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_Lua_isNil) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 e2' @ [ Fragment " == nil" ] }))
-                               else if USyntax.eqULongVId(vid, VId_Lua_notb) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 e2' }))
                                else
                                    NONE
                             end
@@ -886,39 +819,112 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                    in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
                                                                    end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.Call2Op, _, args)) dest
-    = if Vector.length args = 3 then
-          let val f = Vector.sub (args, 0)
-              val a0 = Vector.sub (args, 1)
-              val a1 = Vector.sub (args, 2)
-          in doExpCont ctx env f (fn (stmts0, env, f) =>
-                                     doExpCont ctx env a0 (fn (stmts1, env, a0) =>
-                                                              doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                       putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ [ Fragment ")" ] })
-                                                                                   )
-                                                          )
-                                 )
-          end
-      else
-          raise CodeGenError "PrimExp.Call2Op: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.Call3Op, _, args)) dest
-    = if Vector.length args = 4 then
-          let val f = Vector.sub (args, 0)
-              val a0 = Vector.sub (args, 1)
-              val a1 = Vector.sub (args, 2)
-              val a2 = Vector.sub (args, 3)
-          in doExpCont ctx env f (fn (stmts0, env, f) =>
-                                     doExpCont ctx env a0 (fn (stmts1, env, a0) =>
-                                                              doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                       doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ Fragment ", " :: #exp a2 @ [ Fragment ")" ] })
-                                                                                                            )
-                                                                                   )
-                                                          )
-                                 )
-          end
-      else
-          raise CodeGenError "PrimExp.Call2Op: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.PrimFnOp primOp, _, args)) dest
+    = let fun doUnary cont = if Vector.length args = 1 then
+                                 let val a = Vector.sub (args, 0)
+                                 in doExpCont ctx env a cont
+                                 end
+                             else
+                                 raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+          fun doBinary cont = if Vector.length args = 2 then
+                                  let val a = Vector.sub (args, 0)
+                                      val b = Vector.sub (args, 1)
+                                  in doExpCont ctx env a (fn (stmts0, env, a) =>
+                                                             doExpCont ctx env b (fn (stmts1, env, b) =>
+                                                                                     cont (stmts0 @ stmts1, env, (a, b))
+                                                                                 )
+                                                         )
+                                  end
+                              else
+                                  raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+          fun doBinaryOp (binop, pure) = doBinary (fn (stmts, env, (a, b)) =>
+                                                      let val e = case binop of
+                                                                      InfixOp (prec, luaop) => { prec = prec, exp = paren prec a @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) b }
+                                                                    | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) a @ Fragment (" " ^ luaop ^ " ") :: paren prec b }
+                                                      in if pure then
+                                                             putPureTo ctx env dest (stmts, e)
+                                                         else
+                                                             putImpureTo ctx env dest (stmts, e)
+                                                      end
+                                                  )
+          fun doTernary cont = if Vector.length args = 3 then
+                                  let val a = Vector.sub (args, 0)
+                                      val b = Vector.sub (args, 1)
+                                      val c = Vector.sub (args, 2)
+                                  in doExpCont ctx env a (fn (stmts0, env, a) =>
+                                                             doExpCont ctx env b (fn (stmts1, env, b) =>
+                                                                                     doExpCont ctx env c (fn (stmts2, env, c) =>
+                                                                                                             cont (stmts0 @ stmts1 @ stmts2, env, (a, b, c))
+                                                                                                         )
+                                                                                 )
+                                                         )
+                                  end
+                              else
+                                  raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+      in case primOp of
+             Syntax.PrimOp_call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
+                                                               putImpureTo ctx env dest (stmts, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ [ Fragment ")" ] })
+                                              )
+           | Syntax.PrimOp_call3 => if Vector.length args = 4 then
+                                        let val f = Vector.sub (args, 0)
+                                            val a0 = Vector.sub (args, 1)
+                                            val a1 = Vector.sub (args, 2)
+                                            val a2 = Vector.sub (args, 3)
+                                        in doExpCont ctx env f (fn (stmts0, env, f) =>
+                                                                   doExpCont ctx env a0 (fn (stmts1, env, a0) =>
+                                                                                            doExpCont ctx env a1 (fn (stmts2, env, a1) =>
+                                                                                                                     doExpCont ctx env a2 (fn (stmts3, env, a2) =>
+                                                                                                                                              putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ Fragment ", " :: #exp a2 @ [ Fragment ")" ] })
+                                                                                                                                          )
+                                                                                                                 )
+                                                                                        )
+                                                               )
+                                        end
+                                    else
+                                        raise CodeGenError "PrimExp.call3: invalid number of arguments"
+           | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
+                                                   putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
+                                               )
+           | Syntax.PrimOp_Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
+                                                    let val stmts = stmts @ Indent :: paren ~1 a @ Fragment "[" :: #exp b @ Fragment "] = " :: #exp c @ [ OptSemicolon ]
+                                                    in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                    end
+                                                )
+           | Syntax.PrimOp_Lua_isNil => doUnary (fn (stmts, env, a) =>
+                                                    putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 a @ [ Fragment " == nil" ] })
+                                                )
+           | Syntax.PrimOp_Lua_EQUAL => doBinaryOp (InfixOp (10, "=="), false)
+           | Syntax.PrimOp_Lua_NOTEQUAL => doBinaryOp (InfixOp (10, "~="), false)
+           | Syntax.PrimOp_Lua_LT => doBinaryOp (InfixOp (10, "<"), false)
+           | Syntax.PrimOp_Lua_GT => doBinaryOp (InfixOp (10, ">"), false)
+           | Syntax.PrimOp_Lua_LE => doBinaryOp (InfixOp (10, "<="), false)
+           | Syntax.PrimOp_Lua_GE => doBinaryOp (InfixOp (10, ">="), false)
+           | Syntax.PrimOp_Lua_PLUS => doBinaryOp (InfixOp (4, "+"), false)
+           | Syntax.PrimOp_Lua_MINUS => doBinaryOp (InfixOp (4, "-"), false)
+           | Syntax.PrimOp_Lua_TIMES => doBinaryOp (InfixOp (3, "*"), false)
+           | Syntax.PrimOp_Lua_DIVIDE => doBinaryOp (InfixOp (3, "/"), false)
+           | Syntax.PrimOp_Lua_INTDIV => doBinaryOp (InfixOp (3, "//"), false)
+           | Syntax.PrimOp_Lua_MOD => doBinaryOp (InfixOp (3, "%"), false)
+           | Syntax.PrimOp_Lua_pow => doBinaryOp (InfixOpR (1, "^"), false)
+           | Syntax.PrimOp_Lua_unm => doUnary (fn (stmts, env, a) =>
+                                                  putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                              )
+           | Syntax.PrimOp_Lua_andb => doBinaryOp (InfixOp (7, "&"), false)
+           | Syntax.PrimOp_Lua_orb => doBinaryOp (InfixOp (9, "|"), false)
+           | Syntax.PrimOp_Lua_xorb => doBinaryOp (InfixOp (8, "~"), false)
+           | Syntax.PrimOp_Lua_notb => doUnary (fn (stmts, env, a) =>
+                                                   putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 a })
+                                               )
+           | Syntax.PrimOp_Lua_LSHIFT => doBinaryOp (InfixOp (6, "<<"), false)
+           | Syntax.PrimOp_Lua_RSHIFT => doBinaryOp (InfixOp (6, ">>"), false)
+           | Syntax.PrimOp_Lua_concat => doBinaryOp (InfixOpR (5, ".."), false)
+           | Syntax.PrimOp_Lua_length => doUnary (fn (stmts, env, a) =>
+                                                     putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 a })
+                                                 )
+           | Syntax.PrimOp_Lua_isFalsy => doUnary (fn (stmts, env, a) =>
+                                                      putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 a })
+                                                  )
+      end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then
           let val a0 = Vector.sub (args, 0)
@@ -931,7 +937,6 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           end
       else
           raise CodeGenError "PrimExp.ExnInstanceofOp: invalid number of arguments"
-
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
     = let val luavid = VIdToLua v

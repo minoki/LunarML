@@ -235,7 +235,7 @@ val primTyName_vector = USyntax.MkTyName("vector", 10)
 val primTyName_exntag = USyntax.MkTyName("exntag", 11)
 val primTyName_function2 = USyntax.MkTyName("function2", 12)
 val primTyName_function3 = USyntax.MkTyName("function3", 13)
-(* primTyName_Lua_value : 14 *)
+val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 14)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_word)
@@ -244,6 +244,7 @@ val primTy_string = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_string)
 val primTy_char   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_char)
 val primTy_exn    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_exn)
 val primTy_bool   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_bool)
+val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
 val VId_Bind = USyntax.MkVId("Bind", ~1)
 val LongVId_Bind = USyntax.MkShortVId(VId_Bind)
 
@@ -259,7 +260,16 @@ local
     val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
     val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
     val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
+    fun LuaUnary resultType = { typeVariables = []
+                              , argTypes = vector [primTy_Lua_value]
+                              , resultType = resultType
+                              }
+    fun LuaBinary resultType = { typeVariables = []
+                               , argTypes = vector [primTy_Lua_value, primTy_Lua_value]
+                               , resultType = resultType
+                               }
 in
+(* PRIMITIVES *)
 fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
     = { typeVariables = [(tyVarA, []) (* result *)
                         ,(tyVarB, []) (* arg1 *)
@@ -277,6 +287,35 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
       , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC, tyD], primTyName_function3), tyB, tyC, tyD]
       , resultType = tyA
       }
+  | typeOfPrimCall Syntax.PrimOp_Lua_sub = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_set = { typeVariables = []
+                                           , argTypes = vector [primTy_Lua_value, primTy_Lua_value, primTy_Lua_value]
+                                           , resultType = primTy_unit
+                                           }
+  | typeOfPrimCall Syntax.PrimOp_Lua_isNil = LuaUnary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_EQUAL = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_NOTEQUAL = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_LT = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_GT = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_LE = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_GE = LuaBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_Lua_PLUS = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_MINUS = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_TIMES = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_DIVIDE = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_INTDIV = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_MOD = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_pow = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_unm = LuaUnary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_andb = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_orb = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_xorb = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_notb = LuaUnary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_LSHIFT = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_RSHIFT = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_concat = LuaBinary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_length = LuaUnary primTy_Lua_value
+  | typeOfPrimCall Syntax.PrimOp_Lua_isFalsy = LuaUnary primTy_bool
 end
 
 fun newContext() : ProgramContext

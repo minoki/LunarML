@@ -996,9 +996,8 @@ fun isDiscardablePrimOp (F.SConOp _) = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
-  | isDiscardablePrimOp F.Call2Op = false
-  | isDiscardablePrimOp F.Call3Op = false
   | isDiscardablePrimOp F.ExnInstanceofOp = true
+  | isDiscardablePrimOp (F.PrimFnOp _) = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields

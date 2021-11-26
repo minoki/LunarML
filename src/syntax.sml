@@ -147,8 +147,63 @@ datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
 
-datatype PrimOp = PrimOp_call2 (* # of type arguments: 3 (optional), # of arguments: 3 *)
-                | PrimOp_call3 (* # of type arguments: 4 (optional), # of arguments: 4 *)
+(* PRIMITIVES *)
+datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
+                | PrimOp_call3 (* # of arguments: 4 *)
+                | PrimOp_Lua_sub (* # of arguments: 2 *)
+                | PrimOp_Lua_set (* # of arguments: 3 *)
+                | PrimOp_Lua_isNil (* # of arguments: 1 *)
+                | PrimOp_Lua_EQUAL (* # of arguments: 2 *)
+                | PrimOp_Lua_NOTEQUAL (* # of arguments: 2 *)
+                | PrimOp_Lua_LT (* # of arguments: 2 *)
+                | PrimOp_Lua_GT (* # of arguments: 2 *)
+                | PrimOp_Lua_LE (* # of arguments: 2 *)
+                | PrimOp_Lua_GE (* # of arguments: 2 *)
+                | PrimOp_Lua_PLUS (* # of arguments: 2 *)
+                | PrimOp_Lua_MINUS (* # of arguments: 2 *)
+                | PrimOp_Lua_TIMES (* # of arguments: 2 *)
+                | PrimOp_Lua_DIVIDE (* # of arguments: 2 *)
+                | PrimOp_Lua_INTDIV (* # of arguments: 2 *)
+                | PrimOp_Lua_MOD (* # of arguments: 2 *)
+                | PrimOp_Lua_pow (* # of arguments: 2 *)
+                | PrimOp_Lua_unm (* # of arguments: 1 *)
+                | PrimOp_Lua_andb (* # of arguments: 2 *)
+                | PrimOp_Lua_orb (* # of arguments: 2 *)
+                | PrimOp_Lua_xorb (* # of arguments: 2 *)
+                | PrimOp_Lua_notb (* # of arguments: 1 *)
+                | PrimOp_Lua_LSHIFT (* # of arguments: 2 *)
+                | PrimOp_Lua_RSHIFT (* # of arguments: 2 *)
+                | PrimOp_Lua_concat (* # of arguments: 2 *)
+                | PrimOp_Lua_length (* # of arguments: 1 *)
+                | PrimOp_Lua_isFalsy (* # of arguments: 1 *)
+fun primOpToString PrimOp_call2 = "call2"
+  | primOpToString PrimOp_call3 = "call3"
+  | primOpToString PrimOp_Lua_sub = "Lua.sub"
+  | primOpToString PrimOp_Lua_set = "Lua.set"
+  | primOpToString PrimOp_Lua_isNil = "Lua.isNil"
+  | primOpToString PrimOp_Lua_EQUAL = "Lua.EQUAL"
+  | primOpToString PrimOp_Lua_NOTEQUAL = "Lua.NOTEQUAL"
+  | primOpToString PrimOp_Lua_LT = "Lua.<"
+  | primOpToString PrimOp_Lua_GT = "Lua.>"
+  | primOpToString PrimOp_Lua_LE = "Lua.<="
+  | primOpToString PrimOp_Lua_GE = "Lua.>="
+  | primOpToString PrimOp_Lua_PLUS = "Lua.+"
+  | primOpToString PrimOp_Lua_MINUS = "Lua.-"
+  | primOpToString PrimOp_Lua_TIMES = "Lua.*"
+  | primOpToString PrimOp_Lua_DIVIDE = "Lua./"
+  | primOpToString PrimOp_Lua_INTDIV = "Lua.//"
+  | primOpToString PrimOp_Lua_MOD = "Lua.%"
+  | primOpToString PrimOp_Lua_pow = "Lua.pow"
+  | primOpToString PrimOp_Lua_unm = "Lua.unm"
+  | primOpToString PrimOp_Lua_andb = "Lua.andb"
+  | primOpToString PrimOp_Lua_orb = "Lua.orb"
+  | primOpToString PrimOp_Lua_xorb = "Lua.xorb"
+  | primOpToString PrimOp_Lua_notb = "Lua.notb"
+  | primOpToString PrimOp_Lua_LSHIFT = "Lua.<<"
+  | primOpToString PrimOp_Lua_RSHIFT = "Lua.>>"
+  | primOpToString PrimOp_Lua_concat = "Lua.concat"
+  | primOpToString PrimOp_Lua_length = "Lua.length"
+  | primOpToString PrimOp_Lua_isFalsy = "Lua.isFalsy"
 
 datatype OverloadClass = CLASS_INT
                        | CLASS_WORD

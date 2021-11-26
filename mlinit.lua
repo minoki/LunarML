@@ -32,9 +32,6 @@ end
 local function _EQUAL(t)
   return t[1] == t[2]
 end
-local function _NOTEQUAL(t)
-  return t[1] ~= t[2]
-end
 local function _LT(t)
   return t[1] < t[2]
 end
@@ -58,12 +55,6 @@ local function _TIMES(t)
 end
 local function _DIVIDE(t)
   return t[1] / t[2]
-end
-local function _INTDIV(t)
-  return t[1] // t[2]
-end
-local function _MOD(t)
-  return t[1] % t[2]
 end
 local function _pow(t)
   return t[1] ^ t[2]
@@ -430,13 +421,6 @@ local function _Vector_concat(xs)
 end
 
 -- Lua interface
-local function _Lua_sub(t)
-  return t[1][t[2]]
-end
-local function _Lua_set(t)
-  t[1][t[2]] = t[3]
-  return nil
-end
 local function _Lua_global(name)
   return _ENV[name]
 end
@@ -450,9 +434,6 @@ local function _Lua_method(t)
   return function(v)
     return table_pack(self[name](self, table_unpack(v, 1, v.n)))
   end
-end
-local function _Lua_isNil(x)
-  return x == nil
 end
 local function _Lua_newTable()
   return {}

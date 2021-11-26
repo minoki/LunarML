@@ -40,9 +40,8 @@ fun doPrimOp (F.SConOp scon) = [P.Fragment (Syntax.print_SCon scon)]
   | doPrimOp F.RecordEqualityOp = [P.Fragment "record-equality"]
   | doPrimOp F.DataTagOp = [P.Fragment "data-tag"]
   | doPrimOp F.DataPayloadOp = [P.Fragment "data-payload"]
-  | doPrimOp F.Call2Op = [P.Fragment "call2"]
-  | doPrimOp F.Call3Op = [P.Fragment "call3"]
   | doPrimOp F.ExnInstanceofOp = [P.Fragment "exn-instanceof"]
+  | doPrimOp (F.PrimFnOp primOp) = [P.Fragment (Syntax.primOpToString primOp)]
 (* precedence
  * atomexp ::= PrimExp | VarExp | RecordExp | ProjectionExp | StructExp | '(' exp ')' (* prec: 2 *)
  * appexp ::= atomexp

@@ -300,8 +300,35 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.VectorExp(span, xs)) = Syntax.VectorExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
   | doExp(ctx, env, UnfixedSyntax.PrimValExp(span, name)) = Syntax.VarExp(span, Syntax.MkQualified([], Syntax.MkVId name))
   | doExp(ctx, env, UnfixedSyntax.PrimExp(span, name, tyargs, args)) = let val primOp = case name of
+                                                                                            (* PRIMITIVES *)
                                                                                             "call2" => Syntax.PrimOp_call2
                                                                                           | "call3" => Syntax.PrimOp_call3
+                                                                                          | "Lua.sub" => Syntax.PrimOp_Lua_sub
+                                                                                          | "Lua.set" => Syntax.PrimOp_Lua_set
+                                                                                          | "Lua.isNil" => Syntax.PrimOp_Lua_isNil
+                                                                                          | "Lua.==" => Syntax.PrimOp_Lua_EQUAL
+                                                                                          | "Lua.~=" => Syntax.PrimOp_Lua_NOTEQUAL
+                                                                                          | "Lua.<" => Syntax.PrimOp_Lua_LT
+                                                                                          | "Lua.>" => Syntax.PrimOp_Lua_GT
+                                                                                          | "Lua.<=" => Syntax.PrimOp_Lua_LE
+                                                                                          | "Lua.>=" => Syntax.PrimOp_Lua_GE
+                                                                                          | "Lua.+" => Syntax.PrimOp_Lua_PLUS
+                                                                                          | "Lua.-" => Syntax.PrimOp_Lua_MINUS
+                                                                                          | "Lua.*" => Syntax.PrimOp_Lua_TIMES
+                                                                                          | "Lua./" => Syntax.PrimOp_Lua_DIVIDE
+                                                                                          | "Lua.//" => Syntax.PrimOp_Lua_INTDIV
+                                                                                          | "Lua.%" => Syntax.PrimOp_Lua_MOD
+                                                                                          | "Lua.pow" => Syntax.PrimOp_Lua_pow
+                                                                                          | "Lua.unm" => Syntax.PrimOp_Lua_unm
+                                                                                          | "Lua.andb" => Syntax.PrimOp_Lua_andb
+                                                                                          | "Lua.orb" => Syntax.PrimOp_Lua_orb
+                                                                                          | "Lua.xorb" => Syntax.PrimOp_Lua_xorb
+                                                                                          | "Lua.notb" => Syntax.PrimOp_Lua_notb
+                                                                                          | "Lua.<<" => Syntax.PrimOp_Lua_LSHIFT
+                                                                                          | "Lua.>>" => Syntax.PrimOp_Lua_RSHIFT
+                                                                                          | "Lua.concat" => Syntax.PrimOp_Lua_concat
+                                                                                          | "Lua.length" => Syntax.PrimOp_Lua_length
+                                                                                          | "Lua.isFalsy" => Syntax.PrimOp_Lua_isFalsy
                                                                                           | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
                                                                            val args = Vector.map (fn e => doExp(ctx, env, e)) args
                                                                        in Syntax.PrimExp(span, primOp, tyargs, args)
