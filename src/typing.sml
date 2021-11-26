@@ -260,6 +260,12 @@ local
     val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
     val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
     val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
+    fun Binary (a, b) result = { typeVariables = []
+                               , argTypes = vector [a, b]
+                               , resultType = result
+                               }
+    fun HomoBinary a = Binary (a, a) a
+    fun Compare a = Binary (a, a) primTy_bool
     fun LuaUnary resultType = { typeVariables = []
                               , argTypes = vector [primTy_Lua_value]
                               , resultType = resultType
@@ -287,6 +293,30 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
       , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC, tyD], primTyName_function3), tyB, tyC, tyD]
       , resultType = tyA
       }
+  | typeOfPrimCall Syntax.PrimOp_Int_LT = Compare primTy_int
+  | typeOfPrimCall Syntax.PrimOp_Int_LE = Compare primTy_int
+  | typeOfPrimCall Syntax.PrimOp_Int_GT = Compare primTy_int
+  | typeOfPrimCall Syntax.PrimOp_Int_GE = Compare primTy_int
+  | typeOfPrimCall Syntax.PrimOp_Word_PLUS = HomoBinary primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_MINUS = HomoBinary primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_TIMES = HomoBinary primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Real_PLUS = HomoBinary primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_MINUS = HomoBinary primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_TIMES = HomoBinary primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_DIVIDE = HomoBinary primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_LT = Compare primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_LE = Compare primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_GT = Compare primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_GE = Compare primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Char_LT = Compare primTy_char
+  | typeOfPrimCall Syntax.PrimOp_Char_LE = Compare primTy_char
+  | typeOfPrimCall Syntax.PrimOp_Char_GT = Compare primTy_char
+  | typeOfPrimCall Syntax.PrimOp_Char_GE = Compare primTy_char
+  | typeOfPrimCall Syntax.PrimOp_String_LT = Compare primTy_string
+  | typeOfPrimCall Syntax.PrimOp_String_LE = Compare primTy_string
+  | typeOfPrimCall Syntax.PrimOp_String_GT = Compare primTy_string
+  | typeOfPrimCall Syntax.PrimOp_String_GE = Compare primTy_string
+  | typeOfPrimCall Syntax.PrimOp_String_HAT = HomoBinary primTy_string
   | typeOfPrimCall Syntax.PrimOp_Lua_sub = LuaBinary primTy_Lua_value
   | typeOfPrimCall Syntax.PrimOp_Lua_set = { typeVariables = []
                                            , argTypes = vector [primTy_Lua_value, primTy_Lua_value, primTy_Lua_value]

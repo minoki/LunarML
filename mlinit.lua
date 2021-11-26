@@ -32,56 +32,8 @@ end
 local function _EQUAL(t)
   return t[1] == t[2]
 end
-local function _LT(t)
-  return t[1] < t[2]
-end
-local function _GT(t)
-  return t[1] > t[2]
-end
-local function _LE(t)
-  return t[1] <= t[2]
-end
-local function _GE(t)
-  return t[1] >= t[2]
-end
-local function _PLUS(t)
-  return t[1] + t[2]
-end
-local function _MINUS(t)
-  return t[1] - t[2]
-end
-local function _TIMES(t)
-  return t[1] * t[2]
-end
-local function _DIVIDE(t)
-  return t[1] / t[2]
-end
-local function _pow(t)
-  return t[1] ^ t[2]
-end
 local function _unm(x)
   return -x
-end
-local function _andb(t)
-  return t[1] & t[2]
-end
-local function _orb(t)
-  return t[1] | t[2]
-end
-local function _xorb(t)
-  return t[1] ~ t[2]
-end
-local function _notb(x)
-  return ~x
-end
-local function _LSHIFT(t)
-  return t[1] << t[2]
-end
-local function _RSHIFT(t)
-  return t[1] >> t[2]
-end
-local function _concat(t)
-  return t[1] .. t[2]
 end
 local function _length(x)
   return #x

@@ -77,7 +77,6 @@ val builtins
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Word), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Char), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), NONE)
@@ -124,47 +123,22 @@ val builtins
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(VId_Int_LT, "_LT")
-                    ,(VId_Int_GT, "_GT")
-                    ,(VId_Int_LE, "_LE")
-                    ,(VId_Int_GE, "_GE")
                     ,(USyntax.MkShortVId VId_Int_add_bin, "__Int_add")
                     ,(USyntax.MkShortVId VId_Int_sub_bin, "__Int_sub")
                     ,(USyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
                     ,(USyntax.MkShortVId VId_Int_div_bin, "__Int_div")
                     ,(USyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
                     (* word *)
-                    ,(VId_Word_PLUS, "_PLUS") (* Lua +; does not raise Overflow *)
-                    ,(VId_Word_MINUS, "_MINUS") (* Lua - (binary); does not raise Overflow *)
-                    ,(VId_Word_TIMES, "_TIMES") (* Lua *; does not raise Overflow *)
                     ,(VId_Word_TILDE, "_unm") (* Lua - (unary) *)
                     ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
                     ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
                     ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
                     (* real *)
-                    ,(VId_Real_PLUS, "_PLUS") (* Lua + *)
-                    ,(VId_Real_MINUS, "_MINUS") (* Lua - (binary) *)
-                    ,(VId_Real_TIMES, "_TIMES") (* Lua * *)
-                    ,(VId_Real_DIVIDE, "_DIVIDE") (* Lua / *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     ,(VId_Real_TILDE, "_unm") (* Lua - (unary) *)
-                    ,(VId_Real_LT, "_LT")
-                    ,(VId_Real_GT, "_GT")
-                    ,(VId_Real_LE, "_LE")
-                    ,(VId_Real_GE, "_GE")
                     (* String *)
-                    ,(VId_String_HAT, "_concat")
                     ,(VId_String_size, "_length")
                     ,(VId_String_str, "_id") (* no-op *)
-                    ,(VId_String_LT, "_LT")
-                    ,(VId_String_GT, "_GT")
-                    ,(VId_String_LE, "_LE")
-                    ,(VId_String_GE, "_GE")
-                    (* Char *)
-                    ,(VId_Char_LT, "_LT")
-                    ,(VId_Char_GT, "_GT")
-                    ,(VId_Char_LE, "_LE")
-                    ,(VId_Char_GE, "_GE")
                     (* Array and Vector *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
@@ -217,30 +191,6 @@ val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
                     ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
                     ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
-                    ,(VId_Int_LT,       (InfixOp (10, "<"), true))
-                    ,(VId_Int_LE,       (InfixOp (10, "<="), true))
-                    ,(VId_Int_GT,       (InfixOp (10, ">"), true))
-                    ,(VId_Int_GE,       (InfixOp (10, ">="), true))
-                    ,(VId_Word_PLUS,    (InfixOp (4, "+"), true))
-                    ,(VId_Word_MINUS,   (InfixOp (4, "-"), true))
-                    ,(VId_Word_TIMES,   (InfixOp (3, "*"), true))
-                    ,(VId_Real_PLUS,    (InfixOp (4, "+"), true))
-                    ,(VId_Real_MINUS,   (InfixOp (4, "-"), true))
-                    ,(VId_Real_TIMES,   (InfixOp (3, "*"), true))
-                    ,(VId_Real_DIVIDE,  (InfixOp (3, "/"), true))
-                    ,(VId_Real_LT,      (InfixOp (10, "<"), true))
-                    ,(VId_Real_LE,      (InfixOp (10, "<="), true))
-                    ,(VId_Real_GT,      (InfixOp (10, ">"), true))
-                    ,(VId_Real_GE,      (InfixOp (10, ">="), true))
-                    ,(VId_Char_LT,      (InfixOp (10, "<"), true))
-                    ,(VId_Char_LE,      (InfixOp (10, "<="), true))
-                    ,(VId_Char_GT,      (InfixOp (10, ">"), true))
-                    ,(VId_Char_GE,      (InfixOp (10, ">="), true))
-                    ,(VId_String_LT,    (InfixOp (10, "<"), true))
-                    ,(VId_String_LE,    (InfixOp (10, "<="), true))
-                    ,(VId_String_GT,    (InfixOp (10, ">"), true))
-                    ,(VId_String_GE,    (InfixOp (10, ">="), true))
-                    ,(VId_String_HAT,   (InfixOpR (5, ".."), true))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
@@ -329,23 +279,7 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             [ "_Unit_EQUAL"
                                             , "_Record_EQUAL"
                                             , "_EQUAL"
-                                            , "_LT"
-                                            , "_GT"
-                                            , "_LE"
-                                            , "_GE"
-                                            , "_PLUS"
-                                            , "_MINUS"
-                                            , "_TIMES"
-                                            , "_DIVIDE"
-                                            , "_pow"
                                             , "_unm"
-                                            , "_andb"
-                                            , "_orb"
-                                            , "_xorb"
-                                            , "_notb"
-                                            , "_LSHIFT"
-                                            , "_RSHIFT"
-                                            , "_concat"
                                             , "_length"
                                             , "_not"
                                             , "_id"
@@ -882,6 +816,30 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                         end
                                     else
                                         raise CodeGenError "PrimExp.call3: invalid number of arguments"
+           | Syntax.PrimOp_Int_LT => doBinaryOp (InfixOp (10, "<"), true)
+           | Syntax.PrimOp_Int_GT => doBinaryOp (InfixOp (10, ">"), true)
+           | Syntax.PrimOp_Int_LE => doBinaryOp (InfixOp (10, "<="), true)
+           | Syntax.PrimOp_Int_GE => doBinaryOp (InfixOp (10, ">="), true)
+           | Syntax.PrimOp_Word_PLUS => doBinaryOp (InfixOp (4, "+"), true)
+           | Syntax.PrimOp_Word_MINUS => doBinaryOp (InfixOp (4, "-"), true)
+           | Syntax.PrimOp_Word_TIMES => doBinaryOp (InfixOp (3, "*"), true)
+           | Syntax.PrimOp_Real_PLUS => doBinaryOp (InfixOp (4, "+"), true)
+           | Syntax.PrimOp_Real_MINUS => doBinaryOp (InfixOp (4, "-"), true)
+           | Syntax.PrimOp_Real_TIMES => doBinaryOp (InfixOp (3, "*"), true)
+           | Syntax.PrimOp_Real_DIVIDE => doBinaryOp (InfixOp (3, "/"), true)
+           | Syntax.PrimOp_Real_LT => doBinaryOp (InfixOp (10, "<"), true)
+           | Syntax.PrimOp_Real_GT => doBinaryOp (InfixOp (10, ">"), true)
+           | Syntax.PrimOp_Real_LE => doBinaryOp (InfixOp (10, "<="), true)
+           | Syntax.PrimOp_Real_GE => doBinaryOp (InfixOp (10, ">="), true)
+           | Syntax.PrimOp_Char_LT => doBinaryOp (InfixOp (10, "<"), true)
+           | Syntax.PrimOp_Char_GT => doBinaryOp (InfixOp (10, ">"), true)
+           | Syntax.PrimOp_Char_LE => doBinaryOp (InfixOp (10, "<="), true)
+           | Syntax.PrimOp_Char_GE => doBinaryOp (InfixOp (10, ">="), true)
+           | Syntax.PrimOp_String_LT => doBinaryOp (InfixOp (10, "<"), true)
+           | Syntax.PrimOp_String_GT => doBinaryOp (InfixOp (10, ">"), true)
+           | Syntax.PrimOp_String_LE => doBinaryOp (InfixOp (10, "<="), true)
+           | Syntax.PrimOp_String_GE => doBinaryOp (InfixOp (10, ">="), true)
+           | Syntax.PrimOp_String_HAT => doBinaryOp (InfixOpR (5, ".."), true)
            | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
                                                    putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
                                                )

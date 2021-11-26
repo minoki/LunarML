@@ -150,6 +150,30 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
 (* PRIMITIVES *)
 datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_call3 (* # of arguments: 4 *)
+                | PrimOp_Int_LT (* # of arguments: 2 *)
+                | PrimOp_Int_LE (* # of arguments: 2 *)
+                | PrimOp_Int_GT (* # of arguments: 2 *)
+                | PrimOp_Int_GE (* # of arguments: 2 *)
+                | PrimOp_Word_PLUS (* # of arguments: 2 *)
+                | PrimOp_Word_MINUS (* # of arguments: 2 *)
+                | PrimOp_Word_TIMES (* # of arguments: 2 *)
+                | PrimOp_Real_PLUS (* # of arguments: 2 *)
+                | PrimOp_Real_MINUS (* # of arguments: 2 *)
+                | PrimOp_Real_TIMES (* # of arguments: 2 *)
+                | PrimOp_Real_DIVIDE (* # of arguments: 2 *)
+                | PrimOp_Real_LT (* # of arguments: 2 *)
+                | PrimOp_Real_LE (* # of arguments: 2 *)
+                | PrimOp_Real_GT (* # of arguments: 2 *)
+                | PrimOp_Real_GE (* # of arguments: 2 *)
+                | PrimOp_Char_LT (* # of arguments: 2 *)
+                | PrimOp_Char_LE (* # of arguments: 2 *)
+                | PrimOp_Char_GT (* # of arguments: 2 *)
+                | PrimOp_Char_GE (* # of arguments: 2 *)
+                | PrimOp_String_LT (* # of arguments: 2 *)
+                | PrimOp_String_LE (* # of arguments: 2 *)
+                | PrimOp_String_GT (* # of arguments: 2 *)
+                | PrimOp_String_GE (* # of arguments: 2 *)
+                | PrimOp_String_HAT (* # of arguments: 2 *)
                 | PrimOp_Lua_sub (* # of arguments: 2 *)
                 | PrimOp_Lua_set (* # of arguments: 3 *)
                 | PrimOp_Lua_isNil (* # of arguments: 1 *)
@@ -178,6 +202,30 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Lua_isFalsy (* # of arguments: 1 *)
 fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_call3 = "call3"
+  | primOpToString PrimOp_Int_LT = "Int.<"
+  | primOpToString PrimOp_Int_LE = "Int.<="
+  | primOpToString PrimOp_Int_GT = "Int.>"
+  | primOpToString PrimOp_Int_GE = "Int.>="
+  | primOpToString PrimOp_Word_PLUS = "Word.+"
+  | primOpToString PrimOp_Word_MINUS = "Word.-"
+  | primOpToString PrimOp_Word_TIMES = "Word.*"
+  | primOpToString PrimOp_Real_PLUS = "Real.+"
+  | primOpToString PrimOp_Real_MINUS = "Real.-"
+  | primOpToString PrimOp_Real_TIMES = "Real.*"
+  | primOpToString PrimOp_Real_DIVIDE = "Real./"
+  | primOpToString PrimOp_Real_LT = "Real.<"
+  | primOpToString PrimOp_Real_LE = "Real.<="
+  | primOpToString PrimOp_Real_GT = "Real.>"
+  | primOpToString PrimOp_Real_GE = "Real.>="
+  | primOpToString PrimOp_Char_LT = "Real.<"
+  | primOpToString PrimOp_Char_LE = "Real.<="
+  | primOpToString PrimOp_Char_GT = "Real.>"
+  | primOpToString PrimOp_Char_GE = "Real.>="
+  | primOpToString PrimOp_String_LT = "String.<"
+  | primOpToString PrimOp_String_LE = "String.<="
+  | primOpToString PrimOp_String_GT = "String.>"
+  | primOpToString PrimOp_String_GE = "String.>="
+  | primOpToString PrimOp_String_HAT = "String.^"
   | primOpToString PrimOp_Lua_sub = "Lua.sub"
   | primOpToString PrimOp_Lua_set = "Lua.set"
   | primOpToString PrimOp_Lua_isNil = "Lua.isNil"

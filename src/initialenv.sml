@@ -99,7 +99,6 @@ val StrId_Int = newStrId "Int"
 val StrId_Word = newStrId "Word"
 val StrId_Real = newStrId "Real"
 val StrId_String = newStrId "String"
-val StrId_Char = newStrId "Char"
 val StrId_Vector = newStrId "Vector"
 val StrId_Array = newStrId "Array"
 val StrId_Lua = newStrId "Lua"
@@ -178,55 +177,26 @@ local val newVId = newLongVId (StrId_Int, [])
 in
 val VId_Int_TILDE = newVId "~"
 val VId_Int_abs = newVId "abs"
-val VId_Int_LT = newVId "<"
-val VId_Int_LE = newVId "<="
-val VId_Int_GT = newVId ">"
-val VId_Int_GE = newVId ">="
 end
 
 (* Word *)
 local val newVId = newLongVId (StrId_Word, [])
 in
-val VId_Word_PLUS = newVId "+"
-val VId_Word_MINUS = newVId "-"
-val VId_Word_TIMES = newVId "*"
 val VId_Word_TILDE = newVId "~"
 end
 
 (* Real *)
 local val newVId = newLongVId (StrId_Real, [])
 in
-val VId_Real_PLUS = newVId "+"
-val VId_Real_MINUS = newVId "-"
-val VId_Real_TIMES = newVId "*"
-val VId_Real_DIVIDE = newVId "/"
 val VId_Real_TILDE = newVId "~"
 val VId_Real_abs = newVId "abs"
-val VId_Real_LT = newVId "<"
-val VId_Real_LE = newVId "<="
-val VId_Real_GT = newVId ">"
-val VId_Real_GE = newVId ">="
 end
 
 (* String *)
 local val newVId = newLongVId (StrId_String, [])
 in
 val VId_String_size = newVId "size"
-val VId_String_HAT = newVId "^"
 val VId_String_str = newVId "str"
-val VId_String_LT = newVId "<"
-val VId_String_LE = newVId "<="
-val VId_String_GT = newVId ">"
-val VId_String_GE = newVId ">="
-end
-
-(* Char *)
-local val newVId = newLongVId (StrId_Char, [])
-in
-val VId_Char_LT = newVId "<"
-val VId_Char_GT = newVId ">"
-val VId_Char_LE = newVId "<="
-val VId_Char_GE = newVId ">="
 end
 
 (* Vector *)
@@ -412,35 +382,20 @@ val initialEnv : Typing.Env
                          }
           val sig_Int = { tyConMap = mkTyMap []
                         , valMap = mkValMap
-                                       [("<", TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                       ,("<=", TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                       ,(">", TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                       ,(">=", TypeScheme ([], mkPairType(primTy_int, primTy_int) --> primTy_bool))
-                                       ,("~", TypeScheme ([], primTy_int --> primTy_int))
+                                       [("~", TypeScheme ([], primTy_int --> primTy_int))
                                        ,("abs", TypeScheme ([], primTy_int --> primTy_int))
                                        ]
                         , strMap = mkStrMap []
                         }
           val sig_Word = { tyConMap = mkTyMap []
                          , valMap = mkValMap
-                                        [("+", TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
-                                        ,("-", TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
-                                        ,("*", TypeScheme ([], mkPairType(primTy_word, primTy_word) --> primTy_word))
-                                        ,("~", TypeScheme ([], primTy_word --> primTy_word))
+                                        [("~", TypeScheme ([], primTy_word --> primTy_word))
                                         ]
                          , strMap = mkStrMap []
                          }
           val sig_Real = { tyConMap = mkTyMap []
                          , valMap = mkValMap
-                                        [("+", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
-                                        ,("-", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
-                                        ,("*", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
-                                        ,("/", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_real))
-                                        ,("<", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
-                                        ,("<=", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
-                                        ,(">", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
-                                        ,(">=", TypeScheme ([], mkPairType(primTy_real, primTy_real) --> primTy_bool))
-                                        ,("~", TypeScheme ([], primTy_real --> primTy_real))
+                                        [("~", TypeScheme ([], primTy_real --> primTy_real))
                                         ,("abs", TypeScheme ([], primTy_real --> primTy_real))
                                         ]
                          , strMap = mkStrMap []
@@ -448,24 +403,10 @@ val initialEnv : Typing.Env
           val sig_String = { tyConMap = mkTyMap []
                            , valMap = mkValMap
                                           [("size", TypeScheme ([], primTy_string --> primTy_int))
-                                          ,("^", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_string))
                                           ,("str", TypeScheme ([], primTy_char --> primTy_string))
-                                          ,("<", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
-                                          ,("<=", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
-                                          ,(">", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
-                                          ,(">=", TypeScheme ([], mkPairType(primTy_string, primTy_string) --> primTy_bool))
                                           ]
                            , strMap = mkStrMap []
                            }
-          val sig_Char = { tyConMap = mkTyMap []
-                         , valMap = mkValMap
-                                        [("<", TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
-                                        ,("<=", TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
-                                        ,(">", TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
-                                        ,(">=", TypeScheme ([], mkPairType(primTy_char, primTy_char) --> primTy_bool))
-                                        ]
-                         , strMap = mkStrMap []
-                         }
           val sig_Array = { tyConMap = mkTyMap []
                           , valMap = mkValMap
                                          [("array", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
@@ -613,9 +554,9 @@ val initialEnv : Typing.Env
                                   [(primTyName_bool, { arity = 0, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_int, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
-                                  ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = SOME Syntax.CLASS_REAL })
-                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_STRING })
-                                  ,(primTyName_char, { arity = 0, admitsEquality = true, overloadClass = SOME Syntax.CLASS_CHAR })
+                                  ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = NONE (* SOME Syntax.CLASS_REAL *) })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
+                                  ,(primTyName_char, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
                                   ,(primTyName_list, { arity = 1, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
@@ -633,7 +574,6 @@ val initialEnv : Typing.Env
                                ,("Word", StrId_Word, sig_Word)
                                ,("Real", StrId_Real, sig_Real)
                                ,("String", StrId_String, sig_String)
-                               ,("Char", StrId_Char, sig_Char)
                                ,("Array", StrId_Array, sig_Array)
                                ,("Vector", StrId_Vector, sig_Vector)
                                ,("Lua", StrId_Lua, sig_Lua)

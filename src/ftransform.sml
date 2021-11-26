@@ -267,7 +267,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = let val env = addVar(env, vid, ty1)
                                                                            in genMatcher env exp ty0 innerPat
                                                                            end
-            | genMatcher env exp ty0 (F.VectorPat (pats, ellipsis, elemTy)) = let val e0 = F.AppExp(if ellipsis then F.LongVarExp(InitialEnv.VId_Int_GE) else F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_length), elemTy), exp), F.SConExp (Syntax.IntegerConstant (Vector.length pats))])
+            | genMatcher env exp ty0 (F.VectorPat (pats, ellipsis, elemTy)) = let val vectorLengthExp = F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_length), elemTy), exp)
+                                                                                  val expectedLengthExp = F.SConExp (Syntax.IntegerConstant (Vector.length pats))
+                                                                                  val e0 = if ellipsis then
+                                                                                               F.PrimExp (F.PrimFnOp Syntax.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
+                                                                                           else
+                                                                                               F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [vectorLengthExp, expectedLengthExp])
                                                                               in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_sub), elemTy), F.TupleExp [exp, F.SConExp (Syntax.IntegerConstant i)])) elemTy pat
                                                                                                                          in (env, F.SimplifyingAndalsoExp(e, exp))
                                                                                                                          end

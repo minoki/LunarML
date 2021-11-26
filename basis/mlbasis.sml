@@ -3,6 +3,104 @@ fun x <> y = Bool.not (x = y);
 type unit = {}
 datatype 'a option = NONE | SOME of 'a;
 
+structure Int = struct
+open Int (* ~, abs *)
+fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
+fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
+fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
+fun x div y = _primCall "call2" (_primVal "Int.div", x, y)
+fun x mod y = _primCall "call2" (_primVal "Int.mod", x, y)
+fun x < y = _primCall "Int.<" (x, y)
+fun x <= y = _primCall "Int.<=" (x, y)
+fun x > y = _primCall "Int.>" (x, y)
+fun x >= y = _primCall "Int.>=" (x, y)
+end
+_overload "Int" [int] { + = Int.+
+                      , - = Int.-
+                      , * = Int.*
+                      , div = Int.div
+                      , mod = Int.mod
+                      , ~ = Int.~
+                      , abs = Int.abs
+                      , < = Int.<
+                      , <= = Int.<=
+                      , > = Int.>
+                      , >= = Int.>=
+                      };
+
+structure Word = struct
+open Word (* +, -, *, ~ *)
+fun x + y = _primCall "Word.+" (x, y)
+fun x - y = _primCall "Word.-" (x, y)
+fun x * y = _primCall "Word.*" (x, y)
+fun x div y = _primCall "call2" (_primVal "Word.div", x, y)
+fun x mod y = _primCall "call2" (_primVal "Word.mod", x, y)
+fun x < y = _primCall "call2" (_primVal "Word.<", x, y)
+fun x > y = y < x
+fun x <= y = Bool.not (y < x)
+fun x >= y = Bool.not (x < y)
+end
+_overload "Word" [word] { + = Word.+
+                        , - = Word.-
+                        , * = Word.*
+                        , div = Word.div
+                        , mod = Word.mod
+                        , ~ = Word.~
+                        , < = Word.<
+                        , <= = Word.<=
+                        , > = Word.>
+                        , >= = Word.>=
+                        };
+
+structure Real = struct
+open Real (* ~, abs *)
+fun x + y = _primCall "Real.+" (x, y)
+fun x - y = _primCall "Real.-" (x, y)
+fun x * y = _primCall "Real.*" (x, y)
+fun x / y = _primCall "Real./" (x, y)
+fun x < y = _primCall "Real.<" (x, y)
+fun x <= y = _primCall "Real.<=" (x, y)
+fun x > y = _primCall "Real.>" (x, y)
+fun x >= y = _primCall "Real.>=" (x, y)
+end
+_overload "Real" [real] { + = Real.+
+                        , - = Real.-
+                        , * = Real.*
+                        , / = Real./
+                        , abs = Real.abs
+                        , ~ = Real.~
+                        , < = Real.<
+                        , <= = Real.<=
+                        , > = Real.>
+                        , >= = Real.>=
+                        };
+
+structure Char = struct
+fun x < y = _primCall "Char.<" (x, y)
+fun x <= y = _primCall "Char.<=" (x, y)
+fun x > y = _primCall "Char.>" (x, y)
+fun x >= y = _primCall "Char.>=" (x, y)
+end
+_overload "Char" [char] { < = Char.<
+                        , <= = Char.<=
+                        , > = Char.>
+                        , >= = Char.>=
+                        };
+
+structure String = struct
+open String (* size, str *)
+fun x < y = _primCall "String.<" (x, y)
+fun x <= y = _primCall "String.<=" (x, y)
+fun x > y = _primCall "String.>" (x, y)
+fun x >= y = _primCall "String.>=" (x, y)
+fun x ^ y = _primCall "String.^" (x, y)
+end
+_overload "String" [string] { < = String.<
+                            , <= = String.<=
+                            , > = String.>
+                            , >= = String.>=
+                            };
+
 structure Lua : sig
               type value
               exception TypeError of string
@@ -203,48 +301,6 @@ fun optString x : string option = let val t = typeof x
                                          raise TypeError (String.^ ("expected a string, but got ", t))
                                   end
 end;
-
-structure Int = struct
-open Int (* ~, abs, <, <=, >, >= *)
-fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
-fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
-fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
-fun x div y = _primCall "call2" (_primVal "Int.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Int.mod", x, y)
-end
-_overload "Int" [int] { + = Int.+
-                      , - = Int.-
-                      , * = Int.*
-                      , div = Int.div
-                      , mod = Int.mod
-                      , ~ = Int.~
-                      , abs = Int.abs
-                      , < = Int.<
-                      , <= = Int.<=
-                      , > = Int.>
-                      , >= = Int.>=
-                      };
-
-structure Word = struct
-open Word (* +, -, *, ~ *)
-fun x div y = _primCall "call2" (_primVal "Word.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Word.mod", x, y)
-fun x < y = _primCall "call2" (_primVal "Word.<", x, y)
-fun x > y = y < x
-fun x <= y = Bool.not (y < x)
-fun x >= y = Bool.not (x < y)
-end
-_overload "Word" [word] { + = Word.+
-                        , - = Word.-
-                        , * = Word.*
-                        , div = Word.div
-                        , mod = Word.mod
-                        , ~ = Word.~
-                        , < = Word.<
-                        , <= = Word.<=
-                        , > = Word.>
-                        , >= = Word.>=
-                        };
 
 structure Vector : sig
               datatype vector = datatype vector

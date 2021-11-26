@@ -512,34 +512,7 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                                    ,(LongVId_Fail, VId_Fail_tag)
                                                    ]
                                      end
-                       , overloadMap = let open Syntax Typing InitialEnv
-                                       in List.foldl (fn ((tyname, xs), m) => USyntax.TyNameMap.insert (m, tyname, List.foldl (fn ((key, vid), mm) => Syntax.OverloadKeyMap.insert (mm, key, FSyntax.LongVarExp vid)) Syntax.OverloadKeyMap.empty xs)) USyntax.TyNameMap.empty
-                                                     [(primTyName_real, [(OVERLOAD_abs, VId_Real_abs)
-                                                                        ,(OVERLOAD_TILDE, VId_Real_TILDE)
-                                                                        ,(OVERLOAD_DIVIDE, VId_Real_DIVIDE)
-                                                                        ,(OVERLOAD_TIMES, VId_Real_TIMES)
-                                                                        ,(OVERLOAD_PLUS, VId_Real_PLUS)
-                                                                        ,(OVERLOAD_MINUS, VId_Real_MINUS)
-                                                                        ,(OVERLOAD_LT, VId_Real_LT)
-                                                                        ,(OVERLOAD_LE, VId_Real_LE)
-                                                                        ,(OVERLOAD_GT, VId_Real_GT)
-                                                                        ,(OVERLOAD_GE, VId_Real_GE)
-                                                                        ]
-                                                      )
-                                                     ,(primTyName_char, [(OVERLOAD_LT, VId_Char_LT)
-                                                                        ,(OVERLOAD_LE, VId_Char_LE)
-                                                                        ,(OVERLOAD_GT, VId_Char_GT)
-                                                                        ,(OVERLOAD_GE, VId_Char_GE)
-                                                                        ]
-                                                      )
-                                                     ,(primTyName_string, [(OVERLOAD_LT, VId_String_LT)
-                                                                          ,(OVERLOAD_LE, VId_String_LE)
-                                                                          ,(OVERLOAD_GT, VId_String_GT)
-                                                                          ,(OVERLOAD_GE, VId_String_GE)
-                                                                          ]
-                                                      )
-                                                     ]
-                                       end
+                       , overloadMap = USyntax.TyNameMap.empty
                        }
 
 fun updateEqualityForTyVarMap(f, env : Env) : Env = { equalityForTyVarMap = f (#equalityForTyVarMap env)
