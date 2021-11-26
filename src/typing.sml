@@ -249,6 +249,36 @@ val LongVId_Bind = USyntax.MkShortVId(VId_Bind)
 
 fun isRefOrArray (tyname : USyntax.TyName) = USyntax.eqTyName (tyname, primTyName_ref) orelse USyntax.eqTyName (tyname, primTyName_array)
 
+type PrimTypeScheme = { typeVariables : (USyntax.TyVar * USyntax.UnaryConstraint list) list, argTypes : USyntax.Ty vector, resultType : USyntax.Ty }
+local
+    val tyVarA = USyntax.AnonymousTyVar 0
+    val tyVarB = USyntax.AnonymousTyVar 1
+    val tyVarC = USyntax.AnonymousTyVar 2
+    val tyVarD = USyntax.AnonymousTyVar 3
+    val tyA = USyntax.TyVar (SourcePos.nullSpan, tyVarA)
+    val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
+    val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
+    val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
+in
+fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
+    = { typeVariables = [(tyVarA, []) (* result *)
+                        ,(tyVarB, []) (* arg1 *)
+                        ,(tyVarC, []) (* arg2 *)
+                        ]
+      , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC], primTyName_function2), tyB, tyC]
+      , resultType = tyA
+      }
+  | typeOfPrimCall Syntax.PrimOp_call3
+    = { typeVariables = [(tyVarA, []) (* result *)
+                        ,(tyVarB, []) (* arg1 *)
+                        ,(tyVarC, []) (* arg2 *)
+                        ,(tyVarD, []) (* arg3 *)
+                        ]
+      , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC, tyD], primTyName_function3), tyB, tyC, tyD]
+      , resultType = tyA
+      }
+end
+
 fun newContext() : ProgramContext
     = { nextTyVar = ref 100
       , nextVId = ref 100
@@ -896,48 +926,32 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
                                          end) xs
       in (U.TyCon(span, [elemTy], primTyName_vector), U.VectorExp(span, xs, elemTy))
       end
-  | typeCheckExp(ctx, env, S.PrimExp(span, primOp as S.PrimOp_call2, tyargs, args))
-    = let val tyargs = Vector.map (fn ty => evalTy(ctx, env, ty)) tyargs
-          val (resultTy, argTy1, argTy2) = case Vector.length tyargs of
-                                               0 => (USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
-                                             | 1 => (Vector.sub(tyargs, 0), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
-                                             | 2 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), USyntax.TyVar(span, freshTyVar(ctx)))
-                                             | 3 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), Vector.sub(tyargs, 2))
-                                             | _ => emitError(ctx, [span], "invalid number of type arguments to _primCall \"call2\"")
-          val () = if Vector.length args = 3 then
+  | typeCheckExp(ctx, env, S.PrimExp(span, primOp, tyargs, args))
+    = let val () = if Vector.length tyargs = 0 then
                        ()
                    else
-                       emitError(ctx, [span], "invalid number of arguments to _primCall \"call2\"")
-          val (functionTy, function) = typeCheckExp(ctx, env, Vector.sub(args, 0))
-          val (argTy1', arg1) = typeCheckExp(ctx, env, Vector.sub(args, 1))
-          val (argTy2', arg2) = typeCheckExp(ctx, env, Vector.sub(args, 2))
-      in addConstraint(ctx, env, U.EqConstr(span, functionTy, U.TyCon(span, [resultTy, argTy1', argTy2'], primTyName_function2)))
-       ; addConstraint(ctx, env, U.EqConstr(span, argTy1, argTy1'))
-       ; addConstraint(ctx, env, U.EqConstr(span, argTy2, argTy2'))
-       ; (resultTy, U.PrimExp(span, primOp, vector [resultTy, argTy1, argTy2], vector [function, arg1, arg2]))
-      end
-  | typeCheckExp(ctx, env, S.PrimExp(span, primOp as S.PrimOp_call3, tyargs, args))
-    = let val tyargs = Vector.map (fn ty => evalTy(ctx, env, ty)) tyargs
-          val (resultTy, argTy1, argTy2, argTy3) = case Vector.length tyargs of
-                                                       0 => (USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
-                                                     | 1 => (Vector.sub(tyargs, 0), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
-                                                     | 2 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), USyntax.TyVar(span, freshTyVar(ctx)), USyntax.TyVar(span, freshTyVar(ctx)))
-                                                     | 3 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), Vector.sub(tyargs, 2), USyntax.TyVar(span, freshTyVar(ctx)))
-                                                     | 4 => (Vector.sub(tyargs, 0), Vector.sub(tyargs, 1), Vector.sub(tyargs, 2), Vector.sub(tyargs, 3))
-                                                     | _ => emitError(ctx, [span], "invalid number of type arguments to _primCall \"call2\"")
-          val () = if Vector.length args = 4 then
+                       emitError(ctx, [span], "type arguments to _primCall is not supported currently")
+          val { typeVariables, argTypes, resultType } = typeOfPrimCall primOp
+          val () = if Vector.length args = Vector.length argTypes then
                        ()
                    else
-                       emitError(ctx, [span], "invalid number of arguments to _primCall \"call3\"")
-          val (functionTy, function) = typeCheckExp(ctx, env, Vector.sub(args, 0))
-          val (argTy1', arg1) = typeCheckExp(ctx, env, Vector.sub(args, 1))
-          val (argTy2', arg2) = typeCheckExp(ctx, env, Vector.sub(args, 2))
-          val (argTy3', arg3) = typeCheckExp(ctx, env, Vector.sub(args, 3))
-      in addConstraint(ctx, env, U.EqConstr(span, functionTy, U.TyCon(span, [resultTy, argTy1', argTy2', argTy3'], primTyName_function3)))
-       ; addConstraint(ctx, env, U.EqConstr(span, argTy1, argTy1'))
-       ; addConstraint(ctx, env, U.EqConstr(span, argTy2, argTy2'))
-       ; addConstraint(ctx, env, U.EqConstr(span, argTy3, argTy3'))
-       ; (resultTy, U.PrimExp(span, primOp, vector [resultTy, argTy1, argTy2, argTy3], vector [function, arg1, arg2, arg3]))
+                       emitError(ctx, [span], "wrong number of arguments to _primCall; expected " ^ Int.toString (Vector.length argTypes) ^ ", but got " ^ Int.toString (Vector.length args))
+          val (subst, tyargs) = List.foldl (fn ((v, preds), (m, rest)) =>
+                                               let val tv = freshTyVar ctx
+                                                   val tyarg = U.TyVar (span, tv)
+                                               in List.app (fn pred => addTyVarConstraint (ctx, tv, pred)) preds
+                                                ; (U.TyVarMap.insert (m, v, tyarg), (tyarg, preds) :: rest)
+                                               end
+                                           ) (U.TyVarMap.empty, []) typeVariables
+          val argTypes = Vector.map (applySubstTy subst) argTypes
+          val resultType = applySubstTy subst resultType
+          val args = Vector.mapi (fn (i, argTy) =>
+                                     let val (argTy', arg) = typeCheckExp (ctx, env, Vector.sub (args, i))
+                                     in addConstraint (ctx, env, U.EqConstr (span, argTy, argTy'))
+                                      ; arg
+                                     end
+                                 ) argTypes
+      in (resultType, U.PrimExp (span, primOp, argTypes, args))
       end
 (* typeCheckDec : Context * Env * S.Dec -> (* created environment *) Env * U.Dec list *)
 and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))

@@ -676,6 +676,8 @@ val initialEnv : Typing.Env
                                   ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_vector, { arity = 1, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
@@ -711,6 +713,8 @@ val initialTyNameSet = let open Typing
                               ,primTyName_array
                               ,primTyName_vector
                               ,primTyName_Lua_value
+                              ,primTyName_function2
+                              ,primTyName_function3
                               ]
                        end
 end
