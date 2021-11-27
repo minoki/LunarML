@@ -71,10 +71,7 @@ fun smlNameToLua(name) = String.translate smlNameToLuaChar name
 val builtins
     = let open InitialEnv
           val map = List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                               [(USyntax.MkShortVId (FSyntax.strIdToVId StrId_General), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Bool), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Word), NONE)
+                               [(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
                                ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
@@ -85,12 +82,9 @@ val builtins
       in List.foldl (fn ((vid, name), map) => USyntax.LongVIdMap.insert (map, vid, SOME name)) map
                     [(* ref *)
                      (LongVId_ref, "_ref")
-                    ,(VId_COLONEQUAL, "_set")
-                    ,(VId_EXCLAM, "_read")
                     (* boolean *)
                     ,(LongVId_true, "true") (* boolean literal *)
                     ,(LongVId_false, "false") (* boolean literal *)
-                    ,(VId_Bool_not, "_not") (* Lua not *)
                     (* list *)
                     ,(LongVId_nil, "_nil")
                     ,(LongVId_DCOLON, "_cons")
@@ -129,25 +123,20 @@ val builtins
                     ,(USyntax.MkShortVId VId_Int_div_bin, "__Int_div")
                     ,(USyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
                     (* word *)
-                    ,(VId_Word_TILDE, "_unm") (* Lua - (unary) *)
                     ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
                     ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
                     ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
-                    ,(VId_Real_TILDE, "_unm") (* Lua - (unary) *)
                     (* String *)
-                    ,(VId_String_size, "_length")
                     ,(VId_String_str, "_id") (* no-op *)
                     (* Array and Vector *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Array_length, "_VectorOrArray_length")
                     ,(VId_Array_sub, "_VectorOrArray_sub")
                     ,(VId_Array_update, "_Array_update")
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Vector_length, "_VectorOrArray_length")
                     ,(VId_Vector_sub, "_VectorOrArray_sub")
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
@@ -279,9 +268,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             [ "_Unit_EQUAL"
                                             , "_Record_EQUAL"
                                             , "_EQUAL"
-                                            , "_unm"
-                                            , "_length"
-                                            , "_not"
                                             , "_id"
                                             , "_exn_meta"
                                             , "_Match_tag"
@@ -314,11 +300,8 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_List_EQUAL"
                                             , "_list"
                                             , "_ref"
-                                            , "_set"
-                                            , "_read"
                                             , "_Array_array"
                                             , "_VectorOrArray_fromList"
-                                            , "_VectorOrArray_length"
                                             , "_VectorOrArray_sub"
                                             , "_Vector_Array"
                                             , "_EQUAL_vector"
@@ -498,36 +481,6 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                   | NONE => NONE
                              end
                            | _ => NONE
-          val doUnary = case extractLongVId exp1 of
-                            SOME vid =>
-                            let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
-                                open InitialEnv
-                            in if USyntax.eqULongVId(vid, VId_Real_TILDE) orelse USyntax.eqULongVId(vid, VId_Word_TILDE) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_Bool_not) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 e2' }))
-                               else if USyntax.eqULongVId(vid, VId_String_size) then
-                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 e2' }))
-                               else
-                                   NONE
-                            end
-                          | _ => NONE
-          val doPolymorphicUnary = case exp1 of
-                                       F.TyAppExp (exp1', _) =>
-                                       (case extractLongVId exp1' of
-                                            SOME vid =>
-                                            let fun wrap f = SOME (fn () => doExpCont ctx env exp2 f)
-                                                open InitialEnv
-                                            in if USyntax.eqULongVId(vid, VId_EXCLAM) then
-                                                   wrap (fn (stmts, env, e2') => putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 e2' @ [ Fragment ".payload" ] }))
-                                               else if USyntax.eqULongVId(vid, VId_Vector_length) orelse USyntax.eqULongVId(vid, VId_Array_length) then
-                                                   wrap (fn (stmts, env, e2') => putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 e2' @ [ Fragment ".n" ] }))
-                                               else
-                                                   NONE
-                                            end
-                                          | NONE => NONE
-                                       )
-                                     | _ => NONE
           val doLuaCall = case (exp1, exp2) of
                               (F.AppExp(vid_luacall, f), F.PrimExp(F.VectorOp, _, xs)) =>
                               if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
@@ -566,12 +519,11 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                 else
                                     NONE
                               | _ => NONE
-          (* doTernary = if USyntax.eqVId(vid, VId_Lua_set) then ... *)
           (* doLuaGlobal: VId_Lua_global *)
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse F.isLongVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | exp1 => F.isLongVId(exp1, InitialEnv.VId_String_str)
-      in case List.mapPartial (fn x => x) [doBinary, doUnary, doPolymorphicUnary, doLuaCall, doLuaMethod] of
+      in case List.mapPartial (fn x => x) [doBinary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
@@ -816,6 +768,19 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                         end
                                     else
                                         raise CodeGenError "PrimExp.call3: invalid number of arguments"
+           | Syntax.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
+                                                   (* REPRESENTATION_OF_REF *)
+                                                   let val stmts = stmts @ Indent :: paren ~1 a @ Fragment ".payload = " :: #exp b @ [ OptSemicolon ]
+                                                   in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                   end
+                                               )
+           | Syntax.PrimOp_Ref_read => doUnary (fn (stmts, env, a) =>
+                                               (* REPRESENTATION_OF_REF *)
+                                                   putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ [ Fragment ".payload" ] })
+                                               )
+           | Syntax.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
+                                                   putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 a })
+                                               )
            | Syntax.PrimOp_Int_LT => doBinaryOp (InfixOp (10, "<"), true)
            | Syntax.PrimOp_Int_GT => doBinaryOp (InfixOp (10, ">"), true)
            | Syntax.PrimOp_Int_LE => doBinaryOp (InfixOp (10, "<="), true)
@@ -823,10 +788,16 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
            | Syntax.PrimOp_Word_PLUS => doBinaryOp (InfixOp (4, "+"), true)
            | Syntax.PrimOp_Word_MINUS => doBinaryOp (InfixOp (4, "-"), true)
            | Syntax.PrimOp_Word_TIMES => doBinaryOp (InfixOp (3, "*"), true)
+           | Syntax.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
+                                                     putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                                 )
            | Syntax.PrimOp_Real_PLUS => doBinaryOp (InfixOp (4, "+"), true)
            | Syntax.PrimOp_Real_MINUS => doBinaryOp (InfixOp (4, "-"), true)
            | Syntax.PrimOp_Real_TIMES => doBinaryOp (InfixOp (3, "*"), true)
            | Syntax.PrimOp_Real_DIVIDE => doBinaryOp (InfixOp (3, "/"), true)
+           | Syntax.PrimOp_Real_TILDE => doUnary (fn (stmts, env, a) =>
+                                                     putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                                 )
            | Syntax.PrimOp_Real_LT => doBinaryOp (InfixOp (10, "<"), true)
            | Syntax.PrimOp_Real_GT => doBinaryOp (InfixOp (10, ">"), true)
            | Syntax.PrimOp_Real_LE => doBinaryOp (InfixOp (10, "<="), true)
@@ -840,6 +811,15 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
            | Syntax.PrimOp_String_LE => doBinaryOp (InfixOp (10, "<="), true)
            | Syntax.PrimOp_String_GE => doBinaryOp (InfixOp (10, ">="), true)
            | Syntax.PrimOp_String_HAT => doBinaryOp (InfixOpR (5, ".."), true)
+           | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
+                                                      putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 a })
+                                                  )
+           | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
+                                                        putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 a @ [ Fragment ".n" ] })
+                                                    )
+           | Syntax.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
+                                                       putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 a @ [ Fragment ".n" ] })
+                                                   )
            | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
                                                    putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
                                                )

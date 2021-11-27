@@ -293,6 +293,18 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
       , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC, tyD], primTyName_function3), tyB, tyC, tyD]
       , resultType = tyA
       }
+  | typeOfPrimCall Syntax.PrimOp_Ref_set = { typeVariables = [(tyVarA, [])]
+                                           , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_ref), tyA]
+                                           , resultType = primTy_unit
+                                           }
+  | typeOfPrimCall Syntax.PrimOp_Ref_read = { typeVariables = [(tyVarA, [])]
+                                            , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_ref)]
+                                            , resultType = tyA
+                                            }
+  | typeOfPrimCall Syntax.PrimOp_Bool_not = { typeVariables = []
+                                            , argTypes = vector [primTy_bool]
+                                            , resultType = primTy_bool
+                                            }
   | typeOfPrimCall Syntax.PrimOp_Int_LT = Compare primTy_int
   | typeOfPrimCall Syntax.PrimOp_Int_LE = Compare primTy_int
   | typeOfPrimCall Syntax.PrimOp_Int_GT = Compare primTy_int
@@ -300,10 +312,18 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
   | typeOfPrimCall Syntax.PrimOp_Word_PLUS = HomoBinary primTy_word
   | typeOfPrimCall Syntax.PrimOp_Word_MINUS = HomoBinary primTy_word
   | typeOfPrimCall Syntax.PrimOp_Word_TIMES = HomoBinary primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_TILDE = { typeVariables = []
+                                              , argTypes = vector [primTy_word]
+                                              , resultType = primTy_word
+                                              }
   | typeOfPrimCall Syntax.PrimOp_Real_PLUS = HomoBinary primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_MINUS = HomoBinary primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_TIMES = HomoBinary primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_DIVIDE = HomoBinary primTy_real
+  | typeOfPrimCall Syntax.PrimOp_Real_TILDE = { typeVariables = []
+                                              , argTypes = vector [primTy_real]
+                                              , resultType = primTy_real
+                                              }
   | typeOfPrimCall Syntax.PrimOp_Real_LT = Compare primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_LE = Compare primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_GT = Compare primTy_real
@@ -317,6 +337,18 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
   | typeOfPrimCall Syntax.PrimOp_String_GT = Compare primTy_string
   | typeOfPrimCall Syntax.PrimOp_String_GE = Compare primTy_string
   | typeOfPrimCall Syntax.PrimOp_String_HAT = HomoBinary primTy_string
+  | typeOfPrimCall Syntax.PrimOp_String_size = { typeVariables = []
+                                               , argTypes = vector [primTy_string]
+                                               , resultType = primTy_int
+                                               }
+  | typeOfPrimCall Syntax.PrimOp_Vector_length = { typeVariables = [(tyVarA, [])]
+                                                 , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_vector)]
+                                                 , resultType = primTy_int
+                                                 }
+  | typeOfPrimCall Syntax.PrimOp_Array_length = { typeVariables = [(tyVarA, [])]
+                                                , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_array)]
+                                                , resultType = primTy_int
+                                                }
   | typeOfPrimCall Syntax.PrimOp_Lua_sub = LuaBinary primTy_Lua_value
   | typeOfPrimCall Syntax.PrimOp_Lua_set = { typeVariables = []
                                            , argTypes = vector [primTy_Lua_value, primTy_Lua_value, primTy_Lua_value]

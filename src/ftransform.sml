@@ -246,7 +246,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
               = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_true) | _ => false) then
                     (env, exp)
                 else if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_false) | _ => false) then
-                    (env, F.AppExp(F.LongVarExp(InitialEnv.VId_Bool_not), exp))
+                    (env, F.PrimExp(F.PrimFnOp Syntax.PrimOp_Bool_not, vector [], vector [exp]))
                 else if isExnType ty then
                     let val tag = case path of
                                       F.Root vid => (case USyntax.VIdMap.find(exnTagMap, vid) of
@@ -267,7 +267,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genMatcher env exp ty0 (F.LayeredPat (vid, ty1, innerPat)) = let val env = addVar(env, vid, ty1)
                                                                            in genMatcher env exp ty0 innerPat
                                                                            end
-            | genMatcher env exp ty0 (F.VectorPat (pats, ellipsis, elemTy)) = let val vectorLengthExp = F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_length), elemTy), exp)
+            | genMatcher env exp ty0 (F.VectorPat (pats, ellipsis, elemTy)) = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Syntax.PrimOp_Vector_length, vector [elemTy], vector [exp])
                                                                                   val expectedLengthExp = F.SConExp (Syntax.IntegerConstant (Vector.length pats))
                                                                                   val e0 = if ellipsis then
                                                                                                F.PrimExp (F.PrimFnOp Syntax.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
@@ -284,7 +284,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
             | genBinders env exp (F.RecordPat (fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.ProjectionExp { label = label, record = exp }) innerPat) fields)
             | genBinders env exp (F.ConPat(path, SOME innerPat, tyargs)) = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
                                                                                case tyargs of
-                                                                                   [tyarg] => genBinders env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_EXCLAM), tyarg), exp)) innerPat
+                                                                                   [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Syntax.PrimOp_Ref_read, vector [tyarg], vector [exp])) innerPat
                                                                                  | _ => raise Fail "invalid type arguments to 'ref'"
                                                                            else
                                                                                genBinders env (F.DataPayloadExp exp) innerPat

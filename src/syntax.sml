@@ -150,6 +150,9 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
 (* PRIMITIVES *)
 datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_call3 (* # of arguments: 4 *)
+                | PrimOp_Ref_set (* # of arguments: 2 *)
+                | PrimOp_Ref_read (* # of arguments: 1 *)
+                | PrimOp_Bool_not (* # of arguments: 1 *)
                 | PrimOp_Int_LT (* # of arguments: 2 *)
                 | PrimOp_Int_LE (* # of arguments: 2 *)
                 | PrimOp_Int_GT (* # of arguments: 2 *)
@@ -157,10 +160,12 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Word_PLUS (* # of arguments: 2 *)
                 | PrimOp_Word_MINUS (* # of arguments: 2 *)
                 | PrimOp_Word_TIMES (* # of arguments: 2 *)
+                | PrimOp_Word_TILDE (* # of arguments: 1 *)
                 | PrimOp_Real_PLUS (* # of arguments: 2 *)
                 | PrimOp_Real_MINUS (* # of arguments: 2 *)
                 | PrimOp_Real_TIMES (* # of arguments: 2 *)
                 | PrimOp_Real_DIVIDE (* # of arguments: 2 *)
+                | PrimOp_Real_TILDE (* # of arguments: 1 *)
                 | PrimOp_Real_LT (* # of arguments: 2 *)
                 | PrimOp_Real_LE (* # of arguments: 2 *)
                 | PrimOp_Real_GT (* # of arguments: 2 *)
@@ -174,6 +179,9 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_String_GT (* # of arguments: 2 *)
                 | PrimOp_String_GE (* # of arguments: 2 *)
                 | PrimOp_String_HAT (* # of arguments: 2 *)
+                | PrimOp_String_size (* # of arguments: 1 *)
+                | PrimOp_Vector_length (* # of arguments: 1 *)
+                | PrimOp_Array_length (* # of arguments: 1 *)
                 | PrimOp_Lua_sub (* # of arguments: 2 *)
                 | PrimOp_Lua_set (* # of arguments: 3 *)
                 | PrimOp_Lua_isNil (* # of arguments: 1 *)
@@ -202,6 +210,9 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Lua_isFalsy (* # of arguments: 1 *)
 fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_call3 = "call3"
+  | primOpToString PrimOp_Ref_set = "Ref.:="
+  | primOpToString PrimOp_Ref_read = "Ref.!"
+  | primOpToString PrimOp_Bool_not = "Bool.not"
   | primOpToString PrimOp_Int_LT = "Int.<"
   | primOpToString PrimOp_Int_LE = "Int.<="
   | primOpToString PrimOp_Int_GT = "Int.>"
@@ -209,10 +220,12 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Word_PLUS = "Word.+"
   | primOpToString PrimOp_Word_MINUS = "Word.-"
   | primOpToString PrimOp_Word_TIMES = "Word.*"
+  | primOpToString PrimOp_Word_TILDE = "Word.~"
   | primOpToString PrimOp_Real_PLUS = "Real.+"
   | primOpToString PrimOp_Real_MINUS = "Real.-"
   | primOpToString PrimOp_Real_TIMES = "Real.*"
   | primOpToString PrimOp_Real_DIVIDE = "Real./"
+  | primOpToString PrimOp_Real_TILDE = "Real.~"
   | primOpToString PrimOp_Real_LT = "Real.<"
   | primOpToString PrimOp_Real_LE = "Real.<="
   | primOpToString PrimOp_Real_GT = "Real.>"
@@ -226,6 +239,9 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_String_GT = "String.>"
   | primOpToString PrimOp_String_GE = "String.>="
   | primOpToString PrimOp_String_HAT = "String.^"
+  | primOpToString PrimOp_String_size = "String.size"
+  | primOpToString PrimOp_Vector_length = "Vector.length"
+  | primOpToString PrimOp_Array_length = "Array.length"
   | primOpToString PrimOp_Lua_sub = "Lua.sub"
   | primOpToString PrimOp_Lua_set = "Lua.set"
   | primOpToString PrimOp_Lua_isNil = "Lua.isNil"

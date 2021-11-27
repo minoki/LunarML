@@ -304,6 +304,9 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                            (* PRIMITIVES *)
                            "call2" => Syntax.PrimOp_call2
                          | "call3" => Syntax.PrimOp_call3
+                         | "Ref.:=" => Syntax.PrimOp_Ref_set
+                         | "Ref.!" => Syntax.PrimOp_Ref_read
+                         | "Bool.not" => Syntax.PrimOp_Bool_not
                          | "Int.<" => Syntax.PrimOp_Int_LT
                          | "Int.<=" => Syntax.PrimOp_Int_LE
                          | "Int.>" => Syntax.PrimOp_Int_GT
@@ -311,10 +314,12 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "Word.+" => Syntax.PrimOp_Word_PLUS
                          | "Word.-" => Syntax.PrimOp_Word_MINUS
                          | "Word.*" => Syntax.PrimOp_Word_TIMES
+                         | "Word.~" => Syntax.PrimOp_Word_TILDE
                          | "Real.+" => Syntax.PrimOp_Real_PLUS
                          | "Real.-" => Syntax.PrimOp_Real_MINUS
                          | "Real.*" => Syntax.PrimOp_Real_TIMES
                          | "Real./" => Syntax.PrimOp_Real_DIVIDE
+                         | "Real.~" => Syntax.PrimOp_Real_TILDE
                          | "Real.<" => Syntax.PrimOp_Real_LT
                          | "Real.<=" => Syntax.PrimOp_Real_LE
                          | "Real.>" => Syntax.PrimOp_Real_GT
@@ -328,6 +333,9 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "String.>" => Syntax.PrimOp_String_GT
                          | "String.>=" => Syntax.PrimOp_String_GE
                          | "String.^" => Syntax.PrimOp_String_HAT
+                         | "String.size" => Syntax.PrimOp_String_size
+                         | "Vector.length" => Syntax.PrimOp_Vector_length
+                         | "Array.length" => Syntax.PrimOp_Array_length
                          | "Lua.sub" => Syntax.PrimOp_Lua_sub
                          | "Lua.set" => Syntax.PrimOp_Lua_set
                          | "Lua.isNil" => Syntax.PrimOp_Lua_isNil

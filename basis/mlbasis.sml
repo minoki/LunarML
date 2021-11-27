@@ -1,3 +1,7 @@
+structure Bool = struct
+fun not x = _primCall "Bool.not" (x)
+end;
+
 fun x <> y = Bool.not (x = y);
 
 type unit = {}
@@ -29,7 +33,7 @@ _overload "Int" [int] { + = Int.+
                       };
 
 structure Word = struct
-open Word (* +, -, *, ~ *)
+fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
 fun x * y = _primCall "Word.*" (x, y)
@@ -53,7 +57,8 @@ _overload "Word" [word] { + = Word.+
                         };
 
 structure Real = struct
-open Real (* ~, abs *)
+open Real (* abs *)
+fun ~ x = _primCall "Real.~" (x)
 fun x + y = _primCall "Real.+" (x, y)
 fun x - y = _primCall "Real.-" (x, y)
 fun x * y = _primCall "Real.*" (x, y)
@@ -88,12 +93,13 @@ _overload "Char" [char] { < = Char.<
                         };
 
 structure String = struct
-open String (* size, str *)
+open String (* str *)
 fun x < y = _primCall "String.<" (x, y)
 fun x <= y = _primCall "String.<=" (x, y)
 fun x > y = _primCall "String.>" (x, y)
 fun x >= y = _primCall "String.>=" (x, y)
 fun x ^ y = _primCall "String.^" (x, y)
+fun size x = _primCall "String.size" (x)
 end
 _overload "String" [string] { < = String.<
                             , <= = String.<=
@@ -326,7 +332,8 @@ structure Vector : sig
               (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 datatype vector = datatype vector
-open Vector (* tabulate, length, sub, concat *)
+open Vector (* tabulate, sub, concat *)
+fun length vec = _primCall "Vector.length" (vec)
 val fromList = _primVal "Vector.fromList"
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
@@ -440,7 +447,6 @@ structure General : sig
               val ignore : 'a -> unit
               val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
           end = struct
-open General (* !, := *)
 type unit = {}
 type exn = exn
 exception Bind = Bind
@@ -458,6 +464,8 @@ val exnName : exn -> string
 val exnMessage : exn -> string
 *)
 datatype order = LESS | EQUAL | GREATER
+fun ! (ref x) = x
+fun x := y = _primCall "Ref.:=" (x, y)
 fun x before () = x
 fun ignore _ = ()
 fun (f o g) x = f (g x)
@@ -1138,7 +1146,8 @@ structure Array : sig
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
-open Array (* array, fromList, tabulate, length, sub, update *)
+fun length arr = _primCall "Array.length" (arr)
+open Array (* array, fromList, tabulate, sub, update *)
 end; (* structure Array *)
 
 structure IO : sig

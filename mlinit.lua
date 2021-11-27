@@ -32,15 +32,6 @@ end
 local function _EQUAL(t)
   return t[1] == t[2]
 end
-local function _unm(x)
-  return -x
-end
-local function _length(x)
-  return #x
-end
-local function _not(x)
-  return not x
-end
 
 local function _id(x)
   return x
@@ -277,12 +268,6 @@ end
 local function _ref(x)
   return { tag = "ref", payload = x }
 end
-local function _set(t)
-  t[1].payload = t[2]
-end
-local function _read(t)
-  return t.payload
-end
 
 -- Array
 local function _Array_array(t)
@@ -317,9 +302,6 @@ local function _VectorOrArray_tabulate(t)
     t[i] = f(i - 1)
   end
   return t
-end
-local function _VectorOrArray_length(t)
-  return t.n
 end
 local function _VectorOrArray_sub(t)
   local a, i = t[1], t[2]

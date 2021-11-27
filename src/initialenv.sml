@@ -93,10 +93,7 @@ fun newStrId name = let val n = !vidCounter
                     end
 fun newLongVId (strid0, strids) name = USyntax.MkLongVId(strid0, List.map Syntax.MkStrId strids, Syntax.MkVId name)
 
-val StrId_General = newStrId "General"
-val StrId_Bool = newStrId "Bool"
 val StrId_Int = newStrId "Int"
-val StrId_Word = newStrId "Word"
 val StrId_Real = newStrId "Real"
 val StrId_String = newStrId "String"
 val StrId_Vector = newStrId "Vector"
@@ -107,15 +104,12 @@ val StrId_LunarML = newStrId "LunarML"
 (* Ref *)
 val VId_ref = newVId "ref"
 val LongVId_ref = USyntax.MkShortVId VId_ref
-val VId_COLONEQUAL = newLongVId (StrId_General, []) ":="
-val VId_EXCLAM = newLongVId (StrId_General, []) "!"
 
 (* Bool *)
 val VId_true = newVId "true"
 val VId_false = newVId "false"
 val LongVId_true = USyntax.MkShortVId VId_true
 val LongVId_false = USyntax.MkShortVId VId_false
-val VId_Bool_not = newLongVId (StrId_Bool, []) "not"
 
 (* List *)
 val VId_nil = newVId "nil"
@@ -179,23 +173,15 @@ val VId_Int_TILDE = newVId "~"
 val VId_Int_abs = newVId "abs"
 end
 
-(* Word *)
-local val newVId = newLongVId (StrId_Word, [])
-in
-val VId_Word_TILDE = newVId "~"
-end
-
 (* Real *)
 local val newVId = newLongVId (StrId_Real, [])
 in
-val VId_Real_TILDE = newVId "~"
 val VId_Real_abs = newVId "abs"
 end
 
 (* String *)
 local val newVId = newLongVId (StrId_String, [])
 in
-val VId_String_size = newVId "size"
 val VId_String_str = newVId "str"
 end
 
@@ -203,7 +189,6 @@ end
 local val newVId = newLongVId (StrId_Vector, [])
 in
 val VId_Vector_tabulate = newVId "tabulate"
-val VId_Vector_length = newVId "length"
 val VId_Vector_sub = newVId "sub"
 val VId_Vector_concat = newVId "concat"
 end
@@ -214,7 +199,6 @@ in
 val VId_Array_array = newVId "array"
 val VId_Array_fromList = newVId "fromList"
 val VId_Array_tabulate = newVId "tabulate"
-val VId_Array_length = newVId "length"
 val VId_Array_sub = newVId "sub"
 val VId_Array_update = newVId "update"
 end
@@ -367,19 +351,6 @@ val initialEnv : Typing.Env
           val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
                                 , valEnv = emptyValEnv
                                 }
-          val sig_General = { tyConMap = mkTyMap []
-                            , valMap = mkValMap
-                                           [(":=", TypeScheme ([(tyVarA, [])], mkPairType(refOf tyA, tyA) --> primTy_unit)) (* forall 'a. 'a ref * 'a -> {} *)
-                                           ,("!", TypeScheme ([(tyVarA, [])], refOf tyA --> tyA)) (* forall 'a. 'a ref -> 'a *)
-                                           ]
-                            , strMap = mkStrMap []
-                            }
-          val sig_Bool = { tyConMap = mkTyMap []
-                         , valMap = mkValMap
-                                        [("not", TypeScheme ([], primTy_bool --> primTy_bool))
-                                        ]
-                         , strMap = mkStrMap []
-                         }
           val sig_Int = { tyConMap = mkTyMap []
                         , valMap = mkValMap
                                        [("~", TypeScheme ([], primTy_int --> primTy_int))
@@ -387,23 +358,15 @@ val initialEnv : Typing.Env
                                        ]
                         , strMap = mkStrMap []
                         }
-          val sig_Word = { tyConMap = mkTyMap []
-                         , valMap = mkValMap
-                                        [("~", TypeScheme ([], primTy_word --> primTy_word))
-                                        ]
-                         , strMap = mkStrMap []
-                         }
           val sig_Real = { tyConMap = mkTyMap []
                          , valMap = mkValMap
-                                        [("~", TypeScheme ([], primTy_real --> primTy_real))
-                                        ,("abs", TypeScheme ([], primTy_real --> primTy_real))
+                                        [("abs", TypeScheme ([], primTy_real --> primTy_real))
                                         ]
                          , strMap = mkStrMap []
                          }
           val sig_String = { tyConMap = mkTyMap []
                            , valMap = mkValMap
-                                          [("size", TypeScheme ([], primTy_string --> primTy_int))
-                                          ,("str", TypeScheme ([], primTy_char --> primTy_string))
+                                          [("str", TypeScheme ([], primTy_char --> primTy_string))
                                           ]
                            , strMap = mkStrMap []
                            }
@@ -412,7 +375,6 @@ val initialEnv : Typing.Env
                                          [("array", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
                                          ,("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
                                          ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> arrayOf tyA))
-                                         ,("length", TypeScheme ([(tyVarA, [])], arrayOf tyA --> primTy_int))
                                          ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(arrayOf tyA, primTy_int) --> tyA))
                                          ,("update", TypeScheme ([(tyVarA, [])], USyntax.TupleType(SourcePos.nullSpan, [arrayOf tyA, primTy_int, tyA]) --> primTy_unit))
                                          ]
@@ -421,7 +383,6 @@ val initialEnv : Typing.Env
           val sig_Vector = { tyConMap = mkTyMap []
                            , valMap = mkValMap
                                           [("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
-                                          ,("length", TypeScheme ([(tyVarA, [])], vectorOf tyA --> primTy_int))
                                           ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
                                           ,("concat", TypeScheme ([(tyVarA, [])], listOf (vectorOf tyA) --> vectorOf tyA))
                                           ]
@@ -568,10 +529,7 @@ val initialEnv : Typing.Env
                                   ]
          , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
                                Syntax.StrIdMap.empty
-                               [("General", StrId_General, sig_General)
-                               ,("Bool", StrId_Bool, sig_Bool)
-                               ,("Int", StrId_Int, sig_Int)
-                               ,("Word", StrId_Word, sig_Word)
+                               [("Int", StrId_Int, sig_Int)
                                ,("Real", StrId_Real, sig_Real)
                                ,("String", StrId_String, sig_String)
                                ,("Array", StrId_Array, sig_Array)
