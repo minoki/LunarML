@@ -74,7 +74,7 @@ local function __Int_add(x, y)
   local z = x + y
   if y > 0 and z < x then
     _raise(_Overflow, "Int.+")
-  elseif y < 0 and z < x then
+  elseif y < 0 and z > x then
     _raise(_Overflow, "Int.+")
   else
     return z
@@ -107,7 +107,7 @@ local function __Int_div(x, y)
   assert(math_type(y) == "integer")
   if y == 0 then
     _raise(_Div, "Int.div")
-  elseif x == math.mininteger and y == -1 then
+  elseif x == math_mininteger and y == -1 then
     _raise(_Overflow, "Int.div")
   end
   return x // y
@@ -132,7 +132,7 @@ local function _Int_abs(x)
   if x == math_mininteger then
     _raise(_Overflow, "Int.abs")
   end
-  return math.abs(x)
+  return math_abs(x)
 end
 
 -- Word

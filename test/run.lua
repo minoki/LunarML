@@ -113,6 +113,7 @@ should_run "should_run/" {
   "functor2.sml",
   "functor3.sml",
   "parser_combinator.sml",
+  "overflow.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
