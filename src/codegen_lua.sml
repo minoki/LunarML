@@ -263,7 +263,7 @@ fun paren allowed { prec, exp } = if allowed < prec then
                                       exp
 
 type Context = { nextLuaId : int ref }
-type Env = { boundSymbols : StringSet.set, hoistedSymbols : StringSet.set }
+type Env = { boundSymbols : StringSet.set, hoistedSymbols : StringSet.set, level : int }
 val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             [ "_Unit_EQUAL"
                                             , "_Record_EQUAL"
@@ -328,14 +328,17 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "table_unpack"
                                             ]
                        , hoistedSymbols = StringSet.empty
+                       , level = 0
                        }
-fun addSymbol ({ boundSymbols, hoistedSymbols } : Env, s)
+fun addSymbol ({ boundSymbols, hoistedSymbols, level } : Env, s)
     = { boundSymbols = StringSet.add (boundSymbols, s)
       , hoistedSymbols = hoistedSymbols
+      , level = level
       }
-fun addHoistedSymbol ({ boundSymbols, hoistedSymbols } : Env, s)
+fun addHoistedSymbol ({ boundSymbols, hoistedSymbols, level } : Env, s)
     = { boundSymbols = StringSet.add (boundSymbols, s)
       , hoistedSymbols = StringSet.add (hoistedSymbols, s)
+      , level = level
       }
 fun isHoisted ({ hoistedSymbols, ... } : Env, s)
     = StringSet.member (hoistedSymbols, s)
@@ -349,6 +352,7 @@ fun declareIfNotHoisted (env : Env, vars)
                  | _ => [ Indent, Fragment ("local " ^ String.concatWith ", " vars), LineTerminator ]
          )
       end
+fun increaseLevel ({ boundSymbols, hoistedSymbols, level } : Env) = { boundSymbols = boundSymbols, hoistedSymbols = hoistedSymbols, level = level + 1 }
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
@@ -393,6 +397,8 @@ fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = [ Fra
 datatype Destination = Return
                      | AssignTo of string
                      | UnpackingAssignTo of string list
+                     | DeclareAndAssignTo of { level : int, destination : string }
+                     | DeclareAndUnpackingAssignTo of { level : int, destinations : string list }
                      | Discard
                      | Continue of (* statements *) Fragment list * Env * (* pure expression *) Exp -> Fragment list (* the continuation should be called exactly once, and the expression should be used only once *)
 
@@ -418,15 +424,31 @@ fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
   | extractLongVId _ = NONE
 end
 
-(* doExpTo : Context -> Env -> F.Exp -> Destination -> Line list *)
+(* doExpTo : Context -> Env -> F.Exp -> Destination -> Fragment list *)
 fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
   | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
+                                                                                     stmts @ Indent :: Fragment "local " :: Fragment destination :: Fragment " = " :: #exp exp @ [ OptSemicolon ]
+                                                                                 else
+                                                                                     raise CodeGenError "invalid DeclareAndAssignTo"
+  | putPureTo ctx env (DeclareAndUnpackingAssignTo { level, destinations }) (stmts, exp) = if #level env = level then
+                                                                                               stmts @ Indent :: Fragment "local " :: Fragment (String.concatWith ", " destinations) :: Fragment " = table_unpack(" :: #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length destinations) ^ ")"), OptSemicolon ]
+                                                                                           else
+                                                                                               raise CodeGenError "invalid DeclareAndUnpackingAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
 and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
   | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+  | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
+                                                                                       stmts @ Indent :: Fragment "local " :: Fragment destination :: Fragment " = " :: #exp exp @ [ OptSemicolon ]
+                                                                                   else
+                                                                                       raise CodeGenError "invalid DeclareAndAssignTo"
+  | putImpureTo ctx env (DeclareAndUnpackingAssignTo { level, destinations }) (stmts, exp) = if #level env = level then
+                                                                                                 stmts @ Indent :: Fragment "local " :: Fragment (String.concatWith ", " destinations) :: Fragment " = table_unpack(" :: #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length destinations) ^ ")"), OptSemicolon ]
+                                                                                             else
+                                                                                                 raise CodeGenError "invalid DeclareAndUnpackingAssignTo"
   | putImpureTo ctx env Discard (stmts, exp) = stmts @ (if #prec exp = ~2 then
                                                             Indent :: #exp exp @ [ OptSemicolon ]
                                                         else
@@ -436,7 +458,7 @@ and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "
                                                            val env = addSymbol (env, dest)
                                                        in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], env, { prec = ~1, exp = [ Fragment dest ] })
                                                        end
-and doExpCont ctx env exp (cont : Fragment list * Env * Exp -> Fragment list)  = doExpTo ctx env exp (Continue cont)
+and doExpCont ctx env exp (cont : Fragment list * Env * Exp -> Fragment list) = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if Vector.length xs = 0 then
                                                                                   putPureTo ctx env dest ([], doLiteral scon)
                                                                               else
@@ -543,12 +565,12 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
           val env' = addSymbol (addSymbol (env, status), result)
           val env'' = addSymbol (env', exnName)
           val stmts = [ Indent, Fragment ("local " ^ status ^ ", " ^ result ^ " = pcall(function()"), LineTerminator, IncreaseIndent ]
-                      @ doExpTo ctx env' body Return
+                      @ doExpTo ctx (increaseLevel env') body Return
                       @ [ DecreaseIndent, Indent, Fragment "end)", OptSemicolon
                         , Indent, Fragment ("if not " ^ status ^ " then"), LineTerminator, IncreaseIndent
                         , Indent, Fragment ("local " ^ exnName ^ " = " ^ result), OptSemicolon
                         ]
-                      @ doExpTo ctx env'' handler (AssignTo result) (* TODO: tail call *)
+                      @ doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
                       @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator
                         ]
       in putPureTo ctx env dest (stmts, { prec = ~1, exp = [ Fragment result ] })
@@ -573,16 +595,16 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                         (fn (s1, env, e1') =>
                                             if List.null s1 then
                                                 [ Indent, Fragment "elseif " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                @ doExpTo ctx env e2 dest'
+                                                @ doExpTo ctx (increaseLevel env) e2 dest'
                                                 @ [ DecreaseIndent ]
                                                 @ doElseIf env e3 dest'
                                             else
                                                 [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
                                                 @ s1
                                                 @ [ Indent, Fragment "if " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                @ doExpTo ctx env e2 dest'
+                                                @ doExpTo ctx (increaseLevel (increaseLevel env)) e2 dest'
                                                 @ [ DecreaseIndent ]
-                                                @ doElseIf env e3 dest'
+                                                @ doElseIf (increaseLevel env) e3 dest'
                                                 @ [ Indent, Fragment "end", LineTerminator, DecreaseIndent ]
                                         )
                           | doElseIf env e dest' = case doExpTo ctx env e dest' of
@@ -596,22 +618,36 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                             in cont (stmts1
                                                      @ [ Indent, Fragment ("local " ^ result), LineTerminator
                                                        , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                     @ doExpTo ctx env' exp2 (AssignTo result)
+                                                     @ doExpTo ctx (increaseLevel env') exp2 (AssignTo result)
                                                      @ [ DecreaseIndent ]
                                                      @ doElseIf env' exp3 (AssignTo result)
                                                      @ [ Indent, Fragment "end", LineTerminator ]
                                                     , env', { prec = ~1, exp = [ Fragment result ] })
                                             end
+                         | DeclareAndAssignTo { level, destination } => stmts1
+                                                                        @ [ Indent, Fragment ("local " ^ destination), LineTerminator
+                                                                            , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                                                        @ doExpTo ctx (increaseLevel env) exp2 (AssignTo destination)
+                                                                        @ [ DecreaseIndent ]
+                                                                        @ doElseIf env exp3 (AssignTo destination)
+                                                                        @ [ Indent, Fragment "end", LineTerminator ]
+                         | DeclareAndUnpackingAssignTo { level, destinations } => stmts1
+                                                                                  @ [ Indent, Fragment ("local " ^ String.concatWith ", " destinations), LineTerminator
+                                                                                      , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
+                                                                                  @ doExpTo ctx (increaseLevel env) exp2 (UnpackingAssignTo destinations)
+                                                                                  @ [ DecreaseIndent ]
+                                                                                  @ doElseIf env exp3 (UnpackingAssignTo destinations)
+                                                                                  @ [ Indent, Fragment "end", LineTerminator ]
                          | _ => stmts1
                                 @ [ Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                @ doExpTo ctx env exp2 dest
+                                @ doExpTo ctx (increaseLevel env) exp2 dest
                                 @ [ DecreaseIndent ]
                                 @ doElseIf env exp3 dest
                                 @ [ Indent, Fragment "end", LineTerminator ]
                     end
               )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx env exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx (increaseLevel env) exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
   | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 record' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] }))
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
@@ -878,15 +914,22 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
     = let val luavid = VIdToLua v
-          val (env', dec) = declareIfNotHoisted (env, [luavid])
-      in dec @ doExpTo ctx env' exp (AssignTo luavid)
+      in if isHoisted (env, luavid) then
+             doExpTo ctx env exp (AssignTo luavid)
+         else
+             doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = luavid })
       end
   | doDec ctx env (F.ValDec (F.TupleBind([], exp)))
     = doExpTo ctx env exp Discard
   | doDec ctx env (F.ValDec (F.TupleBind(vars, exp)))
     = let val vars = List.map (VIdToLua o #1) vars
-          val (env', decs) = declareIfNotHoisted (env, vars)
-      in decs @ doExpTo ctx env' exp (UnpackingAssignTo vars)
+          val anyHoisted = List.exists (fn name => isHoisted (env, name)) vars
+      in if anyHoisted then
+             let val (env', decs) = declareIfNotHoisted (env, vars)
+             in decs @ doExpTo ctx env' exp (UnpackingAssignTo vars)
+             end
+         else
+             doExpTo ctx env exp (DeclareAndUnpackingAssignTo { level = #level env, destinations = vars })
       end
   | doDec ctx env (F.RecValDec valbinds)
     = let val (decs, assignments) = List.foldr (fn ((v,_,exp), (decs, assignments)) => let val v' = VIdToLua v
@@ -898,8 +941,10 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
       end
   | doDec ctx env (F.UnpackDec (tv, kind, vid, ty, exp))
     = let val luavid = VIdToLua vid
-          val (env', dec) = declareIfNotHoisted (env, [luavid])
-      in dec @ doExpTo ctx env' exp (AssignTo luavid)
+      in if isHoisted (env, luavid) then
+             doExpTo ctx env exp (AssignTo luavid)
+         else
+             doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = luavid })
       end
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
@@ -921,7 +966,7 @@ and doDec ctx env (F.ValDec (F.SimpleBind(v, _, exp)))
   | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, List.map VIdToLua (USyntax.VIdSet.toList hoist))
                                                     in dec
                                                        @ [ Indent, Fragment "do", LineTerminator, IncreaseIndent ]
-                                                       @ doDecs ctx env decs
+                                                       @ doDecs ctx (increaseLevel env) decs
                                                        @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
                                                     end
   | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
