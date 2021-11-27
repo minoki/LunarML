@@ -128,8 +128,6 @@ val builtins
                     ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
-                    (* String *)
-                    ,(VId_String_str, "_id") (* no-op *)
                     (* Array and Vector *)
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
@@ -145,8 +143,6 @@ val builtins
                     ,(VId_Lua_call, "_Lua_call")
                     ,(VId_Lua_method, "_Lua_method")
                     ,(VId_Lua_NIL, "nil") (* literal *)
-                    ,(VId_Lua_unsafeToValue, "_id") (* no-op *)
-                    ,(VId_Lua_unsafeFromValue, "_id") (* no-op *)
                     ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
                     (* extra *)
@@ -543,8 +539,8 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                               | _ => NONE
           (* doLuaGlobal: VId_Lua_global *)
           val isNoop = case exp1 of
-                           F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_Lua_unsafeToValue) orelse F.isLongVId(vid, InitialEnv.VId_Lua_unsafeFromValue) orelse F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
-                         | exp1 => F.isLongVId(exp1, InitialEnv.VId_String_str)
+                           F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
+                         | _ => false
       in case List.mapPartial (fn x => x) [doBinary, doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
@@ -856,6 +852,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
            | Syntax.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
                                                        putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 a @ [ Fragment ".n" ] })
                                                    )
+           | Syntax.PrimOp_Unsafe_cast => if Vector.length args = 1 then
+                                              doExpTo ctx env (Vector.sub (args, 0)) dest
+                                          else
+                                              raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
            | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
                                                    putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
                                                )

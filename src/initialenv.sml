@@ -179,12 +179,6 @@ in
 val VId_Real_abs = newVId "abs"
 end
 
-(* String *)
-local val newVId = newLongVId (StrId_String, [])
-in
-val VId_String_str = newVId "str"
-end
-
 (* Vector *)
 local val newVId = newLongVId (StrId_Vector, [])
 in
@@ -210,8 +204,6 @@ val VId_Lua_global = newVId "global"
 val VId_Lua_call = newVId "call"
 val VId_Lua_method = newVId "method"
 val VId_Lua_NIL = newVId "NIL"
-val VId_Lua_unsafeToValue = newVId "unsafeToValue"
-val VId_Lua_unsafeFromValue = newVId "unsafeFromValue"
 val VId_Lua_newTable = newVId "newTable"
 val VId_Lua_function = newVId "function"
 local val newVId = newLongVId (StrId_Lua, ["Lib"])
@@ -364,12 +356,6 @@ val initialEnv : Typing.Env
                                         ]
                          , strMap = mkStrMap []
                          }
-          val sig_String = { tyConMap = mkTyMap []
-                           , valMap = mkValMap
-                                          [("str", TypeScheme ([], primTy_char --> primTy_string))
-                                          ]
-                           , strMap = mkStrMap []
-                           }
           val sig_Array = { tyConMap = mkTyMap []
                           , valMap = mkValMap
                                          [("array", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
@@ -434,8 +420,6 @@ val initialEnv : Typing.Env
                                        ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
                                        ,("method", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
                                        ,("NIL", TypeScheme ([], primTy_Lua_value))
-                                       ,("unsafeToValue", TypeScheme ([(tyVarA, [])], tyA --> primTy_Lua_value))
-                                       ,("unsafeFromValue", TypeScheme ([(tyVarA, [])], primTy_Lua_value --> tyA))
                                        ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
                                        ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
                                        ]
@@ -531,7 +515,6 @@ val initialEnv : Typing.Env
                                Syntax.StrIdMap.empty
                                [("Int", StrId_Int, sig_Int)
                                ,("Real", StrId_Real, sig_Real)
-                               ,("String", StrId_String, sig_String)
                                ,("Array", StrId_Array, sig_Array)
                                ,("Vector", StrId_Vector, sig_Vector)
                                ,("Lua", StrId_Lua, sig_Lua)

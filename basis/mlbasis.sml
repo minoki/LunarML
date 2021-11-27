@@ -93,13 +93,13 @@ _overload "Char" [char] { < = Char.<
                         };
 
 structure String = struct
-open String (* str *)
 fun x < y = _primCall "String.<" (x, y)
 fun x <= y = _primCall "String.<=" (x, y)
 fun x > y = _primCall "String.>" (x, y)
 fun x >= y = _primCall "String.>=" (x, y)
 fun x ^ y = _primCall "String.^" (x, y)
 fun size x = _primCall "String.size" (x)
+fun str (x : char) : string = _primCall "Unsafe.cast" (x)
 end
 _overload "String" [string] { < = String.<
                             , <= = String.<=
@@ -197,7 +197,9 @@ structure Lua : sig
                             val lfs : value option (* LuaFileSystem *)
                         end
           end = struct
-open Lua (* type value, sub, set, global, call, method, NIL, isNil, isFalsy, unsafeToValue, unsafeFromValue, newTable, function *)
+open Lua (* type value, global, call, method, NIL, newTable, function *)
+fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
+fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
 val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue

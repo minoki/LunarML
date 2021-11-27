@@ -336,6 +336,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "String.size" => Syntax.PrimOp_String_size
                          | "Vector.length" => Syntax.PrimOp_Vector_length
                          | "Array.length" => Syntax.PrimOp_Array_length
+                         | "Unsafe.cast" => Syntax.PrimOp_Unsafe_cast
                          | "Lua.sub" => Syntax.PrimOp_Lua_sub
                          | "Lua.set" => Syntax.PrimOp_Lua_set
                          | "Lua.isNil" => Syntax.PrimOp_Lua_isNil

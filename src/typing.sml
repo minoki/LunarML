@@ -349,6 +349,10 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                                 , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_array)]
                                                 , resultType = primTy_int
                                                 }
+  | typeOfPrimCall Syntax.PrimOp_Unsafe_cast = { typeVariables = [(tyVarA, []), (tyVarB, [])]
+                                                , argTypes = vector [tyA]
+                                                , resultType = tyB
+                                                }
   | typeOfPrimCall Syntax.PrimOp_Lua_sub = LuaBinary primTy_Lua_value
   | typeOfPrimCall Syntax.PrimOp_Lua_set = { typeVariables = []
                                            , argTypes = vector [primTy_Lua_value, primTy_Lua_value, primTy_Lua_value]
