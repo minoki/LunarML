@@ -113,7 +113,6 @@ should_run "should_run/" {
   "functor2.sml",
   "functor3.sml",
   "parser_combinator.sml",
-  "overflow.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
@@ -166,6 +165,7 @@ should_run "mlbasis/should_run/" {
   "word.sml",
   "word_law.sml",
   "vector.sml",
+  "overflow.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",

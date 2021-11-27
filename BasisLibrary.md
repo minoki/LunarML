@@ -72,6 +72,8 @@ structure Int : sig
   val * : int * int -> int
   val div : int * int -> int
   val mod : int * int -> int
+  val quot : int * int -> int
+  val rem : int * int -> int
   val compare : int * int -> order
   val < : int * int -> bool
   val <= : int * int -> bool

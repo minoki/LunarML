@@ -504,6 +504,8 @@ structure Int : sig
               val * : int * int -> int
               val div : int * int -> int
               val mod : int * int -> int
+              val quot : int * int -> int
+              val rem : int * int -> int
               val compare : int * int -> order
               val < : int * int -> bool
               val <= : int * int -> bool
@@ -533,10 +535,20 @@ val precision : int option = LunarML.assumeDiscardable
                                  )
 val minInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.mininteger))
 val maxInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.maxinteger))
-(*
-val quot : int * int -> int
-val rem : int * int -> int
-*)
+fun quot (x, y) = if (x >= 0 andalso y >= 0) orelse (x <= 0 andalso y <= 0) then
+                      x div y (* raise Overflow if x = minInt and y = ~1, Div if y = 0 *)
+                  else
+                      if x = Lua.unsafeFromValue Lua.Lib.math.mininteger then
+                          if y = 1 then
+                              x
+                          else
+                              ~ (x div (~y)) (* y must be positive, so ~y cannot overflow *)
+                      else
+                          ~ ((~x) div y)
+fun rem (x, y) = if y = ~1 then
+                     0
+                 else
+                     x - quot (x, y) * y (* raise Div if y = 0 *)
 val compare : int * int -> order = fn (x, y) => if x = y then
                                                     EQUAL
                                                 else if x < y then
