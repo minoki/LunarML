@@ -100,6 +100,20 @@ and doCompile opts fileName
           val fdecs = Driver.wholeProgramOptimization fdecs
       in emitLua opts fileName fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
+               | DesugarPatternMatches.DesugarError ([], message) =>
+                 ( print ("internal error: " ^ message ^ "\n")
+                 ; OS.Process.exit OS.Process.failure
+                 )
+               | DesugarPatternMatches.DesugarError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
+                 ( if f1 = f2 then
+                       if p1 = p2 then
+                           print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
+                       else
+                           print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                   else
+                       print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                 ; OS.Process.exit OS.Process.failure
+                 )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
@@ -121,6 +135,20 @@ and doMLB opts mlbfilename
           val fdecs = Driver.wholeProgramOptimization fdecs
       in emitLua opts mlbfilename fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
+                | DesugarPatternMatches.DesugarError ([], message) =>
+                  ( print ("internal error: " ^ message ^ "\n")
+                  ; OS.Process.exit OS.Process.failure
+                  )
+                | DesugarPatternMatches.DesugarError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
+                  ( if f1 = f2 then
+                        if p1 = p2 then
+                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
+                        else
+                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                    else
+                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                  ; OS.Process.exit OS.Process.failure
+                  )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 and emitLua opts fileName decs
     = let val progDir = OS.Path.dir progName
