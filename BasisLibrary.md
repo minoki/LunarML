@@ -304,6 +304,17 @@ structure Vector : sig
 end
 val vector = Vector.fromList
 
+structure VectorSlice :> sig
+  type 'a slice
+  val length : 'a slice -> int
+  val sub : 'a slice * int -> 'a
+  val full : 'a Vector.vector -> 'a slice
+  val slice : 'a Vector.vector * int * int option -> 'a slice
+  val subslice : 'a slice * int * int option -> 'a slice
+  val vector : 'a slice -> 'a Vector.vector
+  val exists : ('a -> bool) -> 'a slice -> bool
+end
+
 structure Array : sig
   datatype array = datatype array
   datatype vector = datatype vector
@@ -313,6 +324,20 @@ structure Array : sig
   val length : 'a array -> int
   val sub : 'a array * int -> 'a
   val update : 'a array * int * 'a -> unit
+  val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
+end
+
+structure ArraySlice :> sig
+  type 'a slice
+  val length : 'a slice -> int
+  val sub : 'a slice * int -> 'a
+  val update : 'a slice * int * 'a -> unit
+  val full : 'a Array.array -> 'a slice
+  val slice : 'a Array.array * int * int option -> 'a slice
+  val subslice : 'a slice * int * int option -> 'a slice
+  val vector : 'a slice -> 'a Vector.vector
+  val copy : { src : 'a slice, dst : 'a Array.array, di : int } -> unit
+  val copyVec : { src : 'a VectorSlice.slice, dst : 'a Array.array, di : int } -> unit
 end
 
 structure IO : sig

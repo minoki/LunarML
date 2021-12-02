@@ -1157,10 +1157,24 @@ structure Array : sig
               val length : 'a array -> int
               val sub : 'a array * int -> 'a
               val update : 'a array * int * 'a -> unit
+              val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
 fun length arr = _primCall "Array.length" (arr)
+fun copyVec { src, dst, di } = let val srcLen = Vector.length src
+                               in if 0 <= di andalso di + Vector.length src <= length dst then
+                                      let fun loop i = if i >= srcLen then
+                                                           ()
+                                                       else
+                                                           ( Array.update (dst, di + i, Vector.sub (src, i))
+                                                           ; loop (i + 1)
+                                                           )
+                                      in loop 0
+                                      end
+                                  else
+                                      raise Subscript
+                               end
 open Array (* array, fromList, tabulate, sub, update *)
 end; (* structure Array *)
 

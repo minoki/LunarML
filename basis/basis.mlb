@@ -2,4 +2,6 @@ local
 _prim
 in
 mlbasis.sml
+vector-slice.sml
+array-slice.sml
 end
