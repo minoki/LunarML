@@ -1093,12 +1093,12 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
                                                                           | _ => let val espan = U.getSourceSpanOfExp exp
                                                                                      val vid' = renewVId ctx vid
                                                                                      val pat' = U.renameVarsInPat (U.VIdMap.insert(U.VIdMap.empty, vid, vid')) pat
-                                                                                 in U.CaseExp(espan, exp, ty, if isExhaustive(ctx, env, pat) then
-                                                                                                                  [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))]
-                                                                                                              else
-                                                                                                                  [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))
-                                                                                                                  ,(U.WildcardPat span, U.RaiseExp(span, ty, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
-                                                                                                                  ]
+                                                                                 in U.CaseExp(espan, exp, expTy, if isExhaustive(ctx, env, pat) then
+                                                                                                                     [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))]
+                                                                                                                 else
+                                                                                                                     [(pat', U.VarExp(espan, U.MkShortVId(vid'), Syntax.ValueVariable, []))
+                                                                                                                     ,(U.WildcardPat span, U.RaiseExp(span, ty, U.VarExp(span, LongVId_Bind, Syntax.ExceptionConstructor, [])))
+                                                                                                                     ]
                                                                                              )
                                                                                  end
                                                                       )
