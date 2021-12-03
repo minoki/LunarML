@@ -479,6 +479,22 @@ val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
+structure StringCvt : sig
+              datatype radix = BIN | OCT | DEC | HEX
+              datatype realfmt = SCI of int option
+                               | FIX of int option
+                               | GEN of int option
+                               | EXACT
+              type ('a,'b) reader = 'b -> ('a * 'b) option
+          end = struct
+datatype radix = BIN | OCT | DEC | HEX
+datatype realfmt = SCI of int option
+                 | FIX of int option
+                 | GEN of int option
+                 | EXACT
+type ('a,'b) reader = 'b -> ('a * 'b) option
+end
+
 structure Bool : sig
               datatype bool = datatype bool
               val not : bool -> bool
@@ -517,6 +533,7 @@ structure Int : sig
               val max : int * int -> int
               val sign : int -> int
               val sameSign : int * int -> bool
+              val fmt : StringCvt.radix -> int -> string
               val toString : int -> string
               val fromString : string -> int option
           end = struct
@@ -570,7 +587,27 @@ val sign : int -> int = fn x => if x > 0 then
                                 else
                                     0
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
-(* fmt *)
+fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
+  | fmt StringCvt.OCT x = if x >= 0 then
+                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
+                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              end
+                          else
+                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
+                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              end
+  | fmt StringCvt.DEC x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
+                              val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
+                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                          end
+  | fmt StringCvt.HEX x = if x >= 0 then
+                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
+                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              end
+                          else
+                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
+                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              end
 fun toString (x : int) : string = let val result = Lua.call Lua.Lib.tostring #[Lua.fromInt x]
                                       val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
@@ -617,6 +654,7 @@ structure Word : sig
               val >= : word * word -> bool
               val min : word * word -> word
               val max : word * word -> word
+              val fmt : StringCvt.radix -> word -> string
               val toString : word -> string
           end = struct
 type word = word
@@ -669,7 +707,16 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
-(* fmt *)
+fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
+  | fmt StringCvt.OCT x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
+                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                          end
+  | fmt StringCvt.DEC x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord x]
+                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                          end
+  | fmt StringCvt.HEX x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x]
+                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                          end
 val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x], 0))
 (* scan, fromString *)
 end; (* structure Word *)

@@ -53,6 +53,15 @@ structure General : sig
 end
 open General
 
+structure StringCvt : sig
+  datatype radix = BIN | OCT | DEC | HEX
+  datatype realfmt = SCI of int option
+                   | FIX of int option
+                   | GEN of int option
+                   | EXACT
+  type ('a,'b) reader = 'b -> ('a * 'b) option
+end
+
 structure Bool : sig
   datatype bool = datatype bool
   val not : bool -> bool
@@ -85,6 +94,7 @@ structure Int : sig
   val max : int * int -> int
   val sign : int -> int
   val sameSign : int * int -> bool
+  val fmt : StringCvt.radix -> int -> string
   val toString : int -> string
   val fromString : string -> int option
 end
@@ -115,6 +125,7 @@ structure Word : sig
   val >= : word * word -> bool
   val min : word * word -> word
   val max : word * word -> word
+  val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
 end
 
