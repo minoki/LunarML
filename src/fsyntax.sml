@@ -869,7 +869,7 @@ fun getEqualityForTypeFunction (ctx, env, U.TypeFunction (tyvars, ty))
           val equality = List.foldr (fn (tv, body) => F.TyAbsExp (tv, F.TypeKind, body)) equality tyvars
       in equality
       end
-fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap }) : Env * F.Exp
+fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, strMap }) : Env * F.Dec list * F.Exp
     = let val exp = F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, ids) => LongVIdToPath(longvid)) valMap
                                 , strMap = Syntax.StrIdMap.map LongStrIdToPath strMap
                                 , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, ids) => if ids = Syntax.ExceptionConstructor then
@@ -880,11 +880,11 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                                                                                  NONE
                                                                        ) valMap
                                 }
-      in (env, exp)
+      in (env, [], exp)
       end
-  | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, LongStrIdExp longstrid)
+  | strExpToFExp(ctx, env, U.StrIdExp(span, longstrid)) = (env, [], LongStrIdExp longstrid)
   | strExpToFExp(ctx, env, U.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig })
-    = let val (env', exp) = strExpToFExp(ctx, env, strExp)
+    = let val (env', decs, exp) = strExpToFExp(ctx, env, strExp)
           val packageTy = signatureToTy (ctx, env, #s packageSig)
           fun EqualityTyForArity 0 xs t = List.foldl F.FnType (F.EqualityType t) xs
             | EqualityTyForArity n xs t = let val tv = freshTyVar ctx
@@ -904,10 +904,10 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                                              end
                                                       end
                                                   ) (exp, packageTy) (payloadTypes, #bound packageSig)
-      in (env', exp)
+      in (env', decs, exp)
       end
   | strExpToFExp(ctx, env, U.FunctorAppExp { sourceSpan, funId, argumentTypes, argumentStr, packageSig })
-    = let val (env', argumentStr) = strExpToFExp (ctx, env, argumentStr)
+    = let val (env', decs, argumentStr) = strExpToFExp (ctx, env, argumentStr)
           (* val packageTy = signatureToTy (ctx, env, #s packageSig) *)
           (* <funid> <argument type>... <argument type's equality>... <structure> *)
           val exp = F.VarExp (case funId of U.MkFunId (name, n) => U.MkVId (name, n)) (* the functor id *)
@@ -920,17 +920,17 @@ fun strExpToFExp(ctx, env : Env, U.StructExp { sourceSpan, valMap, tyConMap, str
                                | ({ typeFunction = _, admitsEquality = false }, exp) => exp
                                ) exp argumentTypes (* apply the equalities *)
           val exp = F.AppExp (exp, argumentStr) (* apply the structure *)
-      in (env (* What to do? *), exp)
+      in (env (* What to do? *), decs, exp)
       end
   | strExpToFExp(ctx, env, U.LetInStrExp(span, strdecs, strexp)) = let val (env', decs) = strDecsToFDecs(ctx, env, strdecs)
-                                                                       val (env', exp) = strExpToFExp(ctx, env', strexp)
-                                                                   in (env', List.foldr F.LetExp exp decs)
+                                                                       val (env', decs', exp) = strExpToFExp(ctx, env', strexp)
+                                                                   in (env', decs @ decs', exp)
                                                                    end
 and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec])
   | strDecToFDecs(ctx, env, U.StrBindDec(span, strid, strexp, { s, bound }))
     = let val vid = F.strIdToVId strid
           val ty = signatureToTy (ctx, env, s)
-          val (env', exp) = strExpToFExp(ctx, env, strexp)
+          val (env', decs0, exp) = strExpToFExp(ctx, env, strexp)
           fun doExnTagMap (strids, { valMap, strMap, ... }, path) exnTagMap
               = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert(m, U.MkLongVId(strid, strids, vid), F.Child(path, F.ExnTagLabel vid))
                                                          | (_, (_, _), m) => m
@@ -956,7 +956,7 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                        (F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp) :: decs, F.VarExp vid, env)
                                                 end
                                             ) ([], exp, env'') bound
-      in (env, List.rev (F.ValDec(F.SimpleBind(vid, ty, exp)) :: decs))
+      in (env, [F.GroupDec(NONE, decs0 @ List.rev (F.ValDec(F.SimpleBind(vid, ty, exp)) :: decs))])
       end
   | strDecToFDecs(ctx, env, U.GroupStrDec(span, decs)) = let val (env, decs) = strDecsToFDecs(ctx, env, decs)
                                                          in (env, case decs of
@@ -979,8 +979,8 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.
                            | ({ admitsEquality = false, ... }, acc) => acc
                            ) (#equalityForTyNameMap env, []) types
           val env' = updateEqualityForTyNameMap (fn _ => equalityForTyNameMap, env)
-          val (_, body) = strExpToFExp (ctx, env', bodyStr)
-          val funexp = F.FnExp (case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n), signatureToTy (ctx, env, paramSig), body)
+          val (_, bodyDecs, bodyExp) = strExpToFExp (ctx, env', bodyStr)
+          val funexp = F.FnExp (case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n), signatureToTy (ctx, env, paramSig), List.foldr F.LetExp bodyExp bodyDecs)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)
           val funexp = List.foldr (fn ({ tyname, arity, admitsEquality = _ }, funexp) => F.TyAbsExp (F.tyNameToTyVar tyname, F.arityToKind arity, funexp)) funexp types (* type parameters *)
       in F.ValDec (F.SimpleBind (funid, F.RecordType Syntax.LabelMap.empty (* TODO *), funexp))

@@ -4,4 +4,5 @@ in
 mlbasis.sml
 vector-slice.sml
 array-slice.sml
+int-inf.sml
 end

@@ -167,6 +167,9 @@ should_run "mlbasis/should_run/" {
   "word_law.sml",
   "vector.sml",
   "overflow.sml",
+  "int-inf-fib-hex.sml",
+  "int-inf-fib.sml",
+  "int-inf-fib-monoid.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
