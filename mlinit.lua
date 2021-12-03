@@ -39,7 +39,13 @@ end
 
 local _exn_meta = {}
 function _exn_meta:__tostring()
-  return string_format("%s: %s", self.location or "<no location info>", self.tag[1])
+  local traceback = self.traceback
+  if traceback then
+    traceback = "\n" .. traceback
+  else
+    traceback = ""
+  end
+  return string_format("%s: %s%s", self.location or "<no location info>", self.tag[1], traceback)
 end
 local _Match_tag = { "Match" }
 local _Match = setmetatable({ tag = _Match_tag }, _exn_meta)
@@ -63,7 +69,8 @@ local function __exn_instanceof(e, tag)
 end
 
 local function _raise(x, location)
-  local e = setmetatable({ tag = x.tag, payload = x.payload, location = location }, _exn_meta)
+  local traceback = debug.traceback(nil, 2)
+  local e = setmetatable({ tag = x.tag, payload = x.payload, location = location, traceback = traceback }, _exn_meta)
   error(e, 1)
 end
 
