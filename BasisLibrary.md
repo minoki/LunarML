@@ -366,6 +366,8 @@ structure Array : sig
   val sub : 'a array * int -> 'a
   val update : 'a array * int * 'a -> unit
   val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
+  val appi : (int * 'a -> unit) -> 'a array -> unit
+  val app : ('a -> unit) -> 'a array -> unit
 end
 
 structure ArraySlice :> sig

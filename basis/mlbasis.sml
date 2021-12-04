@@ -1205,6 +1205,8 @@ structure Array : sig
               val sub : 'a array * int -> 'a
               val update : 'a array * int * 'a -> unit
               val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
+              val appi : (int * 'a -> unit) -> 'a array -> unit
+              val app : ('a -> unit) -> 'a array -> unit
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
@@ -1222,6 +1224,24 @@ fun copyVec { src, dst, di } = let val srcLen = Vector.length src
                                   else
                                       raise Subscript
                                end
+fun appi f arr = let val n = length arr
+                     fun loop i = if i >= n then
+                                      ()
+                                  else
+                                      ( f (i, Array.sub (arr, i))
+                                      ; loop (i + 1)
+                                      )
+                 in loop 0
+                 end
+fun app f arr = let val n = length arr
+                    fun loop i = if i >= n then
+                                     ()
+                                 else
+                                     ( f (Array.sub (arr, i))
+                                     ; loop (i + 1)
+                                     )
+                in loop 0
+                end
 open Array (* array, fromList, tabulate, sub, update *)
 end; (* structure Array *)
 
