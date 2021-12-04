@@ -573,19 +573,22 @@ fun sameSign (ZERO, ZERO) = true
 
 fun notb x = negate (add (x, fromInt 1))
 
-val ten = POSITIVE (vector [0w10])
+local
+    fun stringFmt (f, x) : string = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x], 0))
+    val ten_to_9 = POSITIVE (vector [0w1000000000])
+in
 fun toStringAbs ZERO = ""
-  | toStringAbs x = let val (q, r) = quotRem (x, ten)
-                    in toStringAbs q ^ Int.toString (toInt r)
-                    end
+  | toStringAbs x = if LT (x, ten_to_9) then
+                        stringFmt ("%u", Word.fromInt (toInt x))
+                    else
+                        let val (q, r) = quotRem (x, ten_to_9)
+                        in toStringAbs q ^ stringFmt ("%09u", Word.fromInt (toInt r))
+                        end
 
 fun toString ZERO = "0"
   | toString (x as POSITIVE _) = toStringAbs x
   | toString (NEGATIVE words) = "~" ^ toStringAbs (POSITIVE words)
 
-local
-    fun stringFmt (f, x) : string = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x], 0))
-in
 (* precondition: Vector.length words > 0 *)
 fun fmtHexAbs words = let val n = Vector.length words
                           val last = Vector.sub (words, n - 1)
