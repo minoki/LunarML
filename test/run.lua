@@ -170,6 +170,9 @@ should_run "mlbasis/should_run/" {
   "int-inf-fib-hex.sml",
   "int-inf-fib.sml",
   "int-inf-fib-monoid.sml",
+  "int-inf-factorial-hex.sml",
+  "int-inf-factorial.sml",
+  "int-inf-wilson.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
