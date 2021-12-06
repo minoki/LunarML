@@ -6,5 +6,8 @@ mlbasis.sml
 vector-slice.sml
 array-slice.sml
 word8.sml
+word16.sml
+word32.sml
+word64.sml
 int-inf.sml
 end
