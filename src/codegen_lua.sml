@@ -375,8 +375,8 @@ fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                                      end
                                                           ) s ^ "\""
 
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = [ Fragment ("-" ^ Int.toString (~ x)) ] } else {prec = 0, exp = [ Fragment (Int.toString x) ] }
-  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = [ Fragment ("0x" ^ Word.toString x) ] }
+fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = [ Fragment ("-" ^ LargeInt.toString (~ x)) ] } else { prec = 0, exp = [ Fragment (LargeInt.toString x) ] }
+  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = [ Fragment ("0x" ^ LargeInt.fmt StringCvt.HEX x) ] }
   | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
                                              { prec = 2, exp = [ Fragment (String.map (fn #"~" => #"-" | c => c) x) ] }
                                          else

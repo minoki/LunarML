@@ -48,29 +48,29 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                   in SOME (Tokens.StringConst (implode str,pos(l,c),pos(l',c'-1)), l', c', rest)
                                                   end
               | tokenizeOne (l, c, #"~" :: #"0" :: (zr as #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                                  readHexadecimalConstant (l, c, c+4, NLTNegative, hexDigitToInt x, xs)
+                                                                                  readHexadecimalConstant (l, c, c+4, NLTNegative, hexDigitToLargeInt x, xs)
                                                                               else
                                                                                   ( emitWarning (l, c+2, "there should be a space between a numeric literal and an identifier")
                                                                                   ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c+1)), l, c+2, zr)
                                                                                   )
               | tokenizeOne (l, c, #"~" :: (rest0 as x :: xs)) = if Char.isDigit x then
-                                                                     readDecimalConstant (l, c, c+2, NLTNegative, digitToInt x, xs)
+                                                                     readDecimalConstant (l, c, c+2, NLTNegative, digitToLargeInt x, xs)
                                                                  else
                                                                      readSymbolicIdentifier (l, c, [#"~"], rest0)
               | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                                     readHexadecimalConstant (l, c, c+3, NLTWord, hexDigitToInt x, xs)
+                                                                                     readHexadecimalConstant (l, c, c+3, NLTWord, hexDigitToLargeInt x, xs)
                                                                                  else
                                                                                      ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier")
                                                                                      ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
                                                                                      )
               | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: x :: xs)) = if Char.isDigit x then
-                                                                             readDecimalConstant (l, c, c+3, NLTWord, digitToInt x, xs)
+                                                                             readDecimalConstant (l, c, c+3, NLTWord, digitToLargeInt x, xs)
                                                                          else
                                                                              ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier")
                                                                              ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
                                                                              )
               | tokenizeOne (l, c, #"0" :: (rest0 as #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                             readHexadecimalConstant (l, c, c+3, NLTUnsigned, hexDigitToInt x, xs)
+                                                                             readHexadecimalConstant (l, c, c+3, NLTUnsigned, hexDigitToLargeInt x, xs)
                                                                          else
                                                                              ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier ")
                                                                              ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
@@ -81,7 +81,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                   readIdentifierOrKeyword (l, c, [x], xs)
                                               else if Char.isDigit x then
                                                   (* integer in decimal notation, or real constant *)
-                                                  readDecimalConstant (l, c, c+1, NLTUnsigned, digitToInt x, xs)
+                                                  readDecimalConstant (l, c, c+1, NLTUnsigned, digitToLargeInt x, xs)
                                               else if isSymbolChar x then
                                                   readSymbolicIdentifier (l, c, [x], xs)
                                               else if Char.isSpace x then
@@ -199,24 +199,24 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | isSymbolChar #"|" = true
               | isSymbolChar #"*" = true
               | isSymbolChar _ = false
-            and readDecimalConstant (l1, c1, c', numericLitType : NumericLitType, x0 : int, xs : char list)
+            and readDecimalConstant (l1, c1, c', numericLitType : NumericLitType, x0 : IntInf.int, xs : char list)
                 (* x0 is a decimal digit *)
                 = let fun mkIntConst (p2, a) = if numericLitType = NLTWord then
-                                                   Tokens.WordConst (Word.fromInt a,pos(l1,c1),p2)
+                                                   Tokens.WordConst (a,pos(l1,c1),p2)
                                                else if numericLitType = NLTNegative then
                                                    Tokens.ZNIntConst (~a,pos(l1,c1),p2)
                                                else if x0 <> 0 andalso numericLitType = NLTUnsigned then
                                                    Tokens.PosInt (a,pos(l1,c1),p2)
                                                else
                                                    Tokens.ZNIntConst (a,pos(l1,c1),p2)
-                      fun mkRealConst (p2, intPart, fracPart, expPart)
+                      fun mkRealConst (p2, intPart : IntInf.int, fracPart, expPart)
                           = let val s = if fracPart = "" then
-                                            Int.toString intPart ^ "e" ^ Int.toString expPart
+                                            IntInf.toString intPart ^ "e" ^ Int.toString expPart
                                         else
-                                            Int.toString intPart ^ "." ^ fracPart ^ "e" ^ Int.toString expPart
+                                            IntInf.toString intPart ^ "." ^ fracPart ^ "e" ^ Int.toString expPart
                             in Tokens.RealConst (s,pos(l1,c1),p2)
                             end
-                      fun parseIntPart (l, c, a, rest0 as #"." :: x2 :: rest1)
+                      fun parseIntPart (l, c, a : IntInf.int, rest0 as #"." :: x2 :: rest1)
                           = if numericLitType <> NLTWord andalso Char.isDigit x2 then
                                 parseFracPart (l, c+2, a, String.str x2, rest1)
                             else
@@ -235,7 +235,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                 parseMoreIntPart (l, c, a, rest0)
                         | parseIntPart (l, c, a, rest) = parseMoreIntPart (l, c, a, rest)
                       and parseMoreIntPart (l, c, a, rest0 as x1 :: rest1) = if Char.isDigit x1 then
-                                                                                 parseIntPart (l, c+1, a * 10 + digitToInt x1, rest1)
+                                                                                 parseIntPart (l, c+1, a * 10 + digitToLargeInt x1, rest1)
                                                                              else
                                                                                  ( if Char.isAlpha x1 then
                                                                                        emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
@@ -244,7 +244,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                  ; SOME (mkIntConst(pos(l,c-1),a), l, c, rest0)
                                                                                  )
                         | parseMoreIntPart (l, c, a, rest0) = SOME (mkIntConst(pos(l,c-1),a), l, c, rest0)
-                      and parseFracPart (l, c, intPart, fracPart : string, rest0 as x :: rest1)
+                      and parseFracPart (l, c, intPart : IntInf.int, fracPart : string, rest0 as x :: rest1)
                           = if Char.isDigit x then
                                 parseFracPart (l, c+1, intPart, fracPart ^ String.str x, rest1) (* TODO: a better impl? *)
                             else if x = #"e" orelse x = #"E" then
@@ -261,7 +261,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                             else
                                 SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
                         | parseFracPart (l, c, intPart, fracPart, rest0 as nil) = SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
-                      and parseExpPart (l, c, intPart : int, fracPart : string, expSign : int, expPart : int, rest0 as x :: rest1)
+                      and parseExpPart (l, c, intPart : IntInf.int, fracPart : string, expSign : int, expPart : int, rest0 as x :: rest1)
                           = if Char.isDigit x then
                                 parseExpPart (l, c+1, intPart, fracPart, expSign, expPart * 10 + digitToInt x, rest1)
                             else
@@ -270,16 +270,16 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                           = SOME (mkRealConst (pos(l,c-1), intPart, fracPart, expSign * expPart), l, c, rest0)
                   in parseIntPart (l1, c', x0, xs)
                   end
-            and readHexadecimalConstant (l1, c1, c', numericLitType : NumericLitType, x : int, xs : char list)
+            and readHexadecimalConstant (l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
                 (* x is a hexadecimal digit *)
                 = let fun mkIntConst (p2, a) = if numericLitType = NLTWord then
-                                                   Tokens.WordConst (Word.fromInt a,pos(l1,c1),p2)
+                                                   Tokens.WordConst (a,pos(l1,c1),p2)
                                                else if numericLitType = NLTNegative then
                                                    Tokens.ZNIntConst (~a,pos(l1,c1),p2)
                                                else
                                                    Tokens.ZNIntConst (a,pos(l1,c1),p2)
                       fun parseIntPart (l, c, a, rest0 as x1 :: rest1) = if Char.isHexDigit x1 then
-                                                                             parseIntPart (l, c+1, a * 16 + hexDigitToInt x1, rest1)
+                                                                             parseIntPart (l, c+1, a * 16 + hexDigitToLargeInt x1, rest1)
                                                                          else
                                                                              SOME (mkIntConst(pos(l,c-1), a), l, c, rest0)
                         | parseIntPart (l, c, a, rest0) = SOME (mkIntConst(pos(l,c-1),a), l, c, rest0)
@@ -348,12 +348,14 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                       )
               | readStringLit (l0, c0, l, c, accum, x :: xs) = readStringLit (l0, c0, l, c+1, x :: accum, xs)
             and digitToInt x = ord x - ord #"0"
+            and digitToLargeInt x = Int.toLarge (digitToInt x)
             and hexDigitToInt x = if ord #"A" <= ord x andalso ord x <= ord #"F" then
                                       ord x - ord #"A" + 10
                                   else if ord #"a" <= ord x andalso ord x <= ord #"f" then
                                       ord x - ord #"a" + 10
                                   else
                                       ord x - ord #"0"
+            and hexDigitToLargeInt x = Int.toLarge (hexDigitToInt x)
             and skipFormattingCharacters (l0, c0, l, c, accum, nil) = ( emitError (l0, c0, "unterminated string literal")
                                                                       ; (l, c, rev accum, nil)
                                                                       )
