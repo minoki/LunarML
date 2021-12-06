@@ -112,7 +112,7 @@ fun length vec = _primCall "Vector.length" (vec)
 fun sub (vec, i) = if i < 0 orelse length vec <= i then
                        raise Subscript
                    else
-                       _primCall "Unsafe.Vector.sub" (vec, i)
+                       Unsafe.Vector.sub (vec, i)
 open Vector (* tabulate, concat *)
 end
 
@@ -348,17 +348,17 @@ val fromList = _primVal "Vector.fromList"
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
                                                        else
-                                                           sub (vec, i)
+                                                           Unsafe.Vector.sub (vec, i)
                                   )
 local
     fun foldli' (f, acc, vec, i) = if i >= length vec then
                                        acc
                                    else
-                                       foldli' (f, f (i, sub (vec, i), acc), vec, i + 1)
+                                       foldli' (f, f (i, Unsafe.Vector.sub (vec, i), acc), vec, i + 1)
     fun foldri' (f, acc, vec, i) = if i < 0 then
                                        acc
                                    else
-                                       foldri' (f, f (i, sub (vec, i), acc), vec, i - 1)
+                                       foldri' (f, f (i, Unsafe.Vector.sub (vec, i), acc), vec, i - 1)
 in
 fun foldli f init vec : 'b = foldli' (f, init, vec, 0)
 fun foldri f init vec : 'b = foldri' (f, init, vec, length vec - 1)
@@ -367,11 +367,11 @@ local
     fun foldl' (f, acc, vec, i) = if i >= length vec then
                                       acc
                                   else
-                                      foldl' (f, f (sub (vec, i), acc), vec, i + 1)
+                                      foldl' (f, f (Unsafe.Vector.sub (vec, i), acc), vec, i + 1)
     fun foldr' (f, acc, vec, i) = if i < 0 then
                                       acc
                                   else
-                                      foldr' (f, f (sub (vec, i), acc), vec, i - 1)
+                                      foldr' (f, f (Unsafe.Vector.sub (vec, i), acc), vec, i - 1)
 in
 fun foldl (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldl' (f, init, vec, 0)
 fun foldr (f : 'a * 'b -> 'b) (init : 'b) (vec : 'a vector) : 'b = foldr' (f, init, vec, length vec - 1)
@@ -380,7 +380,7 @@ fun appi f vec = let val n = length vec
                      fun go i = if i = n then
                                     ()
                                 else
-                                    ( f (i, sub (vec, i)) : unit
+                                    ( f (i, Unsafe.Vector.sub (vec, i)) : unit
                                     ; go (i + 1)
                                     )
                  in go 0
@@ -389,18 +389,18 @@ fun app f vec = let val n = length vec
                     fun go i = if i = n then
                                    ()
                                else
-                                   ( f (sub (vec, i)) : unit
+                                   ( f (Unsafe.Vector.sub (vec, i)) : unit
                                    ; go (i + 1)
                                    )
                 in go 0
                 end
-fun mapi f vec = tabulate (length vec, fn i => f (i, sub (vec, i)))
-fun map f vec = tabulate (length vec, fn i => f (sub (vec, i)))
+fun mapi f vec = tabulate (length vec, fn i => f (i, Unsafe.Vector.sub (vec, i)))
+fun map f vec = tabulate (length vec, fn i => f (Unsafe.Vector.sub (vec, i)))
 fun findi f vec = let val n = length vec
                       fun go i = if i = n then
                                      NONE
                                  else
-                                     let val x = sub (vec, i)
+                                     let val x = Unsafe.Vector.sub (vec, i)
                                      in if f (i, x) then
                                             SOME (i, x)
                                         else
@@ -412,7 +412,7 @@ fun find f vec = let val n = length vec
                      fun go i = if i = n then
                                     NONE
                                 else
-                                    let val x = sub (vec, i)
+                                    let val x = Unsafe.Vector.sub (vec, i)
                                     in if f x then
                                            SOME x
                                        else
@@ -424,14 +424,14 @@ fun exists f vec = let val n = length vec
                        fun go i = if i = n then
                                       false
                                   else
-                                      f (sub (vec, i)) orelse go (i + 1)
+                                      f (Unsafe.Vector.sub (vec, i)) orelse go (i + 1)
                    in go 0
                    end
 fun all f vec = let val n = length vec
                     fun go i = if i = n then
                                    true
                                else
-                                   f (sub (vec, i)) andalso go (i + 1)
+                                   f (Unsafe.Vector.sub (vec, i)) andalso go (i + 1)
                 in go 0
                 end
 end
@@ -1151,7 +1151,7 @@ fun collate compare (xs, ys) = let val xl = length xs
                                                   (true, true) => EQUAL
                                                 | (true, false) => LESS
                                                 | (false, true) => GREATER
-                                                | (false, false) => case compare (sub (xs, i), sub (ys, i)) of
+                                                | (false, false) => case compare (Unsafe.Vector.sub (xs, i), Unsafe.Vector.sub (ys, i)) of
                                                                         EQUAL => go (i + 1)
                                                                       | t => t
                                in go 0
@@ -1222,17 +1222,17 @@ fun length arr = _primCall "Array.length" (arr)
 fun sub (arr, i) = if i < 0 orelse length arr <= i then
                        raise Subscript
                    else
-                       _primCall "Unsafe.Array.sub" (arr, i)
+                       Unsafe.Array.sub (arr, i)
 fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                                  raise Subscript
                              else
-                                 _primCall "Unsafe.Array.update" (arr, i, value)
+                                 Unsafe.Array.update (arr, i, value)
 fun copyVec { src, dst, di } = let val srcLen = Vector.length src
                                in if 0 <= di andalso di + Vector.length src <= length dst then
                                       let fun loop i = if i >= srcLen then
                                                            ()
                                                        else
-                                                           ( update (dst, di + i, Vector.sub (src, i))
+                                                           ( Unsafe.Array.update (dst, di + i, Unsafe.Vector.sub (src, i))
                                                            ; loop (i + 1)
                                                            )
                                       in loop 0
@@ -1244,7 +1244,7 @@ fun appi f arr = let val n = length arr
                      fun loop i = if i >= n then
                                       ()
                                   else
-                                      ( f (i, sub (arr, i))
+                                      ( f (i, Unsafe.Array.sub (arr, i))
                                       ; loop (i + 1)
                                       )
                  in loop 0
@@ -1253,7 +1253,7 @@ fun app f arr = let val n = length arr
                     fun loop i = if i >= n then
                                      ()
                                  else
-                                     ( f (sub (arr, i))
+                                     ( f (Unsafe.Array.sub (arr, i))
                                      ; loop (i + 1)
                                      )
                 in loop 0

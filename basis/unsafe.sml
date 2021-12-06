@@ -4,7 +4,7 @@ structure Unsafe : sig
                         end
               structure Array : sig
                             val sub : 'a array * int -> 'a
-                            val update : 'a array * int * 'a -> unit
+                            val update : 'a array * int * 'a -> {}
                         end
               val cast : 'a -> 'b
           end = struct

@@ -1,8 +1,8 @@
 local
 _prim
 in
-mlbasis.sml
 unsafe.sml
+mlbasis.sml
 vector-slice.sml
 array-slice.sml
 word8.sml
