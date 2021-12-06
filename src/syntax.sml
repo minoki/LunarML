@@ -183,6 +183,9 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Vector_length (* # of arguments: 1 *)
                 | PrimOp_Array_length (* # of arguments: 1 *)
                 | PrimOp_Unsafe_cast (* # of arguments: 1 *)
+                | PrimOp_Unsafe_Vector_sub (* # of arguments: 2 *)
+                | PrimOp_Unsafe_Array_sub (* # of arguments: 2 *)
+                | PrimOp_Unsafe_Array_update (* # of arguments: 3 *)
                 | PrimOp_Lua_sub (* # of arguments: 2 *)
                 | PrimOp_Lua_set (* # of arguments: 3 *)
                 | PrimOp_Lua_isNil (* # of arguments: 1 *)
@@ -244,6 +247,9 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Vector_length = "Vector.length"
   | primOpToString PrimOp_Array_length = "Array.length"
   | primOpToString PrimOp_Unsafe_cast = "Unsafe.cast"
+  | primOpToString PrimOp_Unsafe_Vector_sub = "Unsafe.Vector.sub"
+  | primOpToString PrimOp_Unsafe_Array_sub = "Unsafe.Array.sub"
+  | primOpToString PrimOp_Unsafe_Array_update = "Unsafe.Array.update"
   | primOpToString PrimOp_Lua_sub = "Lua.sub"
   | primOpToString PrimOp_Lua_set = "Lua.set"
   | primOpToString PrimOp_Lua_isNil = "Lua.isNil"

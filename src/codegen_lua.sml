@@ -103,7 +103,6 @@ val builtins
                     ,(VId_Size_tag, "_Size_tag")
                     ,(VId_Subscript_tag, "_Subscript_tag")
                     ,(VId_Fail_tag, "_Fail_tag")
-	            (* VId_EQUAL *)
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
                     ,(VId_EQUAL_bool, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_int, "_EQUAL") (* Lua == *)
@@ -132,10 +131,7 @@ val builtins
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Array_sub, "_VectorOrArray_sub")
-                    ,(VId_Array_update, "_Array_update")
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Vector_sub, "_VectorOrArray_sub")
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
@@ -298,7 +294,6 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_ref"
                                             , "_Array_array"
                                             , "_VectorOrArray_fromList"
-                                            , "_VectorOrArray_sub"
                                             , "_Vector_Array"
                                             , "_EQUAL_vector"
                                             , "_Lua_global"
@@ -856,6 +851,17 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                               doExpTo ctx env (Vector.sub (args, 0)) dest
                                           else
                                               raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+           | Syntax.PrimOp_Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
+                                                             putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 vec @ Fragment "[" :: paren 4 i @ [ Fragment " + 1]" ] })
+                                                         )
+           | Syntax.PrimOp_Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
+                                                             putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 arr @ Fragment "[" :: paren 4 i @ [ Fragment " + 1]" ] })
+                                                         )
+           | Syntax.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
+                                                                let val stmts = stmts @ Indent :: paren ~1 arr @ Fragment "[" :: paren 4 i @ Fragment " + 1] = " :: #exp v @ [ OptSemicolon ]
+                                                                in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                                end
+                                                            )
            | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
                                                    putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
                                                )

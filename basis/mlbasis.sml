@@ -107,6 +107,15 @@ _overload "String" [string] { < = String.<
                             , >= = String.>=
                             };
 
+structure Vector = struct
+fun length vec = _primCall "Vector.length" (vec)
+fun sub (vec, i) = if i < 0 orelse length vec <= i then
+                       raise Subscript
+                   else
+                       _primCall "Unsafe.Vector.sub" (vec, i)
+open Vector (* tabulate, concat *)
+end
+
 structure Lua : sig
               type value
               exception TypeError of string
@@ -334,8 +343,7 @@ structure Vector : sig
               (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 datatype vector = datatype vector
-open Vector (* tabulate, sub, concat *)
-fun length vec = _primCall "Vector.length" (vec)
+open Vector (* tabulate, concat, length, sub *)
 val fromList = _primVal "Vector.fromList"
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
@@ -1211,12 +1219,20 @@ structure Array : sig
 datatype array = datatype array
 datatype vector = datatype vector
 fun length arr = _primCall "Array.length" (arr)
+fun sub (arr, i) = if i < 0 orelse length arr <= i then
+                       raise Subscript
+                   else
+                       _primCall "Unsafe.Array.sub" (arr, i)
+fun update (arr, i, value) = if i < 0 orelse length arr <= i then
+                                 raise Subscript
+                             else
+                                 _primCall "Unsafe.Array.update" (arr, i, value)
 fun copyVec { src, dst, di } = let val srcLen = Vector.length src
                                in if 0 <= di andalso di + Vector.length src <= length dst then
                                       let fun loop i = if i >= srcLen then
                                                            ()
                                                        else
-                                                           ( Array.update (dst, di + i, Vector.sub (src, i))
+                                                           ( update (dst, di + i, Vector.sub (src, i))
                                                            ; loop (i + 1)
                                                            )
                                       in loop 0
@@ -1228,7 +1244,7 @@ fun appi f arr = let val n = length arr
                      fun loop i = if i >= n then
                                       ()
                                   else
-                                      ( f (i, Array.sub (arr, i))
+                                      ( f (i, sub (arr, i))
                                       ; loop (i + 1)
                                       )
                  in loop 0
@@ -1237,12 +1253,12 @@ fun app f arr = let val n = length arr
                     fun loop i = if i >= n then
                                      ()
                                  else
-                                     ( f (Array.sub (arr, i))
+                                     ( f (sub (arr, i))
                                      ; loop (i + 1)
                                      )
                 in loop 0
                 end
-open Array (* array, fromList, tabulate, sub, update *)
+open Array (* array, fromList, tabulate *)
 end; (* structure Array *)
 
 structure IO : sig

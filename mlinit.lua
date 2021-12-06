@@ -310,21 +310,6 @@ local function _VectorOrArray_tabulate(t)
   end
   return t
 end
-local function _VectorOrArray_sub(t)
-  local a, i = t[1], t[2]
-  if i < 0 or a.n <= i then
-    _raise(_Subscript, "(Vector|Array).sub")
-  end
-  return a[i+1]
-end
-local function _Array_update(t)
-  local a, i, x = t[1], t[2], t[3]
-  if i < 0 or a.n <= i then
-    _raise(_Subscript, "Array.update")
-  end
-  a[i+1] = x
-  return nil
-end
 
 -- Vector
 local function _Vector_EQUAL(eq)

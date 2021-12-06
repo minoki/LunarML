@@ -275,7 +275,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                  F.PrimExp (F.PrimFnOp Syntax.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
                              else
                                  F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_sub), elemTy), F.TupleExp [exp, F.SConExp (Syntax.IntegerConstant i)])) elemTy pat
+                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant i)])) elemTy pat
                                                            in (env, F.SimplifyingAndalsoExp(e, exp))
                                                            end
                                  ) (env, e0) pats
@@ -292,7 +292,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                                                      genBinders env (F.DataPayloadExp exp) innerPat
             | genBinders env exp (F.ConPat(span, path, NONE, tyargs)) = []
             | genBinders env exp (F.LayeredPat(span, vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
-            | genBinders env exp (F.VectorPat(span, pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.AppExp(F.TyAppExp(F.LongVarExp(InitialEnv.VId_Vector_sub), elemTy), F.TupleExp [exp, F.SConExp (Syntax.IntegerConstant i)])) pat @ acc) [] pats
+            | genBinders env exp (F.VectorPat(span, pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant i)])) pat @ acc) [] pats
           and isExhaustive env (F.WildcardPat _) = true
             | isExhaustive env (F.SConPat _) = false
             | isExhaustive env (F.VarPat _) = true

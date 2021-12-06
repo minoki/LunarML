@@ -183,7 +183,6 @@ end
 local val newVId = newLongVId (StrId_Vector, [])
 in
 val VId_Vector_tabulate = newVId "tabulate"
-val VId_Vector_sub = newVId "sub"
 val VId_Vector_concat = newVId "concat"
 end
 
@@ -193,8 +192,6 @@ in
 val VId_Array_array = newVId "array"
 val VId_Array_fromList = newVId "fromList"
 val VId_Array_tabulate = newVId "tabulate"
-val VId_Array_sub = newVId "sub"
-val VId_Array_update = newVId "update"
 end
 
 (* Lua interface *)
@@ -361,15 +358,12 @@ val initialEnv : Typing.Env
                                          [("array", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
                                          ,("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
                                          ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> arrayOf tyA))
-                                         ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(arrayOf tyA, primTy_int) --> tyA))
-                                         ,("update", TypeScheme ([(tyVarA, [])], USyntax.TupleType(SourcePos.nullSpan, [arrayOf tyA, primTy_int, tyA]) --> primTy_unit))
                                          ]
                           , strMap = mkStrMap []
                           }
           val sig_Vector = { tyConMap = mkTyMap []
                            , valMap = mkValMap
                                           [("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
-                                          ,("sub", TypeScheme ([(tyVarA, [])], mkPairType(vectorOf tyA, primTy_int) --> tyA))
                                           ,("concat", TypeScheme ([(tyVarA, [])], listOf (vectorOf tyA) --> vectorOf tyA))
                                           ]
                            , strMap = mkStrMap []
