@@ -47,6 +47,16 @@ structure IntInf :> sig
               val << : int * Word.word -> int
               val ~>> : int * Word.word -> int
           end = struct
+structure Vector = struct
+open Vector
+val sub = Unsafe.Vector.sub
+end
+structure Array = struct
+open Array
+val sub = Unsafe.Array.sub
+val update = Unsafe.Array.update
+end
+
 datatype int = ZERO
              | POSITIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
              | NEGATIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
@@ -221,6 +231,23 @@ fun mulAbs (words, words') = let val m = Vector.length words
                                           end
                              in normalize arr
                              end
+
+fun mulAbsSingle (words, 0w0) = vector []
+  | mulAbsSingle (words, v) = let val m = Vector.length words
+                                  val arr = Array.array (m + 1, 0w0)
+                                  val () = let fun loop (i, k) = if i >= m then
+                                                                     Array.update (arr, i, k)
+                                                                 else
+                                                                     let val u = Vector.sub (words, i)
+                                                                         val { lo, hi } = mul2 (u, v)
+                                                                         val { lo, hi = hi' } = add2 (lo, k)
+                                                                     in Array.update (arr, i, lo)
+                                                                      ; loop (i + 1, hi + hi')
+                                                                     end
+                                           in loop (0, 0w0)
+                                           end
+                              in normalize arr
+                              end
 
 fun negate (POSITIVE words) = NEGATIVE words
   | negate (NEGATIVE words) = POSITIVE words
@@ -410,18 +437,19 @@ fun quotRemAbs (words, words') : word vector * word vector
                                       val u0 = Array.sub (words, j + n - 1)
                                       val v = Vector.sub (words', n - 1)
                                       val (q', r') = quotRem2 (u1, u0, v)
-                                      fun loop2 q' = let val w = mulAbs (vector [q'], words')
+                                      fun loop2 q' = let val w = mulAbsSingle (words', q') (* = mulAbs (vector [q'], words') *)
                                                          val ws = ArraySlice.vector (ArraySlice.slice (words, j, NONE))
                                                      in case compareAbs (ws, w) of
                                                             LESS => loop2 (q' - 0w1)
-                                                          | _ => let fun l k = if k >= Array.length words then
+                                                          | _ => let val d = subAbs (ws, w)
+                                                                     fun l k = if k >= Array.length words then
                                                                                    ()
                                                                                else
                                                                                    ( Array.update (words, k, 0w0)
                                                                                    ; l (k + 1)
                                                                                    )
-                                                                     val () = l j
-                                                                 in Array.copyVec { src = subAbs (ws, w), dst = words, di = j }
+                                                                     val () = l (j + Vector.length d)
+                                                                 in Array.copyVec { src = d, dst = words, di = j }
                                                                   ; q'
                                                                  end
                                                      end
