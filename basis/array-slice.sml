@@ -17,11 +17,11 @@ type 'a slice = { base : 'a array
                 }
 val length : 'a slice -> int = #length
 fun sub ({ base, start, length }, i) = if 0 <= i andalso i < length then
-                                           Array.sub (base, start + i)
+                                           Unsafe.Array.sub (base, start + i)
                                        else
                                            raise Subscript
 fun update ({ base, start, length }, i, x) = if 0 <= i andalso i < length then
-                                                 Array.update (base, start + i)
+                                                 Unsafe.Array.update (base, start + i)
                                              else
                                                  raise Subscript
 fun full a = { base = a, start = 0, length = Array.length a }
@@ -41,17 +41,17 @@ fun subslice ({ base, start, length }, i, NONE) = if 0 <= i andalso i <= length 
                                                         { base = base, start = start + i, length = n }
                                                     else
                                                         raise Subscript
-fun vector { base, start, length } = Vector.tabulate (length, fn i => Array.sub (base, start + i))
+fun vector { base, start, length } = Vector.tabulate (length, fn i => Unsafe.Array.sub (base, start + i))
 fun copy { src = { base, start, length }, dst, di } = let fun forward i = if i >= length then
                                                                               ()
                                                                           else
-                                                                              ( Array.update (dst, di + i, Array.sub (base, start + i))
+                                                                              ( Array.update (dst, di + i, Unsafe.Array.sub (base, start + i))
                                                                               ; forward (i + 1)
                                                                               )
                                                           fun backward i = if i < 0 then
                                                                                ()
                                                                            else
-                                                                               ( Array.update (dst, di + i, Array.sub (base, start + i))
+                                                                               ( Array.update (dst, di + i, Unsafe.Array.sub (base, start + i))
                                                                                ; backward (i - 1)
                                                                                )
                                                       in if start >= di then

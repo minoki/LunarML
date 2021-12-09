@@ -15,7 +15,7 @@ type 'a slice = { base : 'a vector
                 }
 val length : 'a slice -> int = #length
 fun sub ({ base, start, length }, i) = if 0 <= i andalso i < length then
-                                           Vector.sub (base, start + i)
+                                           Unsafe.Vector.sub (base, start + i)
                                        else
                                            raise Subscript
 fun full a = { base = a, start = 0, length = Vector.length a }
@@ -35,11 +35,11 @@ fun subslice ({ base, start, length }, i, NONE) = if 0 <= i andalso i <= length 
                                                         { base = base, start = start + i, length = n }
                                                     else
                                                         raise Subscript
-fun vector { base, start, length } = Vector.tabulate (length, fn i => Vector.sub (base, start + i))
+fun vector { base, start, length } = Vector.tabulate (length, fn i => Unsafe.Vector.sub (base, start + i))
 fun exists f { base, start, length } = let fun loop i = if i >= length then
                                                             false
                                                         else
-                                                            if f (Vector.sub (base, start + i)) then
+                                                            if f (Unsafe.Vector.sub (base, start + i)) then
                                                                 true
                                                             else
                                                                 loop (i + 1)
