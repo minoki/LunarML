@@ -77,8 +77,8 @@ end
 
 -- Int
 local function __Int_add(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   local z = x + y
   if y > 0 and z < x then
     _raise(_Overflow, "Int.+")
@@ -89,8 +89,8 @@ local function __Int_add(x, y)
   end
 end
 local function __Int_sub(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   local z = x - y
   if y < 0 and z < x then
     _raise(_Overflow, "Int.-")
@@ -101,8 +101,8 @@ local function __Int_sub(x, y)
   end
 end
 local function __Int_mul(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   local z = x * y
   if (x ~= 0 and z // x ~= y) or (y ~= 0 and z // y ~= x) then
     _raise(_Overflow, "Int.*")
@@ -111,8 +111,8 @@ local function __Int_mul(x, y)
   end
 end
 local function __Int_div(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   if y == 0 then
     _raise(_Div, "Int.div")
   elseif x == math_mininteger and y == -1 then
@@ -121,22 +121,22 @@ local function __Int_div(x, y)
   return x // y
 end
 local function __Int_mod(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   if y == 0 then
     _raise(_Div, "Int.mod")
   end
   return x % y
 end
 local function _Int_negate(x)
-  assert(math_type(x) == "integer")
+  -- assert(math_type(x) == "integer")
   if x == math_mininteger then
     _raise(_Overflow, "Int.~")
   end
   return - x
 end
 local function _Int_abs(x)
-  assert(math_type(x) == "integer")
+  -- assert(math_type(x) == "integer")
   if x == math_mininteger then
     _raise(_Overflow, "Int.abs")
   end
@@ -145,8 +145,8 @@ end
 
 -- Word
 local function __Word_div(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   if y == 0 then
     _raise(_Div, "Word.div")
   elseif y > 0 then
@@ -171,8 +171,8 @@ local function __Word_div(x, y)
   end
 end
 local function __Word_mod(x, y)
-  assert(math_type(x) == "integer")
-  assert(math_type(y) == "integer")
+  -- assert(math_type(x) == "integer")
+  -- assert(math_type(y) == "integer")
   if y == 0 then
     _raise(_Div, "Word.mod")
   elseif y > 0 then
