@@ -9,6 +9,7 @@ local math_abs = math.abs
 local math_type = math.type
 local math_maxinteger = math.maxinteger
 local math_mininteger = math.mininteger
+local math_ult = math.ult
 local string = string
 local string_format = string.format
 local table = table
@@ -152,32 +153,20 @@ local function __Word_div(x, y)
     if x >= 0 then
       return x // y
     else -- x < 0
-      local x1 = (x + math_maxinteger) + 1 -- x + 2^63
-      local u1 = ((math_maxinteger % y) + 1) % y -- 2^63 % y
-      local v1 = math_maxinteger // y
-      if math_maxinteger % y == y - 1 then
-        v1 = v1 + 1
-      end
-      -- v1 == 2^63 // y
-      if x1 % y < y - u1 then
-        return x1 // y + v1
+      -- Algorithm from Programming in Lua, 4th ed.
+      local q = ((x >> 1) // y) << 1
+      local r = x - q * y
+      if math_ult(r, y) then
+        return q
       else
-        return x1 // y + v1 + 1
+        return q + 1
       end
     end
   else -- y < 0
-    if x >= 0 then
-      -- x < 2^63 and y + 2^64 > 2^63
-      -- Therefore, x // (y + 2^64) = 0
+    if math_ult(x, y) then
       return 0
-    else -- x < 0
-      -- (x + 2^64) // (y + 2^64)
-      if x >= y then
-        -- (x + 2^64) // (y + 2^64)
-        return 1
-      else
-        return 0
-      end
+    else
+      return 1
     end
   end
 end
@@ -190,56 +179,23 @@ local function __Word_mod(x, y)
     if x >= 0 then
       return x % y
     else -- x < 0
-      local x1 = ((x + math_maxinteger) + 1) % y -- (x + 2^63) % y
-      local u1 = ((math_maxinteger % y) + 1) % y -- 2^63 % y
-      if y <= math_maxinteger // 2 + 1 then -- y <= 2^62
-        -- x1 + u1 <= 2*(y-1) < 2^63
-        return (x1 + u1) % y -- (x + 2^64) % y
+      local q = ((x >> 1) // y) << 1
+      local r = x - q * y
+      if math_ult(r, y) then
+        return r
       else
-        -- 2^62 < y < 2^63
-        -- math.maxinteger % y == math.maxinteger - y
-        -- u1 = 2^63 - y <= 2^63 - (2^62 - 1) = 2^62 + 1
-        -- 0 <= (2^63 - 1) - y <= (2^63 - 1) - (2^62 - 1) = 2^62
-        -- 0 <= u1 - 1 <= 2^62
-        -- 2^64 % y = ((2^63 % y) + (2^63 % y)) % y
-        --          = ((2^63 - y) + (2^63 - y)) % y
-        --          = (u1 + u1) % y -- u1
-        local y2 = y // 2
-        if x1 <= y2 then
-          if u1 <= y2 then
-            -- x1 + u1 <= 2 * (y // 2) <= y
-            return (x1 + u1) % y
-          else -- y2 < u1
-            -- y - u1 <= y2
-            -- -y2 <= x1 - (y - u1) <= y2
-            return (x1 - (y - u1)) % y
-          end
-        else -- y2 < x1
-          -- y - x1 <= y2
-          if u1 <= y2 then
-            return (u1 - (y - x1)) % y
-          else -- y2 < u1
-            local y3 = y - y2
-            return ((x1 - y2) + (u1 - y3)) % y
-          end
-        end
+        return r - y
       end
     end
   else -- y < 0
-    if x >= 0 then
-      -- x < 2^63 and y + 2^64 > 2^63
+    if math_ult(x, y) then
       return x
-    else -- x < 0
-      -- (x + 2^64) % (y + 2^64)
-      if x >= y then
-        return x - y
-      else -- x < y
-        return x
-      end
+    else
+      return x - y
     end
   end
 end
-local __Word_LT = math.ult
+local __Word_LT = math_ult
 
 -- List
 local _nil = { tag = "nil" }
