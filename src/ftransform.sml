@@ -609,6 +609,7 @@ datatype InlineExp = VarExp of USyntax.VId
                    | FnExp of USyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
+                   | PrimExp of F.PrimOp * F.Ty vector * InlineExp vector
 fun lookupSLabel ({ valMap, strMap, exnTagMap }, label) = case label of
                                                               F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
                                                             | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
@@ -669,6 +670,7 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                                                                  else
                                                                                      TyAbsExp (tv, kind, doInlineExp iexp)
                                      | doInlineExp (TyAppExp (iexp, ty)) = TyAppExp (doInlineExp iexp, doTy ty)
+                                     | doInlineExp (PrimExp (primOp, tys, exps)) = PrimExp (primOp, Vector.map doTy tys, Vector.map doInlineExp exps)
                                in doInlineExp
                                end
 fun freeTyVarsInInlineExp (bound, VarExp _) = USyntax.TyVarSet.empty
@@ -679,6 +681,7 @@ fun freeTyVarsInInlineExp (bound, VarExp _) = USyntax.TyVarSet.empty
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (USyntax.TyVarSet.add (bound, tv), exp)
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
+  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) = Vector.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, F.freeTyVarsInTy (bound, ty))) (Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInInlineExp (bound, exp))) USyntax.TyVarSet.empty exps) tys
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, F.PathToExp path) :: xs) [] map)
   | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
@@ -687,6 +690,7 @@ fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
+  | uninlineExp (PrimExp (primOp, tys, exps)) = F.PrimExp (primOp, tys, Vector.map uninlineExp exps)
 fun PathToInlineExp (F.Root vid) = VarExp vid
   | PathToInlineExp (F.Child (parent, label)) = SProjectionExp (PathToInlineExp parent, label)
   | PathToInlineExp (F.Field (parent, label)) = ProjectionExp { label = label, record = PathToInlineExp parent }
@@ -750,7 +754,24 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
           fun doExp env exp = #1 (doExp' env exp)
           and doExp' (env : Env) exp0 : F.Exp * InlineExp option
               = (case exp0 of
-                     F.PrimExp (primOp, tyargs, args) => (F.PrimExp (primOp, tyargs, Vector.map (doExp env) args), NONE)
+                     F.PrimExp (primOp, tyargs, args) => let val shouldInline = case primOp of
+                                                                                    F.PrimFnOp Syntax.PrimOp_Unsafe_cast => true
+                                                                                  | _ => false
+                                                         in if shouldInline then
+                                                                let val (exps, iexps) = Vector.foldr (fn (exp, (exps, SOME iexps)) => (case doExp' env exp of
+                                                                                                                                           (exp', SOME iexp) => (exp :: exps, SOME (iexp :: iexps))
+                                                                                                                                         | (exp', NONE) => (exp :: exps, NONE)
+                                                                                                                                      )
+                                                                                                     | (exp, (exps, NONE)) => (doExp env exp :: exps, NONE)
+                                                                                                     ) ([], SOME []) args
+                                                                in (F.PrimExp (primOp, tyargs, Vector.fromList exps), case iexps of
+                                                                                                                          SOME iexps => SOME (PrimExp (primOp, tyargs, Vector.fromList iexps))
+                                                                                                                        | NONE => NONE
+                                                                   )
+                                                                end
+                                                            else
+                                                                (F.PrimExp (primOp, tyargs, Vector.map (doExp env) args), NONE)
+                                                         end
                    | F.VarExp vid => (case USyntax.VIdMap.find (#valMap env, vid) of
                                           SOME (VarExp vid) => (F.VarExp vid, SOME (evalPath env (F.Root vid)))
                                         | iexpOpt as SOME _ => (exp0, iexpOpt)
@@ -930,52 +951,70 @@ end (* structure Inliner *)
 
 structure FlattenLet = struct
 local structure F = FSyntax in
-fun extractLet (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet exp
-                                       in (dec :: decs, exp)
-                                       end
-  | extractLet exp = ([], exp)
-fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map doExp args)
-  | doExp (exp as F.VarExp _) = exp
-  | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
-  | doExp (F.LetExp (dec, exp2)) = F.LetExp (doDec dec, doExp exp2)
-  | doExp (F.AppExp (exp1, exp2)) = F.AppExp (doExp exp1, doExp exp2)
-  | doExp (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
-  | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
-  | doExp (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp exp, ty, List.map (fn (pat, exp) => (pat, doExp exp)) matches)
-  | doExp (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp exp)
-  | doExp (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp record }
-  | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
-  | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
-  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap
-                                                                    , strMap = strMap
-                                                                    , exnTagMap = exnTagMap
-                                                                    }
-  | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
-  | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
-and doDec (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
-                                                          val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
-                                                      in if List.null decs then
-                                                             dec
-                                                         else
-                                                             F.GroupDec (NONE, decs @ [dec])
-                                                      end
-  | doDec (F.ValDec (F.TupleBind (binds, exp1))) = let val (decs, exp1) = extractLet (doExp exp1)
-                                                       val dec = F.ValDec (F.TupleBind (binds, exp1))
-                                                   in if List.null decs then
-                                                          dec
-                                                      else
-                                                          F.GroupDec (NONE, decs @ [dec])
-                                                   end
-  | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn (vid, ty, exp) => (vid, ty, doExp exp)) valbinds)
-  | doDec (F.UnpackDec (tv, kind, vid, ty, exp)) = F.UnpackDec (tv, kind, vid, ty, doExp exp)
-  | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
-  | doDec (dec as F.DatatypeDec _) = dec
-  | doDec (dec as F.ExceptionDec _) = dec
-  | doDec (dec as F.ExceptionRepDec _) = dec
-  | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
-  | doDec (F.ExportModule xs) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp exp)) xs)
-  | doDec (F.GroupDec (e, decs)) = F.GroupDec (e, doDecs decs)
-and doDecs decs = List.map doDec decs
+type Context = { nextVId : int ref
+               , nextTyVar : int ref
+               }
+fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
+                                            in #nextVId ctx := n + 1
+                                             ; USyntax.MkVId(name, n)
+                                            end
+fun extractLet ctx (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet ctx exp
+                                           in (dec :: decs, exp)
+                                           end
+  | extractLet ctx (F.RecordExp fields) = let val (decs, fields) = List.foldr (fn ((label, exp), (decs, fields)) =>
+                                                                                  case exp of
+                                                                                      F.VarExp _ => (decs, (label, exp) :: fields)
+                                                                                    | _ => let val vid = freshVId (ctx, "tmp")
+                                                                                               val (decs', exp') = extractLet ctx exp
+                                                                                               val dec = F.ValDec (F.SimpleBind (vid, (* dummy *) F.RecordType Syntax.LabelMap.empty, exp'))
+                                                                                           in (decs' @ dec :: decs, (label, F.VarExp vid) :: fields)
+                                                                                           end
+                                                                              ) ([], []) fields
+                                          in (decs, F.RecordExp fields)
+                                          end
+  | extractLet ctx exp = ([], exp)
+fun doExp ctx (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map (doExp ctx) args)
+  | doExp ctx (exp as F.VarExp _) = exp
+  | doExp ctx (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp ctx exp)) fields)
+  | doExp ctx (F.LetExp (dec, exp2)) = F.LetExp (doDec ctx dec, doExp ctx exp2)
+  | doExp ctx (F.AppExp (exp1, exp2)) = F.AppExp (doExp ctx exp1, doExp ctx exp2)
+  | doExp ctx (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp ctx body, exnName = exnName, handler = doExp ctx handler }
+  | doExp ctx (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp ctx exp1, doExp ctx exp2, doExp ctx exp3)
+  | doExp ctx (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp ctx exp, ty, List.map (fn (pat, exp) => (pat, doExp ctx exp)) matches)
+  | doExp ctx (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp ctx exp)
+  | doExp ctx (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp ctx record }
+  | doExp ctx (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp ctx exp)
+  | doExp ctx (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp ctx exp, ty)
+  | doExp ctx (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap
+                                                                        , strMap = strMap
+                                                                        , exnTagMap = exnTagMap
+                                                                        }
+  | doExp ctx (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp ctx exp, label)
+  | doExp ctx (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp ctx exp, packageTy = packageTy }
+and doDec ctx (F.ValDec (F.SimpleBind (vid, ty, exp1))) = let val (decs, exp1) = extractLet ctx (doExp ctx exp1)
+                                                              val dec = F.ValDec (F.SimpleBind (vid, ty, exp1))
+                                                          in if List.null decs then
+                                                                 dec
+                                                             else
+                                                                 F.GroupDec (NONE, decs @ [dec])
+                                                          end
+  | doDec ctx (F.ValDec (F.TupleBind (binds, exp1))) = let val (decs, exp1) = extractLet ctx (doExp ctx exp1)
+                                                           val dec = F.ValDec (F.TupleBind (binds, exp1))
+                                                       in if List.null decs then
+                                                              dec
+                                                          else
+                                                              F.GroupDec (NONE, decs @ [dec])
+                                                       end
+  | doDec ctx (F.RecValDec valbinds) = F.RecValDec (List.map (fn (vid, ty, exp) => (vid, ty, doExp ctx exp)) valbinds)
+  | doDec ctx (F.UnpackDec (tv, kind, vid, ty, exp)) = F.UnpackDec (tv, kind, vid, ty, doExp ctx exp)
+  | doDec ctx (F.IgnoreDec exp) = F.IgnoreDec (doExp ctx exp)
+  | doDec ctx (dec as F.DatatypeDec _) = dec
+  | doDec ctx (dec as F.ExceptionDec _) = dec
+  | doDec ctx (dec as F.ExceptionRepDec _) = dec
+  | doDec ctx (F.ExportValue exp) = F.ExportValue (doExp ctx exp)
+  | doDec ctx (F.ExportModule xs) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp ctx exp)) xs)
+  | doDec ctx (F.GroupDec (e, decs)) = F.GroupDec (e, doDecs ctx decs)
+and doDecs ctx decs = List.map (doDec ctx) decs
 end (* local *)
 end (* structure FlattenLet *)
 
@@ -988,7 +1027,7 @@ val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEn
                        }
 fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
                                       val decs = DecomposeValRec.doDecs decs
-                                      val decs = FlattenLet.doDecs decs
+                                      val decs = FlattenLet.doDecs ctx decs
                                       val (inlinerEnv, decs) = #doDecs (Inliner.run ctx) (#inliner env) decs
                               in ({desugarPatternMatches = dpEnv, inliner = inlinerEnv }, decs)
                               end

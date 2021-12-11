@@ -97,6 +97,7 @@ and doCompile opts fileName
                    else
                        ()
           val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
+          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
           val fdecs = Driver.wholeProgramOptimization fdecs
       in emitLua opts fileName fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
@@ -131,6 +132,7 @@ and doMLB opts mlbfilename
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
+          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
           val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
           val fdecs = Driver.wholeProgramOptimization fdecs
       in emitLua opts mlbfilename fdecs
