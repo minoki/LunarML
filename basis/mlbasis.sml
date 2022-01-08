@@ -686,8 +686,14 @@ val andb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.andb (Lua
 val orb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.orb (Lua.fromWord x, Lua.fromWord y))
 val xorb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.xorb (Lua.fromWord x, Lua.fromWord y))
 val notb : word -> word = fn x => Lua.unsafeFromValue (Lua.notb (Lua.fromWord x))
-val << : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.<< (Lua.fromWord x, Lua.fromWord y))
-val >> : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.>> (Lua.fromWord x, Lua.fromWord y))
+val << : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
+                                                0w0
+                                            else
+                                                Lua.unsafeFromValue (Lua.<< (Lua.fromWord x, Lua.fromWord y))
+val >> : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
+                                                0w0
+                                            else
+                                                Lua.unsafeFromValue (Lua.>> (Lua.fromWord x, Lua.fromWord y))
 val ~>> : word * word -> word = fn (x, y) => if y >= fromInt (Int.- (wordSize, 1)) then
                                                  if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
                                                      ~(0w1)
