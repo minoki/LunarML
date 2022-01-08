@@ -165,6 +165,7 @@ should_run "mlbasis/should_run/" {
   "string.sml",
   "word.sml",
   "word_law.sml",
+  "word_shift.sml",
   "vector.sml",
   "overflow.sml",
   "int-inf-fib-hex.sml",
