@@ -56,7 +56,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"~" :: (rest0 as x :: xs)) = if Char.isDigit x then
                                                                      readDecimalConstant (l, c, c+2, NLTNegative, digitToLargeInt x, xs)
                                                                  else
-                                                                     readSymbolicIdentifier (l, c, [#"~"], rest0)
+                                                                     readSymbolicIdentifier (l, c, c, [], [#"~"], rest0)
               | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: #"x" :: x :: xs)) = if Char.isHexDigit x then
                                                                                      readHexadecimalConstant (l, c, c+3, NLTWord, hexDigitToLargeInt x, xs)
                                                                                  else
@@ -78,12 +78,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               (* TODO: binary constant *)
               | tokenizeOne (l, c, #"\n" :: xs) = tokenizeOne (l+1, 1, xs)
               | tokenizeOne (l, c, x :: xs) = if Char.isAlpha x orelse x = #"_" orelse x = #"'" then
-                                                  readIdentifierOrKeyword (l, c, [x], xs)
+                                                  readIdentifierOrKeyword (l, c, c, [], [x], xs)
                                               else if Char.isDigit x then
                                                   (* integer in decimal notation, or real constant *)
                                                   readDecimalConstant (l, c, c+1, NLTUnsigned, digitToLargeInt x, xs)
                                               else if isSymbolChar x then
-                                                  readSymbolicIdentifier (l, c, [x], xs)
+                                                  readSymbolicIdentifier (l, c, c, [], [x], xs)
                                               else if Char.isSpace x then
                                                   tokenizeOne (l, c+1, xs)
                                               else
@@ -101,82 +101,135 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | skipComment (l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
                                                      ; NONE
                                                      )
-            and readIdentifierOrKeyword (l, c, accum, nil) = SOME (recognizeKeyword (l, c, String.implode (rev accum)), l, c + length accum, nil)
-              | readIdentifierOrKeyword (l, c, accum, input as x :: xs) = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
-                                                                              readIdentifierOrKeyword (l, c, x :: accum, xs)
-                                                                          else
-                                                                              SOME (recognizeKeyword (l, c, String.implode (rev accum)), l, c + length accum, x :: xs)
-            and recognizeKeyword (l, c, name) = let val tok = case name of
-                                                                  "_" => Tokens.UNDERSCORE
-                                                                | "_primType" => Tokens.PRIMTYPE (* extension *)
-                                                                | "_primVal" => Tokens.PRIMVAL (* extension *)
-                                                                | "_primCall" => Tokens.PRIMCALL (* extension *)
-                                                                | "_overload" => Tokens.OVERLOAD (* extension *)
-                                                                | "abstype" => Tokens.ABSTYPE
-                                                                | "and" => Tokens.AND
-                                                                | "andalso" => Tokens.ANDALSO
-                                                                | "as" => Tokens.AS
-                                                                | "case" => Tokens.CASE
-                                                                | "datatype" => Tokens.DATATYPE
-                                                                | "do" => Tokens.DO
-                                                                | "else" => Tokens.ELSE
-                                                                | "end" => Tokens.END
-                                                                | "eqtype" => Tokens.EQTYPE
-                                                                | "exception" => Tokens.EXCEPTION
-                                                                | "fn" => Tokens.FN
-                                                                | "fun" => Tokens.FUN
-                                                                | "functor" => Tokens.FUNCTOR
-                                                                | "handle" => Tokens.HANDLE
-                                                                | "if" => Tokens.IF
-                                                                | "in" => Tokens.IN
-                                                                | "include" => Tokens.INCLUDE
-                                                                | "infix" => Tokens.INFIX
-                                                                | "infixr" => Tokens.INFIXR
-                                                                | "let" => Tokens.LET
-                                                                | "local" => Tokens.LOCAL
-                                                                | "nonfix" => Tokens.NONFIX
-                                                                | "of" => Tokens.OF
-                                                                | "op" => Tokens.OP
-                                                                | "open" => Tokens.OPEN
-                                                                | "orelse" => Tokens.ORELSE
-                                                                | "raise" => Tokens.RAISE
-                                                                | "rec" => Tokens.REC
-                                                                | "sharing" => Tokens.SHARING
-                                                                | "sig" => Tokens.SIG
-                                                                | "signature" => Tokens.SIGNATURE
-                                                                | "struct" => Tokens.STRUCT
-                                                                | "structure" => Tokens.STRUCTURE
-                                                                | "then" => Tokens.THEN
-                                                                | "type" => Tokens.TYPE
-                                                                | "val" => Tokens.VAL
-                                                                | "with" => Tokens.WITH
-                                                                | "withtype" => Tokens.WITHTYPE
-                                                                | "where" => Tokens.WHERE
-                                                                | "while" => Tokens.WHILE
-                                                                | _ => case String.sub(name,0) of
-                                                                           #"'" => (fn (p1,p2) => Tokens.PrimeIdent (name,p1,p2))
-                                                                         | #"_" => ( emitError (l, c, "an identifier cannot begin with an underscore")
-                                                                                   ; Tokens.UNDERSCORE
-                                                                                   )
-                                                                         | _ => (fn (p1,p2) => Tokens.AlnumIdent (name,p1,p2))
-                                                in tok (pos(l,c),pos(l,c + String.size name - 1))
+            and readIdentifierOrKeyword (l, c0, c1, rstrids, accum, nil) = let val (tok, ident) = recognizeKeyword (l, c1, String.implode (rev accum))
+                                                                           in if List.null rstrids then
+                                                                                  SOME (tok, l, c1 + length accum, nil)
+                                                                              else
+                                                                                  case ident of
+                                                                                      SOME (name, p2) => SOME (Tokens.QualifiedAlnumIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, nil)
+                                                                                    | NONE => ( emitError (l, c1, "invalid qualified name")
+                                                                                              ; SOME (tok, l, c1 + length accum, nil)
+                                                                                              )
+                                                                           end
+              | readIdentifierOrKeyword (l, c0, c1, rstrids, accum, input as x :: xs) = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
+                                                                                            readIdentifierOrKeyword (l, c0, c1, rstrids, x :: accum, xs)
+                                                                                        else
+                                                                                            let val (tok, ident) = recognizeKeyword (l, c1, String.implode (rev accum))
+                                                                                            in if List.null rstrids then
+                                                                                                   case ident of
+                                                                                                       SOME (name, p2) =>
+                                                                                                       if x = #"." then
+                                                                                                           case xs of
+                                                                                                               x' :: xs' => if Char.isAlpha x' then
+                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                            else if isSymbolChar x' then
+                                                                                                                                readSymbolicIdentifier (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                            else
+                                                                                                                                SOME (tok, l, c1 + length accum, input)
+                                                                                                             | [] => SOME (tok, l, c1 + length accum, input)
+                                                                                                       else
+                                                                                                           SOME (tok, l, c1 + length accum, input)
+                                                                                                     | NONE => SOME (tok, l, c1 + length accum, input)
+                                                                                               else
+                                                                                                   case ident of
+                                                                                                       SOME (name, p2) =>
+                                                                                                       if x = #"." then
+                                                                                                           case xs of
+                                                                                                               x' :: xs' => if Char.isAlpha x' then
+                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                            else if isSymbolChar x' then
+                                                                                                                                readSymbolicIdentifier (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                            else
+                                                                                                                                SOME (tok, l, c1 + length accum, input)
+                                                                                                             | [] => SOME (tok, l, c1 + length accum, input)
+                                                                                                       else
+                                                                                                           SOME (Tokens.QualifiedAlnumIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                                                                     | NONE => ( emitError (l, c1, "invalid qualified name")
+                                                                                                               ; SOME (tok, l, c1 + length accum, input)
+                                                                                                               )
+                                                                                            end
+            and recognizeKeyword (l, c, name) = let val (tok, ident) = case name of
+                                                                           "_" => (Tokens.UNDERSCORE, NONE)
+                                                                         | "_primType" => (Tokens.PRIMTYPE, NONE) (* extension *)
+                                                                         | "_primVal" => (Tokens.PRIMVAL, NONE) (* extension *)
+                                                                         | "_primCall" => (Tokens.PRIMCALL, NONE) (* extension *)
+                                                                         | "_overload" => (Tokens.OVERLOAD, NONE) (* extension *)
+                                                                         | "abstype" => (Tokens.ABSTYPE, NONE)
+                                                                         | "and" => (Tokens.AND, NONE)
+                                                                         | "andalso" => (Tokens.ANDALSO, NONE)
+                                                                         | "as" => (Tokens.AS, NONE)
+                                                                         | "case" => (Tokens.CASE, NONE)
+                                                                         | "datatype" => (Tokens.DATATYPE, NONE)
+                                                                         | "do" => (Tokens.DO, NONE)
+                                                                         | "else" => (Tokens.ELSE, NONE)
+                                                                         | "end" => (Tokens.END, NONE)
+                                                                         | "eqtype" => (Tokens.EQTYPE, NONE)
+                                                                         | "exception" => (Tokens.EXCEPTION, NONE)
+                                                                         | "fn" => (Tokens.FN, NONE)
+                                                                         | "fun" => (Tokens.FUN, NONE)
+                                                                         | "functor" => (Tokens.FUNCTOR, NONE)
+                                                                         | "handle" => (Tokens.HANDLE, NONE)
+                                                                         | "if" => (Tokens.IF, NONE)
+                                                                         | "in" => (Tokens.IN, NONE)
+                                                                         | "include" => (Tokens.INCLUDE, NONE)
+                                                                         | "infix" => (Tokens.INFIX, NONE)
+                                                                         | "infixr" => (Tokens.INFIXR, NONE)
+                                                                         | "let" => (Tokens.LET, NONE)
+                                                                         | "local" => (Tokens.LOCAL, NONE)
+                                                                         | "nonfix" => (Tokens.NONFIX, NONE)
+                                                                         | "of" => (Tokens.OF, NONE)
+                                                                         | "op" => (Tokens.OP, NONE)
+                                                                         | "open" => (Tokens.OPEN, NONE)
+                                                                         | "orelse" => (Tokens.ORELSE, NONE)
+                                                                         | "raise" => (Tokens.RAISE, NONE)
+                                                                         | "rec" => (Tokens.REC, NONE)
+                                                                         | "sharing" => (Tokens.SHARING, NONE)
+                                                                         | "sig" => (Tokens.SIG, NONE)
+                                                                         | "signature" => (Tokens.SIGNATURE, NONE)
+                                                                         | "struct" => (Tokens.STRUCT, NONE)
+                                                                         | "structure" => (Tokens.STRUCTURE, NONE)
+                                                                         | "then" => (Tokens.THEN, NONE)
+                                                                         | "type" => (Tokens.TYPE, NONE)
+                                                                         | "val" => (Tokens.VAL, NONE)
+                                                                         | "with" => (Tokens.WITH, NONE)
+                                                                         | "withtype" => (Tokens.WITHTYPE, NONE)
+                                                                         | "where" => (Tokens.WHERE, NONE)
+                                                                         | "while" => (Tokens.WHILE, NONE)
+                                                                         | _ => case String.sub(name,0) of
+                                                                                    #"'" => (fn (p1,p2) => Tokens.PrimeIdent (name, p1, p2), NONE)
+                                                                                  | #"_" => ( emitError (l, c, "an identifier cannot begin with an underscore")
+                                                                                            ; (Tokens.UNDERSCORE, NONE)
+                                                                                            )
+                                                                                  | _ => (fn (p1,p2) => Tokens.AlnumIdent (name, p1, p2), SOME name)
+                                                    val p2 = pos(l,c + String.size name - 1)
+                                                in (tok (pos(l, c), p2), Option.map (fn name => (name, p2)) ident)
                                                 end
-            and readSymbolicIdentifier (l, c, accum, nil) = SOME (recognizeSymbolic (l, c, String.implode (rev accum)), l, c + length accum, nil)
-              | readSymbolicIdentifier (l, c, accum, input as x :: xs) = if isSymbolChar x then
-                                                                             readSymbolicIdentifier (l, c, x :: accum, xs)
-                                                                         else
-                                                                             SOME (recognizeSymbolic (l, c, String.implode (rev accum)), l, c + length accum, x :: xs)
-            and recognizeSymbolic (l, c, name) = let val tok = case name of
-                                                                   ":" => Tokens.COLON
-                                                                 | "|" => Tokens.BAR
-                                                                 | "=" => Tokens.EQUALS
-                                                                 | "=>" => Tokens.DARROW
-                                                                 | "->" => Tokens.ARROW
-                                                                 | "#" => Tokens.HASH
-                                                                 | ":>" => Tokens.COLONGT
-                                                                 | "*" => Tokens.ASTERISK
-                                                                 | _ => fn (p1,p2) => Tokens.SymbolicIdent (name,p1,p2)
-                                                 in tok (pos(l,c),pos(l,c + String.size name - 1))
+            and readSymbolicIdentifier (l, c0, c1, rstrids, accum, nil) = SOME (#1 (recognizeSymbolic (l, c1, String.implode (rev accum))), l, c1 + length accum, nil)
+              | readSymbolicIdentifier (l, c0, c1, rstrids, accum, input as x :: xs) = if isSymbolChar x then
+                                                                                           readSymbolicIdentifier (l, c0, c1, rstrids, x :: accum, xs)
+                                                                                       else
+                                                                                           let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                                                                                           in if List.null rstrids then
+                                                                                                  SOME (tok, l, c1 + length accum, input)
+                                                                                              else
+                                                                                                  case ident of
+                                                                                                      SOME (name, p2) => SOME (Tokens.QualifiedSymbolicIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                                                                    | NONE => ( emitError (l, c1, "invalid qualified name")
+                                                                                                              ; SOME (tok, l, c1 + length accum, input)
+                                                                                                              )
+                                                                                           end
+            and recognizeSymbolic (l, c, name) = let val (tok, ident) = case name of
+                                                                            ":" => (Tokens.COLON, NONE)
+                                                                          | "|" => (Tokens.BAR, NONE)
+                                                                          | "=" => (Tokens.EQUALS, NONE)
+                                                                          | "=>" => (Tokens.DARROW, NONE)
+                                                                          | "->" => (Tokens.ARROW, NONE)
+                                                                          | "#" => (Tokens.HASH, NONE)
+                                                                          | ":>" => (Tokens.COLONGT, NONE)
+                                                                          | "*" => (Tokens.ASTERISK, SOME "*")
+                                                                          | _ => (fn (p1,p2) => Tokens.SymbolicIdent (name,p1,p2), SOME name)
+                                                     val p2 = pos(l, c + String.size name - 1)
+                                                 in (tok (pos(l, c), p2), Option.map (fn name => (name, p2)) ident)
                                                  end
             and isSymbolChar #"!" = true
               | isSymbolChar #"%" = true

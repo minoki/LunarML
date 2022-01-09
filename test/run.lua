@@ -159,6 +159,7 @@ should_not_compile "should_not_compile/" {
   "sharing_structures1.sml",
   "sharing_structures2.sml",
   "functor1.sml",
+  "space_in_qualified_id.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

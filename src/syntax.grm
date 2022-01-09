@@ -35,16 +35,20 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
 %arg (filename) : string
 
 %term AlnumIdent of string (* alphanumeric identifier not starting with a prime *)
+    | QualifiedAlnumIdent of string list * string
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
     | SymbolicIdent of string
+    | QualifiedSymbolicIdent of string list * string
     | PosInt of IntInf.int (* positive integer literal not starting with 0 *)
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal *)
     | WordConst of IntInf.int (* non-negative *)
     | RealConst of string
     | StringConst of string
     | CharacterConst of string
-    (* * . *)
-    | ASTERISK | DOT
+    (* * *)
+    | ASTERISK
+    (* . *)
+    | DOT (* not used by the grammar *)
     (* ( ) [ ] { } , : *)
     | LPAREN | RPAREN | LBRACK | RBRACK | LBRACE | RBRACE | COMMA | COLON
     (* ; ... _ | = => -> # *)
@@ -221,19 +225,22 @@ TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
 
 (* long value identifiers, including '=' *)
 LongVId : VId (Syntax.MkLongVId (nil, VId))
-        | StrId DOT LongVId (prependStrId(StrId, LongVId))
+        | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkVId (#2 QualifiedAlnumIdent)))
+        | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkVId (#2 QualifiedSymbolicIdent)))
 
 (* long value identifiers, excluding unqualified '=' *)
 LongBoundVId : BoundVId (Syntax.MkLongVId (nil, BoundVId))
-             | StrId DOT LongBoundVId (prependStrId(StrId, LongBoundVId))
+             | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkVId (#2 QualifiedAlnumIdent)))
+             | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkVId (#2 QualifiedSymbolicIdent)))
 
 (* long type constructors *)
 LongTyCon : TyCon (Syntax.MkLongTyCon (nil, TyCon))
-          | StrId DOT LongTyCon (prependStrId(StrId, LongTyCon))
+          | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkTyCon (#2 QualifiedAlnumIdent)))
+          | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkTyCon (#2 QualifiedSymbolicIdent)))
 
 (* long structure identifiers *)
 LongStrId : StrId (Syntax.MkLongStrId (nil, StrId))
-          | StrId DOT LongStrId (prependStrId(StrId, LongStrId))
+          | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkStrId (#2 QualifiedAlnumIdent)))
 
 Opt_OP : (* empty *) (false)
        | OP (true)
