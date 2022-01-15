@@ -26,7 +26,7 @@ fun doPath (F.Root vid) = [P.Fragment (USyntax.print_VId vid)]
   | doPath (F.Child (parent, label)) = doPath parent @ P.Fragment "." :: doSLabel label
   | doPath (F.Field (parent, label)) = doPath parent @ P.Fragment "." :: doLabel label
 fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
-  | doPat prec (F.SConPat (_, scon)) = [P.Fragment (Syntax.print_SCon scon)]
+  | doPat prec (F.SConPat { scon, ... }) = [P.Fragment (Syntax.print_SCon scon)]
   | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (USyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
   | doPat prec (F.RecordPat (_, fields, wildcard)) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (if wildcard then [[P.Fragment "..."]] else []) fields) @ [P.Fragment "}"]
   | doPat prec (F.ConPat (_, path, NONE, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ [P.Fragment "]"])

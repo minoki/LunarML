@@ -203,11 +203,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                    }
                 end
           and genMatcher (env : Env) exp _ (F.WildcardPat _) : Env * F.Exp = (env, F.VarExp(InitialEnv.VId_true)) (* always match *)
-            | genMatcher env exp ty (F.SConPat(_, scon as Syntax.IntegerConstant _)) = (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [exp, F.SConExp scon]))
-            | genMatcher env exp ty (F.SConPat(_, scon as Syntax.WordConstant _)) = (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_word), F.TupleExp [exp, F.SConExp scon]))
-            | genMatcher env exp ty (F.SConPat(_, scon as Syntax.StringConstant _)) = (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [exp, F.SConExp scon]))
-            | genMatcher env exp ty (F.SConPat(_, scon as Syntax.CharacterConstant _)) = (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_char), F.TupleExp [exp, F.SConExp scon]))
-            | genMatcher env exp ty (F.SConPat(_, Syntax.RealConstant _)) = raise Fail "genMatcher: cannot match a real constant"
+            | genMatcher env exp ty (F.SConPat{ sourceSpan, scon, equality, cookedValue }) = (env, F.AppExp(equality, F.TupleExp [exp, cookedValue]))
             | genMatcher env exp ty (F.VarPat(_, vid, _)) = (addVar(env, vid, ty), F.VarExp(InitialEnv.VId_true)) (* always match *)
             | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat (span, fields, _))
               = List.foldr (fn ((label, pat), (env, e)) =>

@@ -23,13 +23,6 @@ datatype Ty = TyVar of TyVar
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
                          }
-datatype Pat = WildcardPat of SourcePos.span
-             | SConPat of SourcePos.span * Syntax.SCon
-             | VarPat of SourcePos.span * USyntax.VId * Ty
-             | RecordPat of SourcePos.span * (Syntax.Label * Pat) list * bool
-             | ConPat of SourcePos.span * Path * Pat option * Ty list
-             | LayeredPat of SourcePos.span * USyntax.VId * Ty * Pat
-             | VectorPat of SourcePos.span * Pat vector * bool * Ty
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
 datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
@@ -41,7 +34,18 @@ datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
                 | DataPayloadOp (* value argument: the data *)
                 | PrimFnOp of Syntax.PrimOp
                 | ExnInstanceofOp (* type argument: none, value arguments: exception, exception tag *)
-datatype Exp = PrimExp of PrimOp * Ty vector * Exp vector
+datatype Pat = WildcardPat of SourcePos.span
+             | SConPat of { sourceSpan : SourcePos.span
+                          , scon : Syntax.SCon
+                          , equality : Exp
+                          , cookedValue : Exp
+                          }
+             | VarPat of SourcePos.span * USyntax.VId * Ty
+             | RecordPat of SourcePos.span * (Syntax.Label * Pat) list * bool
+             | ConPat of SourcePos.span * Path * Pat option * Ty list
+             | LayeredPat of SourcePos.span * USyntax.VId * Ty * Pat
+             | VectorPat of SourcePos.span * Pat vector * bool * Ty
+     and Exp = PrimExp of PrimOp * Ty vector * Exp vector
              | VarExp of USyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
              | LetExp of Dec * Exp
@@ -421,7 +425,7 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (TypeFn(tv,kind,x)) = "TypeFn(" ^ print_TyVar tv ^ "," ^ print_Ty x ^ ")"
   | print_Ty (SigType _) = "SigType"
 fun print_Pat (WildcardPat _) = "WildcardPat"
-  | print_Pat (SConPat (_, x)) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
+  | print_Pat (SConPat { sourceSpan, scon, equality, cookedValue }) = "SConPat(" ^ Syntax.print_SCon scon ^ ")"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ConPat(_, path, pat, tyargs)) = "ConPat(" ^ print_Path path ^ "," ^ Syntax.print_option print_Pat pat ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
@@ -572,37 +576,10 @@ local structure U = USyntax
                                     ]
                       end
 in
-fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
-  | toFTy(ctx, env, U.RecordType(span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy(ctx, env, ty)) fields)
-  | toFTy(ctx, env, U.TyCon(span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy(ctx, env, arg)) tyargs, tyname)
-  | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
-                                                         in F.FnType(doTy paramTy, doTy resultTy)
-                                                         end
-and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat span)
-  | toFPat(ctx, env, U.SConPat(span, scon)) = (USyntax.VIdMap.empty, F.SConPat(span, scon))
-  | toFPat(ctx, env, U.VarPat(span, vid, ty)) = (USyntax.VIdMap.empty, F.VarPat(span, vid, toFTy(ctx, env, ty))) (* TODO *)
-  | toFPat(ctx, env, U.RecordPat{sourceSpan=span, fields, wildcard}) = let fun doField(label, pat) = let val (_, pat') = toFPat(ctx, env, pat)
-                                                                                                     in (label, pat')
-                                                                                                     end
-                                                                       in (USyntax.VIdMap.empty, F.RecordPat(span, List.map doField fields, wildcard)) (* TODO *)
-                                                                       end
-  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = NONE, tyargs, isSoleConstructor })
-    = (USyntax.VIdMap.empty, F.ConPat(span, LongVIdToPath longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
-  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = SOME payloadPat, tyargs, isSoleConstructor })
-    = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
-      in (USyntax.VIdMap.empty, F.ConPat(span, LongVIdToPath longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
-      end
-  | toFPat(ctx, env, U.TypedPat(_, pat, _)) = toFPat(ctx, env, pat)
-  | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
-                                                              in (USyntax.VIdMap.empty, F.LayeredPat(span, vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
-                                                              end
-  | toFPat(ctx, env, U.VectorPat(span, pats, ellipsis, elemTy)) = let val pats = Vector.map (fn pat => toFPat(ctx, env, pat)) pats
-                                                                  in (USyntax.VIdMap.empty, F.VectorPat(span, Vector.map #2 pats, ellipsis, toFTy(ctx, env, elemTy)))
-                                                                  end
-and toFExp(ctx, env, U.SConExp(span, scon as Syntax.IntegerConstant value, ty))
+fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
     = (case ty of
            U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_int) then
-                                        F.SConExp scon
+                                        F.SConExp (Syntax.IntegerConstant value)
                                     else
                                         let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                   SOME m => m
@@ -635,11 +612,11 @@ and toFExp(ctx, env, U.SConExp(span, scon as Syntax.IntegerConstant value, ty))
                                         in decompose value
                                         end
          | _ => raise Fail "invalid integer constant"
-      )
-  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.WordConstant value, ty))
+      ) (* TODO: check range *)
+fun cookWordConstant(ctx, env, span, value : IntInf.int, ty)
     = (case ty of
            U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_word) then
-                                        F.SConExp scon
+                                        F.SConExp (Syntax.WordConstant value)
                                     else
                                         let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                   SOME m => m
@@ -668,7 +645,64 @@ and toFExp(ctx, env, U.SConExp(span, scon as Syntax.IntegerConstant value, ty))
                                         in decompose value
                                         end
          | _ => raise Fail "invalid word constant: invalid type"
+      ) (* TODO: check range *)
+fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
+  | toFTy(ctx, env, U.RecordType(span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy(ctx, env, ty)) fields)
+  | toFTy(ctx, env, U.TyCon(span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy(ctx, env, arg)) tyargs, tyname)
+  | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
+                                                         in F.FnType(doTy paramTy, doTy resultTy)
+                                                         end
+and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat span)
+  | toFPat(ctx, env, U.SConPat(span, scon as Syntax.IntegerConstant value, ty))
+    = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                       , scon = scon
+                                       , equality = getEquality (ctx, env, ty)
+                                       , cookedValue = cookIntegerConstant (ctx, env, span, value, ty)
+                                       }
       )
+  | toFPat(ctx, env, U.SConPat(span, scon as Syntax.WordConstant value, ty))
+    = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                       , scon = scon
+                                       , equality = getEquality (ctx, env, ty)
+                                       , cookedValue = cookWordConstant (ctx, env, span, value, ty)
+                                       }
+      )
+  | toFPat(ctx, env, U.SConPat(span, scon as Syntax.RealConstant value, ty)) = raise Fail "invalid real constant in pattern"
+  | toFPat(ctx, env, U.SConPat(span, scon as Syntax.CharacterConstant value, ty))
+    = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                       , scon = scon
+                                       , equality = getEquality (ctx, env, ty)
+                                       , cookedValue = F.SConExp scon (* TODO: overloaded literals *)
+                                       }
+      )
+  | toFPat(ctx, env, U.SConPat(span, scon as Syntax.StringConstant value, ty))
+    = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                       , scon = scon
+                                       , equality = getEquality (ctx, env, ty)
+                                       , cookedValue = F.SConExp scon (* TODO: overloaded literals *)
+                                       }
+      )
+  | toFPat(ctx, env, U.VarPat(span, vid, ty)) = (USyntax.VIdMap.empty, F.VarPat(span, vid, toFTy(ctx, env, ty))) (* TODO *)
+  | toFPat(ctx, env, U.RecordPat{sourceSpan=span, fields, wildcard}) = let fun doField(label, pat) = let val (_, pat') = toFPat(ctx, env, pat)
+                                                                                                     in (label, pat')
+                                                                                                     end
+                                                                       in (USyntax.VIdMap.empty, F.RecordPat(span, List.map doField fields, wildcard)) (* TODO *)
+                                                                       end
+  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = NONE, tyargs, isSoleConstructor })
+    = (USyntax.VIdMap.empty, F.ConPat(span, LongVIdToPath longvid, NONE, List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+  | toFPat(ctx, env, U.ConPat { sourceSpan = span, longvid, payload = SOME payloadPat, tyargs, isSoleConstructor })
+    = let val (m, payloadPat') = toFPat(ctx, env, payloadPat)
+      in (USyntax.VIdMap.empty, F.ConPat(span, LongVIdToPath longvid, SOME payloadPat', List.map (fn ty => toFTy(ctx, env, ty)) tyargs))
+      end
+  | toFPat(ctx, env, U.TypedPat(_, pat, _)) = toFPat(ctx, env, pat)
+  | toFPat(ctx, env, U.LayeredPat(span, vid, ty, innerPat)) = let val (m, innerPat') = toFPat(ctx, env, innerPat)
+                                                              in (USyntax.VIdMap.empty, F.LayeredPat(span, vid, toFTy(ctx, env, ty), innerPat')) (* TODO *)
+                                                              end
+  | toFPat(ctx, env, U.VectorPat(span, pats, ellipsis, elemTy)) = let val pats = Vector.map (fn pat => toFPat(ctx, env, pat)) pats
+                                                                  in (USyntax.VIdMap.empty, F.VectorPat(span, Vector.map #2 pats, ellipsis, toFTy(ctx, env, elemTy)))
+                                                                  end
+and toFExp(ctx, env, U.SConExp(span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
+  | toFExp(ctx, env, U.SConExp(span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
   | toFExp(ctx, env, U.SConExp(span, scon as Syntax.RealConstant _, ty)) = F.SConExp(scon)
   | toFExp(ctx, env, U.SConExp(span, scon as Syntax.StringConstant _, ty)) = F.SConExp(scon)
   | toFExp(ctx, env, U.SConExp(span, scon as Syntax.CharacterConstant _, ty)) = F.SConExp(scon)

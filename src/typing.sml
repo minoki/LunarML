@@ -793,11 +793,21 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
       end
   | typeCheckPat(ctx, env, S.SConPat(span, scon))
     = (case scon of
-           Syntax.IntegerConstant(_)   => (primTy_int, S.VIdMap.empty, U.SConPat(span, scon))
-         | Syntax.WordConstant(_)      => (primTy_word, S.VIdMap.empty, U.SConPat(span, scon))
-         | Syntax.RealConstant(_)      => emitError(ctx, [span], "no real constant may occur in a pattern")
-         | Syntax.StringConstant(_)    => (primTy_string, S.VIdMap.empty, U.SConPat(span, scon))
-         | Syntax.CharacterConstant(_) => (primTy_char, S.VIdMap.empty, U.SConPat(span, scon))
+           Syntax.IntegerConstant _   => let val tv = freshTyVar ctx
+                                             val ty = U.TyVar (span, tv)
+                                         in addTyVarConstraint (ctx, tv, U.IsInt span)
+                                          ; addTyVarConstraint (ctx, tv, U.IsEqType span)
+                                          ; (ty, S.VIdMap.empty, U.SConPat(span, scon, ty))
+                                         end
+         | Syntax.WordConstant _      => let val tv = freshTyVar ctx
+                                             val ty = U.TyVar (span, tv)
+                                         in addTyVarConstraint (ctx, tv, U.IsWord span)
+                                          ; addTyVarConstraint (ctx, tv, U.IsEqType span)
+                                          ; (ty, S.VIdMap.empty, U.SConPat(span, scon, ty))
+                                         end
+         | Syntax.RealConstant _      => emitError(ctx, [span], "no real constant may occur in a pattern")
+         | Syntax.CharacterConstant _ => (primTy_char, S.VIdMap.empty, U.SConPat(span, scon, primTy_char)) (* TODO: overloaded literals *)
+         | Syntax.StringConstant _    => (primTy_string, S.VIdMap.empty, U.SConPat(span, scon, primTy_string)) (* TODO: overloaded literals *)
       )
   | typeCheckPat(ctx, env, S.VarPat(span, vid))
     = (case Syntax.VIdMap.find(#valMap env, vid) of

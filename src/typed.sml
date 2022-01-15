@@ -142,7 +142,7 @@ type FunSig = { bound : { tyname : TyName, arity : int, admitsEquality : bool, l
               }
 
 datatype Pat = WildcardPat of SourcePos.span
-             | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
+             | SConPat of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarPat of SourcePos.span * VId * Ty (* variable *)
              | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, wildcard : bool }
              | ConPat of { sourceSpan : SourcePos.span, longvid : LongVId, payload : Pat option, tyargs : Ty list, isSoleConstructor : bool }
@@ -265,7 +265,7 @@ fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
   | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ Syntax.print_list print_Ty x ^ "," ^ print_TyName y ^ ")"
   | print_Ty (FnType(_,x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat (WildcardPat _) = "WildcardPat"
-  | print_Pat (SConPat(_, x)) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
+  | print_Pat (SConPat(_, x, _)) = "SConPat(" ^ Syntax.print_SCon x ^ ")"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (TypedPat (_, pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
@@ -423,7 +423,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                                                        end
           and doMatch(pat, exp) = (doPat pat, doExp exp)
           and doPat(pat as WildcardPat _) = pat
-            | doPat(s as SConPat _) = s
+            | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
             | doPat(VarPat(span, vid, ty)) = VarPat(span, vid, doTy ty)
             | doPat(RecordPat{sourceSpan, fields, wildcard}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, wildcard=wildcard}
             | doPat(ConPat{sourceSpan, longvid, payload, tyargs, isSoleConstructor}) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, isSoleConstructor = isSoleConstructor }
@@ -487,7 +487,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
 fun freeTyVarsInPat(bound, pat)
     = (case pat of
            WildcardPat _ => TyVarSet.empty
-         | SConPat _ => TyVarSet.empty
+         | SConPat(_, _, ty) => freeTyVarsInTy(bound, ty)
          | VarPat(_, _, ty) => freeTyVarsInTy(bound, ty)
          | RecordPat{ fields = xs, ... } => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
          | ConPat { payload = NONE, tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
