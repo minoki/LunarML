@@ -106,6 +106,11 @@ datatype UnaryConstraint
   | IsField of SourcePos.span (* Real; /; defaults to real *)
   | IsSigned of SourcePos.span (* Int, Real; defaults to int *)
   | IsOrdered of SourcePos.span (* NumTxt; <, >, <=, >=; defaults to int *)
+  | IsInt of SourcePos.span (* Int; defaults to int *)
+  | IsWord of SourcePos.span (* Word; defaults to word *)
+  | IsReal of SourcePos.span (* Real; defaults to real *)
+  | IsChar of SourcePos.span (* Char; defaults to char *)
+  | IsString of SourcePos.span (* String; defaults to string *)
 
 datatype Constraint
   = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
@@ -151,7 +156,7 @@ datatype DatBind = DatBind of SourcePos.span * TyVar list * TyName * ConBind lis
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
-datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
+datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
@@ -208,7 +213,7 @@ fun getSourceSpanOfTy(TyVar(span, _)) = span
   | getSourceSpanOfTy(TyCon(span, _, _)) = span
   | getSourceSpanOfTy(FnType(span, _, _)) = span
 
-fun getSourceSpanOfExp(SConExp(span, _)) = span
+fun getSourceSpanOfExp(SConExp(span, _, _)) = span
   | getSourceSpanOfExp(VarExp(span, _, _, _)) = span
   | getSourceSpanOfExp(RecordExp(span, _)) = span
   | getSourceSpanOfExp(LetInExp(span, _, _)) = span
@@ -272,7 +277,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (RecordPat{fields = x, wildcard = true, ...}) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
   | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
-fun print_Exp (SConExp(_, x)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
+fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (VarExp(_, x, idstatus, tyargs)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Ty, Syntax.print_list print_UnaryConstraint)) tyargs ^ ")"
   | print_Exp (RecordExp(_, x)) = (case Syntax.extractTuple (1, x) of
                                        NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
@@ -313,6 +318,11 @@ and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{
   | print_UnaryConstraint (IsField _) = "IsField"
   | print_UnaryConstraint (IsSigned _) = "IsSigned"
   | print_UnaryConstraint (IsOrdered _) = "IsOrdered"
+  | print_UnaryConstraint (IsInt _) = "IsInt"
+  | print_UnaryConstraint (IsWord _) = "IsWord"
+  | print_UnaryConstraint (IsReal _) = "IsReal"
+  | print_UnaryConstraint (IsChar _) = "IsChar"
+  | print_UnaryConstraint (IsString _) = "IsString"
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
@@ -384,7 +394,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
                                                                      in TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty)
                                                                      end
           val doValEnv = VIdMap.map (fn (tysc, idstatus) => (doTypeScheme tysc, idstatus))
-          fun doExp(e as SConExp _) = e
+          fun doExp(SConExp(span, scon, ty)) = SConExp(span, scon, doTy ty)
             | doExp(VarExp(span, longvid, idstatus, tyargs)) = VarExp(span, longvid, idstatus, List.map (fn (ty, cts) => (doTy ty, List.map doUnaryConstraint cts)) tyargs)
             | doExp(RecordExp(span, fields)) = RecordExp(span, Syntax.mapRecordRow doExp fields)
             | doExp(LetInExp(span, decls, e)) = LetInExp(span, List.map doDec decls, doExp e)
@@ -490,7 +500,7 @@ fun freeTyVarsInPat(bound, pat)
 (* freeTyVarsInExp : TyVarSet * Exp -> TyVarSet *)
 fun freeTyVarsInExp(bound, exp)
     = (case exp of
-           SConExp _ => TyVarSet.empty
+           SConExp(_, _, ty) => freeTyVarsInTy(bound, ty)
          | VarExp(_, _, _, tyargs) => List.foldl (fn ((ty,cts), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordExp(_, xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
          | LetInExp(_, decls, exp) => TyVarSet.union(freeTyVarsInDecs(bound, decls), freeTyVarsInExp(bound, exp))
@@ -538,13 +548,18 @@ and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
            HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)
-         | IsEqType _    => TyVarSet.empty
+         | IsEqType _     => TyVarSet.empty
          | IsIntegral _   => TyVarSet.empty
          | IsSignedReal _ => TyVarSet.empty
          | IsRing _       => TyVarSet.empty
          | IsField _      => TyVarSet.empty
          | IsSigned _     => TyVarSet.empty
          | IsOrdered _    => TyVarSet.empty
+         | IsInt _        => TyVarSet.empty
+         | IsWord _       => TyVarSet.empty
+         | IsReal _       => TyVarSet.empty
+         | IsChar _       => TyVarSet.empty
+         | IsString _     => TyVarSet.empty
       )
 
 fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)

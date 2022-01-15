@@ -599,7 +599,79 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat 
   | toFPat(ctx, env, U.VectorPat(span, pats, ellipsis, elemTy)) = let val pats = Vector.map (fn pat => toFPat(ctx, env, pat)) pats
                                                                   in (USyntax.VIdMap.empty, F.VectorPat(span, Vector.map #2 pats, ellipsis, toFTy(ctx, env, elemTy)))
                                                                   end
-and toFExp(ctx, env, U.SConExp(span, scon)) = F.SConExp(scon)
+and toFExp(ctx, env, U.SConExp(span, scon as Syntax.IntegerConstant value, ty))
+    = (case ty of
+           U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_int) then
+                                        F.SConExp scon
+                                    else
+                                        let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                                  SOME m => m
+                                                                | NONE => raise Fail "invalid integer constant"
+                                            val fromInt = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_fromInt) of
+                                                              SOME x => x
+                                                            | NONE => raise Fail "invalid integer constant"
+                                            val PLUS = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_PLUS) of
+                                                           SOME x => x
+                                                         | NONE => raise Fail "invalid integer constant"
+                                            val TIMES = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TIMES) of
+                                                            SOME x => x
+                                                          | NONE => raise Fail "invalid integer constant"
+                                            val TILDE = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TILDE) of
+                                                            SOME x => x
+                                                          | NONE => raise Fail "invalid integer constant"
+                                            fun decompose x = if ~0x80000000 <= x andalso x <= 0x7fffffff then
+                                                                  F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant x))
+                                                              else
+                                                                  let val (q, r) = IntInf.quotRem (x, ~0x80000000)
+                                                                      val y = case q of
+                                                                                  1 => F.SConExp (Syntax.IntegerConstant ~0x80000000)
+                                                                                | ~1 => F.AppExp (TILDE, F.SConExp (Syntax.IntegerConstant ~0x80000000))
+                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant ~0x80000000))])
+                                                                  in if r = 0 then
+                                                                         y
+                                                                     else
+                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant r))])
+                                                                  end
+                                        in decompose value
+                                        end
+         | _ => raise Fail "invalid integer constant"
+      )
+  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.WordConstant value, ty))
+    = (case ty of
+           U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_word) then
+                                        F.SConExp scon
+                                    else
+                                        let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                                  SOME m => m
+                                                                | NONE => raise Fail ("invalid word constant for " ^ USyntax.print_TyName tycon)
+                                            val fromWord = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_fromWord) of
+                                                              SOME x => x
+                                                            | NONE => raise Fail "invalid word constant: fromWord is not defined"
+                                            val PLUS = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_PLUS) of
+                                                           SOME x => x
+                                                         | NONE => raise Fail "invalid word constant: + is not defined"
+                                            val TIMES = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TIMES) of
+                                                            SOME x => x
+                                                          | NONE => raise Fail "invalid word constant: * is not defined"
+                                            fun decompose x = if x <= 0xffffffff then
+                                                                  F.AppExp (fromWord, F.SConExp (Syntax.WordConstant x))
+                                                              else
+                                                                  let val (q, r) = IntInf.quotRem (x, 0xffffffff)
+                                                                      val y = case q of
+                                                                                  1 => F.SConExp (Syntax.WordConstant 0xffffffff)
+                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromWord, F.SConExp (Syntax.WordConstant 0xffffffff))])
+                                                                  in if r = 0 then
+                                                                         y
+                                                                     else
+                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromWord, F.SConExp (Syntax.WordConstant r))])
+                                                                  end
+                                        in decompose value
+                                        end
+         | _ => raise Fail "invalid word constant: invalid type"
+      )
+  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.RealConstant _, ty)) = F.SConExp(scon)
+  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.StringConstant _, ty)) = F.SConExp(scon)
+  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.CharacterConstant _, ty)) = F.SConExp(scon)
   | toFExp(ctx, env, U.VarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
     = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
           getEquality(ctx, env, tyarg)

@@ -18,6 +18,7 @@ fun x < y = _primCall "Int.<" (x, y)
 fun x <= y = _primCall "Int.<=" (x, y)
 fun x > y = _primCall "Int.>" (x, y)
 fun x >= y = _primCall "Int.>=" (x, y)
+fun fromInt (x : int) = x
 end
 _overload "Int" [int] { + = Int.+
                       , - = Int.-
@@ -30,6 +31,7 @@ _overload "Int" [int] { + = Int.+
                       , <= = Int.<=
                       , > = Int.>
                       , >= = Int.>=
+                      , fromInt = Int.fromInt
                       };
 
 structure Word = struct
@@ -44,6 +46,9 @@ fun x > y = y < x
 fun x <= y = Bool.not (y < x)
 fun x >= y = Bool.not (x < y)
 end
+local
+fun fromWord (x : word) = x
+in
 _overload "Word" [word] { + = Word.+
                         , - = Word.-
                         , * = Word.*
@@ -54,7 +59,9 @@ _overload "Word" [word] { + = Word.+
                         , <= = Word.<=
                         , > = Word.>
                         , >= = Word.>=
+                        , fromWord = fromWord
                         };
+end
 
 structure Real = struct
 open Real (* abs *)
@@ -546,10 +553,9 @@ structure Int : sig
               val fromString : string -> int option
           end = struct
 type int = int
-open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >= *)
+open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
-val fromInt : int -> int = fn x => x
 val precision : int option = LunarML.assumeDiscardable
                                  (let fun computeWordSize (x : int, n) = if x = 0 then
                                                                              n

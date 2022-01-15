@@ -116,13 +116,18 @@ fun freeTyVarsInConstraint(bound, USyntax.EqConstr(span, ty1, ty2)) = USyntax.Ty
   | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(span, ty, unaryConstraint))
     = (case unaryConstraint of
            USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty), USyntax.freeTyVarsInTy(bound, fieldTy))
-         | USyntax.IsEqType _    => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsEqType _     => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsIntegral _   => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsSignedReal _ => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsRing _       => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsField _      => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsSigned _     => USyntax.freeTyVarsInTy(bound, ty)
          | USyntax.IsOrdered _    => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsInt _        => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsWord _       => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsReal _       => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsChar _       => USyntax.freeTyVarsInTy(bound, ty)
+         | USyntax.IsString _     => USyntax.freeTyVarsInTy(bound, ty)
       )
 
 type ProgramContext = { nextTyVar : int ref
@@ -476,13 +481,18 @@ fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
     in fn U.EqConstr(span, ty1, ty2) => U.EqConstr(span, substTy ty1, substTy ty2)
      | U.UnaryConstraint(span1, recordTy, U.HasField{sourceSpan, label, fieldTy }) => U.UnaryConstraint(span1, substTy recordTy, U.HasField{sourceSpan = sourceSpan, label = label, fieldTy = substTy fieldTy})
-     | U.UnaryConstraint(span1, ty, U.IsEqType span2) => U.UnaryConstraint(span1, substTy ty, U.IsEqType span2)
-     | U.UnaryConstraint(span1, ty, U.IsIntegral span2) => U.UnaryConstraint(span1, substTy ty, U.IsIntegral span2)
-     | U.UnaryConstraint(span1, ty, U.IsSignedReal span2) => U.UnaryConstraint(span1, substTy ty, U.IsSignedReal span2)
-     | U.UnaryConstraint(span1, ty, U.IsRing span2) => U.UnaryConstraint(span1, substTy ty, U.IsRing span2)
-     | U.UnaryConstraint(span1, ty, U.IsField span2) => U.UnaryConstraint(span1, substTy ty, U.IsField span2)
-     | U.UnaryConstraint(span1, ty, U.IsSigned span2) => U.UnaryConstraint(span1, substTy ty, U.IsSigned span2)
-     | U.UnaryConstraint(span1, ty, U.IsOrdered span2) => U.UnaryConstraint(span1, substTy ty, U.IsOrdered span2)
+     | U.UnaryConstraint(span1, ty, c as U.IsEqType _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsIntegral _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsSignedReal _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsRing _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsField _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsSigned _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsOrdered _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsInt _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsWord _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsReal _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsChar _) => U.UnaryConstraint(span1, substTy ty, c)
+     | U.UnaryConstraint(span1, ty, c as U.IsString _) => U.UnaryConstraint(span1, substTy ty, c)
     end
 
 val applySubstTy = U.applySubstTy
@@ -577,6 +587,11 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsField span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare records")
+         | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsInt span3) => emitError(ctx, [span1, span2, span3], "cannot unify a record with an int")
+         | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsWord span3) => emitError(ctx, [span1, span2, span3], "cannot unify a record with a word")
+         | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsReal span3) => emitError(ctx, [span1, span2, span3], "cannot unify a record with a real")
+         | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsChar span3) => emitError(ctx, [span1, span2, span3], "cannot unify a record with a char")
+         | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsString span3) => emitError(ctx, [span1, span2, span3], "cannot unify a record with a string")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsEqType span3) => emitError(ctx, [span1, span2, span3], "function type does not admit equality")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsIntegral span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsSignedReal span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
@@ -584,6 +599,11 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsField span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsSigned span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
          | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsOrdered span3) => emitError(ctx, [span1, span2, span3], "cannot compare functions")
+         | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsInt span3) => emitError(ctx, [span1, span2, span3], "cannot unify a function with an int")
+         | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsWord span3) => emitError(ctx, [span1, span2, span3], "cannot unify a function with a word")
+         | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsReal span3) => emitError(ctx, [span1, span2, span3], "cannot unify a function with a real")
+         | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsChar span3) => emitError(ctx, [span1, span2, span3], "cannot unify a function with a char")
+         | U.UnaryConstraint(span1, U.FnType(span2, _, _), U.IsString span3) => emitError(ctx, [span1, span2, span3], "cannot unify a function with a string")
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsEqType span3) =>
            let val { admitsEquality, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
            in if isRefOrArray tyname then
@@ -662,6 +682,56 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
               else
                   emitError(ctx, [span1, span2, span3], "comparison operator on unsupported type")
            end
+         | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsInt span3) =>
+           if USyntax.eqTyName(tyname, primTyName_int) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               in if overloadClass = SOME Syntax.CLASS_INT then
+                      unify(ctx, env, ctrs) (* do nothing *)
+                  else
+                      emitError(ctx, [span1, span2, span3], "invalid integer constant: " ^ USyntax.print_TyName tyname)
+               end
+         | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsWord span3) =>
+           if USyntax.eqTyName(tyname, primTyName_word) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               in if overloadClass = SOME Syntax.CLASS_WORD then
+                      unify(ctx, env, ctrs) (* do nothing *)
+                  else
+                      emitError(ctx, [span1, span2, span3], "invalid word constant")
+               end
+         | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsReal span3) =>
+           if USyntax.eqTyName(tyname, primTyName_real) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               in if overloadClass = SOME Syntax.CLASS_REAL then
+                      unify(ctx, env, ctrs) (* do nothing *)
+                  else
+                      emitError(ctx, [span1, span2, span3], "invalid real constant")
+               end
+         | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsChar span3) =>
+           if USyntax.eqTyName(tyname, primTyName_char) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               in if overloadClass = SOME Syntax.CLASS_CHAR then
+                      unify(ctx, env, ctrs) (* do nothing *)
+                  else
+                      emitError(ctx, [span1, span2, span3], "invalid character constant")
+               end
+         | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsString span3) =>
+           if USyntax.eqTyName(tyname, primTyName_string) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else
+               let val { overloadClass, ... } = lookupTyNameInEnv(ctx, env, span2, tyname)
+               in if overloadClass = SOME Syntax.CLASS_STRING then
+                      unify(ctx, env, ctrs) (* do nothing *)
+                  else
+                      emitError(ctx, [span1, span2, span3], "invalid string constant")
+               end
          | U.UnaryConstraint(span1, U.TyVar(span2, tv), pred) =>
            (case USyntax.TyVarMap.find(!(#tyVarSubst ctx), tv) of
                 SOME replacement => unify(ctx, env, U.UnaryConstraint(span1, replacement, pred) :: ctrs)
@@ -940,13 +1010,21 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
 
 (* typeCheckExp : Context * Env * S.Exp -> U.Ty * U.Exp *)
 fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
-    = let val ty = case scon of (* TODO: overloaded literals *)
-                       Syntax.IntegerConstant x   => primTy_int
-                     | Syntax.WordConstant x      => primTy_word
-                     | Syntax.RealConstant x      => primTy_real
-                     | Syntax.StringConstant x    => primTy_string
-                     | Syntax.CharacterConstant x => primTy_char
-      in (ty, U.SConExp(span, scon))
+    = let val ty = case scon of
+                       Syntax.IntegerConstant x   => let val tv = freshTyVar ctx
+                                                         val ty = U.TyVar (span, tv)
+                                                     in addTyVarConstraint (ctx, tv, U.IsInt span)
+                                                      ; ty
+                                                     end
+                     | Syntax.WordConstant x      => let val tv = freshTyVar ctx
+                                                         val ty = U.TyVar (span, tv)
+                                                     in addTyVarConstraint (ctx, tv, U.IsWord span)
+                                                      ; ty
+                                                     end
+                     | Syntax.RealConstant x      => primTy_real (* TODO: overloaded literals *)
+                     | Syntax.CharacterConstant x => primTy_char (* TODO: overloaded literals *)
+                     | Syntax.StringConstant x    => primTy_string (* TODO: overloaded literals *)
+      in (ty, U.SConExp(span, scon, ty))
       end
   | typeCheckExp(ctx, env, exp as S.VarExp(span, longvid as Syntax.MkQualified(_, vid)))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
@@ -1513,6 +1591,12 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_GE) of
                        NONE => ()
                      | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, U.PairType(span, ty, ty), primTy_bool)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_fromInt) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, primTy_int, ty)))
+          val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_fromWord) of
+                       NONE => ()
+                     | SOME (ty', _) => addConstraint(ctx, env, U.EqConstr(span, ty', U.FnType(span, primTy_word, ty)))
           val attr = lookupTyNameInEnv(ctx, env, span, tyname)
           val attr = { arity = #arity attr
                      , admitsEquality = #admitsEquality attr
@@ -1556,24 +1640,83 @@ open PrettyPrint
           *)
 (* applyDefaultTypes : Context * (U.UnaryConstraint list) USyntax.TyVarMap.map * USyntax.TopDec list -> U.Ty U.TyVarMap.map *)
 fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
-    let fun doInt [] = primTy_int
+    let fun findClass [] = NONE
+          | findClass (USyntax.IsInt _ :: _) = SOME Syntax.CLASS_INT
+          | findClass (USyntax.IsWord _ :: _) = SOME Syntax.CLASS_WORD
+          | findClass (USyntax.IsReal _ :: _) = SOME Syntax.CLASS_REAL
+          | findClass (USyntax.IsChar _ :: _) = SOME Syntax.CLASS_CHAR
+          | findClass (USyntax.IsString _ :: _) = SOME Syntax.CLASS_STRING
+          | findClass (_ :: xs) = findClass xs
+        fun doInt [] = primTy_int
           | doInt (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
           | doInt (USyntax.IsEqType _ :: xs) = doInt xs
           | doInt (USyntax.IsIntegral _ :: xs) = doInt xs
           | doInt (USyntax.IsSignedReal _ :: xs) = doInt xs
           | doInt (USyntax.IsRing _ :: xs) = doInt xs
-          | doInt (USyntax.IsField _ :: xs) = emitError(ctx, [], "cannot apply / operator for int")
+          | doInt (USyntax.IsField _ :: xs) = emitError(ctx, [], "cannot apply / operator on ints")
           | doInt (USyntax.IsSigned _ :: xs) = doInt xs
           | doInt (USyntax.IsOrdered _ :: xs) = doInt xs
+          | doInt (USyntax.IsInt _ :: xs) = doInt xs
+          | doInt (USyntax.IsWord _ :: xs) = emitError(ctx, [], "type mismatch: int vs word")
+          | doInt (USyntax.IsReal _ :: xs) = emitError(ctx, [], "type mismatch: int vs real")
+          | doInt (USyntax.IsChar _ :: xs) = emitError(ctx, [], "type mismatch: int vs char")
+          | doInt (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: int vs string")
+        fun doWord [] = primTy_word
+          | doWord (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
+          | doWord (USyntax.IsEqType _ :: xs) = doWord xs
+          | doWord (USyntax.IsIntegral _ :: xs) = doWord xs
+          | doWord (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "abs is invalid for word")
+          | doWord (USyntax.IsRing _ :: xs) = doWord xs
+          | doWord (USyntax.IsField _ :: xs) = emitError(ctx, [], "cannot apply / operator on words")
+          | doWord (USyntax.IsSigned _ :: xs) = doWord xs
+          | doWord (USyntax.IsOrdered _ :: xs) = doWord xs
+          | doWord (USyntax.IsInt _ :: xs) = emitError(ctx, [], "type mismatch: word vs int")
+          | doWord (USyntax.IsWord _ :: xs) = doWord xs
+          | doWord (USyntax.IsReal _ :: xs) = emitError(ctx, [], "type mismatch: word vs real")
+          | doWord (USyntax.IsChar _ :: xs) = emitError(ctx, [], "type mismatch: word vs char")
+          | doWord (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: word vs string")
         fun doReal [] = primTy_real
           | doReal (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for real")
           | doReal (USyntax.IsEqType _ :: xs) = emitError(ctx, [], "real does not admit equality")
-          | doReal (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "div, mod is invalid for real")
+          | doReal (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "div, mod are invalid for real")
           | doReal (USyntax.IsSignedReal _ :: xs) = doReal xs
           | doReal (USyntax.IsRing _ :: xs) = doReal xs
           | doReal (USyntax.IsField _ :: xs) = doReal xs
           | doReal (USyntax.IsSigned _ :: xs) = doReal xs
           | doReal (USyntax.IsOrdered _ :: xs) = doReal xs
+          | doReal (USyntax.IsInt _ :: xs) = emitError(ctx, [], "type mismatch: real vs int")
+          | doReal (USyntax.IsWord _ :: xs) = emitError(ctx, [], "type mismatch: real vs word")
+          | doReal (USyntax.IsReal _ :: xs) = doReal xs
+          | doReal (USyntax.IsChar _ :: xs) = emitError(ctx, [], "type mismatch: real vs char")
+          | doReal (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: real vs string")
+        fun doChar [] = primTy_char
+          | doChar (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for char")
+          | doChar (USyntax.IsEqType _ :: xs) = doChar xs
+          | doChar (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "invalid operation on char")
+          | doChar (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "invalid operation on char")
+          | doChar (USyntax.IsRing _ :: xs) = emitError(ctx, [], "invalid operation on char")
+          | doChar (USyntax.IsField _ :: xs) = emitError(ctx, [], "invalid operation on char")
+          | doChar (USyntax.IsSigned _ :: xs) = emitError(ctx, [], "invalid operation on char")
+          | doChar (USyntax.IsOrdered _ :: xs) = doChar xs
+          | doChar (USyntax.IsInt _ :: xs) = emitError(ctx, [], "type mismatch: char vs int")
+          | doChar (USyntax.IsWord _ :: xs) = emitError(ctx, [], "type mismatch: char vs word")
+          | doChar (USyntax.IsReal _ :: xs) = emitError(ctx, [], "type mismatch: char vs real")
+          | doChar (USyntax.IsChar _ :: xs) = doChar xs
+          | doChar (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: char vs string")
+        fun doString [] = primTy_string
+          | doString (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for string")
+          | doString (USyntax.IsEqType _ :: xs) = doString xs
+          | doString (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "invalid operation on string")
+          | doString (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "invalid operation on string")
+          | doString (USyntax.IsRing _ :: xs) = emitError(ctx, [], "invalid operation on string")
+          | doString (USyntax.IsField _ :: xs) = emitError(ctx, [], "invalid operation on string")
+          | doString (USyntax.IsSigned _ :: xs) = emitError(ctx, [], "invalid operation on string")
+          | doString (USyntax.IsOrdered _ :: xs) = doString xs
+          | doString (USyntax.IsInt _ :: xs) = emitError(ctx, [], "type mismatch: string vs int")
+          | doString (USyntax.IsWord _ :: xs) = emitError(ctx, [], "type mismatch: string vs word")
+          | doString (USyntax.IsReal _ :: xs) = emitError(ctx, [], "type mismatch: string vs real")
+          | doString (USyntax.IsChar _ :: xs) = emitError(ctx, [], "type mismatch: string vs char")
+          | doString (USyntax.IsString _ :: xs) = doString xs
         fun doIntOrReal [] = primTy_int
           | doIntOrReal (USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
           | doIntOrReal (USyntax.IsEqType _ :: xs) = doInt xs
@@ -1583,6 +1726,11 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doIntOrReal (USyntax.IsField _ :: xs) = doReal xs
           | doIntOrReal (USyntax.IsSigned _ :: xs) = doIntOrReal xs
           | doIntOrReal (USyntax.IsOrdered _ :: xs) = doIntOrReal xs
+          | doIntOrReal (USyntax.IsInt _ :: xs) = doInt xs (* cannot occur *)
+          | doIntOrReal (USyntax.IsWord _ :: xs) = doIntOrReal xs (* cannot occur *)
+          | doIntOrReal (USyntax.IsReal _ :: xs) = doReal xs (* cannot occur *)
+          | doIntOrReal (USyntax.IsChar _ :: xs) = doIntOrReal xs (* cannot occur *)
+          | doIntOrReal (USyntax.IsString _ :: xs) = doIntOrReal xs (* cannot occur *)
         fun defaultTyForConstraints(eq, []) = primTy_unit
           | defaultTyForConstraints(eq, USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
           | defaultTyForConstraints(eq, USyntax.IsEqType _ :: xs) = defaultTyForConstraints(true, xs)
@@ -1592,9 +1740,20 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | defaultTyForConstraints(eq, USyntax.IsField _ :: xs) = if eq then emitError(ctx, [], "real does not admit equality") else doReal xs
           | defaultTyForConstraints(eq, USyntax.IsSigned _ :: xs) = if eq then doInt xs else doIntOrReal xs
           | defaultTyForConstraints(eq, USyntax.IsOrdered _ :: xs) = if eq then doInt xs else doIntOrReal xs
+          | defaultTyForConstraints(eq, USyntax.IsInt _ :: xs) = doInt xs (* cannot occur *)
+          | defaultTyForConstraints(eq, USyntax.IsWord _ :: xs) = doWord xs (* cannot occur *)
+          | defaultTyForConstraints(eq, USyntax.IsReal _ :: xs) = if eq then emitError(ctx, [], "real does not admit equality") else doReal xs (* cannot occur *)
+          | defaultTyForConstraints(eq, USyntax.IsChar _ :: xs) = doChar xs (* cannot occur *)
+          | defaultTyForConstraints(eq, USyntax.IsString _ :: xs) = doString xs (* cannot occur *)
         fun doTyVar tv = case U.TyVarMap.find(tvc, tv) of
                              NONE => primTy_unit
-                           | SOME constraints => defaultTyForConstraints(false, constraints)
+                           | SOME constraints => case findClass constraints of
+                                                     SOME Syntax.CLASS_INT => doInt constraints
+                                                   | SOME Syntax.CLASS_WORD => doWord constraints
+                                                   | SOME Syntax.CLASS_REAL => doReal constraints
+                                                   | SOME Syntax.CLASS_CHAR => doChar constraints
+                                                   | SOME Syntax.CLASS_STRING => doString constraints
+                                                   | NONE => defaultTyForConstraints(false, constraints)
         val freeTyVars = USyntax.freeTyVarsInTopDecs(USyntax.TyVarSet.empty, decs)
     in USyntax.TyVarSet.foldl (fn (tv, map) => USyntax.TyVarMap.insert(map, tv, doTyVar tv)) USyntax.TyVarMap.empty freeTyVars
     end
@@ -1627,7 +1786,7 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
             | goPat (U.TypedPat(span, pat, ty)) = ( goTy ty; goPat pat )
             | goPat (U.LayeredPat(span, vid, ty, pat)) = ( goTy ty; goPat pat )
             | goPat (U.VectorPat(span, pats, ellipsis, elemTy)) = ( goTy elemTy; Vector.app goPat pats )
-          fun goExp (U.SConExp (span, scon)) = ()
+          fun goExp (U.SConExp (span, scon, ty)) = goTy ty
             | goExp (U.VarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
             | goExp (U.RecordExp (span, fields)) = List.app (fn (label, exp) => goExp exp) fields
             | goExp (U.LetInExp (span, decs, exp)) = let val tynameset = goDecs decs

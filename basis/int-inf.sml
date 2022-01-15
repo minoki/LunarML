@@ -665,4 +665,5 @@ _overload "Int" [IntInf.int]
   , <= = IntInf.<=
   , > = IntInf.>
   , >= = IntInf.>=
+  , fromInt = IntInf.fromInt
   }

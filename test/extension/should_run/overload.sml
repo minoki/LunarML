@@ -20,6 +20,10 @@ fun x > y = y < x
 fun x >= y = x > y orelse x = y
 fun toString O = "O"
   | toString I = "I"
+fun fromInt x = if Int.mod (x, 2) = 0 then
+                    O
+                else
+                    I
 end
 _overload "Int" [bin] { + = Bin.+
                       , - = Bin.-
@@ -32,6 +36,7 @@ _overload "Int" [bin] { + = Bin.+
                       , <= = Bin.<=
                       , > = Bin.>
                       , >= = Bin.>=
+                      , fromInt = Bin.fromInt
                       }
 val () = print (Bin.toString (I + O) ^ "\n");
 val () = print (Bin.toString (I * O) ^ "\n");

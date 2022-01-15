@@ -295,6 +295,8 @@ datatype OverloadKey = OVERLOAD_abs
                      | OVERLOAD_LE
                      | OVERLOAD_GT
                      | OVERLOAD_GE
+                     | OVERLOAD_fromInt (* used by desugaring of literals *)
+                     | OVERLOAD_fromWord (* used by desugaring of literals *)
 
 structure OverloadKey = struct
 type t = OverloadKey
@@ -333,6 +335,12 @@ fun compare (OVERLOAD_abs, OVERLOAD_abs) = EQUAL
   | compare (OVERLOAD_GT, _) = LESS
   | compare (_, OVERLOAD_GT) = GREATER
   | compare (OVERLOAD_GE, OVERLOAD_GE) = EQUAL
+  | compare (OVERLOAD_GE, _) = LESS
+  | compare (_, OVERLOAD_GE) = GREATER
+  | compare (OVERLOAD_fromInt, OVERLOAD_fromInt) = EQUAL
+  | compare (OVERLOAD_fromInt, _) = LESS
+  | compare (_, OVERLOAD_fromInt) = GREATER
+  | compare (OVERLOAD_fromWord, OVERLOAD_fromWord) = EQUAL
 end
 structure OverloadKeyMap = RedBlackMapFn (OverloadKey)
 

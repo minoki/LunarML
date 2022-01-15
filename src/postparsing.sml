@@ -470,6 +470,7 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                              ,("<=", Syntax.OVERLOAD_LE)
                                              ,(">", Syntax.OVERLOAD_GT)
                                              ,(">=", Syntax.OVERLOAD_GE)
+                                             ,("fromInt", Syntax.OVERLOAD_fromInt)
                                              ]
                        | Syntax.CLASS_WORD => [("+", Syntax.OVERLOAD_PLUS)
                                               ,("-", Syntax.OVERLOAD_MINUS)
@@ -481,6 +482,7 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                               ,("<=", Syntax.OVERLOAD_LE)
                                               ,(">", Syntax.OVERLOAD_GT)
                                               ,(">=", Syntax.OVERLOAD_GE)
+                                              ,("fromWord", Syntax.OVERLOAD_fromWord)
                                               ]
                        | Syntax.CLASS_REAL => [("+", Syntax.OVERLOAD_PLUS)
                                               ,("-", Syntax.OVERLOAD_MINUS)
