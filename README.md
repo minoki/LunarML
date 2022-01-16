@@ -32,11 +32,7 @@ Successor ML features:
 * [ ] Line comments
 * [ ] Extended literal syntax
 * [ ] Record punning
-* [ ] Record extension
-    * [x] in patterns
-    * [x] in expressions
-    * [x] in types
-    * [ ] derived forms
+* [x] Record extension
 * [ ] Record update
 * [ ] Conjunctive patterns
 * [ ] Nested matches

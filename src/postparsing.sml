@@ -175,7 +175,13 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
                                                               )
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = ConOrVarPat(env, span, vid)
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE) (* TODO: Check idstatus? *)
-  | doPat(ctx, env, UnfixedSyntax.RecordPat{sourceSpan, fields, ellipsis}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(ctx, env, pat))) fields, ellipsis = Option.map (fn pat => doPat(ctx, env, pat)) ellipsis }
+  | doPat(ctx, env, UnfixedSyntax.RecordPat (span, items))
+    = let val (fields, ellipsis) = List.foldr (fn (UnfixedSyntax.Field (label, pat), (fields, ellipsis)) => ((label, doPat (ctx, env, pat)) :: fields, ellipsis)
+                                              | (UnfixedSyntax.Ellipsis pat, (fields, NONE)) => (fields, SOME (doPat (ctx, env, pat)))
+                                              | (UnfixedSyntax.Ellipsis _, (_, SOME _)) => emitError (ctx, [span], "multiple ellipses in a record pattern")
+                                              ) ([], NONE) items
+      in Syntax.RecordPat { sourceSpan = span, fields = fields, ellipsis = ellipsis }
+      end
   | doPat(ctx, env, UnfixedSyntax.JuxtapositionPat(jspan, patterns)) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid) of
@@ -238,7 +244,21 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                  | _ => emitError(ctx, [span], "infix operaor used in non-infix position")
                                                               )
   | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
-  | doExp(ctx, env, UnfixedSyntax.RecordExp(span, fields, optBase)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(ctx, env, exp))) fields, Option.map (fn exp => doExp (ctx, env, exp)) optBase)
+  | doExp(ctx, env, UnfixedSyntax.RecordExp (span, items))
+    = let val (fields1, ellipsis, fields2) = List.foldr (fn (UnfixedSyntax.Field (label, exp), (fields1, ellipsis as SOME _, fields2)) => ((label, doExp (ctx, env, exp)) :: fields1, ellipsis, fields2)
+                                                        | (UnfixedSyntax.Field (label, exp), (fields1, ellipsis as NONE, fields2)) => (fields1, ellipsis, (label, doExp (ctx, env, exp)) :: fields2)
+                                                        | (UnfixedSyntax.Ellipsis exp, (fields1, NONE, fields2)) => (fields1, SOME (doExp (ctx, env, exp)), fields2)
+                                                        | (UnfixedSyntax.Ellipsis exp, (fields1, SOME _, fields2)) => emitError (ctx, [span], "multiple ellipses in a record expression")
+                                                        ) ([], NONE, []) items
+      in case ellipsis of
+             NONE => Syntax.RecordExp (span, fields2, NONE)
+           | SOME baseExp => if List.null fields2 then
+                                 Syntax.RecordExp (span, fields1, SOME baseExp)
+                             else (* desugar *)
+                                 let val vid = freshVId (ctx, "record")
+                                 in Syntax.RecordExp (span, fields1, SOME (Syntax.LetInExp (span, [Syntax.ValDec (span, [], [Syntax.PatBind (span, Syntax.VarPat (span, vid), baseExp)])], Syntax.RecordExp (span, fields2, SOME (Syntax.VarExp (span, Syntax.MkQualified ([], vid)))))))
+                                 end
+      end
   | doExp(ctx, env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(ctx, env, decls)
                                                                 in Syntax.LetInExp(span, decls', doExp(ctx, mergeEnv(env, env'), exp))
                                                                 end

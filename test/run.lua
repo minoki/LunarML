@@ -186,6 +186,7 @@ should_run "successor_ml/should_run/" {
   "record_extension_pattern_3.sml",
   "record_extension_expression.sml",
   "record_extension.sml",
+  "record_extension_2.sml",
 }
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
@@ -199,6 +200,9 @@ should_not_compile "successor_ml/should_not_compile/" {
   "typealias_in_signature.sml",
   "record_extension_pattern_1.sml",
   "record_extension_pattern_2.sml",
+  "record_extension_pattern.sml",
+  "record_extension_expression.sml",
+  "record_extension_type.sml",
 }
 should_run "extension/should_run/" {
   "vector_exp.sml",

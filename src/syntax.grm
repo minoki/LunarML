@@ -9,7 +9,7 @@ fun nilExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syn
 fun consOp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
 fun MkAndAlsoExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, e2, falseExp span)
 fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp span, e2)
-fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)], NONE)
+fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [UnfixedSyntax.Field (Syntax.NumericLabel 1, e1), UnfixedSyntax.Field (Syntax.NumericLabel 2, e2)])
 fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
 fun MkListExp (span, xs) = UnfixedSyntax.ListExp(span, Vector.fromList xs)
 fun MkVectorExp (span, xs) = UnfixedSyntax.VectorExp(span, Vector.fromList xs)
@@ -87,7 +87,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | AtPats of UnfixedSyntax.Pat list
        | TypedPatPun of Syntax.Label * UnfixedSyntax.Pat
        | PatPun of Syntax.Label * UnfixedSyntax.Pat
-       | PatRow of (Syntax.Label * UnfixedSyntax.Pat) list * UnfixedSyntax.Pat option
+       | PatRow of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list (* (Syntax.Label * UnfixedSyntax.Pat) list * UnfixedSyntax.Pat option *)
+       | PatRowRest of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
        | Pat of UnfixedSyntax.Pat
@@ -103,9 +104,11 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TyVarSeq of Syntax.TyVar list
        | TyVarSeqRest of Syntax.TyVar list
        | TyRow of (Syntax.Label * Syntax.Ty) list * Syntax.Ty option
+       | COMMA_TyRow_NoELLIPSIS of (Syntax.Label * Syntax.Ty) list
        | AtExp of UnfixedSyntax.Exp
        | AppOrInfExp of UnfixedSyntax.Exp list
-       | ExpRow of (Syntax.Label * UnfixedSyntax.Exp) list * UnfixedSyntax.Exp option
+       | ExpRow of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list (* (Syntax.Label * UnfixedSyntax.Exp) list * UnfixedSyntax.Exp option *)
+       | ExpRowRest of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpCSeqRest of UnfixedSyntax.Exp list
        | ExpSSeqRest of UnfixedSyntax.Exp list
        | TypedExp of UnfixedSyntax.Exp
@@ -253,9 +256,9 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat(span(UNDERSCOREleft,UNDERSCORErigh
                           Syntax.MkQualified([], vid) => UnfixedSyntax.InfixOrVIdPat(span(LongBoundVIdleft,LongBoundVIdright),vid)
                         | longvid => UnfixedSyntax.NonInfixVIdPat(span(LongBoundVIdleft,LongBoundVIdright),longvid)
                      ) (* value identifier *)
-      | LBRACE RBRACE (UnfixedSyntax.RecordPat{sourceSpan=span(LBRACEleft,RBRACEright), fields=nil, ellipsis=NONE}) (* empty record *)
-      | LBRACE PatRow RBRACE (case PatRow of (fields, ellipsis) => UnfixedSyntax.RecordPat{sourceSpan=span(LBRACEleft, RBRACEright), fields=fields, ellipsis=ellipsis}) (* record *)
-      | LPAREN RPAREN (UnfixedSyntax.RecordPat {sourceSpan=span(LPARENleft,RPARENright), fields=nil, ellipsis=NONE}) (* [derived] empty tuple *)
+      | LBRACE RBRACE (UnfixedSyntax.RecordPat (span (LBRACEleft, RBRACEright), [])) (* empty record *)
+      | LBRACE PatRow RBRACE (UnfixedSyntax.RecordPat (span (LBRACEleft, RBRACEright), PatRow)) (* record *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordPat (span(LPARENleft,RPARENright), [])) (* [derived] empty tuple *)
       | LPAREN Pat RPAREN (case Pat of
                                UnfixedSyntax.InfixOrVIdPat _ => UnfixedSyntax.JuxtapositionPat(span(LPARENleft,RPARENright), [Pat])
                              | pat => pat
@@ -291,12 +294,13 @@ PatPun : TypedPatPun (TypedPatPun)
        | TypedPatPun AS Pat ((#1 TypedPatPun, UnfixedSyntax.ConjunctivePat(span(TypedPatPunleft,Patright), #2 TypedPatPun, Pat)))
 
 (* pattern rows *)
-PatRow : ELLIPSIS ((nil, SOME (UnfixedSyntax.WildcardPat(span(ELLIPSISleft,ELLIPSISright))))) (* wildcard *)
-       | ELLIPSIS EQUALS Pat ((nil, SOME Pat)) (* [Successor ML] ellipses *)
-       | Lab EQUALS Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
-       | Lab EQUALS Pat (([(Lab, Pat)], NONE))
-       | PatPun COMMA PatRow (case PatRow of (s,t) => ((#1 PatPun, #2 PatPun) :: s, t)) (* [derived] punning *)
-       | PatPun (([(#1 PatPun, #2 PatPun)], NONE)) (* [derived] punning *)
+PatRow : ELLIPSIS PatRowRest (UnfixedSyntax.Ellipsis (UnfixedSyntax.WildcardPat (span (ELLIPSISleft, ELLIPSISright))) :: PatRowRest) (* wildcard *)
+       | ELLIPSIS EQUALS Pat PatRowRest (UnfixedSyntax.Ellipsis Pat :: PatRowRest) (* [Successor ML] ellipses *)
+       | Lab EQUALS Pat PatRowRest (UnfixedSyntax.Field (Lab, Pat) :: PatRowRest) (* pattern row *)
+       | PatPun PatRowRest (UnfixedSyntax.Field PatPun :: PatRowRest) (* [derived] punning *)
+
+PatRowRest : COMMA PatRow (PatRow)
+           | ([])
 
 PatSeqRest : COMMA Pat PatSeqRest (Pat :: PatSeqRest)
            | (nil)
@@ -339,7 +343,10 @@ TyVarSeqRest : COMMA TyVar TyVarSeqRest (TyVar :: TyVarSeqRest) (* *)
 (* type-expression rows *)
 TyRow : Lab COLON Ty COMMA TyRow (((Lab, Ty) :: #1 TyRow, #2 TyRow)) (* type-expression row *)
       | Lab COLON Ty (([(Lab, Ty)], NONE)) (* type-expression row *)
-      | ELLIPSIS COLON Ty (([], SOME Ty)) (* [Successor ML] ellipses *)
+      | ELLIPSIS COLON Ty COMMA_TyRow_NoELLIPSIS ((COMMA_TyRow_NoELLIPSIS, SOME Ty)) (* [Successor ML] ellipses *)
+
+COMMA_TyRow_NoELLIPSIS : COMMA Lab COLON Ty COMMA_TyRow_NoELLIPSIS ((Lab, Ty) :: COMMA_TyRow_NoELLIPSIS) (* type-expression row *)
+                       | ([]) (* type-expression row *)
 
 (* atomic expressions *)
 AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special constant *)
@@ -349,14 +356,14 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
                         | longvid => UnfixedSyntax.NonInfixVIdExp(span(LongBoundVIdleft,LongBoundVIdright),longvid)
                      ) (* value identifier *)
       | EQUALS (UnfixedSyntax.InfixOrVIdExp(span(EQUALSleft,EQUALSright),Syntax.MkVId "="))
-      | LBRACE RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),nil,NONE)) (* empty record *)
-      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),#1 ExpRow,#2 ExpRow)) (* record *)
+      | LBRACE RBRACE (UnfixedSyntax.RecordExp (span (LBRACEleft, RBRACEright), [])) (* empty record *)
+      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp (span (LBRACEleft, RBRACEright), ExpRow)) (* record *)
       | LET Decs IN Exp END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (case Exp of
                                UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp(span(LPARENleft,RPARENright),[Exp])
                              | exp => exp
                           ) (* parenthesized expression *)
-      | LPAREN RPAREN (UnfixedSyntax.RecordExp(span(LPARENleft,RPARENright),nil,NONE)) (* [derived] 0-tuple *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordExp (span (LPARENleft, RPARENright), [])) (* [derived] 0-tuple *)
       | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (span(LPARENleft,RPARENright), Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
       | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp (span(LPARENleft,RPARENright), Exp1, Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
       | LET Decs IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, MkSequentialExp(span(Exp1left, ExpSSeqRestright), Exp1, Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
@@ -380,9 +387,11 @@ ExpSSeqRest : SEMICOLON Exp ExpSSeqRest (Exp :: ExpSSeqRest)
             | (nil)
 
 (* expression rows *)
-ExpRow : Lab EQUALS Exp COMMA ExpRow (((Lab, Exp) :: #1 ExpRow, #2 ExpRow))
-       | Lab EQUALS Exp (([(Lab, Exp)], NONE))
-       | ELLIPSIS EQUALS Exp (([], SOME Exp)) (* [Successor ML] ellipses *)
+ExpRow : Lab EQUALS Exp ExpRowRest (UnfixedSyntax.Field (Lab, Exp) :: ExpRowRest)
+       | ELLIPSIS EQUALS Exp ExpRowRest (UnfixedSyntax.Ellipsis Exp :: ExpRowRest) (* [Successor ML] ellipses *)
+
+ExpRowRest : COMMA ExpRow (ExpRow)
+           | ([])
 
 (*
 AppExp : AtExp

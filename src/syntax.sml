@@ -542,6 +542,8 @@ exception SyntaxError of SourcePos.span list * string
 end (* structure Syntax *)
 
 structure UnfixedSyntax = struct
+datatype 'a RecordItem = Field of Syntax.Label * 'a
+                       | Ellipsis of 'a
 datatype Pat
   = WildcardPat of SourcePos.span
   | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
@@ -549,7 +551,7 @@ datatype Pat
   | InfixOrVIdPat of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifers *)
   | JuxtapositionPat of SourcePos.span * Pat list (* constructed pattern, maybe with binary operator  *)
   | ConPat of SourcePos.span * Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
-  | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
+  | RecordPat of SourcePos.span * (Pat RecordItem) list
   | TypedPat of SourcePos.span * Pat * Syntax.Ty (* typed *)
   | ConjunctivePat of SourcePos.span * Pat * Pat (* layered or [Successor ML] conjunctive *)
   | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
@@ -557,7 +559,7 @@ datatype Pat
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
              | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
-             | RecordExp of SourcePos.span * (Syntax.Label * Exp) list * Exp option (* record *)
+             | RecordExp of SourcePos.span * (Exp RecordItem) list (* record *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
              | JuxtapositionExp of SourcePos.span * Exp list (* application, or binary operator *)
              | AppExp of SourcePos.span * Exp * Exp (* application, used by desugaring of list expression *)
@@ -593,10 +595,10 @@ type Program = (Dec Syntax.StrDec) list
 
 local
     fun doFields i nil = nil
-      | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+      | doFields i (x :: xs) = Field (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
 in
-fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs, NONE)
-fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
+fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
+fun TuplePat(span, xs) = RecordPat (span, doFields 1 xs)
 end
 
 fun getSourceSpanOfPat(WildcardPat span) = span
@@ -605,7 +607,7 @@ fun getSourceSpanOfPat(WildcardPat span) = span
   | getSourceSpanOfPat(InfixOrVIdPat(span, _)) = span
   | getSourceSpanOfPat(JuxtapositionPat(span, _)) = span
   | getSourceSpanOfPat(ConPat(span, _, _)) = span
-  | getSourceSpanOfPat(RecordPat{sourceSpan, ...}) = sourceSpan
+  | getSourceSpanOfPat(RecordPat(span, _)) = span
   | getSourceSpanOfPat(TypedPat(span, _, _)) = span
   | getSourceSpanOfPat(ConjunctivePat(span, _, _)) = span
   | getSourceSpanOfPat(VectorPat(span, _, _)) = span
