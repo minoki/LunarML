@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure Fixity = struct
@@ -238,7 +238,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                  | _ => emitError(ctx, [span], "infix operaor used in non-infix position")
                                                               )
   | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
-  | doExp(ctx, env, UnfixedSyntax.RecordExp(span, fields)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(ctx, env, exp))) fields)
+  | doExp(ctx, env, UnfixedSyntax.RecordExp(span, fields, optBase)) = Syntax.RecordExp (span, List.map (fn (label, exp) => (label, doExp(ctx, env, exp))) fields, Option.map (fn exp => doExp (ctx, env, exp)) optBase)
   | doExp(ctx, env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(ctx, env, decls)
                                                                 in Syntax.LetInExp(span, decls', doExp(ctx, mergeEnv(env, env'), exp))
                                                                 end
@@ -263,7 +263,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.IfThenElseExp(span, e1, e2, e3)) = Syntax.IfThenElseExp(span, doExp(ctx, env, e1), doExp(ctx, env, e2), doExp(ctx, env, e3))
   | doExp(ctx, env, UnfixedSyntax.WhileDoExp(span, e1, e2))
     = let val fnName = freshVId(ctx, "loop")
-          val fnCall = Syntax.AppExp(span, Syntax.VarExp(span, Syntax.MkQualified([], fnName)), Syntax.RecordExp(span, []))
+          val fnCall = Syntax.AppExp(span, Syntax.VarExp(span, Syntax.MkQualified([], fnName)), Syntax.RecordExp(span, [], NONE))
       in Syntax.LetInExp( span
                         , [ Syntax.RecValDec( span
                                             , [] (* tyvars *)
@@ -281,7 +281,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                                                                         ]
                                                                                                                       , fnCall
                                                                                                                       )
-                                                                                                     , Syntax.RecordExp(span, [])
+                                                                                                     , Syntax.RecordExp(span, [], NONE)
                                                                                                      )
                                                                                )
                                                                              ]
@@ -779,7 +779,7 @@ local
     fun union3(x, y, z) = TyVarSet.union(x, TyVarSet.union(y, z))
     fun collectExp(_, SConExp _) = TyVarSet.empty
       | collectExp(_, VarExp _) = TyVarSet.empty
-      | collectExp(bound, RecordExp(_, xs)) = List.foldl (fn ((_, e), set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
+      | collectExp(bound, RecordExp(_, xs, optBase)) = List.foldl (fn ((_, e), set) => TyVarSet.union(collectExp(bound, e), set)) (case optBase of NONE => TyVarSet.empty | SOME base => collectExp(bound, base)) xs
       | collectExp(bound, LetInExp(_, decs, e)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (collectExp(bound, e)) decs
       | collectExp(bound, AppExp(_, x, y)) = TyVarSet.union(collectExp(bound, x), collectExp(bound,y))
       | collectExp(bound, TypedExp(_ ,x, ty)) = TyVarSet.union(collectExp(bound, x), TyVarSet.difference(freeTyVarsInTy(bound, ty), bound))
@@ -966,10 +966,13 @@ fun doDatBind (S.DatBind (span, tyvarseq, tycon, conbinds))
 (* doValBind : S.TyVarSet * S.ValBind -> unit *)
 fun doExp (env : S.TyVarSet.set, S.SConExp span) = ()
   | doExp (env, S.VarExp span) = ()
-  | doExp (env, S.RecordExp (span, fields)) = if checkRow fields then
-                                                  raise S.SyntaxError ([span], "no expression row may bind the same label twice")
-                                              else
-                                                  List.app (fn (label, exp) => doExp (env, exp)) fields
+  | doExp (env, S.RecordExp (span, fields, optBase))
+    = if checkRow fields then
+          raise S.SyntaxError ([span], "no expression row may bind the same label twice")
+      else
+          ( List.app (fn (label, exp) => doExp (env, exp)) fields
+          ; Option.app (fn exp => doExp (env, exp)) optBase
+          )
   | doExp (env, S.LetInExp (span, decls, exp)) = ( List.app (fn dec => doDec (env, dec)) decls ; doExp (env, exp) )
   | doExp (env, S.AppExp (span, e1, e2)) = ( doExp (env, e1) ; doExp (env, e2) )
   | doExp (env, S.TypedExp (span, exp, ty)) = ( doExp (env, exp) ; doTy ty )

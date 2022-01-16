@@ -34,8 +34,9 @@ Successor ML features:
 * [ ] Record punning
 * [ ] Record extension
     * [x] in patterns
-    * [ ] in expressions
+    * [x] in expressions
     * [ ] in types
+    * [ ] derived forms
 * [ ] Record update
 * [ ] Conjunctive patterns
 * [ ] Nested matches

@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure Typing = struct
@@ -1079,11 +1079,21 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
                                end
          | NONE => emitError(ctx, [span], "unknown value name " ^ Syntax.getVIdName vid)
       )
-  | typeCheckExp(ctx, env, S.RecordExp(span, fields))
+  | typeCheckExp(ctx, env, S.RecordExp(span, fields, NONE))
     = let fun oneField(label, exp) = case typeCheckExp(ctx, env, exp) of
                                          (ty, exp) => ((label, ty), (label, exp))
           val (fieldTypes, fields) = ListPair.unzip (List.map oneField fields)
       in (U.RecordType(span, Syntax.LabelMapFromList fieldTypes), U.RecordExp(span, fields))
+      end
+  | typeCheckExp(ctx, env, S.RecordExp(span, fields, SOME baseExp))
+    = let val (baseTy, baseExp) = typeCheckExp (ctx, env, baseExp)
+          val recordTy = U.TyVar (span, freshTyVar ctx)
+          fun oneField(label, exp) = case typeCheckExp(ctx, env, exp) of
+                                         (ty, exp) => ((label, ty), (label, exp))
+          val (fieldTypes, fields) = ListPair.unzip (List.map oneField fields)
+      in addConstraint (ctx, env, U.UnaryConstraint (span, recordTy, U.RecordExt { sourceSpan = span, fields = fieldTypes, baseTy = baseTy }))
+       ; addConstraint (ctx, env, U.UnaryConstraint (span, baseTy, U.SubrecordOf { sourceSpan = span, extraFields = fieldTypes, extendedTy = recordTy }))
+       ; (recordTy, U.RecordExtExp { sourceSpan = span, fields = fields, baseExp = baseExp, baseTy = baseTy })
       end
   | typeCheckExp(ctx, env, S.LetInExp(span, decs, innerExp))
     = let val (env', decs) = typeCheckDecs(ctx, env, decs)
@@ -1851,6 +1861,11 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
           fun goExp (U.SConExp (span, scon, ty)) = goTy ty
             | goExp (U.VarExp (span, longvid, ids, tyargs)) = List.app (fn (ty, cts) => (goTy ty; List.app goUnaryConstraint cts)) tyargs
             | goExp (U.RecordExp (span, fields)) = List.app (fn (label, exp) => goExp exp) fields
+            | goExp (U.RecordExtExp { sourceSpan, fields, baseExp, baseTy })
+              = ( List.app (fn (label, exp) => goExp exp) fields
+                ; goExp baseExp
+                ; goTy baseTy
+                )
             | goExp (U.LetInExp (span, decs, exp)) = let val tynameset = goDecs decs
                                                          val { goExp, ... } = checkTyScope (ctx, tvset, tynameset)
                                                      in goExp exp

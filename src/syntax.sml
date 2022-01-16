@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure Syntax = struct
@@ -346,7 +346,7 @@ structure OverloadKeyMap = RedBlackMapFn (OverloadKey)
 
 datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)
-             | RecordExp of SourcePos.span * (Label * Exp) list (* record *)
+             | RecordExp of SourcePos.span * (Label * Exp) list * Exp option (* record *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
              | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
              | TypedExp of SourcePos.span * Exp * Ty
@@ -410,7 +410,7 @@ local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
 in
-fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
+fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs, NONE)
 fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 end
 
@@ -425,7 +425,7 @@ fun getSourceSpanOfPat(WildcardPat span) = span
 
 fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(VarExp(span, _)) = span
-  | getSourceSpanOfExp(RecordExp(span, _)) = span
+  | getSourceSpanOfExp(RecordExp(span, _, _)) = span
   | getSourceSpanOfExp(LetInExp(span, _, _)) = span
   | getSourceSpanOfExp(AppExp(span, _, _)) = span
   | getSourceSpanOfExp(TypedExp(span, _, _)) = span
@@ -443,7 +443,7 @@ fun MkInfixConPat(pat1, _, vid, pat2) = let val span = SourcePos.mergeSpan(getSo
                                         in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], ellipsis = NONE }))
                                         end
 fun MkInfixExp(exp1, vspan, vid, exp2) = let val span = SourcePos.mergeSpan(getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
-                                        in AppExp(span, VarExp(vspan, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
+                                        in AppExp(span, VarExp(vspan, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)], NONE))
                                         end
 
 (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
@@ -508,10 +508,11 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
 fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
   | print_Exp (VarExp(_,MkQualified([], vid))) = "SimpleVarExp(" ^ print_VId vid ^ ")"
   | print_Exp (VarExp(_,x)) = "VarExp(" ^ print_LongVId x ^ ")"
-  | print_Exp (RecordExp(_,x)) = (case extractTuple (1, x) of
-                                      NONE => "RecordExp " ^ print_list (print_pair (print_Label, print_Exp)) x
-                                    | SOME ys => "TupleExp " ^ print_list print_Exp ys
-                                 )
+  | print_Exp (RecordExp(_,x,NONE)) = (case extractTuple (1, x) of
+                                           NONE => "RecordExp(" ^ print_list (print_pair (print_Label, print_Exp)) x ^ ",NONE)"
+                                         | SOME ys => "TupleExp " ^ print_list print_Exp ys
+                                      )
+  | print_Exp (RecordExp(_,x,SOME y)) = "RecordExp(" ^ print_list (print_pair (print_Label, print_Exp)) x ^ ",SOME " ^ print_Exp y ^ ")"
   | print_Exp (LetInExp(_,decls,x)) = "LetInExp(" ^ print_list print_Dec decls ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(_,x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (TypedExp(_,x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
@@ -555,7 +556,7 @@ datatype Pat
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
              | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
-             | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
+             | RecordExp of SourcePos.span * (Syntax.Label * Exp) list * Exp option (* record *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
              | JuxtapositionExp of SourcePos.span * Exp list (* application, or binary operator *)
              | AppExp of SourcePos.span * Exp * Exp (* application, used by desugaring of list expression *)
@@ -593,7 +594,7 @@ local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
 in
-fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
+fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs, NONE)
 fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 end
 

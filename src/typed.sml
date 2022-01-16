@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure USyntax = struct
@@ -167,6 +167,11 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
+             | RecordExtExp of { sourceSpan : SourcePos.span
+                               , fields : (Syntax.Label * Exp) list
+                               , baseExp : Exp
+                               , baseTy : Ty
+                               } (* record extension *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
              | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
              | TypedExp of SourcePos.span * Exp * Ty
@@ -224,6 +229,7 @@ fun getSourceSpanOfTy(TyVar(span, _)) = span
 fun getSourceSpanOfExp(SConExp(span, _, _)) = span
   | getSourceSpanOfExp(VarExp(span, _, _, _)) = span
   | getSourceSpanOfExp(RecordExp(span, _)) = span
+  | getSourceSpanOfExp(RecordExtExp { sourceSpan, ... }) = sourceSpan
   | getSourceSpanOfExp(LetInExp(span, _, _)) = span
   | getSourceSpanOfExp(AppExp(span, _, _)) = span
   | getSourceSpanOfExp(TypedExp(span, _, _)) = span
@@ -291,6 +297,7 @@ fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
                                        NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                      | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
                                   )
+  | print_Exp (RecordExtExp { sourceSpan = _, fields, baseExp, baseTy }) = "RecordExtExp(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) fields ^ "," ^ print_Exp baseExp ^ ")"
   | print_Exp (LetInExp(_,decls,x)) = "LetInExp(" ^ Syntax.print_list print_Dec decls ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(_,x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (TypedExp(_,x,y)) = "TypedExp(" ^ print_Exp x ^ "," ^ print_Ty y ^ ")"
@@ -407,6 +414,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
           fun doExp(SConExp(span, scon, ty)) = SConExp(span, scon, doTy ty)
             | doExp(VarExp(span, longvid, idstatus, tyargs)) = VarExp(span, longvid, idstatus, List.map (fn (ty, cts) => (doTy ty, List.map doUnaryConstraint cts)) tyargs)
             | doExp(RecordExp(span, fields)) = RecordExp(span, Syntax.mapRecordRow doExp fields)
+            | doExp(RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = RecordExtExp { sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doExp fields, baseExp = doExp baseExp, baseTy = doTy baseTy }
             | doExp(LetInExp(span, decls, e)) = LetInExp(span, List.map doDec decls, doExp e)
             | doExp(AppExp(span, e1, e2)) = AppExp(span, doExp e1, doExp e2)
             | doExp(TypedExp(span, e, ty)) = TypedExp(span, doExp e, doTy ty)
@@ -513,6 +521,7 @@ fun freeTyVarsInExp(bound, exp)
            SConExp(_, _, ty) => freeTyVarsInTy(bound, ty)
          | VarExp(_, _, _, tyargs) => List.foldl (fn ((ty,cts), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
          | RecordExp(_, xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
+         | RecordExtExp { sourceSpan = _, fields, baseExp, baseTy } => List.foldl (fn ((_, exp), set) => TyVarSet.union (freeTyVarsInExp (bound, exp), set)) (TyVarSet.union (freeTyVarsInExp (bound, baseExp), freeTyVarsInTy (bound, baseTy))) fields
          | LetInExp(_, decls, exp) => TyVarSet.union(freeTyVarsInDecs(bound, decls), freeTyVarsInExp(bound, exp))
          | AppExp(_, exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
          | TypedExp(_, exp, ty) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInTy(bound, ty))

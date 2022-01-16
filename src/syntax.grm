@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 fun nilPat span = UnfixedSyntax.NonInfixVIdPat (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
@@ -9,7 +9,7 @@ fun nilExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syn
 fun consOp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
 fun MkAndAlsoExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, e2, falseExp span)
 fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp span, e2)
-fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)])
+fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)], NONE)
 fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
 fun MkListExp (span, xs) = UnfixedSyntax.ListExp(span, Vector.fromList xs)
 fun MkVectorExp (span, xs) = UnfixedSyntax.VectorExp(span, Vector.fromList xs)
@@ -105,7 +105,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TyRow of (Syntax.Label * Syntax.Ty) list
        | AtExp of UnfixedSyntax.Exp
        | AppOrInfExp of UnfixedSyntax.Exp list
-       | ExpRow of (Syntax.Label * UnfixedSyntax.Exp) list
+       | ExpRow of (Syntax.Label * UnfixedSyntax.Exp) list * UnfixedSyntax.Exp option
        | ExpCSeqRest of UnfixedSyntax.Exp list
        | ExpSSeqRest of UnfixedSyntax.Exp list
        | TypedExp of UnfixedSyntax.Exp
@@ -348,14 +348,14 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
                         | longvid => UnfixedSyntax.NonInfixVIdExp(span(LongBoundVIdleft,LongBoundVIdright),longvid)
                      ) (* value identifier *)
       | EQUALS (UnfixedSyntax.InfixOrVIdExp(span(EQUALSleft,EQUALSright),Syntax.MkVId "="))
-      | LBRACE RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),nil)) (* empty record *)
-      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),ExpRow)) (* record *)
+      | LBRACE RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),nil,NONE)) (* empty record *)
+      | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp(span(LBRACEleft,RBRACEright),#1 ExpRow,#2 ExpRow)) (* record *)
       | LET Decs IN Exp END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (case Exp of
                                UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp(span(LPARENleft,RPARENright),[Exp])
                              | exp => exp
                           ) (* parenthesized expression *)
-      | LPAREN RPAREN (UnfixedSyntax.RecordExp(span(LPARENleft,RPARENright),nil)) (* [derived] 0-tuple *)
+      | LPAREN RPAREN (UnfixedSyntax.RecordExp(span(LPARENleft,RPARENright),nil,NONE)) (* [derived] 0-tuple *)
       | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (span(LPARENleft,RPARENright), Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
       | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp (span(LPARENleft,RPARENright), Exp1, Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
       | LET Decs IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, MkSequentialExp(span(Exp1left, ExpSSeqRestright), Exp1, Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
@@ -379,8 +379,9 @@ ExpSSeqRest : SEMICOLON Exp ExpSSeqRest (Exp :: ExpSSeqRest)
             | (nil)
 
 (* expression rows *)
-ExpRow : Lab EQUALS Exp COMMA ExpRow ((Lab, Exp) :: ExpRow)
-       | Lab EQUALS Exp ((Lab, Exp) :: nil)
+ExpRow : Lab EQUALS Exp COMMA ExpRow (((Lab, Exp) :: #1 ExpRow, #2 ExpRow))
+       | Lab EQUALS Exp (([(Lab, Exp)], NONE))
+       | ELLIPSIS EQUALS Exp (([], SOME Exp))
 
 (*
 AppExp : AtExp

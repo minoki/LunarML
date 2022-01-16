@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure FSyntax = struct
@@ -747,6 +747,25 @@ and toFExp(ctx, env, U.SConExp(span, Syntax.IntegerConstant value, ty)) = cookIn
   | toFExp(ctx, env, U.RecordExp(span, fields)) = let fun doField (label, e) = (label, toFExp(ctx, env, e))
                                                   in F.RecordExp (List.map doField fields)
                                                   end
+  | toFExp(ctx, env, U.RecordExtExp { sourceSpan, fields, baseExp, baseTy as U.RecordType (_, baseFields) })
+    = let fun vidForLabel (Syntax.IdentifierLabel x) = x
+            | vidForLabel (Syntax.NumericLabel n) = "field" ^ Int.toString n
+          fun doField ((label, e), (decs, fields))
+              = let val vid = freshVId (ctx, vidForLabel label)
+                    val e = toFExp (ctx, env, e)
+                    val dec = F.ValDec (F.SimpleBind (vid, F.RecordType Syntax.LabelMap.empty (* dummy *), e))
+                in (dec :: decs, (label, F.VarExp vid) :: fields)
+                end
+          val (decs, fields) = List.foldr doField ([], []) fields
+          val baseVId = freshVId (ctx, "base")
+          val baseDec = F.ValDec (F.SimpleBind (baseVId, toFTy (ctx, env, baseTy), toFExp (ctx, env, baseExp)))
+          val baseExp = F.VarExp baseVId
+          val baseFields = Syntax.LabelMap.foldri (fn (label, _, fields) =>
+                                                      (label, F.ProjectionExp { label = label, record = baseExp }) :: fields
+                                                  ) [] baseFields
+      in List.foldr F.LetExp (F.LetExp (baseDec, F.RecordExp (fields @ baseFields))) decs
+      end
+  | toFExp(ctx, env, U.RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = raise Fail ("record extension of non-record type: " ^ U.print_Ty baseTy)
   | toFExp(ctx, env, U.LetInExp(span, decs, e))
     = let val (env, decs) = toFDecs(ctx, env, decs)
       in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
