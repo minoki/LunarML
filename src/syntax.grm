@@ -23,7 +23,7 @@ fun MkSequentialExp (span, e1, []) = e1
 fun MkTupleTy(_,[x]) = x
   | MkTupleTy(span, xs) = let fun doFields i nil = nil
                                 | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
-                          in Syntax.RecordType (span, doFields 1 xs)
+                          in Syntax.RecordType (span, doFields 1 xs, NONE)
                           end
 fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(strid :: strids, x)
 fun span(p1,p2) = { start = p1, end_ = p2 }
@@ -102,7 +102,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TySeqRest of Syntax.Ty list
        | TyVarSeq of Syntax.TyVar list
        | TyVarSeqRest of Syntax.TyVar list
-       | TyRow of (Syntax.Label * Syntax.Ty) list
+       | TyRow of (Syntax.Label * Syntax.Ty) list * Syntax.Ty option
        | AtExp of UnfixedSyntax.Exp
        | AppOrInfExp of UnfixedSyntax.Exp list
        | ExpRow of (Syntax.Label * UnfixedSyntax.Exp) list * UnfixedSyntax.Exp option
@@ -292,7 +292,7 @@ PatPun : TypedPatPun (TypedPatPun)
 
 (* pattern rows *)
 PatRow : ELLIPSIS ((nil, SOME (UnfixedSyntax.WildcardPat(span(ELLIPSISleft,ELLIPSISright))))) (* wildcard *)
-       | ELLIPSIS EQUALS Pat ((nil, SOME Pat)) (* ellipses *)
+       | ELLIPSIS EQUALS Pat ((nil, SOME Pat)) (* [Successor ML] ellipses *)
        | Lab EQUALS Pat COMMA PatRow (case PatRow of (s,t) => ((Lab, Pat) :: s, t)) (* pattern row *)
        | Lab EQUALS Pat (([(Lab, Pat)], NONE))
        | PatPun COMMA PatRow (case PatRow of (s,t) => ((#1 PatPun, #2 PatPun) :: s, t)) (* [derived] punning *)
@@ -306,8 +306,8 @@ PatSeqRestEllipsis : COMMA Pat PatSeqRestEllipsis (case PatSeqRestEllipsis of (P
                    | ((nil, false))
 
 AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
-     | LBRACE RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), nil)) (* record type expression *)
-     | LBRACE TyRow RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), TyRow)) (* record type expression *)
+     | LBRACE RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), nil, NONE)) (* record type expression *)
+     | LBRACE TyRow RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), #1 TyRow, #2 TyRow)) (* record type expression *)
      | LPAREN Ty RPAREN (Ty)
 
 LongTyConOrPrimTyCon : LongTyCon (LongTyCon)
@@ -337,8 +337,9 @@ TyVarSeqRest : COMMA TyVar TyVarSeqRest (TyVar :: TyVarSeqRest) (* *)
              | (nil) (* empty *)
 
 (* type-expression rows *)
-TyRow : Lab COLON Ty COMMA TyRow ((Lab, Ty) :: TyRow) (* type-expression row *)
-      | Lab COLON Ty ((Lab, Ty) :: nil) (* type-expression row *)
+TyRow : Lab COLON Ty COMMA TyRow (((Lab, Ty) :: #1 TyRow, #2 TyRow)) (* type-expression row *)
+      | Lab COLON Ty (([(Lab, Ty)], NONE)) (* type-expression row *)
+      | ELLIPSIS COLON Ty (([], SOME Ty)) (* [Successor ML] ellipses *)
 
 (* atomic expressions *)
 AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special constant *)
@@ -381,7 +382,7 @@ ExpSSeqRest : SEMICOLON Exp ExpSSeqRest (Exp :: ExpSSeqRest)
 (* expression rows *)
 ExpRow : Lab EQUALS Exp COMMA ExpRow (((Lab, Exp) :: #1 ExpRow, #2 ExpRow))
        | Lab EQUALS Exp (([(Lab, Exp)], NONE))
-       | ELLIPSIS EQUALS Exp (([], SOME Exp))
+       | ELLIPSIS EQUALS Exp (([], SOME Exp)) (* [Successor ML] ellipses *)
 
 (*
 AppExp : AtExp

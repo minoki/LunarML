@@ -191,6 +191,7 @@ should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
   "withtype_in_signature.sml",
   "abstype.sml",
+  "record_extension_type.sml",
 }
 should_not_compile "successor_ml/should_not_compile/" {
   "nonexhaustive_bind.sml",

@@ -758,7 +758,8 @@ fun freeTyVarsInTy(bound, TyVar(_, tv)) = if TyVarSet.member(bound, tv) then
                                               TyVarSet.empty
                                           else
                                               TyVarSet.singleton tv
-  | freeTyVarsInTy(bound, RecordType(_, xs)) = List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+  | freeTyVarsInTy(bound, RecordType(_, xs, NONE)) = List.foldl (fn ((_, ty), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
+  | freeTyVarsInTy(bound, RecordType(_, xs, SOME baseTy)) = List.foldl (fn ((_, ty), set) => TyVarSet.union (freeTyVarsInTy (bound, ty), set)) (freeTyVarsInTy (bound, baseTy)) xs
   | freeTyVarsInTy(bound, TyCon(_, xs, _)) = List.foldl (fn (ty,set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
   | freeTyVarsInTy(bound, FnType(_, s, t)) = TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
 
@@ -918,10 +919,10 @@ and doCheckTyVarSeq (span, seen, []) = ()
 
 (* doTy : S.Ty -> unit *)
 fun doTy (S.TyVar span) = ()
-  | doTy (S.RecordType (span, fields)) = if checkRow fields then
-                                             raise S.SyntaxError ([span], "no type-expression row may bind the same label twice")
-                                         else
-                                             ()
+  | doTy (S.RecordType (span, fields, optBaseTy)) = if checkRow fields then
+                                                        raise S.SyntaxError ([span], "no type-expression row may bind the same label twice")
+                                                    else
+                                                        Option.app doTy optBaseTy
   | doTy (S.TyCon (span, tyargs, longtycon)) = List.app doTy tyargs
   | doTy (S.FnType (span, s, t)) = ( doTy s ; doTy t )
 

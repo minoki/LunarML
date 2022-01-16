@@ -806,7 +806,16 @@ fun evalTy(ctx : Context, env : ('val,'str) Env', S.TyVar(span, tv)) : U.Ty
            SOME tv => U.TyVar(span, tv)
          | NONE => emitError(ctx, [span], "unknown type varibale `" ^ Syntax.print_TyVar tv ^ "`")
       )
-  | evalTy(ctx, env, S.RecordType(span, fields)) = U.RecordType(span, List.foldl (fn ((label, ty), m) => Syntax.LabelMap.insert(m, label, evalTy(ctx, env, ty))) Syntax.LabelMap.empty fields)
+  | evalTy(ctx, env, S.RecordType(span, fields, NONE)) = U.RecordType(span, List.foldl (fn ((label, ty), m) => Syntax.LabelMap.insert(m, label, evalTy(ctx, env, ty))) Syntax.LabelMap.empty fields)
+  | evalTy(ctx, env, S.RecordType(span, fields, SOME baseTy)) = (case evalTy (ctx, env, baseTy) of
+                                                                     U.RecordType (_, fields') => U.RecordType (span, List.foldl (fn ((label, ty), m) =>
+                                                                                                                                     if Syntax.LabelMap.inDomain (m, label) then
+                                                                                                                                         emitError (ctx, [span], "duplicate record field: " ^ Syntax.print_Label label)
+                                                                                                                                     else
+                                                                                                                                         Syntax.LabelMap.insert (m, label, evalTy (ctx, env, ty))
+                                                                                                                                 ) fields' fields)
+                                                                   | _ => emitError (ctx, [span], "invalid record extension")
+                                                                )
   | evalTy(ctx, env, S.TyCon(span, args, tycon))
     = let val { typeFunction = U.TypeFunction(tyvars, ty), ... } = lookupTyConInEnv(ctx, env, span, tycon)
           val subst = (ListPair.foldlEq (fn (tv, arg, m) => USyntax.TyVarMap.insert (m, tv, evalTy(ctx, env, arg))) USyntax.TyVarMap.empty (tyvars, args))
@@ -945,11 +954,11 @@ fun doWithtype(ctx, env, typbinds : S.TypBind list) : S.ConBind -> S.ConBind
                                                               SOME ty => ty
                                                             | NONE => ty
                                                          )
-            | goTyAlias env (S.RecordType (span, fields)) = S.RecordType (span, List.map (fn (label, ty) => (label, goTyAlias env ty)) fields)
+            | goTyAlias env (S.RecordType (span, fields, optBaseTy)) = S.RecordType (span, List.map (fn (label, ty) => (label, goTyAlias env ty)) fields, Option.map (goTyAlias env) optBaseTy)
             | goTyAlias env (S.TyCon (span, tyargs, longtycon)) = S.TyCon (span, List.map (goTyAlias env) tyargs, longtycon)
             | goTyAlias env (S.FnType (span, s, t)) = S.FnType (span, goTyAlias env s, goTyAlias env t)
           fun goTy (ty as S.TyVar (span, tv)) = ty
-            | goTy (S.RecordType (span, fields)) = S.RecordType (span, List.map (fn (label, ty) => (label, goTy ty)) fields)
+            | goTy (S.RecordType (span, fields, optBaseTy)) = S.RecordType (span, List.map (fn (label, ty) => (label, goTy ty)) fields, Option.map goTy optBaseTy)
             | goTy (S.TyCon (span, tyargs, Syntax.MkQualified ([], tycon))) = let val tyargs = List.map goTy tyargs
                                                                               in case S.TyConMap.find (map, tycon) of
                                                                                      SOME (tyvars, ty) => let val env' = ListPair.foldlEq (fn (tv, tyarg, m) => S.TyVarMap.insert (m, tv, tyarg)) S.TyVarMap.empty (tyvars, tyargs)
@@ -980,7 +989,14 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
                                                                                else
                                                                                    NONE
                                                         )
-                      | doTy (S.RecordType (span, fields)) = doTypes (List.map #2 fields)
+                      | doTy (S.RecordType (span, fields, NONE)) = doTypes (List.map #2 fields)
+                      | doTy (S.RecordType (span, fields, SOME baseTy)) = (case doTypes (List.map #2 fields) of
+                                                                               SOME xs => (case doTy baseTy of
+                                                                                               SOME ys => SOME (xs @ ys)
+                                                                                             | none as NONE => none
+                                                                                          )
+                                                                             | none as NONE => none
+                                                                          )
                       | doTy (S.TyCon (span, tyargs, longtycon))
                         = let val l = case longtycon of
                                           Syntax.MkQualified([], tycon) =>

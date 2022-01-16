@@ -125,7 +125,7 @@ end
 structure LongTyConSet = RedBlackSetFn(LongTyCon)
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
-            | RecordType of SourcePos.span * (Label * Ty) list (* record type expression *)
+            | RecordType of SourcePos.span * (Label * Ty) list * Ty option (* record type expression *)
             | TyCon of SourcePos.span * Ty list * LongTyCon (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
 
@@ -489,7 +489,8 @@ fun print_IdStatus ValueVariable = "ValueVariable"
 
 (* pretty printing *)
 fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
-  | print_Ty (RecordType(_,xs)) = "RecordType " ^ print_list (print_pair (print_Label,print_Ty)) xs
+  | print_Ty (RecordType(_,xs,NONE)) = "RecordType(" ^ print_list (print_pair (print_Label,print_Ty)) xs ^ ",NONE)"
+  | print_Ty (RecordType(_,xs,SOME baseTy)) = "RecordType(" ^ print_list (print_pair (print_Label,print_Ty)) xs ^ ",SOME " ^ print_Ty baseTy ^ ")"
   | print_Ty (TyCon(_,x,y)) = "TyCon(" ^ print_list print_Ty x ^ "," ^ print_LongTyCon y ^ ")"
   | print_Ty (FnType(_,x,y)) = "FnType(" ^ print_Ty x ^ "," ^ print_Ty y ^ ")"
 fun print_Pat (WildcardPat _) = "WildcardPat"
