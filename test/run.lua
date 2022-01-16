@@ -180,6 +180,11 @@ should_run "mlbasis/should_run/" {
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
 }
+should_run "successor_ml/should_run/" {
+  "record_extension_pattern.sml",
+  "record_extension_pattern_2.sml",
+  "record_extension_pattern_3.sml",
+}
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
   "withtype_in_signature.sml",
@@ -189,6 +194,8 @@ should_not_compile "successor_ml/should_not_compile/" {
   "nonexhaustive_bind.sml",
   "val_rec_override.sml",
   "typealias_in_signature.sml",
+  "record_extension_pattern_1.sml",
+  "record_extension_pattern_2.sml",
 }
 should_run "extension/should_run/" {
   "vector_exp.sml",

@@ -134,7 +134,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | VarPat of SourcePos.span * VId (* variable *)
              | RecordPat of { sourceSpan : SourcePos.span
                             , fields : (Label * Pat) list
-                            , wildcard : bool
+                            , ellipsis : Pat option
                             }
              | ConPat of SourcePos.span * LongVId * Pat option (* constructed pattern *)
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
@@ -411,7 +411,7 @@ local
       | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
 in
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
-fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, wildcard = false }
+fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 end
 
 fun getSourceSpanOfPat(WildcardPat span) = span
@@ -440,7 +440,7 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(PrimExp(span, _, _, _)) = span
 
 fun MkInfixConPat(pat1, _, vid, pat2) = let val span = SourcePos.mergeSpan(getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
-                                        in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], wildcard = false }))
+                                        in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], ellipsis = NONE }))
                                         end
 fun MkInfixExp(exp1, vspan, vid, exp2) = let val span = SourcePos.mergeSpan(getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
                                         in AppExp(span, VarExp(vspan, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)]))
@@ -498,11 +498,11 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (TypedPat (_, pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, oty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_option print_Ty oty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ConPat(_, longvid, pat)) = "ConPat(" ^ print_LongVId longvid ^ "," ^ print_option print_Pat pat ^ ")"
-  | print_Pat (RecordPat { fields = x, wildcard = false, ... }) = (case extractTuple (1, x) of
-                                                                       NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",false)"
+  | print_Pat (RecordPat { fields = x, ellipsis = NONE, ... }) = (case extractTuple (1, x) of
+                                                                       NONE => "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",NONE)"
                                                                      | SOME ys => "TuplePat " ^ print_list print_Pat ys
                                                                   )
-  | print_Pat (RecordPat { fields = x, wildcard = true, ... }) = "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",true)"
+  | print_Pat (RecordPat { fields = x, ellipsis = SOME rest, ... }) = "RecordPat(" ^ print_list (print_pair (print_Label, print_Pat)) x ^ ",SOME(" ^ print_Pat rest ^ "))"
   | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp(_,x)) = "SConExp(" ^ print_SCon x ^ ")"
@@ -547,7 +547,7 @@ datatype Pat
   | InfixOrVIdPat of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifers *)
   | JuxtapositionPat of SourcePos.span * Pat list (* constructed pattern, maybe with binary operator  *)
   | ConPat of SourcePos.span * Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
-  | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, wildcard : bool }
+  | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
   | TypedPat of SourcePos.span * Pat * Syntax.Ty (* typed *)
   | ConjunctivePat of SourcePos.span * Pat * Pat (* layered or [Successor ML] conjunctive *)
   | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
@@ -594,7 +594,7 @@ local
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
 in
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
-fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, wildcard = false }
+fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 end
 
 fun getSourceSpanOfPat(WildcardPat span) = span

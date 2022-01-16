@@ -175,7 +175,7 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
                                                               )
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = ConOrVarPat(env, span, vid)
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE) (* TODO: Check idstatus? *)
-  | doPat(ctx, env, UnfixedSyntax.RecordPat{sourceSpan, fields, wildcard}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(ctx, env, pat))) fields, wildcard = wildcard }
+  | doPat(ctx, env, UnfixedSyntax.RecordPat{sourceSpan, fields, ellipsis}) = Syntax.RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat(ctx, env, pat))) fields, ellipsis = Option.map (fn pat => doPat(ctx, env, pat)) ellipsis }
   | doPat(ctx, env, UnfixedSyntax.JuxtapositionPat(jspan, patterns)) (* constructed pattern or infix constructed pattern *)
     = let fun doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: UnfixedSyntax.InfixOrVIdPat(span2, vid') :: pats)
               = (case getFixityStatus(env, vid) of
@@ -270,7 +270,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                             , [Syntax.PatBind( span
                                                              , Syntax.VarPat(span, fnName)
                                                              , Syntax.FnExp( span
-                                                                           , [ ( Syntax.RecordPat { sourceSpan = span, fields = [], wildcard = false }
+                                                                           , [ ( Syntax.RecordPat { sourceSpan = span, fields = [], ellipsis = NONE }
                                                                                , Syntax.IfThenElseExp( span
                                                                                                      , doExp(ctx, env, e1)
                                                                                                      , Syntax.LetInExp( span
@@ -930,10 +930,10 @@ fun doPat (S.WildcardPat _) = ()
   | doPat (S.SConPat (span, S.RealConstant _)) = raise S.SyntaxError ([span], "no real constant may occur in a pattern")
   | doPat (S.SConPat _) = ()
   | doPat (S.VarPat (_, vid)) = ()
-  | doPat (S.RecordPat { sourceSpan, fields, wildcard }) = if checkRow fields then
+  | doPat (S.RecordPat { sourceSpan, fields, ellipsis }) = if checkRow fields then
                                                                raise S.SyntaxError ([sourceSpan], "no pattern row may bind the same label twice")
                                                            else
-                                                               ()
+                                                               Option.app doPat ellipsis
   | doPat (S.ConPat (_, _, NONE)) = ()
   | doPat (S.ConPat (_, longvid, SOME pat)) = doPat pat
   | doPat (S.TypedPat (_, pat, ty)) = ( doTy ty ; doPat pat )

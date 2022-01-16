@@ -99,6 +99,14 @@ datatype UnaryConstraint
                 , label : Syntax.Label
                 , fieldTy : Ty
                 }
+  | RecordExt of { sourceSpan : SourcePos.span
+                 , fields : (Syntax.Label * Ty) list
+                 , baseTy : Ty
+                 }
+  | SubrecordOf of { sourceSpan : SourcePos.span
+                   , extraFields : (Syntax.Label * Ty) list
+                   , extendedTy : Ty
+                   }
   | IsEqType of SourcePos.span
   | IsIntegral of SourcePos.span (* Int, Word; div, mod; defaults to int *)
   | IsSignedReal of SourcePos.span (* Int, Real; abs; defaults to int *)
@@ -144,7 +152,7 @@ type FunSig = { bound : { tyname : TyName, arity : int, admitsEquality : bool, l
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarPat of SourcePos.span * VId * Ty (* variable *)
-             | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, wildcard : bool }
+             | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
              | ConPat of { sourceSpan : SourcePos.span, longvid : LongVId, payload : Pat option, tyargs : Ty list, isSoleConstructor : bool }
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
              | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
@@ -204,7 +212,7 @@ local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
 in
-fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, wildcard = false }
+fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 end
 
@@ -270,11 +278,11 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (TypedPat (_, pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ConPat { longvid, payload, tyargs, ...}) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat payload ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
-  | print_Pat (RecordPat{fields = x, wildcard = false, ...}) = (case Syntax.extractTuple (1, x) of
-                                                               NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",false)"
+  | print_Pat (RecordPat{fields = x, ellipsis = NONE, ...}) = (case Syntax.extractTuple (1, x) of
+                                                               NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",NONE)"
                                                              | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
                                                           )
-  | print_Pat (RecordPat{fields = x, wildcard = true, ...}) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",true)"
+  | print_Pat (RecordPat{fields = x, ellipsis = SOME basePat, ...}) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",SOME(" ^ print_Pat basePat ^ "))"
   | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
@@ -311,6 +319,8 @@ and print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (S
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_UnaryConstraint (RecordExt { sourceSpan, fields, baseTy }) = "RecordExt{fields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) fields ^ ",baseTy=" ^ print_Ty baseTy ^ "}"
+  | print_UnaryConstraint (SubrecordOf { sourceSpan, extraFields, extendedTy }) = "SubrecordOf{extraFields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) extraFields ^ ",extendedTy=" ^ print_Ty extendedTy ^ "}"
   | print_UnaryConstraint (IsEqType _) = "IsEqType"
   | print_UnaryConstraint (IsIntegral _) = "IsIntegral"
   | print_UnaryConstraint (IsSignedReal _) = "IsSignedReal"
@@ -425,7 +435,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyV
           and doPat(pat as WildcardPat _) = pat
             | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
             | doPat(VarPat(span, vid, ty)) = VarPat(span, vid, doTy ty)
-            | doPat(RecordPat{sourceSpan, fields, wildcard}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, wildcard=wildcard}
+            | doPat(RecordPat{sourceSpan, fields, ellipsis}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, ellipsis=Option.map doPat ellipsis}
             | doPat(ConPat{sourceSpan, longvid, payload, tyargs, isSoleConstructor}) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, isSoleConstructor = isSoleConstructor }
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
@@ -547,7 +557,9 @@ and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInExBind(bound, ExReplication(_, _, _, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
-           HasField{fieldTy = fieldTy, ...} => freeTyVarsInTy(bound, fieldTy)
+           HasField { fieldTy, ... } => freeTyVarsInTy (bound, fieldTy)
+         | RecordExt { fields, baseTy, ... } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, baseTy)) fields
+         | SubrecordOf { extraFields, extendedTy, ... } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, extendedTy)) extraFields
          | IsEqType _     => TyVarSet.empty
          | IsIntegral _   => TyVarSet.empty
          | IsSignedReal _ => TyVarSet.empty
@@ -585,7 +597,7 @@ fun filterVarsInPat pred =
                             WildcardPat _ => pat
                           | SConPat _ => pat
                           | VarPat(span, vid, ty) => if pred vid then pat else WildcardPat span
-                          | RecordPat{sourceSpan, fields, wildcard} => RecordPat{ sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, wildcard = wildcard }
+                          | RecordPat { sourceSpan, fields, ellipsis } => RecordPat{ sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis }
                           | ConPat { payload = NONE, ... } => pat
                           | ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (doPat innerPat), tyargs = tyargs, isSoleConstructor = isSoleConstructor }
                           | TypedPat(span, innerPat, ty) => TypedPat(span, doPat innerPat, ty)
@@ -602,9 +614,9 @@ fun renameVarsInPat m =
                                                         NONE => pat
                                                       | SOME repl => VarPat(span, repl, ty)
                                                    )
-          | doPat (RecordPat { sourceSpan, fields, wildcard }) = RecordPat { sourceSpan = sourceSpan
+          | doPat (RecordPat { sourceSpan, fields, ellipsis }) = RecordPat { sourceSpan = sourceSpan
                                                                            , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
-                                                                           , wildcard = wildcard
+                                                                           , ellipsis = Option.map doPat ellipsis
                                                                            }
           | doPat (ConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = tyargs, isSoleConstructor = isSoleConstructor }
           | doPat (TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, ty)

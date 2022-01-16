@@ -113,22 +113,7 @@ fun freeTyVarsInEnv(bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap
       in Syntax.StrIdMap.foldl (fn ((s, _), set) => USyntax.TyVarSet.union(set, freeTyVarsInSignature(bound, s))) valMapSet strMap
       end
 fun freeTyVarsInConstraint(bound, USyntax.EqConstr(span, ty1, ty2)) = USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty1), USyntax.freeTyVarsInTy(bound, ty2))
-  | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(span, ty, unaryConstraint))
-    = (case unaryConstraint of
-           USyntax.HasField{fieldTy = fieldTy, ...} => USyntax.TyVarSet.union(USyntax.freeTyVarsInTy(bound, ty), USyntax.freeTyVarsInTy(bound, fieldTy))
-         | USyntax.IsEqType _     => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsIntegral _   => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsSignedReal _ => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsRing _       => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsField _      => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsSigned _     => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsOrdered _    => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsInt _        => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsWord _       => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsReal _       => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsChar _       => USyntax.freeTyVarsInTy(bound, ty)
-         | USyntax.IsString _     => USyntax.freeTyVarsInTy(bound, ty)
-      )
+  | freeTyVarsInConstraint(bound, USyntax.UnaryConstraint(span, ty, unaryConstraint)) = USyntax.TyVarSet.union (USyntax.freeTyVarsInTy(bound, ty), USyntax.freeTyVarsInUnaryConstraint (bound, unaryConstraint))
 
 type ProgramContext = { nextTyVar : int ref
                       , nextVId : int ref
@@ -480,7 +465,9 @@ fun substituteTy (tv, replacement) =
 fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
     in fn U.EqConstr(span, ty1, ty2) => U.EqConstr(span, substTy ty1, substTy ty2)
-     | U.UnaryConstraint(span1, recordTy, U.HasField{sourceSpan, label, fieldTy }) => U.UnaryConstraint(span1, substTy recordTy, U.HasField{sourceSpan = sourceSpan, label = label, fieldTy = substTy fieldTy})
+     | U.UnaryConstraint(span1, recordTy, U.HasField { sourceSpan, label, fieldTy }) => U.UnaryConstraint(span1, substTy recordTy, U.HasField { sourceSpan = sourceSpan, label = label, fieldTy = substTy fieldTy })
+     | U.UnaryConstraint(span1, recordTy, U.RecordExt { sourceSpan, fields, baseTy }) => U.UnaryConstraint(span1, substTy recordTy, U.RecordExt { sourceSpan = sourceSpan, fields = List.map (fn (label, ty) => (label, substTy ty)) fields, baseTy = substTy baseTy })
+     | U.UnaryConstraint(span1, recordTy, U.SubrecordOf { sourceSpan, extraFields, extendedTy }) => U.UnaryConstraint(span1, substTy recordTy, U.SubrecordOf { sourceSpan = sourceSpan, extraFields = List.map (fn (label, ty) => (label, substTy ty)) extraFields, extendedTy = substTy extendedTy })
      | U.UnaryConstraint(span1, ty, c as U.IsEqType _) => U.UnaryConstraint(span1, substTy ty, c)
      | U.UnaryConstraint(span1, ty, c as U.IsIntegral _) => U.UnaryConstraint(span1, substTy ty, c)
      | U.UnaryConstraint(span1, ty, c as U.IsSignedReal _) => U.UnaryConstraint(span1, substTy ty, c)
@@ -579,6 +566,48 @@ fun unify(ctx : Context, env : Env, nil : U.Constraint list) : unit = ()
                              ; unify(ctx, env, ctrs)
                              )
                 )
+           )
+         | U.UnaryConstraint(span1, recordTy, c as U.RecordExt { sourceSpan = span3, fields, baseTy }) =>
+           (case recordTy of
+                U.RecordType (span2, fields') =>
+                let val (fields', ctrs) = List.foldl (fn ((label, ty), (fields', ctrs)) =>
+                                                         if Syntax.LabelMap.inDomain (fields', label) then
+                                                             let val (fields', ty') = Syntax.LabelMap.remove (fields', label)
+                                                             in (fields', U.EqConstr (span1, ty, ty') :: ctrs)
+                                                             end
+                                                         else
+                                                             emitError (ctx, [span1, span2, span3], "record field mismatch: " ^ Syntax.print_Label label)
+                                                     ) (fields', ctrs) fields
+                in unify (ctx, env, U.EqConstr (span1, baseTy, U.RecordType (span1, fields')) :: ctrs)
+                end
+              | U.TyCon (span2, _, _) => emitError (ctx, [span1, span2, span3], "record field for a non-record type")
+              | U.FnType (span2, _, _) => emitError (ctx, [span1, span2, span3], "record field for a function type")
+              | U.TyVar (span2, tv) =>
+                case USyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+                    SOME replacement => unify (ctx, env, U.UnaryConstraint (span1, replacement, c) :: ctrs)
+                  | NONE => ( addTyVarConstraint (ctx, tv, c)
+                            ; unify (ctx, env, ctrs)
+                            )
+           )
+         | U.UnaryConstraint(span1, recordTy, c as U.SubrecordOf { sourceSpan = span3, extraFields, extendedTy }) =>
+           (case recordTy of
+                U.RecordType (span2, fields') =>
+                let val fields' = List.foldl (fn ((label, ty), fields') =>
+                                                 if Syntax.LabelMap.inDomain (fields', label) then
+                                                     emitError (ctx, [span1, span2, span3], "duplicate record field: " ^ Syntax.print_Label label)
+                                                 else
+                                                     Syntax.LabelMap.insert (fields', label, ty)
+                                             ) fields' extraFields
+                in unify (ctx, env, U.EqConstr (span1, extendedTy, U.RecordType (span1, fields')) :: ctrs)
+                end
+              | U.TyCon (span2, _, _) => emitError (ctx, [span1, span2, span3], "record extension for a non-record type")
+              | U.FnType (span2, _, _) => emitError (ctx, [span1, span2, span3], "record extension for a function type")
+              | U.TyVar (span2, tv) =>
+                case USyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+                    SOME replacement => unify (ctx, env, U.UnaryConstraint (span1, replacement, c) :: ctrs)
+                  | NONE => ( addTyVarConstraint (ctx, tv, c)
+                            ; unify (ctx, env, ctrs)
+                            )
            )
          | U.UnaryConstraint(span1, U.RecordType(span2, fields), U.IsEqType span3) => unify(ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => U.UnaryConstraint(span1, ty, U.IsEqType span3) :: acc) ctrs fields)
          | U.UnaryConstraint(span1, U.RecordType(span2, _), U.IsIntegral span3) => emitError(ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
@@ -818,20 +847,27 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
                 in (ty, S.VIdMap.singleton(vid, (vid', ty)), U.VarPat(span, vid', ty))
                 end
       )
-  | typeCheckPat(ctx, env, S.RecordPat{sourceSpan, fields, wildcard})
+  | typeCheckPat(ctx, env, S.RecordPat{sourceSpan, fields, ellipsis})
     = let fun oneField((label, pat), (fieldTypes, vars, fieldPats))
               = let val (ty, vars', pat') = typeCheckPat(ctx, env, pat)
-                in ((label, ty) :: fieldTypes, Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [], "duplicate identifier in a pattern")) (vars, vars'), (label, pat') :: fieldPats)
+                in ((label, ty) :: fieldTypes, Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [sourceSpan], "duplicate identifier in a pattern")) (vars, vars'), (label, pat') :: fieldPats)
                 end
           val (fieldTypes, vars, fieldPats) = List.foldr oneField ([], Syntax.VIdMap.empty, []) fields
-      in if wildcard then
+      in case ellipsis of
+             SOME (S.WildcardPat wspan) =>
              let val recordTy = U.TyVar(sourceSpan, freshTyVar(ctx))
                  fun oneField(label, ty) = addConstraint(ctx, env, U.UnaryConstraint(sourceSpan, recordTy, U.HasField { sourceSpan = sourceSpan, label = label, fieldTy = ty }))
              in List.app oneField fieldTypes
-              ; (recordTy, vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, wildcard=wildcard})
+              ; (recordTy, vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, ellipsis=SOME (U.WildcardPat wspan)})
              end
-         else
-             (U.RecordType(sourceSpan, Syntax.LabelMapFromList fieldTypes), vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, wildcard=wildcard})
+           | SOME basePat =>
+             let val recordTy = U.TyVar(sourceSpan, freshTyVar(ctx))
+                 val (baseTy, vars', basePat) = typeCheckPat(ctx, env, basePat)
+             in addConstraint(ctx, env, U.UnaryConstraint(sourceSpan, recordTy, U.RecordExt { sourceSpan = sourceSpan, fields = fieldTypes, baseTy = baseTy }))
+              ; addConstraint(ctx, env, U.UnaryConstraint(sourceSpan, baseTy, U.SubrecordOf { sourceSpan = sourceSpan, extraFields = fieldTypes, extendedTy = recordTy }))
+              ; (recordTy, Syntax.VIdMap.unionWith (fn _ => emitError(ctx, [sourceSpan], "duplicate identifier in a pattern")) (vars, vars'), U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, ellipsis=SOME basePat})
+             end
+           | NONE => (U.RecordType(sourceSpan, Syntax.LabelMapFromList fieldTypes), vars, U.RecordPat{sourceSpan=sourceSpan, fields=fieldPats, ellipsis=NONE})
       end
   | typeCheckPat(ctx, env, S.ConPat(span, longvid, optInnerPat))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
@@ -1659,6 +1695,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | findClass (_ :: xs) = findClass xs
         fun doInt [] = primTy_int
           | doInt (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
+          | doInt (USyntax.RecordExt{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
+          | doInt (USyntax.SubrecordOf{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
           | doInt (USyntax.IsEqType _ :: xs) = doInt xs
           | doInt (USyntax.IsIntegral _ :: xs) = doInt xs
           | doInt (USyntax.IsSignedReal _ :: xs) = doInt xs
@@ -1672,7 +1710,9 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doInt (USyntax.IsChar _ :: xs) = emitError(ctx, [], "type mismatch: int vs char")
           | doInt (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: int vs string")
         fun doWord [] = primTy_word
-          | doWord (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for int")
+          | doWord (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for word")
+          | doWord (USyntax.RecordExt{...} :: xs) = emitError(ctx, [], "invalid record syntax for word")
+          | doWord (USyntax.SubrecordOf{...} :: xs) = emitError(ctx, [], "invalid record syntax for word")
           | doWord (USyntax.IsEqType _ :: xs) = doWord xs
           | doWord (USyntax.IsIntegral _ :: xs) = doWord xs
           | doWord (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "abs is invalid for word")
@@ -1687,6 +1727,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doWord (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: word vs string")
         fun doReal [] = primTy_real
           | doReal (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for real")
+          | doReal (USyntax.RecordExt{...} :: xs) = emitError(ctx, [], "invalid record syntax for real")
+          | doReal (USyntax.SubrecordOf{...} :: xs) = emitError(ctx, [], "invalid record syntax for real")
           | doReal (USyntax.IsEqType _ :: xs) = emitError(ctx, [], "real does not admit equality")
           | doReal (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "div, mod are invalid for real")
           | doReal (USyntax.IsSignedReal _ :: xs) = doReal xs
@@ -1701,6 +1743,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doReal (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: real vs string")
         fun doChar [] = primTy_char
           | doChar (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for char")
+          | doChar (USyntax.RecordExt{...} :: xs) = emitError(ctx, [], "invalid record syntax for char")
+          | doChar (USyntax.SubrecordOf{...} :: xs) = emitError(ctx, [], "invalid record syntax for char")
           | doChar (USyntax.IsEqType _ :: xs) = doChar xs
           | doChar (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "invalid operation on char")
           | doChar (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "invalid operation on char")
@@ -1715,6 +1759,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doChar (USyntax.IsString _ :: xs) = emitError(ctx, [], "type mismatch: char vs string")
         fun doString [] = primTy_string
           | doString (USyntax.HasField{...} :: xs) = emitError(ctx, [], "invalid record syntax for string")
+          | doString (USyntax.RecordExt{...} :: xs) = emitError(ctx, [], "invalid record syntax for string")
+          | doString (USyntax.SubrecordOf{...} :: xs) = emitError(ctx, [], "invalid record syntax for string")
           | doString (USyntax.IsEqType _ :: xs) = doString xs
           | doString (USyntax.IsIntegral _ :: xs) = emitError(ctx, [], "invalid operation on string")
           | doString (USyntax.IsSignedReal _ :: xs) = emitError(ctx, [], "invalid operation on string")
@@ -1729,6 +1775,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doString (USyntax.IsString _ :: xs) = doString xs
         fun doIntOrReal [] = primTy_int
           | doIntOrReal (USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
+          | doIntOrReal (USyntax.RecordExt{...} :: _) = emitError(ctx, [], "unresolved flex record")
+          | doIntOrReal (USyntax.SubrecordOf{...} :: _) = emitError(ctx, [], "unresolved flex record")
           | doIntOrReal (USyntax.IsEqType _ :: xs) = doInt xs
           | doIntOrReal (USyntax.IsIntegral _ :: xs) = doInt xs
           | doIntOrReal (USyntax.IsSignedReal _ :: xs) = doIntOrReal xs
@@ -1743,6 +1791,8 @@ fun applyDefaultTypes(ctx, tvc, decs : U.TopDec list) : U.Ty U.TyVarMap.map =
           | doIntOrReal (USyntax.IsString _ :: xs) = doIntOrReal xs (* cannot occur *)
         fun defaultTyForConstraints(eq, []) = primTy_unit
           | defaultTyForConstraints(eq, USyntax.HasField{...} :: _) = emitError(ctx, [], "unresolved flex record")
+          | defaultTyForConstraints(eq, USyntax.RecordExt{...} :: _) = emitError(ctx, [], "unresolved flex record")
+          | defaultTyForConstraints(eq, USyntax.SubrecordOf{...} :: _) = emitError(ctx, [], "unresolved flex record")
           | defaultTyForConstraints(eq, USyntax.IsEqType _ :: xs) = defaultTyForConstraints(true, xs)
           | defaultTyForConstraints(eq, USyntax.IsIntegral _ :: xs) = doInt xs
           | defaultTyForConstraints(eq, USyntax.IsSignedReal _ :: xs) = if eq then doInt xs else doIntOrReal xs
@@ -1789,7 +1839,9 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
           fun goPat (U.WildcardPat _) = ()
             | goPat (U.SConPat _) = ()
             | goPat (U.VarPat (_, _, ty)) = goTy ty
-            | goPat (U.RecordPat { sourceSpan, fields, wildcard }) = List.app (fn (label, pat) => goPat pat) fields
+            | goPat (U.RecordPat { sourceSpan, fields, ellipsis }) = ( List.app (fn (label, pat) => goPat pat) fields
+                                                                     ; Option.app goPat ellipsis
+                                                                     )
             | goPat (U.ConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ( List.app goTy tyargs
                                                                                              ; Option.app goPat payload
                                                                                              )

@@ -57,7 +57,8 @@ val initialEnv : Env = { valMap = let open InitialEnv
 fun isWildcardPat (F.WildcardPat _) = true
   | isWildcardPat (F.SConPat _) = false
   | isWildcardPat (F.VarPat _) = false
-  | isWildcardPat (F.RecordPat (_, fields, _)) = List.all (fn (label, pat) => isWildcardPat pat) fields
+  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (label, pat) => isWildcardPat pat) fields
+  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isWildcardPat basePat andalso List.all (fn (label, pat) => isWildcardPat pat) fields
   | isWildcardPat (F.ConPat (_, longvid, optPat, tyargs)) = false (* TODO *)
   | isWildcardPat (F.LayeredPat _) = false
   | isWildcardPat (F.VectorPat (_, pats, ellipsis, _)) = ellipsis andalso Vector.length pats = 0
@@ -135,7 +136,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                         val env = addVar(env, examinedVId, ty)
                                         fun go [] = F.RaiseExp(span, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, F.VarExp(InitialEnv.VId_Match))
                                           | go ((pat, innerExp) :: rest)
-                                            = let val binders = genBinders env examinedExp pat
+                                            = let val binders = genBinders env examinedExp ty pat
                                                   val (env', matcher) = genMatcher env examinedExp ty pat
                                               in if isExhaustive env pat then
                                                      if List.null rest then
@@ -205,17 +206,31 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
           and genMatcher (env : Env) exp _ (F.WildcardPat _) : Env * F.Exp = (env, F.VarExp(InitialEnv.VId_true)) (* always match *)
             | genMatcher env exp ty (F.SConPat{ sourceSpan, scon, equality, cookedValue }) = (env, F.AppExp(equality, F.TupleExp [exp, cookedValue]))
             | genMatcher env exp ty (F.VarPat(_, vid, _)) = (addVar(env, vid, ty), F.VarExp(InitialEnv.VId_true)) (* always match *)
-            | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat (span, fields, _))
+            | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE })
               = List.foldr (fn ((label, pat), (env, e)) =>
                                case Syntax.LabelMap.find (fieldTypes, label) of
                                    SOME fieldTy => let val (env, exp) = genMatcher env (F.ProjectionExp { label = label, record = exp }) fieldTy pat
                                                    in (env, F.SimplifyingAndalsoExp(exp, e))
                                                    end
-                                 | NONE => raise DesugarError ([span], "internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
+                                 | NONE => raise DesugarError ([sourceSpan], "internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
                            )
-                           (env, F.VarExp(InitialEnv.VId_true))
+                           (env, F.VarExp (InitialEnv.VId_true))
                            fields
-            | genMatcher env exp _ (F.RecordPat (span, fields, _)) = raise DesugarError ([span], "internal error: record pattern against non-record type")
+            | genMatcher env exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
+              = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
+                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp }) :: xs) [] restTypes)
+                    val init = genMatcher env restExp (F.RecordType restTypes) basePat
+                in List.foldr (fn ((label, pat), (env, e)) =>
+                                  case Syntax.LabelMap.find (fieldTypes, label) of
+                                      SOME fieldTy => let val (env, exp) = genMatcher env (F.ProjectionExp { label = label, record = exp }) fieldTy pat
+                                                      in (env, F.SimplifyingAndalsoExp(exp, e))
+                                                      end
+                                    | NONE => raise DesugarError ([sourceSpan], "internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
+                              )
+                              init
+                              fields
+                end
+            | genMatcher env exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genMatcher (env as { exnTagMap, ... }) exp ty (F.ConPat (span, path, SOME innerPat, tyargs))
               = let val conTy = lookupPath(env, path)
                     val payloadTy = getPayloadTy(tyargs, conTy)
@@ -276,23 +291,34 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doValB
                                                            end
                                  ) (env, e0) pats
                 end
-          and genBinders env exp (F.WildcardPat _) = [] : F.ValBind list
-            | genBinders env exp (F.SConPat _) = []
-            | genBinders env exp (F.VarPat (span, vid, ty)) = [F.SimpleBind (vid, ty, exp)]
-            | genBinders env exp (F.RecordPat (span, fields, _)) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.ProjectionExp { label = label, record = exp }) innerPat) fields)
-            | genBinders env exp (F.ConPat(span, path, SOME innerPat, tyargs)) = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
-                                                                                     case tyargs of
-                                                                                         [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Syntax.PrimOp_Ref_read, vector [tyarg], vector [exp])) innerPat
-                                                                                       | _ => raise Fail "invalid type arguments to 'ref'"
-                                                                                 else
-                                                                                     genBinders env (F.DataPayloadExp exp) innerPat
-            | genBinders env exp (F.ConPat(span, path, NONE, tyargs)) = []
-            | genBinders env exp (F.LayeredPat(span, vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp pat
-            | genBinders env exp (F.VectorPat(span, pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant (Int.toLarge i))])) pat @ acc) [] pats
+          and genBinders env exp ty (F.WildcardPat _) = [] : F.ValBind list
+            | genBinders env exp ty (F.SConPat _) = []
+            | genBinders env exp _ (F.VarPat (span, vid, ty)) = [F.SimpleBind (vid, ty, exp)]
+            | genBinders env exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.concat (List.map (fn (label, innerPat) => genBinders env (F.ProjectionExp { label = label, record = exp }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
+            | genBinders env exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
+              = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
+                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp }) :: xs) [] restTypes)
+                in genBinders env restExp (F.RecordType restTypes) basePat @ List.concat (List.map (fn (label, innerPat) => genBinders env (F.ProjectionExp { label = label, record = exp }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
+                end
+            | genBinders env exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
+            | genBinders env exp ty (F.ConPat(span, path, SOME innerPat, tyargs))
+              = let val conTy = lookupPath(env, path)
+                    val payloadTy = getPayloadTy(tyargs, conTy)
+                in if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
+                       case tyargs of
+                           [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Syntax.PrimOp_Ref_read, vector [tyarg], vector [exp])) payloadTy innerPat
+                         | _ => raise Fail "invalid type arguments to 'ref'"
+                   else
+                       genBinders env (F.DataPayloadExp exp) payloadTy innerPat
+                end
+            | genBinders env exp ty (F.ConPat(span, path, NONE, tyargs)) = []
+            | genBinders env exp _ (F.LayeredPat(span, vid, ty, pat)) = F.SimpleBind (vid, ty, exp) :: genBinders env exp ty pat
+            | genBinders env exp ty (F.VectorPat(span, pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant (Int.toLarge i))])) elemTy pat @ acc) [] pats
           and isExhaustive env (F.WildcardPat _) = true
             | isExhaustive env (F.SConPat _) = false
             | isExhaustive env (F.VarPat _) = true
-            | isExhaustive env (F.RecordPat (_, row, _)) = List.all (fn (_, e) => isExhaustive env e) row
+            | isExhaustive env (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (_, e) => isExhaustive env e) fields
+            | isExhaustive env (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isExhaustive env basePat andalso List.all (fn (_, e) => isExhaustive env e) fields
             | isExhaustive env (F.ConPat (_, longvid, pat, _)) = false (* TODO *)
             | isExhaustive env (F.LayeredPat (_, _, _, innerPat)) = isExhaustive env innerPat
             | isExhaustive env (F.VectorPat (_, pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
@@ -461,12 +487,17 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doPat env (F.VarPat (span, vid, ty)) = let val vid' = refreshVId vid
                                                      in (insertVId (emptyEnv, vid, vid'), F.VarPat (span, vid', doTy env ty))
                                                      end
-            | doPat env (F.RecordPat (span, fields, wildcard))
-              = let val (env', fields) = List.foldr (fn ((label, pat), (env', fields)) => let val (env'', pat) = doPat env pat
+            | doPat env (F.RecordPat { sourceSpan, fields, ellipsis })
+              = let val (env', ellipsis) = case ellipsis of
+                                               NONE => (emptyEnv, NONE)
+                                             | SOME basePat => let val (env', basePat) = doPat env basePat
+                                                               in (env', SOME basePat)
+                                                               end
+                    val (env', fields) = List.foldr (fn ((label, pat), (env', fields)) => let val (env'', pat) = doPat env pat
                                                                                           in (mergeEnv (env', env''), (label, pat) :: fields)
                                                                                           end
-                                                    ) (emptyEnv, []) fields
-                in (env', F.RecordPat (span, fields, wildcard))
+                                                    ) (env', []) fields
+                in (env', F.RecordPat { sourceSpan = sourceSpan, fields = fields, ellipsis = ellipsis })
                 end
             | doPat env (F.ConPat (span, path, NONE, tyargs)) = (emptyEnv, F.ConPat (span, doPath env path, NONE, List.map (doTy env) tyargs))
             | doPat env (F.ConPat (span, path, SOME pat, tyargs)) = let val (env', pat) = doPat env pat
@@ -615,7 +646,7 @@ val emptyEnv : Env = { valMap = USyntax.VIdMap.empty }
 fun freeVarsInPat (F.WildcardPat _) = USyntax.VIdSet.empty
   | freeVarsInPat (F.SConPat _) = USyntax.VIdSet.empty
   | freeVarsInPat (F.VarPat (_, vid, _)) = USyntax.VIdSet.singleton vid
-  | freeVarsInPat (F.RecordPat (_, fields, wildcard)) = List.foldl (fn ((_, pat), acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) USyntax.VIdSet.empty fields
+  | freeVarsInPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((_, pat), acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) (case ellipsis of NONE => USyntax.VIdSet.empty | SOME basePat => freeVarsInPat basePat) fields
   | freeVarsInPat (F.ConPat (_, longvid, optPat, tyargs)) = (case optPat of
                                                                  NONE => USyntax.VIdSet.empty
                                                                | SOME pat => freeVarsInPat pat
@@ -1060,7 +1091,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
 fun doPat (F.WildcardPat _) = USyntax.VIdSet.empty
   | doPat (F.SConPat _) = USyntax.VIdSet.empty
   | doPat (F.VarPat _) = USyntax.VIdSet.empty
-  | doPat (F.RecordPat (_, fields, wildcard)) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty fields
+  | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) (case ellipsis of NONE => USyntax.VIdSet.empty | SOME basePat => doPat basePat) fields
   | doPat (F.ConPat (_, F.Root vid, NONE, tyargs)) = USyntax.VIdSet.singleton vid
   | doPat (F.ConPat (_, F.Root vid, SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
   | doPat (F.ConPat (_, F.Child _, _, tyargs)) = raise Fail "not implemented yet"
