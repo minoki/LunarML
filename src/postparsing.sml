@@ -259,6 +259,23 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                  in Syntax.RecordExp (span, fields1, SOME (Syntax.LetInExp (span, [Syntax.ValDec (span, [], [Syntax.PatBind (span, Syntax.VarPat (span, vid), baseExp)])], Syntax.RecordExp (span, fields2, SOME (Syntax.VarExp (span, Syntax.MkQualified ([], vid)))))))
                                  end
       end
+  | doExp(ctx, env, UnfixedSyntax.RecordUpdateExp (span, baseExp, update))
+    = let val baseExp = doExp (ctx, env, baseExp)
+          val update = List.map (fn UnfixedSyntax.Field (label, exp) => (label, doExp (ctx, env, exp))
+                                | UnfixedSyntax.Ellipsis exp => emitError (ctx, [span], "invalid record update")
+                                ) update
+          val patrow = List.map (fn (label, _) => (label, Syntax.WildcardPat span)) update
+          val vid = freshVId (ctx, "record")
+      in Syntax.LetInExp ( span
+                         , [Syntax.ValDec (span, [], [Syntax.PatBind ( span
+                                                                     , Syntax.RecordPat { sourceSpan = span
+                                                                                        , fields = patrow
+                                                                                        , ellipsis = SOME (Syntax.VarPat (span, vid))
+                                                                                        }
+                                                                     , baseExp)])]
+                         , Syntax.RecordExp (span, update, SOME (Syntax.VarExp (span, Syntax.MkQualified ([], vid))))
+                         )
+      end
   | doExp(ctx, env, UnfixedSyntax.LetInExp(span, decls, exp)) = let val (env', decls') = doDecs(ctx, env, decls)
                                                                 in Syntax.LetInExp(span, decls', doExp(ctx, mergeEnv(env, env'), exp))
                                                                 end

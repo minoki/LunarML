@@ -358,6 +358,8 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
       | EQUALS (UnfixedSyntax.InfixOrVIdExp(span(EQUALSleft,EQUALSright),Syntax.MkVId "="))
       | LBRACE RBRACE (UnfixedSyntax.RecordExp (span (LBRACEleft, RBRACEright), [])) (* empty record *)
       | LBRACE ExpRow RBRACE (UnfixedSyntax.RecordExp (span (LBRACEleft, RBRACEright), ExpRow)) (* record *)
+      | LBRACE AtExp WHERE RBRACE (UnfixedSyntax.RecordUpdateExp (span (LBRACEleft, RBRACEright), AtExp, [])) (* [Successor ML] record update *)
+      | LBRACE AtExp WHERE ExpRow RBRACE (UnfixedSyntax.RecordUpdateExp (span (LBRACEleft, RBRACEright), AtExp, ExpRow)) (* [Successor ML] record update *)
       | LET Decs IN Exp END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, Exp)) (* local declaration *)
       | LPAREN Exp RPAREN (case Exp of
                                UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp(span(LPARENleft,RPARENright),[Exp])

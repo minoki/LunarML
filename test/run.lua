@@ -187,6 +187,7 @@ should_run "successor_ml/should_run/" {
   "record_extension_expression.sml",
   "record_extension.sml",
   "record_extension_2.sml",
+  "record_update.sml",
 }
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",

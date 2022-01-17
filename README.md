@@ -33,7 +33,7 @@ Successor ML features:
 * [ ] Extended literal syntax
 * [ ] Record punning
 * [x] Record extension
-* [ ] Record update
+* [x] Record update
 * [ ] Conjunctive patterns
 * [ ] Nested matches
 * [ ] Pattern guards
