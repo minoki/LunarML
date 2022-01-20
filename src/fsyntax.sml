@@ -485,6 +485,8 @@ end (* structure PrettyPrint *)
 end (* structure FSyntax *)
 
 structure ToFSyntax = struct
+exception Error of SourcePos.span list * string
+
 fun LongStrIdExp(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (label, x) => FSyntax.SProjectionExp (x, FSyntax.StructLabel label)) (FSyntax.VarExp (FSyntax.strIdToVId strid0)) strids
 
 fun LongVIdToPath(USyntax.MkLongVId(strid0, strids, vid)) = FSyntax.Child (List.foldl (fn (strid, p) => FSyntax.Child(p, FSyntax.StructLabel strid)) (FSyntax.Root (FSyntax.strIdToVId strid0)) strids, FSyntax.ValueLabel vid)
@@ -494,6 +496,7 @@ fun LongStrIdToPath(USyntax.MkLongStrId(strid0, strids)) = List.foldl (fn (strid
 type Context = { nextVId : int ref
                , nextTyVar : int ref
                }
+fun emitError (ctx : Context, spans, message) = raise Error (spans, message)
 type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
            , equalityForTyNameMap : USyntax.LongVId USyntax.TyNameMap.map
            , exnTagMap : FSyntax.Path USyntax.LongVIdMap.map
@@ -910,7 +913,7 @@ and toFDecs(ctx, env, []) = (env, [])
                                                                                            , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
                                                                                            } :: xs
                                                                        )
-                                                     | NONE => raise Fail ("exception not found: " ^ USyntax.print_LongVId longvid)
+                                                     | NONE => emitError (ctx, [span], "exception not found: " ^ USyntax.print_LongVId longvid)
                                                   )
                                                 ) (exnTagMap, []) exbinds
           val env = updateExnTagMap (fn _ => exnTagMap, env)
@@ -1108,6 +1111,7 @@ and strDecsToFDecs(ctx, env : Env, []) = (env, [])
                                             end
 fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.Dec
     = let val funid = case funid of U.MkFunId (name, n) => U.MkVId (name, n)
+          val paramId = case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n)
           val (equalityForTyNameMap, equalityVars)
               = List.foldr (fn ({ tyname, arity, admitsEquality = true }, (m, xs)) => let val vid = freshVId(ctx, "eq")
                                                                                       in (U.TyNameMap.insert (m, tyname, U.MkShortVId vid), (tyname, arity, vid) :: xs)
@@ -1115,8 +1119,19 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.
                            | ({ admitsEquality = false, ... }, acc) => acc
                            ) (#equalityForTyNameMap env, []) types
           val env' = updateEqualityForTyNameMap (fn _ => equalityForTyNameMap, env)
+          fun doExnTag (s : U.Signature) exnTagMap = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (_, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert (m, USyntax.MkLongVId (paramStrId, [], vid), (F.Child (F.Root paramId, F.ExnTagLabel vid)))
+                                                                                              | (_, (_, _), m) => m
+                                                                                              ) exnTagMap (#valMap s)
+                                                     in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s', m) => doExnTagInStr ([strid], F.Child (F.Root paramId, F.StructLabel strid), s') m) exnTagMap (#strMap s)
+                                                     end
+          and doExnTagInStr (q, path, s : U.Signature) exnTagMap = let val exnTagMap = Syntax.VIdMap.foldli (fn (vid, (_, Syntax.ExceptionConstructor), m) => USyntax.LongVIdMap.insert (m, USyntax.MkLongVId (paramStrId, q, vid), (F.Child (path, F.ExnTagLabel vid)))
+                                                                                                            | (_, (_, _), m) => m
+                                                                                                            ) exnTagMap (#valMap s)
+                                                                   in Syntax.StrIdMap.foldli (fn (strid, U.MkSignature s', m) => doExnTagInStr (q @ [strid], F.Child (path, F.StructLabel strid), s') m) exnTagMap (#strMap s)
+                                                                   end
+          val env' = updateExnTagMap (doExnTag paramSig, env')
           val (_, bodyDecs, bodyExp) = strExpToFExp (ctx, env', bodyStr)
-          val funexp = F.FnExp (case paramStrId of U.MkStrId (name, n) => U.MkVId (name, n), signatureToTy (ctx, env, paramSig), List.foldr F.LetExp bodyExp bodyDecs)
+          val funexp = F.FnExp (paramId, signatureToTy (ctx, env, paramSig), List.foldr F.LetExp bodyExp bodyDecs)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)
           val funexp = List.foldr (fn ({ tyname, arity, admitsEquality = _ }, funexp) => F.TyAbsExp (F.tyNameToTyVar tyname, F.arityToKind arity, funexp)) funexp types (* type parameters *)
       in F.ValDec (F.SimpleBind (funid, F.RecordType Syntax.LabelMap.empty (* TODO *), funexp))

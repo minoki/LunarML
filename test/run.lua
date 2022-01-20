@@ -114,6 +114,8 @@ should_run "should_run/" {
   "functor3.sml",
   "parser_combinator.sml",
   "val_projection.sml",
+  "functor_exception.sml",
+  "functor_exception_2.sml",
 }
 should_compile "should_compile/" {
   "signature_sharing1.sml",
