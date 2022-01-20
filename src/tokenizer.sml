@@ -121,9 +121,9 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                                        if x = #"." then
                                                                                                            case xs of
                                                                                                                x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
                                                                                                                             else if isSymbolChar x' then
-                                                                                                                                readSymbolicIdentifier (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                                readSymbolicIdentifier (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
                                                                                                                             else
                                                                                                                                 SOME (tok, l, c1 + length accum, input)
                                                                                                              | [] => SOME (tok, l, c1 + length accum, input)
@@ -136,9 +136,9 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                                        if x = #"." then
                                                                                                            case xs of
                                                                                                                x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
                                                                                                                             else if isSymbolChar x' then
-                                                                                                                                readSymbolicIdentifier (l, c0, c1 + 2, name :: rstrids, [x'], xs')
+                                                                                                                                readSymbolicIdentifier (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
                                                                                                                             else
                                                                                                                                 SOME (tok, l, c1 + length accum, input)
                                                                                                              | [] => SOME (tok, l, c1 + length accum, input)
