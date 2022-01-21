@@ -166,6 +166,7 @@ should_not_compile "should_not_compile/" {
 should_run "mlbasis/should_run/" {
   "general.sml",
   "string.sml",
+  "string_fields.sml",
   "word.sml",
   "word_law.sml",
   "word_shift.sml",

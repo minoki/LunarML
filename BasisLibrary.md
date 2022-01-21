@@ -331,13 +331,16 @@ structure String : sig
   val explode : string -> char list
   val map : (char -> char) -> string -> string
   val translate : (char -> string) -> string -> string
+  val fields : (char -> bool) -> string -> string list
+  val isPrefix : string -> string -> bool
   val < : string * string -> bool
   val <= : string * string -> bool
   val > : string * string -> bool
   val >= : string * string -> bool
 end
-val size = String.size
 val ^ = String.^
+val concat = String.concat
+val size = String.size
 val str = String.str
 
 structure Substring :> sig
@@ -348,6 +351,7 @@ structure Substring :> sig
   val size : substring -> int
   val base : substring -> string * int * int
   val full : string -> substring
+  val string : substring -> string
   val getc : substring -> (char * substring) option
 end
 
@@ -519,6 +523,15 @@ structure OS : sig
   structure IO : sig
   end
   structure Path : sig
+    exception Path
+    exception InvalidArc
+    val parentArc : string
+    val currentArc : string
+    val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
+    val mkCanonical : string -> string
+    val mkRelative : { path : string, relativeTo : string } -> string
+    val isAbsolute : string -> bool
+    val isRelative : string -> bool
   end
   structure Process : sig
     type status

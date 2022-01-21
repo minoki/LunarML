@@ -3,6 +3,8 @@ _prim
 in
 unsafe.sml
 mlbasis.sml
+os.sml
+commandline.sml
 vector-slice.sml
 array-slice.sml
 word8.sml

@@ -790,219 +790,6 @@ val tanh : real -> real
 *)
 end; (* structure Math *)
 
-structure String : sig
-              type string = string
-              type char = char
-              val size : string -> int
-              val sub : string * int -> char
-              val extract : string * int * int option -> string
-              val substring : string * int * int -> string
-              val ^ : string * string -> string
-              val concat : string list -> string
-              val concatWith : string -> string list -> string
-              val str : char -> string
-              val implode : char list -> string
-              val explode : string -> char list
-              val map : (char -> char) -> string -> string
-              val translate : (char -> string) -> string -> string
-              val compare : string * string -> order
-              val < : string * string -> bool
-              val <= : string * string -> bool
-              val > : string * string -> bool
-              val >= : string * string -> bool
-          end = struct
-type string = string
-type char = char
-val size = String.size
-val str = String.str
-val op ^ = String.^
-fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
-                                           raise Subscript
-                                       else
-                                           let val i' = i + 1
-                                               val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt i', Lua.fromInt i']
-                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                           end
-fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
-                                                          raise Subscript
-                                                      else
-                                                          let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)]
-                                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                                          end
-fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
-                                                                    raise Subscript
-                                                                else
-                                                                    let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1)]
-                                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                                                    end
-  | extract (s, i, SOME j) = substring (s, i, j)
-fun concat (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
-                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                        end
-fun concatWith (s : string) (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.fromString s]
-                                                         in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                                         end
-fun implode (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
-                                       in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                       end
-fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
-fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
-                                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                                   end
-fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
-                                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
-                                                           end
-(* tokens, fields, isPrefix, isSubstring, isSuffix, collate, toString, scan, fromString, toCString, fromCString *)
-fun compare (s, t) = if s = t then
-                         EQUAL
-                     else if String.< (s, t) then
-                         LESS
-                     else
-                         GREATER
-open String (* size, ^, str, <, <=, >, >= *)
-end (* structure String *)
-val op ^ : string * string -> string = String.^
-val size : string -> int = String.size
-val str : char -> string = String.str;
-
-structure Substring :> sig
-              type substring
-              type char = char
-              type string = string
-              val sub : substring * int -> char
-              val size : substring -> int
-              val base : substring -> string * int * int
-              val full : string -> substring
-              val getc : substring -> (char * substring) option
-          end = struct
-type char = char
-type string = string
-type substring = string * int * int (* the underlying string, the starting index, the size *)
-fun sub ((s, i, z), j) = if 0 <= j andalso j < z then
-                             String.sub (s, i + j)
-                         else
-                             raise Subscript
-fun size (_, _, z) = z
-fun base x = x
-fun full s = (s, 0, String.size s)
-fun getc (s, i, z) = if z = 0 then
-                         NONE
-                     else
-                         SOME (String.sub (s, i), (s, i + 1, z - 1))
-end;
-
-structure Char : sig
-              type char = char
-              type string = string
-              val minChar : char
-              val maxChar : char
-              val maxOrd : int
-              val ord : char -> int
-              val chr : int -> char
-              val succ : char -> char
-              val pred : char -> char
-              val compare : char * char -> order
-              val < : char * char -> bool
-              val <= : char * char -> bool
-              val > : char * char -> bool
-              val >= : char * char -> bool
-              val contains : string -> char -> bool
-              val notContains : string -> char -> bool
-              val isAscii : char -> bool
-              val toLower : char -> char
-              val toUpper : char -> char
-              val isAlpha : char -> bool
-              val isAlphaNum : char -> bool
-              val isCntrl : char -> bool
-              val isDigit : char -> bool
-              val isGraph : char -> bool
-              val isHexDigit : char -> bool
-              val isLower : char -> bool
-              val isPrint : char -> bool
-              val isSpace : char -> bool
-              val isPunct : char -> bool
-              val isUpper : char -> bool
-              val toString : char -> String.string
-          end = struct
-type char = char
-type string = string
-val minChar = #"\000"
-val maxChar = #"\255"
-val maxOrd = 255
-val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
-val chr : int -> char = fn x => if x < 0 orelse x > 255 then
-                                    raise Chr
-                                else
-                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char #[Lua.fromInt x], 0))
-fun succ c = chr (ord c + 1)
-fun pred c = chr (ord c - 1)
-fun compare (x : char, y : char) = if x = y then
-                                       EQUAL
-                                   else if x < y then
-                                       LESS
-                                   else
-                                       GREATER
-fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
-                                                 in Lua.isNil (Vector.sub (result, 0))
-                                                 end
-fun contains s c = not (notContains s c)
-local
-    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match #[Lua.fromChar c, Lua.fromString pattern], 0)))
-in
-val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
-val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
-val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
-val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
-val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
-val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
-val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
-val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
-val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
-val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
-val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
-val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
-end
-(* string.lower and string.upper depends on the locale *)
-val toLower = fn (c : char) => let val x = ord c
-                               in if ord #"A" <= x andalso x <= ord #"Z" then
-                                      chr (x - ord #"A" + ord #"a")
-                                  else
-                                      c
-                               end
-val toUpper = fn (c : char) => let val x = ord c
-                               in if ord #"a" <= x andalso x <= ord #"z" then
-                                      chr (x - ord #"a" + ord #"A")
-                                  else
-                                      c
-                               end
-fun toString #"\\" = "\\\\"
-  | toString #"\"" = "\\\""
-  | toString c = if isPrint c then
-                     String.str c
-                 else
-                     case c of
-                         #"\\a" => "\\a"
-                       | #"\\b" => "\\b"
-                       | #"\\t" => "\\t"
-                       | #"\\n" => "\\n"
-                       | #"\\v" => "\\v"
-                       | #"\\f" => "\\f"
-                       | #"\\r" => "\\r"
-                       | _ => let val x = ord c
-                              in if x < 32 then
-                                     "\\^" ^ String.str (chr (x + 64))
-                                 else if x < 100 then
-                                     "\\0" ^ Int.toString x
-                                 else
-                                     "\\" ^ Int.toString x
-                                 (* TODO: x >= 1000 *)
-                              end
-open Char (* <, <=, >, >= *)
-(* scan, fromString, toCString, fromCString *)
-end (* structure Char *)
-val chr = Char.chr
-val ord = Char.ord;
-
 structure List : sig
               datatype list = datatype list
               exception Empty
@@ -1125,6 +912,238 @@ val map : ('a -> 'b) -> 'a list -> 'b list = List.map
 val null : 'a list -> bool = List.null
 val rev : 'a list -> 'a list = List.rev
 val tl : 'a list -> 'a list = List.tl;
+
+structure String : sig
+              type string = string
+              type char = char
+              val size : string -> int
+              val sub : string * int -> char
+              val extract : string * int * int option -> string
+              val substring : string * int * int -> string
+              val ^ : string * string -> string
+              val concat : string list -> string
+              val concatWith : string -> string list -> string
+              val str : char -> string
+              val implode : char list -> string
+              val explode : string -> char list
+              val map : (char -> char) -> string -> string
+              val translate : (char -> string) -> string -> string
+              val fields : (char -> bool) -> string -> string list
+              val isPrefix : string -> string -> bool
+              val compare : string * string -> order
+              val < : string * string -> bool
+              val <= : string * string -> bool
+              val > : string * string -> bool
+              val >= : string * string -> bool
+          end = struct
+type string = string
+type char = char
+val size = String.size
+val str = String.str
+val op ^ = String.^
+fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
+                                           raise Subscript
+                                       else
+                                           let val i' = i + 1
+                                               val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt i', Lua.fromInt i']
+                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                           end
+fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
+                                                          raise Subscript
+                                                      else
+                                                          let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)]
+                                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                          end
+fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
+                                                                    raise Subscript
+                                                                else
+                                                                    let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1)]
+                                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                                    end
+  | extract (s, i, SOME j) = substring (s, i, j)
+fun concat (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                        end
+fun concatWith (s : string) (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.fromString s]
+                                                         in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                         end
+fun implode (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+                                       in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                       end
+fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
+fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+                                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                   end
+fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+                                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                           end
+(* tokens *)
+fun fields f s = let fun go (revFields, acc, []) = List.rev (implode (List.rev acc) :: revFields)
+                       | go (revFields, acc, x :: xs) = if f x then
+                                                            go (implode (List.rev acc) :: revFields, [], xs)
+                                                        else
+                                                            go (revFields, x :: acc, xs)
+                 in go ([], [], explode s)
+                 end
+fun isPrefix prefix s = let val n = size prefix
+                        in if n > size s then
+                               false
+                           else
+                               substring (s, 0, n) = prefix
+                        end
+(* isSubstring, isSuffix, collate, toString, scan, fromString, toCString, fromCString *)
+fun compare (s, t) = if s = t then
+                         EQUAL
+                     else if String.< (s, t) then
+                         LESS
+                     else
+                         GREATER
+open String (* size, ^, str, <, <=, >, >= *)
+end (* structure String *)
+val op ^ : string * string -> string = String.^
+val concat : string list -> string = String.concat
+val size : string -> int = String.size
+val str : char -> string = String.str;
+
+structure Substring :> sig
+              type substring
+              type char = char
+              type string = string
+              val sub : substring * int -> char
+              val size : substring -> int
+              val base : substring -> string * int * int
+              val full : string -> substring
+              val string : substring -> string
+              val getc : substring -> (char * substring) option
+          end = struct
+type char = char
+type string = string
+type substring = string * int * int (* the underlying string, the starting index, the size *)
+fun sub ((s, i, z), j) = if 0 <= j andalso j < z then
+                             String.sub (s, i + j)
+                         else
+                             raise Subscript
+fun size (_, _, z) = z
+fun base x = x
+fun full s = (s, 0, String.size s)
+fun string (s, i, z) = String.substring (s, i, z)
+fun getc (s, i, z) = if z = 0 then
+                         NONE
+                     else
+                         SOME (String.sub (s, i), (s, i + 1, z - 1))
+end;
+
+structure Char : sig
+              type char = char
+              type string = string
+              val minChar : char
+              val maxChar : char
+              val maxOrd : int
+              val ord : char -> int
+              val chr : int -> char
+              val succ : char -> char
+              val pred : char -> char
+              val compare : char * char -> order
+              val < : char * char -> bool
+              val <= : char * char -> bool
+              val > : char * char -> bool
+              val >= : char * char -> bool
+              val contains : string -> char -> bool
+              val notContains : string -> char -> bool
+              val isAscii : char -> bool
+              val toLower : char -> char
+              val toUpper : char -> char
+              val isAlpha : char -> bool
+              val isAlphaNum : char -> bool
+              val isCntrl : char -> bool
+              val isDigit : char -> bool
+              val isGraph : char -> bool
+              val isHexDigit : char -> bool
+              val isLower : char -> bool
+              val isPrint : char -> bool
+              val isSpace : char -> bool
+              val isPunct : char -> bool
+              val isUpper : char -> bool
+              val toString : char -> String.string
+          end = struct
+type char = char
+type string = string
+val minChar = #"\000"
+val maxChar = #"\255"
+val maxOrd = 255
+val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
+val chr : int -> char = fn x => if x < 0 orelse x > 255 then
+                                    raise Chr
+                                else
+                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char #[Lua.fromInt x], 0))
+fun succ c = chr (ord c + 1)
+fun pred c = chr (ord c - 1)
+fun compare (x : char, y : char) = if x = y then
+                                       EQUAL
+                                   else if x < y then
+                                       LESS
+                                   else
+                                       GREATER
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
+                                                 in Lua.isNil (Vector.sub (result, 0))
+                                                 end
+fun contains s c = not (notContains s c)
+local
+    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match #[Lua.fromChar c, Lua.fromString pattern], 0)))
+in
+val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
+val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
+val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
+val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
+val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
+val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
+val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
+val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
+val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
+val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
+val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
+val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
+end
+(* string.lower and string.upper depends on the locale *)
+val toLower = fn (c : char) => let val x = ord c
+                               in if ord #"A" <= x andalso x <= ord #"Z" then
+                                      chr (x - ord #"A" + ord #"a")
+                                  else
+                                      c
+                               end
+val toUpper = fn (c : char) => let val x = ord c
+                               in if ord #"a" <= x andalso x <= ord #"z" then
+                                      chr (x - ord #"a" + ord #"A")
+                                  else
+                                      c
+                               end
+fun toString #"\\" = "\\\\"
+  | toString #"\"" = "\\\""
+  | toString c = if isPrint c then
+                     String.str c
+                 else
+                     case c of
+                         #"\\a" => "\\a"
+                       | #"\\b" => "\\b"
+                       | #"\\t" => "\\t"
+                       | #"\\n" => "\\n"
+                       | #"\\v" => "\\v"
+                       | #"\\f" => "\\f"
+                       | #"\\r" => "\\r"
+                       | _ => let val x = ord c
+                              in if x < 32 then
+                                     "\\^" ^ String.str (chr (x + 64))
+                                 else if x < 100 then
+                                     "\\0" ^ Int.toString x
+                                 else
+                                     "\\" ^ Int.toString x
+                                 (* TODO: x >= 1000 *)
+                              end
+open Char (* <, <=, >, >= *)
+(* scan, fromString, toCString, fromCString *)
+end (* structure Char *)
+val chr = Char.chr
+val ord = Char.ord;
 
 structure Vector : sig
               datatype vector = datatype vector
@@ -1402,247 +1421,3 @@ open Outstream
 end (* local *)
 end (* structure TextIO *)
 val print : string -> unit = TextIO.print;
-
-structure OS :> sig
-              structure FileSys : sig
-                            val chDir : string -> unit (* requires LuaFileSystem *)
-                            val getDir : unit -> string (* requires LuaFileSystem *)
-                            val mkDir : string -> unit (* requires LuaFileSystem *)
-                            val rmDir : string -> unit (* requires LuaFileSystem *)
-                            val isDir : string -> bool (* requires LuaFileSystem *)
-                            val isLink : string -> bool (* requires LuaFileSystem *)
-                            val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
-                            val remove : string -> unit
-                            val rename : { old : string, new : string } -> unit
-                        end
-              structure IO : sig
-                        end
-              structure Path : sig
-                        end
-              structure Process : sig
-                            type status
-                            val success : status
-                            val failure : status
-                            val isSuccess : status -> bool
-                            val system : string -> status
-                            val exit : status -> 'a
-                            val terminate : status -> 'a
-                            val getEnv : string -> string option
-                        end
-              eqtype syserror
-              exception SysErr of string * syserror option
-          end = struct
-type syserror = string
-exception SysErr of string * syserror option
-local
-    val oslib = LunarML.assumeDiscardable (Lua.global "os")
-    val os_execute = LunarML.assumeDiscardable (Lua.field (oslib, "execute"))
-    val os_exit = LunarML.assumeDiscardable (Lua.field (oslib, "exit"))
-    val os_getenv = LunarML.assumeDiscardable (Lua.field (oslib, "getenv"))
-    val os_remove = LunarML.assumeDiscardable (Lua.field (oslib, "remove"))
-    val os_rename = LunarML.assumeDiscardable (Lua.field (oslib, "rename"))
-in
-structure FileSys = struct
-(*
-type dirstream
-val openDir : string -> dirstream : lfs.dir?
-val readDir : dirstream -> string open : dir_obj:next()
-val rewindDir : dirstream -> unit
-val closeDir : dirstream -> unit : dir_obj:close()
-val fullPath : string -> string
-val realPath : string -> string
-datatype access_mode = A_READ | A_WRITE | A_EXEC
-val access : string * access_mode list -> bool
-val tmpName : unit -> string : os.tmpname
-eqtype file_id
-val fileId : string -> file_id : lfs.attributes "ino"?
-val hash : file_id -> word
-val compare : file_id * file_id -> order
-*)
-fun use_lfs (field, f : Lua.value -> 'a -> 'b) = case Lua.Lib.lfs of
-                                                     SOME lfs => f (Lua.field (lfs, field))
-                                                   | NONE => fn _ => raise SysErr ("LuaFileSystem not available", NONE)
-val chDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("chdir", fn lfs_chdir =>
-                                                                             fn path => let val results = Lua.call lfs_chdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
-                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
-                                                                )
-                                                       )
-val getDir : unit -> string = LunarML.assumeDiscardable (use_lfs ("currentdir", fn lfs_currentdir =>
-                                                                                   fn () => let val results = Lua.call lfs_currentdir #[]
-                                                                                                val r0 = Vector.sub (results, 0)
-                                                                                            in if Lua.typeof r0 = "string" then
-                                                                                                   Lua.unsafeFromValue r0
-                                                                                               else
-                                                                                                   let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                   in raise SysErr (message, SOME message)
-                                                                                                   end
-                                                                                            end
-                                                                 )
-                                                        )
-val mkDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("mkdir", fn lfs_mkdir =>
-                                                                             fn path => let val results = Lua.call lfs_mkdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
-                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
-                                                                )
-                                                       )
-val rmDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("rmdir", fn lfs_rmdir =>
-                                                                             fn path => let val results = Lua.call lfs_rmdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy (Vector.sub (results, 0)) then
-                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
-                                                                )
-                                                       )
-val isDir : string -> bool = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                  fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "mode"]
-                                                                                                 val r0 = Vector.sub (results, 0)
-                                                                                             in if Lua.isFalsy r0 then
-                                                                                                    let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                    in raise SysErr (message, SOME message)
-                                                                                                    end
-                                                                                                else
-                                                                                                    Lua.== (r0, Lua.fromString "directory")
-                                                                                             end
-                                                                )
-                                                       )
-val isLink : string -> bool = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
-                                                                                          fn path => let val results = Lua.call lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "mode"]
-                                                                                                         val r0 = Vector.sub (results, 0)
-                                                                                                     in if Lua.isFalsy r0 then
-                                                                                                            let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                            in raise SysErr (message, SOME message)
-                                                                                                            end
-                                                                                                        else
-                                                                                                            Lua.== (r0, Lua.fromString "link")
-                                                                                                     end
-                                                                 )
-                                                        )
-val readLink : string -> string = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
-                                                                                              fn path => let val results = Lua.call lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "target"]
-                                                                                                             val r0 = Vector.sub (results, 0)
-                                                                                                         in if Lua.isFalsy r0 then
-                                                                                                                let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                                in raise SysErr (message, SOME message)
-                                                                                                                end
-                                                                                                            else
-                                                                                                                Lua.checkString r0
-                                                                                                         end
-                                                                     )
-                                                            )
-(* fullPath, realPath *)
-(*
-val modTime : string -> Time.time = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                  fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "modification"]
-                                                                                                 val r0 = Vector.sub (results, 0)
-                                                                                             in if Lua.isFalsy r0 then
-                                                                                                    let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                    in raise SysErr (message, SOME message)
-                                                                                                    end
-                                                                                                else
-                                                                                                    raise Fail "modTime: not implemented yet"
-                                                                                             end
-                                                                       )
-                                                              )
-val fileSize : string -> Position.int = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                             fn path => let val results = Lua.call lfs_attributes #[Lua.fromString path, Lua.fromString "size"]
-                                                                                                            val r0 = Vector.sub (results, 0)
-                                                                                                        in if Lua.isFalsy r0 then
-                                                                                                               let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                               in raise SysErr (message, SOME message)
-                                                                                                               end
-                                                                                                           else
-                                                                                                               raise Fail "fileSize: not implemented yet"
-                                                                                                        end
-                                                                           )
-                                                                  )
-val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable (use_lfs ("touch", fn lfs_touch =>
-                                                                                                  (fn (path, NONE) => let val results = Lua.call lfs_touch #[Lua.fromString path]
-                                                                                                                          val r0 = Vector.sub (results, 0)
-                                                                                                                      in if Lua.isFalsy r0 then
-                                                                                                                             let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                                             in raise SysErr (message, SOME message)
-                                                                                                                             end
-                                                                                                                         else
-                                                                                                                             ()
-                                                                                                                      end
-                                                                                                  | (path, SOME t) => let val results = Lua.call lfs_touch #[Lua.fromString path, (* TODO *) t, (* TODO *) t]
-                                                                                                                          val r0 = Vector.sub (results, 0)
-                                                                                                                      in if Lua.isFalsy r0 then
-                                                                                                                             let val message = Lua.checkString (Vector.sub (results, 1))
-                                                                                                                             in raise SysErr (message, SOME message)
-                                                                                                                             end
-                                                                                                                         else
-                                                                                                                             ()
-                                                                                                                      end
-                                                                                                  )
-                                                                                     )
-                                                                            )
-*)
-val remove : string -> unit = fn filename => ignore (Lua.call os_remove #[Lua.fromString filename])
-val rename : {old : string, new : string} -> unit = fn {old, new} => ignore (Lua.call os_rename #[Lua.fromString old, Lua.fromString new])
-end (* structure FileSys *)
-structure IO = struct end
-structure Path = struct end
-structure Process = struct
-type status = int
-val success : status = 0
-val failure : status = 1
-val isSuccess : status -> bool = fn 0 => true | _ => false
-val system : string -> status = fn command => let val result = Lua.call os_execute #[Lua.fromString command]
-                                              in failure (* TODO *)
-                                              end
-(* val atExit : (unit -> unit) -> unit *)
-val exit : status -> 'a = fn status => let val result = Lua.call os_exit #[Lua.fromInt status, Lua.fromBool true]
-                                       in raise Fail "os.exit not available"
-                                       end
-val terminate : status -> 'a = fn status => let val result = Lua.call os_exit #[Lua.fromInt status, Lua.fromBool false]
-                                            in raise Fail "os.exit not available"
-                                            end
-val getEnv : string -> string option = fn name => let val result = Lua.call os_getenv #[Lua.fromString name]
-                                                  in if Lua.isNil (Vector.sub (result, 0)) then
-                                                         NONE
-                                                     else
-                                                         SOME (Lua.unsafeFromValue (Vector.sub (result, 0)))
-                                                  end
-(* val sleep : Time.time -> unit : LuaSocket's socket.sleep or luaposix's posix.time.nanosleep or use native API (nanosleep or Sleep) via FFI or system command via os.execute or busy loop *)
-end (* structure Process *)
-end (* local *)
-(*
-eqtype syserror
-exception SysErr of string * syserror option
-val errorMsg : syserror -> string
-val errorName : syserror -> string
-val syserror : string -> syserror option
-*)
-end; (* structure OS *)
-
-structure CommandLine : sig
-              val name : unit -> string
-              val arguments : unit -> string list
-          end = struct
-local
-    val luaarg = LunarML.assumeDiscardable (Lua.global "arg")
-in
-val name : unit -> string = fn () => let val s = Lua.sub (luaarg, Lua.fromInt 0)
-                                     in if Lua.isNil s then
-                                            raise Fail "CommandLine.name: arg is not available"
-                                        else
-                                            Lua.unsafeFromValue s
-                                     end
-val arguments : unit -> string list = fn () => List.tabulate (Lua.unsafeFromValue (Lua.length luaarg), fn i => Lua.unsafeFromValue (Lua.sub (luaarg, Lua.fromInt (i + 1))) : string)
-end
-end; (* structure CommandLine *)
