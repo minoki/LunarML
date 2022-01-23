@@ -87,7 +87,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | AtPats of UnfixedSyntax.Pat list
        | TypedPatPun of Syntax.Label * UnfixedSyntax.Pat
        | PatPun of Syntax.Label * UnfixedSyntax.Pat
-       | PatRow of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list (* (Syntax.Label * UnfixedSyntax.Pat) list * UnfixedSyntax.Pat option *)
+       | PatRow of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | PatRowRest of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
@@ -107,14 +107,21 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | COMMA_TyRow_NoELLIPSIS of (Syntax.Label * Syntax.Ty) list
        | AtExp of UnfixedSyntax.Exp
        | AppOrInfExp of UnfixedSyntax.Exp list
-       | ExpRow of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list (* (Syntax.Label * UnfixedSyntax.Exp) list * UnfixedSyntax.Exp option *)
+       | ExpRow of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpRowRest of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpCSeqRest of UnfixedSyntax.Exp list
        | ExpSSeqRest of UnfixedSyntax.Exp list
        | TypedExp of UnfixedSyntax.Exp
-       | OrElseExp of UnfixedSyntax.Exp
-       | Exp_NoMatch of UnfixedSyntax.Exp
+       | AndalsoExp of UnfixedSyntax.Exp
+       | AndalsoExp_NoHead of UnfixedSyntax.Exp
+       | AndalsoExp_NoMatch of UnfixedSyntax.Exp
+       | OrelseExp of UnfixedSyntax.Exp
+       | OrelseExp_NoHead of UnfixedSyntax.Exp
+       | OrelseExp_NoMatch of UnfixedSyntax.Exp
        | Exp of UnfixedSyntax.Exp
+       | Exp_NoMatch of UnfixedSyntax.Exp
+       | HeadExp of UnfixedSyntax.Exp
+       | HeadExp_NoMatch of UnfixedSyntax.Exp
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
        | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
        | Dec_NoLocal of UnfixedSyntax.Dec
@@ -175,10 +182,6 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
 %nodefault
 
 %right ARROW (* function type expression *)
-%right RAISE
-%right HANDLE
-%left ORELSE
-%left ANDALSO
 
 %verbose
 
@@ -408,23 +411,46 @@ AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
 TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExpleft,AppOrInfExpright), AppOrInfExp))
          | TypedExp COLON Ty (UnfixedSyntax.TypedExp (span(TypedExpleft,Tyright), TypedExp, Ty)) (* typed (L) *)
 
-OrElseExp : TypedExp (TypedExp)
-          | OrElseExp ANDALSO OrElseExp (MkAndAlsoExp (span(OrElseExp1left, OrElseExp2right), OrElseExp1, OrElseExp2)) (* [derived] conjunction *)
-          | OrElseExp ORELSE OrElseExp (MkOrElseExp (span(OrElseExp1left, OrElseExp2right), OrElseExp1, OrElseExp2)) (* [derived] disjunction *)
+AndalsoExp : TypedExp (TypedExp)
+           | TypedExp ANDALSO AndalsoExp (MkAndAlsoExp (span(TypedExpleft, AndalsoExpright), TypedExp, AndalsoExp)) (* [derived] conjunction *)
+           | TypedExp ANDALSO HeadExp (MkAndAlsoExp (span(TypedExpleft, HeadExpright), TypedExp, HeadExp)) (* [derived] conjunction *)
 
-(* expressions *)
-Exp : OrElseExp (OrElseExp)
-    | OrElseExp HANDLE MatchClauses (UnfixedSyntax.HandleExp (span(OrElseExpleft, MatchClausesright), OrElseExp, MatchClauses)) (* handle exception *)
-    | RAISE Exp (UnfixedSyntax.RaiseExp(span(RAISEleft, Expright), Exp)) (* raise exception *)
-    | IF Exp THEN Exp ELSE Exp (UnfixedSyntax.IfThenElseExp (span(IFleft, Exp3right), Exp1, Exp2, Exp3)) (* [derived] conditional *)
-    | WHILE Exp DO Exp (UnfixedSyntax.WhileDoExp (span(WHILEleft, Exp2right), Exp1, Exp2)) (* [derived] iteration *)
-    | CASE Exp OF MatchClauses (UnfixedSyntax.CaseExp (span(CASEleft, MatchClausesright), Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
-    | FN MatchClauses (UnfixedSyntax.FnExp(span(FNleft, MatchClausesright), MatchClauses)) (* function *)
+AndalsoExp_NoHead : TypedExp (TypedExp)
+                  | TypedExp ANDALSO AndalsoExp_NoHead (MkAndAlsoExp (span(TypedExpleft, AndalsoExp_NoHeadright), TypedExp, AndalsoExp_NoHead)) (* [derived] conjunction *)
 
-Exp_NoMatch : OrElseExp (OrElseExp)
-            | RAISE Exp_NoMatch (UnfixedSyntax.RaiseExp(span(RAISEleft, Exp_NoMatchright), Exp_NoMatch)) (* raise exception *)
-            | IF Exp THEN Exp ELSE Exp_NoMatch (UnfixedSyntax.IfThenElseExp (span(IFleft, Exp_NoMatchright), Exp1, Exp2, Exp_NoMatch))
-            | WHILE Exp DO Exp_NoMatch (UnfixedSyntax.WhileDoExp (span(WHILEleft, Exp_NoMatchright), Exp, Exp_NoMatch)) (* [derived] iteration *)
+AndalsoExp_NoMatch : TypedExp (TypedExp)
+                   | TypedExp ANDALSO AndalsoExp_NoMatch (MkAndAlsoExp (span(TypedExpleft, AndalsoExp_NoMatchright), TypedExp, AndalsoExp_NoMatch)) (* [derived] conjunction *)
+                   | TypedExp ANDALSO HeadExp_NoMatch (MkAndAlsoExp (span(TypedExpleft, HeadExp_NoMatchright), TypedExp, HeadExp_NoMatch)) (* [derived] conjunction *)
+
+OrelseExp : AndalsoExp (AndalsoExp)
+          | AndalsoExp_NoHead ORELSE OrelseExp (MkOrElseExp (span(AndalsoExp_NoHeadleft, OrelseExpright), AndalsoExp_NoHead, OrelseExp)) (* [derived] disjunction *)
+          | AndalsoExp_NoHead ORELSE HeadExp (MkOrElseExp (span(AndalsoExp_NoHeadleft, HeadExpright), AndalsoExp_NoHead, HeadExp)) (* [derived] disjunction *)
+
+OrelseExp_NoHead : AndalsoExp_NoHead (AndalsoExp_NoHead)
+                 | AndalsoExp_NoHead ORELSE OrelseExp_NoHead (MkOrElseExp (span(AndalsoExp_NoHeadleft, OrelseExp_NoHeadright), AndalsoExp_NoHead, OrelseExp_NoHead)) (* [derived] disjunction *)
+
+OrelseExp_NoMatch : AndalsoExp_NoMatch (AndalsoExp_NoMatch)
+                  | AndalsoExp_NoHead ORELSE OrelseExp_NoMatch (MkOrElseExp (span(AndalsoExp_NoHeadleft, OrelseExp_NoMatchright), AndalsoExp_NoHead, OrelseExp_NoMatch)) (* [derived] disjunction *)
+                  | AndalsoExp_NoHead ORELSE HeadExp_NoMatch (MkOrElseExp (span(AndalsoExp_NoHeadleft, HeadExp_NoMatchright), AndalsoExp_NoHead, HeadExp_NoMatch)) (* [derived] disjunction *)
+
+(* expression with a starting token *)
+HeadExp : RAISE Exp (UnfixedSyntax.RaiseExp(span(RAISEleft, Expright), Exp)) (* raise exception *)
+        | IF Exp THEN Exp ELSE Exp (UnfixedSyntax.IfThenElseExp (span(IFleft, Exp3right), Exp1, Exp2, Exp3)) (* [derived] conditional *)
+        | WHILE Exp DO Exp (UnfixedSyntax.WhileDoExp (span(WHILEleft, Exp2right), Exp1, Exp2)) (* [derived] iteration *)
+        | CASE Exp OF MatchClauses (UnfixedSyntax.CaseExp (span(CASEleft, MatchClausesright), Exp, MatchClauses)) (* [derived] pattern match: (fn MatchClauses)(Exp) *)
+        | FN MatchClauses (UnfixedSyntax.FnExp(span(FNleft, MatchClausesright), MatchClauses)) (* function *)
+
+HeadExp_NoMatch : RAISE Exp_NoMatch (UnfixedSyntax.RaiseExp(span(RAISEleft, Exp_NoMatchright), Exp_NoMatch)) (* raise exception *)
+                | IF Exp THEN Exp ELSE Exp_NoMatch (UnfixedSyntax.IfThenElseExp (span(IFleft, Exp_NoMatchright), Exp1, Exp2, Exp_NoMatch))
+                | WHILE Exp DO Exp_NoMatch (UnfixedSyntax.WhileDoExp (span(WHILEleft, Exp_NoMatchright), Exp, Exp_NoMatch)) (* [derived] iteration *)
+
+(* expression *)
+Exp : OrelseExp (OrelseExp)
+    | OrelseExp_NoHead HANDLE MatchClauses (UnfixedSyntax.HandleExp (span(OrelseExp_NoHeadleft, MatchClausesright), OrelseExp_NoHead, MatchClauses)) (* handle exception *)
+    | HeadExp (HeadExp)
+
+Exp_NoMatch : OrelseExp_NoMatch (OrelseExp_NoMatch)
+            | HeadExp_NoMatch (HeadExp_NoMatch)
 
 (* matches *)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
