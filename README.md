@@ -28,7 +28,7 @@ Successor ML features:
     * SML '97-compatible ordering for type variables is also supported: `val <tyvarseq> rec <valbind>`
 * [x] Abstype as derived form
 * [x] Fixed manifest type specifications
-* [x] Abolish sequenced type realizations
+* [ ] Abolish sequenced type realizations
 * [ ] Line comments
 * [ ] Extended literal syntax
 * [ ] Record punning
