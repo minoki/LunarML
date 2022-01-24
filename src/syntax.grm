@@ -145,6 +145,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | ConBindRest of Syntax.ConBind list
        | ExBind of Syntax.ExBind list
        | ExBindRest of Syntax.ExBind list
+       | AtStrExp of UnfixedSyntax.Dec Syntax.StrExp
        | StrExp of UnfixedSyntax.Dec Syntax.StrExp
        | StrExp_AND of UnfixedSyntax.Dec Syntax.StrExp
        | ProperStrDec of UnfixedSyntax.Dec Syntax.StrDec
@@ -173,6 +174,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TypeRealisationRest_AND of (SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Syntax.Ty) list
        | SigBinds of (Syntax.SigId * Syntax.SigExp) list
        | SigDec of (Syntax.SigId * Syntax.SigExp) list
+       | SigConstraint of UnfixedSyntax.Dec Syntax.StrExp -> UnfixedSyntax.Dec Syntax.StrExp
        | FunDec of (SourcePos.span * Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
        | FunBind of (SourcePos.span * Syntax.FunId * UnfixedSyntax.Dec Syntax.FunExp) list
        | TopDecs of (UnfixedSyntax.Dec Syntax.TopDec) list
@@ -564,22 +566,20 @@ ExBind : Opt_OP BoundVId OF Ty ExBindRest (Syntax.ExBind (span(Opt_OPleft, Tyrig
 ExBindRest : AND ExBind (ExBind)
            | (nil)
 
-StrExp : STRUCT StrDecs END (Syntax.StructExp(span(STRUCTleft, ENDright), StrDecs))
-       | LongStrId (Syntax.StrIdExp(span(LongStrIdleft, LongStrIdright), LongStrId))
+AtStrExp : STRUCT StrDecs END (Syntax.StructExp(span(STRUCTleft, ENDright), StrDecs))
+         | LongStrId (Syntax.StrIdExp(span(LongStrIdleft, LongStrIdright), LongStrId))
+         | FunId LPAREN StrExp RPAREN (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, StrExp))
+         | FunId LPAREN StrDecs RPAREN (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, Syntax.StructExp(span(StrDecsleft, StrDecsright), StrDecs))) (* derived form *)
+         | LET StrDecs IN StrExp END (Syntax.LetInStrExp(span(LETleft, ENDright), StrDecs, StrExp))
+
+StrExp : AtStrExp (AtStrExp)
        | StrExp COLON SigExp (Syntax.TransparentConstraintExp(span(StrExpleft, SigExpright), StrExp, SigExp)) (* transparent constraint *)
        | StrExp COLONGT SigExp (Syntax.OpaqueConstraintExp(span(StrExpleft, SigExpright), StrExp, SigExp)) (* opaque constraint *)
-       | FunId LPAREN StrExp RPAREN (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, StrExp))
-       | FunId LPAREN StrDecs RPAREN (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, Syntax.StructExp(span(StrDecsleft, StrDecsright), StrDecs))) (* derived form *)
-       | LET StrDecs IN StrExp END (Syntax.LetInStrExp(span(LETleft, ENDright), StrDecs, StrExp))
 
 (* equivalent to 'StrExp AND' *)
-StrExp_AND : STRUCT StrDecs END AND (Syntax.StructExp(span(STRUCTleft, ENDright), StrDecs))
-           | LongStrId AND (Syntax.StrIdExp(span(LongStrIdleft, LongStrIdright), LongStrId))
+StrExp_AND : AtStrExp AND (AtStrExp)
            | StrExp COLON SigExp_AND (Syntax.TransparentConstraintExp(span(StrExpleft, SigExp_ANDright), StrExp, SigExp_AND)) (* transparent constraint *)
            | StrExp COLONGT SigExp_AND (Syntax.OpaqueConstraintExp(span(StrExpleft, SigExp_ANDright), StrExp, SigExp_AND)) (* opaque constraint *)
-           | FunId LPAREN StrExp RPAREN AND (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, StrExp))
-           | FunId LPAREN StrDecs RPAREN AND (Syntax.FunctorAppExp(span(FunIdleft, RPARENright), FunId, Syntax.StructExp(span(StrDecsleft, StrDecsright), StrDecs))) (* derived form *)
-           | LET StrDecs IN StrExp END AND (Syntax.LetInStrExp(span(LETleft, ENDright), StrDecs, StrExp))
 
 ProperStrDec : STRUCTURE StrBind (Syntax.StrBindDec(span(STRUCTUREleft, StrBindright), StrBind))
              | LOCAL StrDecs IN StrDecs END (Syntax.LocalStrDec(span(LOCALleft, ENDright), StrDecs1, StrDecs2))
@@ -589,12 +589,8 @@ StrDecs : Dec_NoLocal StrDecs (Syntax.CoreDec(span(Dec_NoLocalleft, Dec_NoLocalr
         | SEMICOLON StrDecs (StrDecs)
         | ([])
 
-StrBind : StrId EQUALS StrExp_AND StrBind ((StrId, StrExp_AND) :: StrBind)
-        | StrId COLON SigExp EQUALS StrExp_AND StrBind ((StrId, Syntax.TransparentConstraintExp(span(StrIdleft, StrExp_ANDright), StrExp_AND, SigExp)) :: StrBind) (* derived form *)
-        | StrId COLONGT SigExp EQUALS StrExp_AND StrBind ((StrId, Syntax.OpaqueConstraintExp(span(StrIdleft, StrExp_ANDright), StrExp_AND, SigExp)) :: StrBind) (* derived form *)
-        | StrId EQUALS StrExp ((StrId, StrExp) :: [])
-        | StrId COLON SigExp EQUALS StrExp ((StrId, Syntax.TransparentConstraintExp(span(StrIdleft, StrExpright), StrExp, SigExp)) :: []) (* derived form *)
-        | StrId COLONGT SigExp EQUALS StrExp ((StrId, Syntax.OpaqueConstraintExp(span(StrIdleft, StrExpright), StrExp, SigExp)) :: []) (* derived form *)
+StrBind : StrId SigConstraint EQUALS StrExp_AND StrBind ((StrId, SigConstraint StrExp_AND) :: StrBind)
+        | StrId SigConstraint EQUALS StrExp ((StrId, SigConstraint StrExp) :: [])
 
 Spec : VAL ValDesc ([Syntax.ValDesc(span(VALleft, ValDescright), ValDesc)])
      | TYPE TyVarSeq TyCon TypDescRest ([Syntax.TypeDesc(span(TYPEleft, TypDescRestright), (TyVarSeq, TyCon) :: TypDescRest)])
@@ -681,20 +677,16 @@ SigBinds : SigId EQUALS SigExp ((SigId, SigExp) :: nil)
 
 SigDec : SIGNATURE SigBinds (SigBinds)
 
+SigConstraint : (fn strexp => strexp)
+              | COLON SigExp (fn strexp => Syntax.TransparentConstraintExp (span (COLONleft, SigExpright), strexp, SigExp))
+              | COLONGT SigExp (fn strexp => Syntax.OpaqueConstraintExp (span (COLONGTleft, SigExpright), strexp, SigExp))
+
 FunDec : FUNCTOR FunBind (FunBind)
 
-FunBind : FunId LPAREN StrId COLON SigExp RPAREN EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.NamedFunExp (StrId, SigExp, StrExp_AND)) :: FunBind)
-        | FunId LPAREN StrId COLON SigExp RPAREN COLON SigExp EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.TransparentConstraintExp(span(COLONleft, StrExp_ANDright), StrExp_AND, SigExp2))) :: FunBind)
-        | FunId LPAREN StrId COLON SigExp RPAREN COLONGT SigExp EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExp_ANDright), StrExp_AND, SigExp2))) :: FunBind)
-        | FunId LPAREN Specs RPAREN EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), StrExp_AND)) :: FunBind)
-        | FunId LPAREN Specs RPAREN COLON SigExp EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.TransparentConstraintExp(span(COLONleft, StrExp_ANDright), StrExp_AND, SigExp))) :: FunBind)
-        | FunId LPAREN Specs RPAREN COLONGT SigExp EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExp_ANDright), StrExp_AND, SigExp))) :: FunBind)
-        | FunId LPAREN StrId COLON SigExp RPAREN EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp, StrExp)) :: [])
-        | FunId LPAREN StrId COLON SigExp RPAREN COLON SigExp EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp2))) :: [])
-        | FunId LPAREN StrId COLON SigExp RPAREN COLONGT SigExp EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp1, Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp2))) :: [])
-        | FunId LPAREN Specs RPAREN EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), StrExp)) :: [])
-        | FunId LPAREN Specs RPAREN COLON SigExp EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.TransparentConstraintExp(span(COLONleft, StrExpright), StrExp, SigExp))) :: [])
-        | FunId LPAREN Specs RPAREN COLONGT SigExp EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), Syntax.OpaqueConstraintExp(span(COLONGTleft, StrExpright), StrExp, SigExp))) :: [])
+FunBind : FunId LPAREN StrId COLON SigExp RPAREN SigConstraint EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.NamedFunExp (StrId, SigExp, SigConstraint StrExp_AND)) :: FunBind)
+        | FunId LPAREN Specs RPAREN SigConstraint EQUALS StrExp_AND FunBind ((span(FunIdleft, StrExp_ANDright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), SigConstraint StrExp_AND)) :: FunBind)
+        | FunId LPAREN StrId COLON SigExp RPAREN SigConstraint EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.NamedFunExp (StrId, SigExp, SigConstraint StrExp)) :: [])
+        | FunId LPAREN Specs RPAREN SigConstraint EQUALS StrExp ((span(FunIdleft, StrExpright), FunId, Syntax.AnonymousFunExp (Syntax.BasicSigExp(span(LPARENleft, RPARENright), Specs), SigConstraint StrExp)) :: [])
 
 TopDecs : Dec_NoLocal TopDecs (Syntax.StrDec(Syntax.CoreDec(span(Dec_NoLocalleft, Dec_NoLocalright), Dec_NoLocal)) :: TopDecs) (* strdec *)
         | ProperStrDec TopDecs (Syntax.StrDec(ProperStrDec) :: TopDecs) (* strdec *)
