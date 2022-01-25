@@ -902,6 +902,7 @@ fun collate compare ([], []) = EQUAL
                                              EQUAL => collate compare (xs, ys)
                                            | c => c
 end (* structure List *)
+exception Empty = List.Empty
 val op @ : ('a list * 'a list) -> 'a list = List.@
 val app : ('a -> unit) -> 'a list -> unit = List.app
 val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl

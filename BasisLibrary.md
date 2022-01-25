@@ -102,6 +102,8 @@ end
 structure Word : sig
   type word = word
   val wordSize : int
+  val toLarge : word -> LargeWord.word
+  val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -132,6 +134,8 @@ end
 structure Word8 :> sig
   eqtype word
   val wordSize : int
+  val toLarge : word -> LargeWord.word
+  val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -162,6 +166,8 @@ end
 structure Word16 :> sig
   eqtype word
   val wordSize : int
+  val toLarge : word -> LargeWord.word
+  val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -192,6 +198,8 @@ end
 structure Word32 :> sig
   eqtype word
   val wordSize : int
+  val toLarge : word -> LargeWord.word
+  val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -222,6 +230,8 @@ end
 structure Word64 :> sig
   eqtype word
   val wordSize : int
+  val toLarge : word -> LargeWord.word
+  val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -248,6 +258,8 @@ structure Word64 :> sig
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
 end
+
+structure LargeWord = Word64
 
 structure Real : sig
   type real = real
@@ -384,6 +396,7 @@ structure List : sig
   val tabulate : int * (int -> 'a) -> 'a list
   val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
 end
+exception Empty = List.Empty
 val @ = List.@
 val app = List.app
 val foldl = List.foldl
@@ -394,6 +407,20 @@ val map = List.map
 val null = List.null
 val rev = List.rev
 val tl = List.tl
+
+structure ListPair : sig
+  exception UnequalLengths
+  val zip : 'a list * 'b list -> ('a * 'b) list
+  val zipEq : 'a list * 'b list -> ('a * 'b) list
+  val app : ('a * 'b -> unit) -> 'a list * 'b list -> unit
+  val appEq : ('a * 'b -> unit) -> 'a list * 'b list -> unit
+  val map : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
+  val mapEq : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
+  val foldl : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
+  val foldlEq : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
+  val all : ('a * 'b -> bool) -> 'a list * 'b list -> bool
+  val allEq : ('a * 'b -> bool) -> 'a list * 'b list -> bool
+end
 
 structure Option : sig
   datatype 'a option = NONE | SOME of 'a

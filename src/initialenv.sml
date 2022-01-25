@@ -33,7 +33,7 @@ val initialFixity = let open Syntax
                                   ,(MkVId "<=", InfixL 4)
                                   ,(MkVId ":=", InfixL 3)
                                   ,(MkVId "o",  InfixL 3)
-                                  ,(MkVId "before",InfixL 3)
+                                  ,(MkVId "before",InfixL 0)
                                   ]
                     end
 val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n, isSoleConstructor), m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ValueConstructor isSoleConstructor)) Syntax.VIdMap.empty xs
