@@ -7,6 +7,7 @@ datatype 'a option = NONE | SOME of 'a;
 
 structure Int = struct
 open Int (* ~, abs *)
+type int = int
 fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
 fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
 fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
@@ -691,6 +692,41 @@ fun toString true = "true"
 end (* structure Bool *)
 val not : bool -> bool = Bool.not;
 
+(*
+signature INTEGER = sig
+    eqtype int
+    (* val toLarge : int -> LargeInt.int *)
+    (* val fromLarge : LargeInt.int -> int *)
+    val toInt : int -> Int.int
+    val fromInt : Int.int -> int
+    val precision : int option
+    val minInt : int option
+    val maxInt : int option
+    val + : int * int -> int
+    val - : int * int -> int
+    val * : int * int -> int
+    val div : int * int -> int
+    val mod : int * int -> int
+    val quot : int * int -> int
+    val rem : int * int -> int
+    val compare : int * int -> order
+    val < : int * int -> bool
+    val <= : int * int -> bool
+    val > : int * int -> bool
+    val >= : int * int -> bool
+    val ~ : int -> int
+    val abs : int -> int
+    val min : int * int -> int
+    val max : int * int -> int
+    val sign : int -> int
+    val sameSign : int * int -> bool
+    val fmt : StringCvt.radix -> int -> string
+    val toString : int -> string
+    (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader; defined in scan-num.sml *)
+    (* val fromString : string -> int option; defined in scan-num.sml *)
+end;
+*)
+
 structure Int : sig
               type int = int
               val toInt : int -> int
@@ -718,7 +754,8 @@ structure Int : sig
               val sameSign : int * int -> bool
               val fmt : StringCvt.radix -> int -> string
               val toString : int -> string
-              val fromString : string -> int option
+              (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader; defined in scan-num.sml *)
+              (* val fromString : string -> int option; defined in scan-num.sml *)
           end = struct
 type int = int
 open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
@@ -795,6 +832,7 @@ fun toString (x : int) : string = let val result = Lua.call Lua.Lib.tostring #[L
                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
                                   end
 (* scan *)
+(*
 fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.string.match #[Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"]
                                            in if Lua.isNil (Vector.sub (result, 0)) then
                                                   NONE
@@ -808,6 +846,7 @@ fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.str
                                                   in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
                                                   end
                                            end
+*)
 end; (* structure Int *)
 
 structure Word : sig
@@ -838,6 +877,8 @@ structure Word : sig
               val max : word * word -> word
               val fmt : StringCvt.radix -> word -> string
               val toString : word -> string
+              (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader; defined in scan-num.sml *)
+              (* val fromString : string -> word option; defined in scan-num.sml *)
           end = struct
 type word = word
 open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
@@ -1304,276 +1345,6 @@ open String
 fun toString s = translate Char.toString s
 end;
 
-structure Int : sig
-              type int = int
-              val toInt : int -> int
-              val fromInt : int -> int
-              val precision : int option
-              val minInt : int option
-              val maxInt : int option
-              val + : int * int -> int
-              val - : int * int -> int
-              val * : int * int -> int
-              val div : int * int -> int
-              val mod : int * int -> int
-              val quot : int * int -> int
-              val rem : int * int -> int
-              val compare : int * int -> order
-              val < : int * int -> bool
-              val <= : int * int -> bool
-              val > : int * int -> bool
-              val >= : int * int -> bool
-              val ~ : int -> int
-              val abs : int -> int
-              val min : int * int -> int
-              val max : int * int -> int
-              val sign : int -> int
-              val sameSign : int * int -> bool
-              val fmt : StringCvt.radix -> int -> string
-              val toString : int -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
-              val fromString : string -> int option
-          end = struct
-local
-    fun skipInitialWhitespace (getc, strm) = case getc strm of
-                                                 NONE => strm
-                                               | SOME (c, strm') => if Char.isSpace c then
-                                                                        skipInitialWhitespace (getc, strm')
-                                                                    else
-                                                                        strm
-    fun isBinDigit c = c = #"0" orelse c = #"1"
-    fun isOctDigit c = #"0" <= c andalso c <= #"7"
-    fun digitToInt c = if #"0" <= c andalso c <= #"9" then
-                           Char.ord c - Char.ord #"0"
-                       else if #"a" <= c andalso c <= #"f" then
-                           Char.ord c - Char.ord #"a"
-                       else
-                           Char.ord c - Char.ord #"A"
-    (* scanSign: true if negative *)
-    fun scanSign (getc, strm) = case getc strm of
-                                    SOME (#"+", strm) => (false, strm)
-                                  | SOME (#"~", strm) => (true, strm)
-                                  | SOME (#"-", strm) => (true, strm)
-                                  | _ => (false, strm)
-    fun scanDigits (radix, isDigit, getc)
-        = let fun go1 (x, strm) = case getc strm of
-                                      SOME (c, strm') => if isDigit c then
-                                                             go1 (radix * x + digitToInt c, strm')
-                                                         else
-                                                             SOME (x, strm)
-                                    | NONE => SOME (x, strm)
-          in fn strm => case getc strm of
-                            SOME (c, strm') => if isDigit c then
-                                                   go1 (digitToInt c, strm')
-                                               else
-                                                   NONE
-                          | NONE => NONE
-          end
-    fun scanNegativeDigits (radix, isDigit, getc)
-        = let fun go1 (x, strm) = case getc strm of
-                                      SOME (c, strm') => if isDigit c then
-                                                             go1 (radix * x - digitToInt c, strm')
-                                                         else
-                                                             SOME (x, strm)
-                                    | NONE => SOME (x, strm)
-          in fn strm => case getc strm of
-                            SOME (c, strm') => if isDigit c then
-                                                   go1 (~ (digitToInt c), strm')
-                                               else
-                                                   NONE
-                          | NONE => NONE
-          end
-in
-fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val (isNegative, strm) = scanSign (getc, strm)
-                                   in if isNegative then
-                                          scanNegativeDigits (2, isBinDigit, getc) strm
-                                      else
-                                          scanDigits (2, isBinDigit, getc) strm
-                                   end
-  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val (isNegative, strm) = scanSign (getc, strm)
-                                   in if isNegative then
-                                          scanNegativeDigits (8, isOctDigit, getc) strm
-                                      else
-                                          scanDigits (8, isOctDigit, getc) strm
-                                   end
-  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val (isNegative, strm) = scanSign (getc, strm)
-                                   in if isNegative then
-                                          scanNegativeDigits (10, Char.isDigit, getc) strm
-                                      else
-                                          scanDigits (10, Char.isDigit, getc) strm
-                                   end
-  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val (isNegative, strm) = scanSign (getc, strm)
-                                       val strm = case getc strm of
-                                                      SOME (#"0", strm') =>
-                                                      (case getc strm' of
-                                                           SOME (c, strm'') =>
-                                                           if c = #"x" orelse c = #"X" then
-                                                               case getc strm'' of
-                                                                   SOME (c, _) => if Char.isHexDigit c then
-                                                                                      strm''
-                                                                                  else
-                                                                                      strm
-                                                                 | NONE => strm
-                                                           else
-                                                               strm
-                                                         | NONE => strm
-                                                      )
-                                                    | _ => strm
-                                   in if isNegative then
-                                          scanNegativeDigits (16, Char.isHexDigit, getc) strm
-                                      else
-                                          scanDigits (16, Char.isHexDigit, getc) strm
-                                   end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
-end
-open Int
-end;
-
-structure Word : sig
-              type word = word
-              val wordSize : int
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * word -> word
-              val >> : word * word -> word
-              val ~>> : word * word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val ~ : word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
-local
-    fun skipInitialWhitespace (getc, strm) = case getc strm of
-                                                 NONE => strm
-                                               | SOME (c, strm') => if Char.isSpace c then
-                                                                        skipInitialWhitespace (getc, strm')
-                                                                    else
-                                                                        strm
-    fun skip0w (isDigit, getc, strm) = case getc strm of
-                                           NONE => strm
-                                         | SOME (#"0", strm') => (case getc strm' of
-                                                                      SOME (#"w", strm'') => (case getc strm'' of
-                                                                                                  SOME (c, _) => if isDigit c then
-                                                                                                                     strm''
-                                                                                                                 else
-                                                                                                                     strm
-                                                                                                | NONE => strm
-                                                                                             )
-                                                                    | _ => strm
-                                                                 )
-                                         | _ => strm
-    fun skip0wx (getc, strm) = case getc strm of
-                                   NONE => strm
-                                 | SOME (#"0", strm') =>
-                                   (case getc strm' of
-                                        SOME (#"w", strm'') =>
-                                        (case getc strm'' of
-                                             SOME (x, strm''') =>
-                                             if x = #"x" orelse x = #"X" then
-                                                 case getc strm''' of
-                                                     SOME (c, _) => if Char.isHexDigit c then
-                                                                        strm'''
-                                                                    else
-                                                                        strm
-                                                   | NONE => strm
-                                             else
-                                                 strm
-                                        )
-                                      | SOME (#"x", strm'') =>
-                                        (case getc strm'' of
-                                             SOME (c, _) => if Char.isHexDigit c then
-                                                                strm''
-                                                            else
-                                                                strm
-                                           | NONE => strm
-                                        )
-                                      | SOME (#"X", strm'') =>
-                                        (case getc strm'' of
-                                             SOME (c, _) => if Char.isHexDigit c then
-                                                                strm''
-                                                            else
-                                                                strm
-                                           | NONE => strm
-                                        )
-                                      | _ => strm
-                                   )
-                                 | _ => strm
-    fun isBinDigit c = c = #"0" orelse c = #"1"
-    fun isOctDigit c = #"0" <= c andalso c <= #"7"
-    fun digitToInt c = if #"0" <= c andalso c <= #"9" then
-                           Char.ord c - Char.ord #"0"
-                       else if #"a" <= c andalso c <= #"f" then
-                           Char.ord c - Char.ord #"a"
-                       else
-                           Char.ord c - Char.ord #"A"
-    fun scanDigits (radix, isDigit, getc)
-        = let fun go1 (x, strm) = case getc strm of
-                                      SOME (c, strm') => if isDigit c then
-                                                             let val y = radix * x
-                                                             in if y div radix <> x then
-                                                                    raise Overflow
-                                                                else
-                                                                    let val z = y + Word.fromInt (digitToInt c)
-                                                                    in if z < y then
-                                                                           raise Overflow
-                                                                       else
-                                                                           go1 (z, strm')
-                                                                    end
-                                                             end
-                                                         else
-                                                             SOME (x, strm)
-                                    | NONE => SOME (x, strm)
-          in fn strm => case getc strm of
-                            SOME (c, strm') => if isDigit c then
-                                                   go1 (Word.fromInt (digitToInt c), strm')
-                                               else
-                                                   NONE
-                          | NONE => NONE
-          end
-in
-fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val strm = skip0w (isBinDigit, getc, strm)
-                                   in scanDigits (0w2, isBinDigit, getc) strm
-                                   end
-  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val strm = skip0w (isOctDigit, getc, strm)
-                                   in scanDigits (0w8, isOctDigit, getc) strm
-                                   end
-  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val strm = skip0w (Char.isDigit, getc, strm)
-                                   in scanDigits (0w10, Char.isDigit, getc) strm
-                                   end
-  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                       val strm = skip0wx (getc, strm)
-                                   in scanDigits (0w16, Char.isHexDigit, getc) strm
-                                   end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
-end
-open Word
-end;
-
 structure Vector : sig
               datatype vector = datatype vector
               val maxLen : int
@@ -1670,139 +1441,3 @@ fun app f arr = let val n = length arr
                 end
 open Array (* array, fromList, tabulate *)
 end; (* structure Array *)
-
-structure IO : sig
-              exception Io of { name : string
-                              , function : string
-                              , cause : exn
-                              }
-          end = struct
-exception Io of { name : string
-                , function : string
-                , cause : exn
-                }
-end; (* structure IO *)
-
-structure TextIO :> sig
-              type instream
-              type outstream
-              type vector = string
-              type elem = char
-              val input1 : instream -> elem option
-              val inputN : instream * int -> vector
-              val inputAll : instream -> vector
-              val closeIn : instream -> unit
-              val output : outstream * vector -> unit
-              val output1 : outstream * elem -> unit
-              val flushOut : outstream -> unit
-              val closeOut : outstream -> unit
-              val inputLine : instream -> string option
-              val openIn : string -> instream
-              val openOut : string -> outstream
-              val openAppend : string -> outstream
-              val stdIn : instream
-              val stdOut : outstream
-              val stdErr : outstream
-              val print : string -> unit
-          end = struct
-local
-    val io = LunarML.assumeDiscardable (Lua.global "io")
-    val io_open = LunarML.assumeDiscardable (Lua.field (io, "open"))
-    val io_write = LunarML.assumeDiscardable (Lua.field (io, "write"))
-    structure Instream :> sig
-                  type instream
-                  type vector = string
-                  type elem = char
-                  val input1 : instream -> elem option
-                  val inputN : instream * int -> vector
-                  val inputAll : instream -> vector
-                  val closeIn : instream -> unit
-                  val inputLine : instream -> string option
-                  val openIn : string -> instream
-                  val stdIn : instream
-              end = struct
-    type instream = Lua.value
-    type vector = string
-    type elem = char
-    fun input1 f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
-                   in if Lua.isNil result then
-                          NONE
-                      else
-                          SOME (Lua.unsafeFromValue result : elem)
-                   end
-    fun inputN (f, n : int) = if n < 0 then
-                                  raise Size
-                              else
-                                  let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt n]), 0)
-                                  in if Lua.isNil result then
-                                         ""
-                                     else
-                                         (Lua.unsafeFromValue result : vector)
-                                  end
-    fun inputAll f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "a"]), 0)
-                     in Lua.unsafeFromValue result : vector
-                     end
-    fun closeIn f = (Lua.method (f, "close") (vector []); ())
-
-    (* TEXT_IO *)
-    fun inputLine f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "L"]), 0)
-                      in if Lua.isNil result then
-                             NONE
-                         else
-                             SOME (Lua.unsafeFromValue result : string)
-                      end
-    fun openIn f = let val result = Lua.call io_open #[Lua.fromString f, Lua.fromString "r"]
-                   in if Lua.isNil (Vector.sub (result, 0)) then
-                          raise IO.Io { name = f, function = "TextIO.openIn", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
-                      else
-                          Vector.sub (result, 0)
-                   end
-    val stdIn = LunarML.assumeDiscardable (Lua.field (io, "stdin"))
-    end
-    structure Outstream :> sig
-                  type outstream
-                  type vector = string
-                  type elem = char
-                  val output : outstream * vector -> unit
-                  val output1 : outstream * elem -> unit
-                  val flushOut : outstream -> unit
-                  val closeOut : outstream -> unit
-                  val openOut : string -> outstream
-                  val openAppend : string -> outstream
-                  val stdOut : outstream
-                  val stdErr : outstream
-                  val print : string -> unit
-              end = struct
-    type outstream = Lua.value
-    type vector = string
-    type elem = char
-    fun output (f, s) = (Lua.method (f, "write") (vector [Lua.fromString s]); ())
-    fun output1 (f, c) = (Lua.method (f, "write") (vector [Lua.fromString (String.str c)]); ())
-    fun flushOut f = (Lua.method (f, "flush") (vector []); ())
-    fun closeOut f = (Lua.method (f, "close") (vector []); ())
-    (* outputsubstr : outstream * substring -> unit *)
-    fun openOut f = let val result = Lua.call io_open #[Lua.fromString f, Lua.fromString "w"]
-                    in if Lua.isNil (Vector.sub (result, 0)) then
-                           raise IO.Io { name = f, function = "TextIO.openOut", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
-                       else
-                           Vector.sub (result, 0)
-                    end
-    fun openAppend f = let val result = Lua.call io_open #[Lua.fromString f, Lua.fromString "a"]
-                       in if Lua.isNil (Vector.sub (result, 0)) then
-                              raise IO.Io { name = f, function = "TextIO.openAppend", cause = Fail (Lua.unsafeFromValue (Vector.sub (result, 1))) } (* TODO: cause *)
-                          else
-                              Vector.sub (result, 0)
-                       end
-    val stdOut = LunarML.assumeDiscardable (Lua.field (io, "stdout"))
-    val stdErr = LunarML.assumeDiscardable (Lua.field (io, "stderr"))
-    fun print s = (Lua.call io_write #[Lua.fromString s]; ())
-    end
-in
-open Instream
-open Outstream
-(* IMPERATIVE_IO *)
-(* fun openString f *)
-(* scanStream *)
-end (* local *)
-end (* structure TextIO *)
-val print : string -> unit = TextIO.print;

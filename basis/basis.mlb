@@ -5,15 +5,19 @@ _primOverloads
 unsafe.sml
 equal.sml
 mlbasis.sml
+word.sml
+scan-num.sml
+io.sml
+text-io.sml
 os.sml
 commandline.sml
 vector-slice.sml
 array-slice.sml
 list-pair.sml
-word.sml
 int-inf.sml
 in
 _primOverloads
+signature INTEGER
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure Int
