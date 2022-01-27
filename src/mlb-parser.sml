@@ -92,6 +92,7 @@ val basdec = P.fix (fn basdec =>
                                                                                                                                                       <|> P.pure (id1, id1)
                                                                                                                                        ), reserved "and")
                                           , MLBSyntax.PrimDec <$ reserved "_prim"
+                                          , MLBSyntax.PrimOverloadDec <$ reserved "_primOverloads"
                                           , reserved "ann" >> P.many1 stringLiteral <* reserved "in" >>= (fn annotations => (fn dec => MLBSyntax.AnnotationDec (annotations, dec)) <$> basdec <* reserved "end")
                                           , MLBSyntax.PathDec <$> file (* .sml, .sig, .fun, .mlb *)
                                           , MLBSyntax.PathDec <$> stringLiteral

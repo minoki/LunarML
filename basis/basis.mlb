@@ -1,7 +1,9 @@
-local
+infixes.sml
 _prim
-in
+local
+_primOverloads
 unsafe.sml
+equal.sml
 mlbasis.sml
 os.sml
 commandline.sml
@@ -10,4 +12,37 @@ array-slice.sml
 list-pair.sml
 word.sml
 int-inf.sml
+in
+_primOverloads
+structure Unsafe (* extension; to be moved... *)
+structure Lua (* extension; to be moved... *)
+structure Int
+structure Word
+structure Real
+structure Char
+structure String
+structure Vector
+structure General
+structure List
+structure Option
+structure Bool
+structure IEEEReal
+structure Math
+structure StringCvt
+structure Substring
+structure Array
+structure IO
+structure TextIO
+structure OS
+structure CommandLine
+structure VectorSlice
+structure ArraySlice
+structure ListPair
+structure Word8
+structure Word16
+structure Word32
+structure Word64
+structure LargeWord
+structure IntInf
+top-level.sml
 end

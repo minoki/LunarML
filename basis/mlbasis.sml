@@ -2,8 +2,6 @@ structure Bool = struct
 fun not x = _primCall "Bool.not" (x)
 end;
 
-fun x <> y = Bool.not (x = y);
-
 type unit = {}
 datatype 'a option = NONE | SOME of 'a;
 
@@ -494,20 +492,190 @@ val ignore : 'a -> unit = General.ignore;
 val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c = General.o;
 *)
 
+(* depends on int, option, General.Subscript, General.order *)
+structure List : sig
+              datatype list = datatype list
+              exception Empty
+              val null : 'a list -> bool
+              val length : 'a list -> int
+              val @ : 'a list * 'a list -> 'a list
+              val hd : 'a list -> 'a
+              val tl : 'a list -> 'a list
+              val last : 'a list -> 'a
+              val getItem : 'a list -> ('a * 'a list) option
+              val nth : 'a list * int -> 'a
+              val take : 'a list * int -> 'a list
+              val drop : 'a list * int -> 'a list
+              val rev : 'a list -> 'a list
+              val concat : 'a list list -> 'a list
+              val revAppend : 'a list * 'a list -> 'a list
+              val app : ('a -> unit) -> 'a list -> unit
+              val map : ('a -> 'b) -> 'a list -> 'b list
+              val mapPartial : ('a -> 'b option) -> 'a list -> 'b list
+              val find : ('a -> bool) -> 'a list -> 'a option
+              val filter : ('a -> bool) -> 'a list -> 'a list
+              val partition : ('a -> bool) -> 'a list -> 'a list * 'a list
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
+              val exists : ('a -> bool) -> 'a list -> bool
+              val all : ('a -> bool) -> 'a list -> bool
+              val tabulate : int * (int -> 'a) -> 'a list
+              val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
+          end = struct
+datatype list = datatype list
+exception Empty
+fun null [] = true
+  | null _ = false
+local
+    fun doLength (acc, []) = acc : int
+      | doLength (acc, x :: xs) = doLength (acc + 1, xs)
+in
+fun length xs = doLength (0, xs)
+end
+fun [] @ ys = ys
+  | (x :: xs) @ ys = x :: (xs @ ys)
+fun hd [] = raise Empty
+  | hd (x :: _) = x
+fun tl [] = raise Empty
+  | tl (_ :: xs) = xs
+fun last [x] = x
+  | last (_ :: xs) = last xs
+  | last [] = raise Empty
+fun getItem [] = NONE
+  | getItem (x :: xs) = SOME (x, xs)
+fun nth (x :: _, 0) = x
+  | nth (_ :: xs, n) = nth (xs, n - 1)
+  | nth ([], _) = raise Subscript
+fun take (_, 0) = []
+  | take (x :: xs, n) = x :: take (xs, n - 1)
+  | take ([], _) = raise Subscript
+fun drop (xs, 0) = xs
+  | drop (_ :: xs, n) = drop (xs, n - 1)
+  | drop ([], _) = raise Subscript
+fun rev [] = []
+  | rev (x :: xs) = rev xs @ [x]
+fun revAppend ([], ys) = ys
+  | revAppend (x :: xs, ys) = revAppend (xs, x :: ys)
+fun app f [] = ()
+  | app f (x :: xs) = (f x; app f xs)
+fun map f [] = []
+  | map f (x :: xs) = f x :: map f xs
+fun mapPartial f [] = []
+  | mapPartial f (x :: xs) = case f x of
+                                 NONE => mapPartial f xs
+                               | SOME y => y :: mapPartial f xs
+fun find f [] = NONE
+  | find f (x :: xs) = if f x then
+                           SOME x
+                       else
+                           find f xs
+fun filter f [] = []
+  | filter f (x :: xs) = if f x then
+                             x :: filter f xs
+                         else
+                             filter f xs
+fun partition f [] = ([], [])
+  | partition f (x :: xs) = if f x then
+                                let val (l, r) = partition f xs
+                                in (x :: l, r)
+                                end
+                            else
+                                let val (l, r) = partition f xs
+                                in (l, x :: r)
+                                end
+fun foldl f init [] = init
+  | foldl f init (x :: xs) = foldl f (f (x, init)) xs
+fun foldr f init [] = init
+  | foldr f init (x :: xs) = f (x, foldr f init xs)
+fun concat xs = foldr (op @) [] xs
+fun exists f [] = false
+  | exists f (x :: xs) = f x orelse exists f xs
+fun all f [] = true
+  | all f (x :: xs) = f x andalso all f xs
+fun tabulate (n, f) = let fun go i = if i >= n then
+                                         []
+                                     else
+                                         f i :: go (i + 1)
+                      in go 0
+                      end
+fun collate compare ([], []) = EQUAL
+  | collate compare (_ :: _, []) = GREATER
+  | collate compare ([], _ :: _) = LESS
+  | collate compare (x :: xs, y :: ys) = case compare (x, y) of
+                                             EQUAL => collate compare (xs, ys)
+                                           | c => c
+end (* structure List *)
+exception Empty = List.Empty
+val op @ : ('a list * 'a list) -> 'a list = List.@
+val app : ('a -> unit) -> 'a list -> unit = List.app
+val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
+val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
+val hd : 'a list -> 'a = List.hd
+val length : 'a list -> int = List.length
+val map : ('a -> 'b) -> 'a list -> 'b list = List.map
+val null : 'a list -> bool = List.null
+val rev : 'a list -> 'a list = List.rev
+val tl : 'a list -> 'a list = List.tl;
+
+structure Option : sig
+              datatype 'a option = NONE | SOME of 'a
+              exception Option
+              val getOpt : 'a option * 'a -> 'a
+              val isSome : 'a option -> bool
+              val valOf : 'a option -> 'a
+              val filter : ('a -> bool) -> 'a -> 'a option
+              val join : 'a option option -> 'a option
+              val app : ('a -> unit) -> 'a option -> unit
+              val map : ('a -> 'b) -> 'a option -> 'b option
+              val mapPartial : ('a -> 'b option) -> 'a option -> 'b option
+              val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
+              val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
+          end = struct
+datatype option = datatype option
+exception Option
+fun getOpt (NONE, default) = default
+  | getOpt (SOME x, _) = x
+fun isSome (SOME _) = true
+  | isSome NONE = false
+fun valOf (SOME x) = x
+  | valOf NONE = raise Option
+fun filter pred x = if pred x then
+                        SOME x
+                    else
+                        NONE
+fun join (SOME x) = x
+  | join NONE = NONE
+fun app f (SOME x) = f x
+  | app f NONE = ()
+fun map f (SOME x) = SOME (f x)
+  | map f NONE = NONE
+fun mapPartial f (SOME x) = f x
+  | mapPartial f NONE = NONE
+fun compose (f, g) x = case g x of
+                           SOME y => SOME (f y)
+                         | NONE => NONE
+fun composePartial (f, g) x = case g x of
+                                  SOME y => f y
+                                | NONE => NONE
+end (* structure Option *)
+val getOpt : 'a option * 'a -> 'a = Option.getOpt
+val isSome : 'a option -> bool = Option.isSome
+val valOf : 'a option -> 'a = Option.valOf;
+
 structure StringCvt : sig
               datatype radix = BIN | OCT | DEC | HEX
               datatype realfmt = SCI of int option
                                | FIX of int option
                                | GEN of int option
                                | EXACT
-              type ('a,'b) reader = 'b -> ('a * 'b) option
+              type ('a, 'b) reader = 'b -> ('a * 'b) option
           end = struct
 datatype radix = BIN | OCT | DEC | HEX
 datatype realfmt = SCI of int option
                  | FIX of int option
                  | GEN of int option
                  | EXACT
-type ('a,'b) reader = 'b -> ('a * 'b) option
+type ('a, 'b) reader = 'b -> ('a * 'b) option
 end
 
 structure Bool : sig
@@ -735,6 +903,20 @@ val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.cal
 (* scan, fromString *)
 end; (* structure Word *)
 
+structure IEEEReal : sig
+              exception Unordered
+              datatype real_order = LESS | EQUAL | GREATER | UNORDERED
+              datatype float_class = NAN | INF | ZERO | NORMAL | SUBNORMAL
+              datatype rounding_mode = TO_NEAREST | TO_NEGINF | TO_POSINF | TO_ZERO
+              type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
+          end = struct
+exception Unordered
+datatype real_order = LESS | EQUAL | GREATER | UNORDERED
+datatype float_class = NAN | INF | ZERO | NORMAL | SUBNORMAL
+datatype rounding_mode = TO_NEAREST | TO_NEGINF | TO_POSINF | TO_ZERO
+type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
+end;
+
 structure Real : sig
               type real = real
               val + : real * real -> real
@@ -743,12 +925,62 @@ structure Real : sig
               val / : real * real -> real
               val ~ : real -> real
               val abs : real -> real
+              val compare : real * real -> order
               val < : real * real -> bool
               val <= : real * real -> bool
               val > : real * real -> bool
               val >= : real * real -> bool
+              val == : real * real -> bool
+              val != : real * real -> bool
+              val isNan : real -> bool
+              val fmt : StringCvt.realfmt -> real -> string
+              val toString : real -> string
           end = struct
 type real = real
+fun == (x, y) = Lua.== (Lua.fromReal x, Lua.fromReal y)
+fun != (x, y) = Lua.~= (Lua.fromReal x, Lua.fromReal y)
+fun isNan x = != (x, x)
+fun compare (x, y) = if isNan x orelse isNan y then
+                         raise IEEEReal.Unordered
+                     else
+                         if x < y then
+                             LESS
+                         else if == (x, y) then
+                             EQUAL
+                         else
+                             GREATER
+fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
+                                     val () = if prec < 0 then
+                                                  raise Size
+                                              else
+                                                  ()
+                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%dE", Lua.fromInt prec], 0)
+                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                 end
+  | fmt (StringCvt.FIX prec) r = let val prec = Option.getOpt (prec, 6)
+                                     val () = if prec < 0 then
+                                                  raise Size
+                                              else
+                                                  ()
+                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%df", Lua.fromInt prec], 0)
+                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                 end
+  | fmt (StringCvt.GEN prec) r = let val prec = Option.getOpt (prec, 12)
+                                     val () = if prec < 1 then
+                                                  raise Size
+                                              else
+                                                  ()
+                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%dG", Lua.fromInt prec], 0) (* TODO *)
+                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                 end
+  | fmt StringCvt.EXACT r = raise Fail "Real.fmt StringCvt.EXACT: not implemented yet"
+val toString = fmt (StringCvt.GEN NONE)
 open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
 end; (* structure Real *)
 
@@ -789,130 +1021,6 @@ val cosh : real -> real
 val tanh : real -> real
 *)
 end; (* structure Math *)
-
-structure List : sig
-              datatype list = datatype list
-              exception Empty
-              val null : 'a list -> bool
-              val length : 'a list -> int
-              val @ : 'a list * 'a list -> 'a list
-              val hd : 'a list -> 'a
-              val tl : 'a list -> 'a list
-              val last : 'a list -> 'a
-              val getItem : 'a list -> ('a * 'a list) option
-              val nth : 'a list * int -> 'a
-              val take : 'a list * int -> 'a list
-              val drop : 'a list * int -> 'a list
-              val rev : 'a list -> 'a list
-              val concat : 'a list list -> 'a list
-              val revAppend : 'a list * 'a list -> 'a list
-              val app : ('a -> unit) -> 'a list -> unit
-              val map : ('a -> 'b) -> 'a list -> 'b list
-              val mapPartial : ('a -> 'b option) -> 'a list -> 'b list
-              val find : ('a -> bool) -> 'a list -> 'a option
-              val filter : ('a -> bool) -> 'a list -> 'a list
-              val partition : ('a -> bool) -> 'a list -> 'a list * 'a list
-              val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
-              val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b
-              val exists : ('a -> bool) -> 'a list -> bool
-              val all : ('a -> bool) -> 'a list -> bool
-              val tabulate : int * (int -> 'a) -> 'a list
-              val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
-          end = struct
-datatype list = datatype list
-exception Empty
-fun null [] = true
-  | null _ = false
-local
-    fun doLength (acc, []) = acc : int
-      | doLength (acc, x :: xs) = doLength (acc + 1, xs)
-in
-fun length xs = doLength (0, xs)
-end
-fun [] @ ys = ys
-  | (x :: xs) @ ys = x :: (xs @ ys)
-fun hd [] = raise Empty
-  | hd (x :: _) = x
-fun tl [] = raise Empty
-  | tl (_ :: xs) = xs
-fun last [x] = x
-  | last (_ :: xs) = last xs
-  | last [] = raise Empty
-fun getItem [] = NONE
-  | getItem (x :: xs) = SOME (x, xs)
-fun nth (x :: _, 0) = x
-  | nth (_ :: xs, n) = nth (xs, n - 1)
-  | nth ([], _) = raise Subscript
-fun take (_, 0) = []
-  | take (x :: xs, n) = x :: take (xs, n - 1)
-  | take ([], _) = raise Subscript
-fun drop (xs, 0) = xs
-  | drop (_ :: xs, n) = drop (xs, n - 1)
-  | drop ([], _) = raise Subscript
-fun rev [] = []
-  | rev (x :: xs) = rev xs @ [x]
-fun revAppend ([], ys) = ys
-  | revAppend (x :: xs, ys) = revAppend (xs, x :: ys)
-fun app f [] = ()
-  | app f (x :: xs) = (f x; app f xs)
-fun map f [] = []
-  | map f (x :: xs) = f x :: map f xs
-fun mapPartial f [] = []
-  | mapPartial f (x :: xs) = case f x of
-                                 NONE => mapPartial f xs
-                               | SOME y => y :: mapPartial f xs
-fun find f [] = NONE
-  | find f (x :: xs) = if f x then
-                           SOME x
-                       else
-                           find f xs
-fun filter f [] = []
-  | filter f (x :: xs) = if f x then
-                             x :: filter f xs
-                         else
-                             filter f xs
-fun partition f [] = ([], [])
-  | partition f (x :: xs) = if f x then
-                                let val (l, r) = partition f xs
-                                in (x :: l, r)
-                                end
-                            else
-                                let val (l, r) = partition f xs
-                                in (l, x :: r)
-                                end
-fun foldl f init [] = init
-  | foldl f init (x :: xs) = foldl f (f (x, init)) xs
-fun foldr f init [] = init
-  | foldr f init (x :: xs) = f (x, foldr f init xs)
-fun concat xs = foldr (op @) [] xs
-fun exists f [] = false
-  | exists f (x :: xs) = f x orelse exists f xs
-fun all f [] = true
-  | all f (x :: xs) = f x andalso all f xs
-fun tabulate (n, f) = let fun go i = if i >= n then
-                                         []
-                                     else
-                                         f i :: go (i + 1)
-                      in go 0
-                      end
-fun collate compare ([], []) = EQUAL
-  | collate compare (_ :: _, []) = GREATER
-  | collate compare ([], _ :: _) = LESS
-  | collate compare (x :: xs, y :: ys) = case compare (x, y) of
-                                             EQUAL => collate compare (xs, ys)
-                                           | c => c
-end (* structure List *)
-exception Empty = List.Empty
-val op @ : ('a list * 'a list) -> 'a list = List.@
-val app : ('a -> unit) -> 'a list -> unit = List.app
-val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
-val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
-val hd : 'a list -> 'a = List.hd
-val length : 'a list -> int = List.length
-val map : ('a -> 'b) -> 'a list -> 'b list = List.map
-val null : 'a list -> bool = List.null
-val rev : 'a list -> 'a list = List.rev
-val tl : 'a list -> 'a list = List.tl;
 
 structure String : sig
               type string = string
@@ -1005,6 +1113,28 @@ val op ^ : string * string -> string = String.^
 val concat : string list -> string = String.concat
 val size : string -> int = String.size
 val str : char -> string = String.str;
+
+structure StringCvt :> sig
+              datatype radix = BIN | OCT | DEC | HEX
+              datatype realfmt = SCI of int option
+                               | FIX of int option
+                               | GEN of int option
+                               | EXACT
+              type ('a, 'b) reader = 'b -> ('a * 'b) option
+              type cs
+              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
+          end where type radix = StringCvt.radix
+              where type realfmt = StringCvt.realfmt = struct
+open StringCvt
+type cs = string * int (* the underlying string, the starting index *)
+fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
+                                                    SOME (String.sub (s, i), (s, i + 1))
+                                                else
+                                                    NONE
+                                  ) (s, 0) of
+                            SOME (x, _) => SOME x
+                          | NONE => NONE
+end
 
 structure Substring :> sig
               type substring
@@ -1146,6 +1276,304 @@ end (* structure Char *)
 val chr = Char.chr
 val ord = Char.ord;
 
+structure String : sig
+              type string = string
+              type char = char
+              val size : string -> int
+              val sub : string * int -> char
+              val extract : string * int * int option -> string
+              val substring : string * int * int -> string
+              val ^ : string * string -> string
+              val concat : string list -> string
+              val concatWith : string -> string list -> string
+              val str : char -> string
+              val implode : char list -> string
+              val explode : string -> char list
+              val map : (char -> char) -> string -> string
+              val translate : (char -> string) -> string -> string
+              val fields : (char -> bool) -> string -> string list
+              val isPrefix : string -> string -> bool
+              val compare : string * string -> order
+              val < : string * string -> bool
+              val <= : string * string -> bool
+              val > : string * string -> bool
+              val >= : string * string -> bool
+              val toString : string -> string
+          end = struct
+open String
+fun toString s = translate Char.toString s
+end;
+
+structure Int : sig
+              type int = int
+              val toInt : int -> int
+              val fromInt : int -> int
+              val precision : int option
+              val minInt : int option
+              val maxInt : int option
+              val + : int * int -> int
+              val - : int * int -> int
+              val * : int * int -> int
+              val div : int * int -> int
+              val mod : int * int -> int
+              val quot : int * int -> int
+              val rem : int * int -> int
+              val compare : int * int -> order
+              val < : int * int -> bool
+              val <= : int * int -> bool
+              val > : int * int -> bool
+              val >= : int * int -> bool
+              val ~ : int -> int
+              val abs : int -> int
+              val min : int * int -> int
+              val max : int * int -> int
+              val sign : int -> int
+              val sameSign : int * int -> bool
+              val fmt : StringCvt.radix -> int -> string
+              val toString : int -> string
+              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
+              val fromString : string -> int option
+          end = struct
+local
+    fun skipInitialWhitespace (getc, strm) = case getc strm of
+                                                 NONE => strm
+                                               | SOME (c, strm') => if Char.isSpace c then
+                                                                        skipInitialWhitespace (getc, strm')
+                                                                    else
+                                                                        strm
+    fun isBinDigit c = c = #"0" orelse c = #"1"
+    fun isOctDigit c = #"0" <= c andalso c <= #"7"
+    fun digitToInt c = if #"0" <= c andalso c <= #"9" then
+                           Char.ord c - Char.ord #"0"
+                       else if #"a" <= c andalso c <= #"f" then
+                           Char.ord c - Char.ord #"a"
+                       else
+                           Char.ord c - Char.ord #"A"
+    (* scanSign: true if negative *)
+    fun scanSign (getc, strm) = case getc strm of
+                                    SOME (#"+", strm) => (false, strm)
+                                  | SOME (#"~", strm) => (true, strm)
+                                  | SOME (#"-", strm) => (true, strm)
+                                  | _ => (false, strm)
+    fun scanDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (radix * x + digitToInt c, strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (digitToInt c, strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+    fun scanNegativeDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (radix * x - digitToInt c, strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (~ (digitToInt c), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+in
+fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (2, isBinDigit, getc) strm
+                                      else
+                                          scanDigits (2, isBinDigit, getc) strm
+                                   end
+  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (8, isOctDigit, getc) strm
+                                      else
+                                          scanDigits (8, isOctDigit, getc) strm
+                                   end
+  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (10, Char.isDigit, getc) strm
+                                      else
+                                          scanDigits (10, Char.isDigit, getc) strm
+                                   end
+  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                       val strm = case getc strm of
+                                                      SOME (#"0", strm') =>
+                                                      (case getc strm' of
+                                                           SOME (c, strm'') =>
+                                                           if c = #"x" orelse c = #"X" then
+                                                               case getc strm'' of
+                                                                   SOME (c, _) => if Char.isHexDigit c then
+                                                                                      strm''
+                                                                                  else
+                                                                                      strm
+                                                                 | NONE => strm
+                                                           else
+                                                               strm
+                                                         | NONE => strm
+                                                      )
+                                                    | _ => strm
+                                   in if isNegative then
+                                          scanNegativeDigits (16, Char.isHexDigit, getc) strm
+                                      else
+                                          scanDigits (16, Char.isHexDigit, getc) strm
+                                   end
+fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+open Int
+end;
+
+structure Word : sig
+              type word = word
+              val wordSize : int
+              val toInt : word -> int
+              val toIntX : word -> int
+              val fromInt : int -> word
+              val andb : word * word -> word
+              val orb : word * word -> word
+              val xorb : word * word -> word
+              val notb : word -> word
+              val << : word * word -> word
+              val >> : word * word -> word
+              val ~>> : word * word -> word
+              val + : word * word -> word
+              val - : word * word -> word
+              val * : word * word -> word
+              val div : word * word -> word
+              val mod : word * word -> word
+              val ~ : word -> word
+              val compare : word * word -> order
+              val < : word * word -> bool
+              val <= : word * word -> bool
+              val > : word * word -> bool
+              val >= : word * word -> bool
+              val min : word * word -> word
+              val max : word * word -> word
+              val fmt : StringCvt.radix -> word -> string
+              val toString : word -> string
+              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+              val fromString : string -> word option
+          end = struct
+local
+    fun skipInitialWhitespace (getc, strm) = case getc strm of
+                                                 NONE => strm
+                                               | SOME (c, strm') => if Char.isSpace c then
+                                                                        skipInitialWhitespace (getc, strm')
+                                                                    else
+                                                                        strm
+    fun skip0w (isDigit, getc, strm) = case getc strm of
+                                           NONE => strm
+                                         | SOME (#"0", strm') => (case getc strm' of
+                                                                      SOME (#"w", strm'') => (case getc strm'' of
+                                                                                                  SOME (c, _) => if isDigit c then
+                                                                                                                     strm''
+                                                                                                                 else
+                                                                                                                     strm
+                                                                                                | NONE => strm
+                                                                                             )
+                                                                    | _ => strm
+                                                                 )
+                                         | _ => strm
+    fun skip0wx (getc, strm) = case getc strm of
+                                   NONE => strm
+                                 | SOME (#"0", strm') =>
+                                   (case getc strm' of
+                                        SOME (#"w", strm'') =>
+                                        (case getc strm'' of
+                                             SOME (x, strm''') =>
+                                             if x = #"x" orelse x = #"X" then
+                                                 case getc strm''' of
+                                                     SOME (c, _) => if Char.isHexDigit c then
+                                                                        strm'''
+                                                                    else
+                                                                        strm
+                                                   | NONE => strm
+                                             else
+                                                 strm
+                                        )
+                                      | SOME (#"x", strm'') =>
+                                        (case getc strm'' of
+                                             SOME (c, _) => if Char.isHexDigit c then
+                                                                strm''
+                                                            else
+                                                                strm
+                                           | NONE => strm
+                                        )
+                                      | SOME (#"X", strm'') =>
+                                        (case getc strm'' of
+                                             SOME (c, _) => if Char.isHexDigit c then
+                                                                strm''
+                                                            else
+                                                                strm
+                                           | NONE => strm
+                                        )
+                                      | _ => strm
+                                   )
+                                 | _ => strm
+    fun isBinDigit c = c = #"0" orelse c = #"1"
+    fun isOctDigit c = #"0" <= c andalso c <= #"7"
+    fun digitToInt c = if #"0" <= c andalso c <= #"9" then
+                           Char.ord c - Char.ord #"0"
+                       else if #"a" <= c andalso c <= #"f" then
+                           Char.ord c - Char.ord #"a"
+                       else
+                           Char.ord c - Char.ord #"A"
+    fun scanDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             let val y = radix * x
+                                                             in if y div radix <> x then
+                                                                    raise Overflow
+                                                                else
+                                                                    let val z = y + Word.fromInt (digitToInt c)
+                                                                    in if z < y then
+                                                                           raise Overflow
+                                                                       else
+                                                                           go1 (z, strm')
+                                                                    end
+                                                             end
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (Word.fromInt (digitToInt c), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+in
+fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val strm = skip0w (isBinDigit, getc, strm)
+                                   in scanDigits (0w2, isBinDigit, getc) strm
+                                   end
+  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val strm = skip0w (isOctDigit, getc, strm)
+                                   in scanDigits (0w8, isOctDigit, getc) strm
+                                   end
+  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val strm = skip0w (Char.isDigit, getc, strm)
+                                   in scanDigits (0w10, Char.isDigit, getc) strm
+                                   end
+  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val strm = skip0wx (getc, strm)
+                                   in scanDigits (0w16, Char.isHexDigit, getc) strm
+                                   end
+fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+open Word
+end;
+
 structure Vector : sig
               datatype vector = datatype vector
               val maxLen : int
@@ -1184,50 +1612,6 @@ fun collate compare (xs, ys) = let val xl = length xs
                                end
 end
 
-structure Option : sig
-              datatype 'a option = NONE | SOME of 'a
-              exception Option
-              val getOpt : 'a option * 'a -> 'a
-              val isSome : 'a option -> bool
-              val valOf : 'a option -> 'a
-              val filter : ('a -> bool) -> 'a -> 'a option
-              val join : 'a option option -> 'a option
-              val app : ('a -> unit) -> 'a option -> unit
-              val map : ('a -> 'b) -> 'a option -> 'b option
-              val mapPartial : ('a -> 'b option) -> 'a option -> 'b option
-              val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
-              val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
-          end = struct
-datatype option = datatype option
-exception Option
-fun getOpt (NONE, default) = default
-  | getOpt (SOME x, _) = x
-fun isSome (SOME _) = true
-  | isSome NONE = false
-fun valOf (SOME x) = x
-  | valOf NONE = raise Option
-fun filter pred x = if pred x then
-                        SOME x
-                    else
-                        NONE
-fun join (SOME x) = x
-  | join NONE = NONE
-fun app f (SOME x) = f x
-  | app f NONE = ()
-fun map f (SOME x) = SOME (f x)
-  | map f NONE = NONE
-fun mapPartial f (SOME x) = f x
-  | mapPartial f NONE = NONE
-fun compose (f, g) x = case g x of
-                           SOME y => SOME (f y)
-                         | NONE => NONE
-fun composePartial (f, g) x = case g x of
-                                  SOME y => f y
-                                | NONE => NONE
-end (* structure Option *)
-val getOpt : 'a option * 'a -> 'a = Option.getOpt
-val isSome : 'a option -> bool = Option.isSome
-val valOf : 'a option -> 'a = Option.valOf;
 
 structure Array : sig
               datatype array = datatype array

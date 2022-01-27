@@ -3,34 +3,99 @@
 Available types and functions:
 
 ```sml
+infix  7  * / div mod
+infix  6  + - ^
+infixr 5  :: @
+infix  4  = <> > >= < <=
+infix  3  := o
+infix  0  before
+
 type unit = {}
 eqtype int  (* primitive *)
 eqtype word  (* primitive *)
 type real  (* primitive *)
-eqtype string  (* primitive *)
 eqtype char  (* primitive *)
+eqtype string  (* primitive *)
+type substring = Substring.substring
 type exn  (* primitive *)
-datatype 'a ref = ref of 'a  (* primitive *)
-datatype bool = false | true
-datatype 'a list = nil | :: of 'a * 'a list
 eqtype 'a array  (* primitive *)
 eqtype 'a vector  (* primitive *)
+datatype 'a ref = ref of 'a  (* primitive *)
+datatype bool = false | true
+datatype option = datatype Option.option
+datatype order = datatype General.order
+datatype 'a list = nil | :: of 'a * 'a list
 
-val = : ''a * ''a -> bool
-val <> : ''a * ''a -> bool
+exception Bind = General.Bind
+exception Chr = General.Chr
+exception Div = General.Div
+exception Domain = General.Domain
+exception Fail = General.Fail
+exception Match = General.Match
+exception Overflow = General.Overflow
+exception Size = General.Size
+exception Span = General.Span
+exception Subscript = General.Subscript
+exception Empty = List.Empty
+exception Option = Option.Option
+
+val op = : ''a * ''a -> bool
+val op <> : ''a * ''a -> bool
 val abs : ∀'a:realint. 'a -> 'a  (* overloaded *)
 val ~ : ∀'a:num. 'a -> 'a  (* overloaded *)
-val + : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val - : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val * : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val / : ∀'a:Real. 'a * 'a -> 'a  (* overloaded *)
-val div : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
-val mod : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
-val < : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val <= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val > : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val >= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val op + : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val op - : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val op * : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val op / : ∀'a:Real. 'a * 'a -> 'a  (* overloaded *)
+val op div : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
+val op mod : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
+val op < : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val op <= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val op > : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val op >= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
 
+val ! : 'a ref -> 'a = General.!
+val op := : 'a ref * 'a -> unit = General.:=
+val op @ : ('a list * 'a list) -> 'a list = List.@
+val op ^ : string * string -> string = String.^
+val app : ('a -> unit) -> 'a list -> unit = List.app
+val op before : 'a * unit -> 'a = General.before
+(* val ceil : not implemented yet *)
+val chr : int -> char = Char.chr
+val concat : string list -> string = String.concat
+(* val exnMessage : not implemented yet *)
+(* val exnName : not implemented yet *)
+val explode : string -> char list = String.explode
+(* val floor : not implemented yet *)
+val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
+val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
+val getOpt : 'a option * 'a -> 'a = Option.getOpt
+val hd : 'a list -> 'a = List.hd
+val ignore : 'a -> unit = General.ignore
+val implode : char list -> string = String.implode
+val isSome : 'a option -> bool = Option.isSome
+val length : 'a list -> int = List.length
+val map : ('a -> 'b) -> 'a list -> 'b list = List.map
+val not : bool -> bool = Bool.not
+val null : 'a list -> bool = List.null
+val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> c = General.o
+val ord : char -> int = Char.ord
+val print : string -> unit = TextIO.print
+(* val real = Real.fromInt : not implemented yet *)
+(* val ref *)
+val rev : 'a list -> 'a list = List.rev
+(* val round : not implemented yet *)
+val size : string -> int = String.size
+val str : char -> string = String.str
+val substring : string * int * int -> string = String.substring
+val tl : 'a list -> 'a list = List.tl
+(* val trunc : not implemented yet *)
+(* val use : not supported *)
+val valOf : 'a option -> 'a = Option.valOf
+val vector : 'a list -> 'a vector = Vector.fromList;
+```
+
+```sml
 structure General : sig
   type unit = {}
   type exn = exn
@@ -51,15 +116,16 @@ structure General : sig
   val ignore : 'a -> unit
   val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
 end
-open General
 
-structure StringCvt : sig
+structure StringCvt :> sig
   datatype radix = BIN | OCT | DEC | HEX
   datatype realfmt = SCI of int option
                    | FIX of int option
                    | GEN of int option
                    | EXACT
   type ('a,'b) reader = 'b -> ('a * 'b) option
+  type cs
+  val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
 end
 
 structure Bool : sig
@@ -67,7 +133,6 @@ structure Bool : sig
   val not : bool -> bool
   val toString : bool -> string
 end
-val not = Bool.not
 
 structure Int : sig
   type int = int
@@ -96,6 +161,7 @@ structure Int : sig
   val sameSign : int * int -> bool
   val fmt : StringCvt.radix -> int -> string
   val toString : int -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
   val fromString : string -> int option
 end
 
@@ -103,6 +169,7 @@ structure Word : sig
   type word = word
   val wordSize : int
   val toLarge : word -> LargeWord.word
+  val toLargeX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
@@ -129,12 +196,15 @@ structure Word : sig
   val max : word * word -> word
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+  val fromString : string -> word option
 end
 
 structure Word8 :> sig
   eqtype word
   val wordSize : int
   val toLarge : word -> LargeWord.word
+  val toLargeX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
@@ -167,6 +237,7 @@ structure Word16 :> sig
   eqtype word
   val wordSize : int
   val toLarge : word -> LargeWord.word
+  val toLargeX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
@@ -199,6 +270,7 @@ structure Word32 :> sig
   eqtype word
   val wordSize : int
   val toLarge : word -> LargeWord.word
+  val toLargeX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
@@ -231,6 +303,7 @@ structure Word64 :> sig
   eqtype word
   val wordSize : int
   val toLarge : word -> LargeWord.word
+  val toLargeX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val toInt : word -> int
   val toIntX : word -> int
@@ -261,6 +334,14 @@ end
 
 structure LargeWord = Word64
 
+structure IEEEReal : sig
+  exception Unordered
+  datatype real_order = LESS | EQUAL | GREATER | UNORDERED
+  datatype float_class = NAN | INF | ZERO | NORMAL | SUBNORMAL
+  datatype rounding_mode = TO_NEAREST | TO_NEGINF | TO_POSINF | TO_ZERO
+  type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
+end
+
 structure Real : sig
   type real = real
   val + : real * real -> real
@@ -269,10 +350,16 @@ structure Real : sig
   val / : real * real -> real
   val ~ : real -> real
   val abs : real -> real
+  val compare : real * real -> order
   val < : real * real -> bool
   val <= : real * real -> bool
   val > : real * real -> bool
   val >= : real * real -> bool
+  val == : real * real -> bool
+  val != : real * real -> bool
+  val isNan : real -> bool
+  val fmt : StringCvt.realfmt -> real -> string
+  val toString : real -> string
 end
 
 structure Math : sig
@@ -325,8 +412,6 @@ structure Char : sig
   val isUpper : char -> bool
   val toString : char -> String.string
 end
-val ord = Char.ord
-val chr = Char.chr
 
 structure String : sig
   type string = string
@@ -349,11 +434,8 @@ structure String : sig
   val <= : string * string -> bool
   val > : string * string -> bool
   val >= : string * string -> bool
+  val toString : string -> string
 end
-val ^ = String.^
-val concat = String.concat
-val size = String.size
-val str = String.str
 
 structure Substring :> sig
   type substring
@@ -396,29 +478,22 @@ structure List : sig
   val tabulate : int * (int -> 'a) -> 'a list
   val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
 end
-exception Empty = List.Empty
-val @ = List.@
-val app = List.app
-val foldl = List.foldl
-val foldr = List.foldr
-val hd = List.hd
-val length = List.length
-val map = List.map
-val null = List.null
-val rev = List.rev
-val tl = List.tl
 
 structure ListPair : sig
   exception UnequalLengths
   val zip : 'a list * 'b list -> ('a * 'b) list
   val zipEq : 'a list * 'b list -> ('a * 'b) list
+  val unzip : ('a * 'b) list -> 'a list * 'b list
   val app : ('a * 'b -> unit) -> 'a list * 'b list -> unit
   val appEq : ('a * 'b -> unit) -> 'a list * 'b list -> unit
   val map : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
   val mapEq : ('a * 'b -> 'c) -> 'a list * 'b list -> 'c list
   val foldl : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
+  val foldr : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
   val foldlEq : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
+  val foldrEq : ('a * 'b * 'c -> 'c) -> 'c -> 'a list * 'b list -> 'c
   val all : ('a * 'b -> bool) -> 'a list * 'b list -> bool
+  val exists : ('a * 'b -> bool) -> 'a list * 'b list -> bool
   val allEq : ('a * 'b -> bool) -> 'a list * 'b list -> bool
 end
 
@@ -436,10 +511,6 @@ structure Option : sig
   val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
   val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
 end
-datatype option = datatype Option.option
-val getOpt = Option.getOpt
-val isSome = Option.isSome
-val valOf = Option.valOf
 
 structure Vector : sig
   datatype vector = datatype vector
@@ -464,7 +535,6 @@ structure Vector : sig
   val all : ('a -> bool) -> 'a vector -> bool
   val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order
 end
-val vector = Vector.fromList
 
 structure VectorSlice :> sig
   type 'a slice
@@ -533,7 +603,6 @@ structure TextIO : sig
   val stdErr : outstream
   val print : string -> unit
 end
-val print = TextIO.print
 
 structure OS : sig
   structure FileSys : sig
@@ -550,6 +619,7 @@ structure OS : sig
   structure IO : sig
   end
   structure Path : sig
+    (* currently Unix-style only *)
     exception Path
     exception InvalidArc
     val parentArc : string

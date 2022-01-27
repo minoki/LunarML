@@ -10,6 +10,7 @@ datatype BasDec = BasisDec of (BasId * BasExp) list
                 | PathDec of Path (* path.sml, path.sig, path.fun, path.mlb *)
                 | AnnotationDec of string list * BasDec list
                 | PrimDec
+                | PrimOverloadDec
      and BasExp = BasisExp of BasDec list
                 | BasIdExp of BasId
                 | LetExp of BasDec list * BasExp

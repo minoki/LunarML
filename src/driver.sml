@@ -122,8 +122,8 @@ fun compile({ typingContext, toFContext } : Context, { fixity, typingEnv, tyname
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
            val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
            val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
-           val modifiedEnv = { fixity = Fixity.mergeEnv (fixity, fixity')
-                             , typingEnv = Typing.mergeEnv (typingEnv, typingEnv')
+           val modifiedEnv = { fixity = fixity'
+                             , typingEnv = typingEnv'
                              , tynameset = tynameset
                              , toFEnv = toFEnv
                              }

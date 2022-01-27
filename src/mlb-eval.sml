@@ -50,7 +50,16 @@ fun doDec ctx env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn (
                                            in (env', acc)
                                            end
   | doDec ctx env (M.LocalDec (decs1, decs2)) acc = let val (env', acc) = doDecs ctx env decs1 acc
-                                                    in doDecs ctx (mergeEnv (env, env')) decs2 acc
+                                                        val (env'', acc) = doDecs ctx (mergeEnv (env, env')) decs2 acc
+                                                        val typingEnv = { valMap = #valMap (#typing env'')
+                                                                        , tyConMap = #tyConMap (#typing env'')
+                                                                        , tyNameMap = USyntax.TyNameMap.unionWith #2 (#tyNameMap (#typing env'), #tyNameMap (#typing env''))
+                                                                        , strMap = #strMap (#typing env'')
+                                                                        , sigMap = #sigMap (#typing env'')
+                                                                        , funMap = #funMap (#typing env'')
+                                                                        , boundTyVars = #boundTyVars (#typing env'')
+                                                                        }
+                                                    in ({ bas = #bas env'', fixity = #fixity env'', typing = typingEnv }, acc)
                                                     end
   | doDec ctx env (M.StructureDec binds) acc = let val strMap = #strMap (#typing env)
                                                    val strMap' = List.foldl (fn ((id1, id2), m) =>
@@ -85,6 +94,7 @@ fun doDec ctx env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn (
                                          )
   | doDec ctx env (M.AnnotationDec (_, decs)) acc = doDecs ctx env decs acc (* not implemented yet *)
   | doDec ctx env M.PrimDec acc = ({ bas = M.BasMap.empty, fixity = InitialEnv.initialFixityEnv, typing = InitialEnv.initialEnv }, acc)
+  | doDec ctx env M.PrimOverloadDec acc = ({ bas = M.BasMap.empty, fixity = Fixity.emptyEnv, typing = InitialEnv.primOverloadEnv }, acc)
 and doDecs ctx env decs acc = List.foldl (fn (dec, (newenv, acc)) => let val (env', acc) = doDec ctx (mergeEnv (env, newenv)) dec acc
                                                                      in (mergeEnv (newenv, env'), acc)
                                                                      end

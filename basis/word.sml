@@ -4,6 +4,7 @@ local
                                 eqtype word
                                 val wordSize : int
                                 val toLarge : word -> word
+                                val toLargeX : word -> word
                                 val fromLarge : word -> word
                                 val toInt : word -> int
                                 val toIntX : word -> int
@@ -35,6 +36,7 @@ local
                                 eqtype word
                                 val wordSize : int
                                 val toLarge : word -> LargeWord.word
+                                val toLargeX : word -> LargeWord.word
                                 val fromLarge : LargeWord.word -> word
                                 val toInt : word -> int
                                 val toIntX : word -> int
@@ -66,6 +68,7 @@ local
                                 eqtype word
                                 val wordSize : int
                                 val toLarge : word -> LargeWord.word
+                                val toLargeX : word -> LargeWord.word
                                 val fromLarge : LargeWord.word -> word
                                 val toInt : word -> int
                                 val toIntX : word -> int
@@ -97,6 +100,7 @@ local
                                 eqtype word
                                 val wordSize : int
                                 val toLarge : word -> LargeWord.word
+                                val toLargeX : word -> LargeWord.word
                                 val fromLarge : LargeWord.word -> word
                                 val toInt : word -> int
                                 val toIntX : word -> int
@@ -128,6 +132,7 @@ local
                                 eqtype word
                                 val wordSize : int
                                 val toLarge : word -> LargeWord.word
+                                val toLargeX : word -> LargeWord.word
                                 val fromLarge : LargeWord.word -> word
                                 val toInt : word -> int
                                 val toIntX : word -> int
@@ -160,14 +165,19 @@ local
                   val wordToWord16 : Word.word -> Word16.word
                   val wordToWord32 : Word.word -> Word32.word
                   val wordToWord64 : Word.word -> Word64.word
-                  val wordToLargeWord : Word.word -> LargeWord.word
-                  val wordFromLargeWord : LargeWord.word -> Word.word
+                  val wordToLarge : Word.word -> LargeWord.word
+                  val wordToLargeX : Word.word -> LargeWord.word
+                  val wordFromLarge : LargeWord.word -> Word.word
               end = struct
     structure Word8 = struct
     type word = Word.word
     val FULL : word = 0wxFF
     val wordSize = 8
     fun toLarge x = x
+    fun toLargeX x = if x >= 0wx80 then
+                         x - 0wx80
+                     else
+                         x
     fun fromLarge x = Word.andb (x, FULL)
     val toInt = Word.toInt
     fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
@@ -203,6 +213,10 @@ local
     val FULL : word = 0wxFFFF
     val wordSize = 16
     fun toLarge x = x
+    fun toLargeX x = if x >= 0wx8000 then
+                         x - 0wx8000
+                     else
+                         x
     fun fromLarge x = Word.andb (x, FULL)
     val toInt = Word.toInt
     fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
@@ -238,6 +252,10 @@ local
     val FULL : word = 0wxFFFFFFFF
     val wordSize = 32
     fun toLarge x = x
+    fun toLargeX x = if x >= 0wx80000000 then
+                         x - 0wx80000000
+                     else
+                         x
     fun fromLarge x = Word.andb (x, FULL)
     val toInt = Word.toInt
     fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
@@ -271,6 +289,7 @@ local
     structure Word64 = struct
     open Word
     fun toLarge x = x
+    fun toLargeX x = x
     fun fromLarge x = x
     end
     structure LargeWord = Word64
@@ -282,8 +301,9 @@ local
     fun wordToWord16 x = Word.andb (x, Word16.FULL)
     fun wordToWord32 x = Word.andb (x, Word32.FULL)
     fun wordToWord64 x = x
-    fun wordToLargeWord x = x
-    fun wordFromLargeWord x = x
+    fun wordToLarge x = x
+    fun wordToLargeX x = x
+    fun wordFromLarge x = x
     end
 in
 structure LargeWord = WordImpl.LargeWord
@@ -293,8 +313,9 @@ structure Word32 = WordImpl.Word32
 structure Word64 = WordImpl.Word64
 structure Word = struct
 open Word
-val fromLarge = WordImpl.wordFromLargeWord
-val toLarge = WordImpl.wordToLargeWord
+val toLarge = WordImpl.wordToLarge
+val toLargeX = WordImpl.wordToLargeX
+val fromLarge = WordImpl.wordFromLarge
 end;
 _overload "Word" [Word8.word] { + = Word8.+
                               , - = Word8.-

@@ -3,39 +3,6 @@
  * This file is part of LunarML.
  *)
 structure InitialEnv = struct
-(*
-Top-level environment:
-infix  7  * / div mod
-infix  6  + - ^
-infixr 5  :: @
-infix  4  = <> > >= < <=
-infix  3  := o
-infix  0  before
-*)
-val initialFixity = let open Syntax
-                        fun InfixL p = Syntax.Infix (Syntax.LeftAssoc p)
-                        fun InfixR p = Syntax.Infix (Syntax.RightAssoc p)
-                    in List.foldl VIdMap.insert' VIdMap.empty
-                                  [(MkVId "*",  InfixL 7)
-                                  ,(MkVId "/",  InfixL 7)
-                                  ,(MkVId "div",InfixL 7)
-                                  ,(MkVId "mod",InfixL 7)
-                                  ,(MkVId "+",  InfixL 6)
-                                  ,(MkVId "-",  InfixL 6)
-                                  ,(MkVId "^",  InfixL 6) (* string concatenation *)
-                                  ,(MkVId "::", InfixR 5)
-                                  ,(MkVId "@",  InfixR 5) (* list concatenation *)
-                                  ,(MkVId "=",  InfixL 4)
-                                  ,(MkVId "<>", InfixL 4)
-                                  ,(MkVId ">",  InfixL 4)
-                                  ,(MkVId ">=", InfixL 4)
-                                  ,(MkVId "<",  InfixL 4)
-                                  ,(MkVId "<=", InfixL 4)
-                                  ,(MkVId ":=", InfixL 3)
-                                  ,(MkVId "o",  InfixL 3)
-                                  ,(MkVId "before",InfixL 0)
-                                  ]
-                    end
 val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n, isSoleConstructor), m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ValueConstructor isSoleConstructor)) Syntax.VIdMap.empty xs
                                         fun mkExConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty xs
                                         fun mkTyConMap xs = List.foldl (fn ((n, y), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon n, y)) Syntax.TyConMap.empty xs
@@ -44,7 +11,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n,
                                                              , tyConMap = Syntax.TyConMap.empty
                                                              , strMap = mkStrMap xs
                                                              }
-                                    in { fixityMap = initialFixity
+                                    in { fixityMap = Syntax.VIdMap.empty
                                        , idStatusMap = { valMap = Syntax.VIdMap.unionWith #2 (mkValConMap [("ref", true), ("true", false), ("false", false), ("nil", false), ("::", false)]
                                                                                              ,mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail"]
                                                                                              )
@@ -268,13 +235,6 @@ val initialEnv : Typing.Env
           val tyVarD = USyntax.AnonymousTyVar(3)
           val TypeFunction = USyntax.TypeFunction
           val TypeScheme = USyntax.TypeScheme
-          val IsEqType = USyntax.IsEqType
-          val IsIntegral = USyntax.IsIntegral
-          val IsSignedReal = USyntax.IsSignedReal
-          val IsRing = USyntax.IsRing
-          val IsField = USyntax.IsField
-          val IsSigned = USyntax.IsSigned
-          val IsOrdered = USyntax.IsOrdered
           val emptyValEnv = USyntax.emptyValEnv
           fun mkTyVar tv = USyntax.TyVar(SourcePos.nullSpan, tv)
           val tyA = mkTyVar tyVarA
@@ -448,20 +408,7 @@ val initialEnv : Typing.Env
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
                                            Syntax.VIdMap.empty
-                                           [("=", USyntax.MkShortVId VId_EQUAL, TypeScheme ([(tyVarA, [IsEqType SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* forall ''a. ''a * ''a -> bool *)
-                                           ,("abs", USyntax.MkShortVId VId_abs, TypeScheme([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA)) (* realint -> realint, default: int -> int *)
-                                           ,("~", USyntax.MkShortVId VId_TILDE, TypeScheme([(tyVarA, [IsRing SourcePos.nullSpan])], tyA --> tyA)) (* num -> num, default: int -> int *)
-                                           ,("div", USyntax.MkShortVId VId_div, TypeScheme([(tyVarA, [IsIntegral SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                                           ,("mod", USyntax.MkShortVId VId_mod, TypeScheme([(tyVarA, [IsIntegral SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* wordint * wordint -> wordint, default: int * int -> int *)
-                                           ,("*", USyntax.MkShortVId VId_TIMES, TypeScheme([(tyVarA, [IsRing SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                           ,("/", USyntax.MkShortVId VId_DIVIDE, TypeScheme([(tyVarA, [IsField SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* Real * Real -> Real, default: real * real -> real *)
-                                           ,("+", USyntax.MkShortVId VId_PLUS, TypeScheme([(tyVarA, [IsRing SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                           ,("-", USyntax.MkShortVId VId_MINUS, TypeScheme([(tyVarA, [IsRing SourcePos.nullSpan])], mkPairType(tyA, tyA) --> tyA)) (* num * num -> num, default: int * int -> int *)
-                                           ,("<", USyntax.MkShortVId VId_LT, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                           ,(">", USyntax.MkShortVId VId_GT, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                           ,("<=", USyntax.MkShortVId VId_LE, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                           ,(">=", USyntax.MkShortVId VId_GE, TypeScheme([(tyVarA, [IsOrdered SourcePos.nullSpan])], mkPairType(tyA, tyA) --> primTy_bool)) (* numtxt * numtxt -> bool, default: int * int -> bool *)
-                                           ,("Vector.fromList", USyntax.MkShortVId VId_Vector_fromList, TypeScheme([(tyVarA, [])], listOf tyA --> vectorOf tyA))
+                                           [("Vector.fromList", USyntax.MkShortVId VId_Vector_fromList, TypeScheme([(tyVarA, [])], listOf tyA --> vectorOf tyA))
                                            ,("Int.+", USyntax.MkShortVId VId_Int_add_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("Int.-", USyntax.MkShortVId VId_Int_sub_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("Int.*", USyntax.MkShortVId VId_Int_mul_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
@@ -514,6 +461,47 @@ val initialEnv : Typing.Env
                                ,("Lua", StrId_Lua, sig_Lua)
                                ,("LunarML", StrId_LunarML, sig_LunarML)
                                ]
+         , sigMap = Syntax.SigIdMap.empty
+         , funMap = Syntax.FunIdMap.empty
+         , boundTyVars = Syntax.TyVarMap.empty
+         }
+      end
+
+val primOverloadEnv : Typing.Env
+    = let open Typing
+          val TypeScheme = USyntax.TypeScheme
+          val IsEqType = USyntax.IsEqType
+          val IsIntegral = USyntax.IsIntegral
+          val IsSignedReal = USyntax.IsSignedReal
+          val IsRing = USyntax.IsRing
+          val IsField = USyntax.IsField
+          val IsSigned = USyntax.IsSigned
+          val IsOrdered = USyntax.IsOrdered
+          fun mkTyVar tv = USyntax.TyVar (SourcePos.nullSpan, tv)
+          val tyVarA = USyntax.AnonymousTyVar 0
+          val tyA = mkTyVar tyVarA
+          infixr -->
+          fun a --> b = USyntax.FnType (SourcePos.nullSpan, a, b)
+          fun mkPairType (a, b) = USyntax.PairType (SourcePos.nullSpan, a, b)
+      in { valMap = List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, USyntax.MkShortVId vid)))
+                               Syntax.VIdMap.empty
+                               [("=",   VId_EQUAL,  TypeScheme ([(tyVarA, [IsEqType SourcePos.nullSpan])],     mkPairType (tyA, tyA) --> primTy_bool)) (* forall ''a.        ''a * ''a -> bool *)
+                               ,("abs", VId_abs,    TypeScheme ([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA))                           (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
+                               ,("~",   VId_TILDE,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       tyA --> tyA))                           (* forall 'a:num.     'a -> 'a,        default: int -> int *)
+                               ,("div", VId_div,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))         (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("mod", VId_mod,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))         (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("*",   VId_TIMES,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))         (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("/",   VId_DIVIDE, TypeScheme ([(tyVarA, [IsField SourcePos.nullSpan])],      mkPairType (tyA, tyA) --> tyA))         (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
+                               ,("+",   VId_PLUS,   TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))         (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("-",   VId_MINUS,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))         (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("<",   VId_LT,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool)) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,(">",   VId_GT,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool)) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,("<=",  VId_LE,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool)) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,(">=",  VId_GE,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool)) (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ]
+         , tyConMap = Syntax.TyConMap.empty
+         , tyNameMap = USyntax.TyNameMap.empty
+         , strMap = Syntax.StrIdMap.empty
          , sigMap = Syntax.SigIdMap.empty
          , funMap = Syntax.FunIdMap.empty
          , boundTyVars = Syntax.TyVarMap.empty
