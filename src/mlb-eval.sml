@@ -17,10 +17,6 @@ fun envWithBasis bas : Env = { bas = bas
                              , fixity = Fixity.emptyEnv
                              , typing = Typing.emptyEnv
                              }
-fun envWithTyping typing : Env = { bas = M.BasMap.empty
-                                 , fixity = Fixity.emptyEnv
-                                 , typing = typing
-                                 }
 fun mergeEnv (e1 : Env, e2 : Env) = { bas = M.BasMap.unionWith #2 (#bas e1, #bas e2)
                                     , fixity = Fixity.mergeEnv (#fixity e1, #fixity e2)
                                     , typing = Typing.mergeEnv (#typing e1, #typing e2)
@@ -61,29 +57,47 @@ fun doDec ctx env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn (
                                                                         }
                                                     in ({ bas = #bas env'', fixity = #fixity env'', typing = typingEnv }, acc)
                                                     end
-  | doDec ctx env (M.StructureDec binds) acc = let val strMap = #strMap (#typing env)
-                                                   val strMap' = List.foldl (fn ((id1, id2), m) =>
-                                                                                case Syntax.StrIdMap.find (strMap, id2) of
-                                                                                    SOME value => Syntax.StrIdMap.insert (m, id1, value)
-                                                                                  | NONE => raise Fail ("undefined structure: " ^ Syntax.print_StrId id2)
-                                                                            ) Syntax.StrIdMap.empty binds
-                                               in (envWithTyping (Typing.envWithStrMap strMap'), acc)
+  | doDec ctx env (M.StructureDec binds) acc = let val strMap_fixity = #strMap (#idStatusMap (#fixity env))
+                                                   val strMap_fixity' = List.foldl (fn ((id1, id2), m) =>
+                                                                                       case Syntax.StrIdMap.find (strMap_fixity, id2) of
+                                                                                           SOME value => Syntax.StrIdMap.insert (m, id1, value)
+                                                                                         | NONE => raise Fail ("undefined structure: " ^ Syntax.print_StrId id2)
+                                                                                   ) Syntax.StrIdMap.empty binds
+                                                   val strMap_typing = #strMap (#typing env)
+                                                   val strMap_typing' = List.foldl (fn ((id1, id2), m) =>
+                                                                                       case Syntax.StrIdMap.find (strMap_typing, id2) of
+                                                                                           SOME value => Syntax.StrIdMap.insert (m, id1, value)
+                                                                                         | NONE => raise Fail ("undefined structure: " ^ Syntax.print_StrId id2)
+                                                                                   ) Syntax.StrIdMap.empty binds
+                                               in ({ bas = M.BasMap.empty, fixity = Fixity.envWithStrMap strMap_fixity', typing = Typing.envWithStrMap strMap_typing' }, acc)
                                                end
-  | doDec ctx env (M.SignatureDec binds) acc = let val sigMap = #sigMap (#typing env)
-                                                   val sigMap' = List.foldl (fn ((id1, id2), m) =>
-                                                                                case Syntax.SigIdMap.find (sigMap, id2) of
-                                                                                    SOME value => Syntax.SigIdMap.insert (m, id1, value)
-                                                                                  | NONE => raise Fail ("undefined signature: " ^ Syntax.print_SigId id2)
-                                                                            ) Syntax.SigIdMap.empty binds
-                                               in (envWithTyping (Typing.envWithSigMap sigMap'), acc)
+  | doDec ctx env (M.SignatureDec binds) acc = let val sigMap_fixity = #sigMap (#fixity env)
+                                                   val sigMap_fixity' = List.foldl (fn ((id1, id2), m) =>
+                                                                                       case Syntax.SigIdMap.find (sigMap_fixity, id2) of
+                                                                                           SOME value => Syntax.SigIdMap.insert (m, id1, value)
+                                                                                         | NONE => raise Fail ("undefined signature: " ^ Syntax.print_SigId id2)
+                                                                                   ) Syntax.SigIdMap.empty binds
+                                                   val sigMap_typing = #sigMap (#typing env)
+                                                   val sigMap_typing' = List.foldl (fn ((id1, id2), m) =>
+                                                                                       case Syntax.SigIdMap.find (sigMap_typing, id2) of
+                                                                                           SOME value => Syntax.SigIdMap.insert (m, id1, value)
+                                                                                         | NONE => raise Fail ("undefined signature: " ^ Syntax.print_SigId id2)
+                                                                                   ) Syntax.SigIdMap.empty binds
+                                               in ({ bas = M.BasMap.empty, fixity = Fixity.envWithSigMap sigMap_fixity, typing = Typing.envWithSigMap sigMap_typing' }, acc)
                                                end
-  | doDec ctx env (M.FunctorDec binds) acc = let val funMap = #funMap (#typing env)
-                                                 val funMap' = List.foldl (fn ((id1, id2), m) =>
-                                                                              case Syntax.FunIdMap.find (funMap, id2) of
-                                                                                  SOME value => Syntax.FunIdMap.insert (m, id1, value)
-                                                                                | NONE => raise Fail ("undefined functor: " ^ Syntax.print_FunId id2)
-                                                                          ) Syntax.FunIdMap.empty binds
-                                             in (envWithTyping (Typing.envWithFunMap funMap'), acc)
+  | doDec ctx env (M.FunctorDec binds) acc = let val funMap_fixity = #funMap (#fixity env)
+                                                 val funMap_fixity' = List.foldl (fn ((id1, id2), m) =>
+                                                                                     case Syntax.FunIdMap.find (funMap_fixity, id2) of
+                                                                                         SOME value => Syntax.FunIdMap.insert (m, id1, value)
+                                                                                       | NONE => raise Fail ("undefined functor: " ^ Syntax.print_FunId id2)
+                                                                                 ) Syntax.FunIdMap.empty binds
+                                                 val funMap_typing = #funMap (#typing env)
+                                                 val funMap_typing' = List.foldl (fn ((id1, id2), m) =>
+                                                                                     case Syntax.FunIdMap.find (funMap_typing, id2) of
+                                                                                         SOME value => Syntax.FunIdMap.insert (m, id1, value)
+                                                                                       | NONE => raise Fail ("undefined functor: " ^ Syntax.print_FunId id2)
+                                                                                 ) Syntax.FunIdMap.empty binds
+                                             in ({ bas = M.BasMap.empty, fixity = Fixity.envWithFunMap funMap_fixity, typing = Typing.envWithFunMap funMap_typing' }, acc)
                                              end
   | doDec ctx env (M.PathDec path) acc = (case OS.Path.ext path of
                                               SOME "sml" => doSmlSource ctx env path acc

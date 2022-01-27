@@ -46,6 +46,15 @@ fun envWithIdStatusMap idStatusMap : Env = { fixityMap = Syntax.VIdMap.empty
                                            , funMap = Syntax.FunIdMap.empty
                                            }
 
+fun envWithStrMap strMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , idStatusMap = { valMap = Syntax.VIdMap.empty
+                                                 , tyConMap = Syntax.TyConMap.empty
+                                                 , strMap = strMap
+                                                 }
+                                 , sigMap = Syntax.SigIdMap.empty
+                                 , funMap = Syntax.FunIdMap.empty
+                                 }
+
 (* used by signature binding *)
 fun envWithSigMap sigMap : Env = { fixityMap = Syntax.VIdMap.empty
                                  , idStatusMap = emptyIdStatusMap
