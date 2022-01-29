@@ -157,21 +157,37 @@ fun lookupTyNameInEnv(ctx, { tyNameMap, ... } : ('val,'str) Env', span, tyname)
            SOME attr => attr
          | NONE => emitError(ctx, [span], "unknown type constructor " ^ USyntax.print_TyName tyname ^ " (internal error)")
       )
-(* Context * Env * SourcePos.span * Syntax.LongVId -> (USyntax.LongVId, USyntax.TypeScheme * Syntax.IdStatus) option *)
-fun lookupLongVIdInEnv(ctx, env : Env, span, Syntax.MkQualified([], vid))
-    = (case Syntax.VIdMap.find(#valMap env, vid) of
-           SOME (tysc, ids, longvid) => SOME (longvid, tysc, ids)
-         | NONE => NONE
+
+datatype 'a LookupResult = Found of 'a
+                         | ValueNotFound of Syntax.VId Syntax.Qualified
+                         | StructureNotFound of Syntax.StrId Syntax.Qualified
+
+(* lookupStr' : Context * USyntax.Signature * Syntax.StrId list -> USyntax.Signature LookupResult *)
+fun lookupStr' (ctx, s : USyntax.Signature, _, nil) = Found s
+  | lookupStr' (ctx, s as { strMap, ... }, revStrIds, (strid0 as Syntax.MkStrId name) :: strids)
+    = (case Syntax.StrIdMap.find (strMap, strid0) of
+           NONE => StructureNotFound (Syntax.MkQualified (List.rev revStrIds, strid0))
+         | SOME (USyntax.MkSignature innerEnv) => lookupStr' (ctx, innerEnv, strid0 :: revStrIds, strids)
       )
-  | lookupLongVIdInEnv(ctx, env, span, Syntax.MkQualified(strid0 :: strids, vid))
-    = (case Syntax.StrIdMap.find(#strMap env, strid0) of
-           SOME (s, USyntax.MkLongStrId(strid0, strids0)) =>
-           (case lookupStr(ctx, s, span, strids) of
-                { valMap, ... } => case Syntax.VIdMap.find(valMap, vid) of
-                                       SOME (tysc, ids) => SOME (USyntax.MkLongVId(strid0, strids0 @ strids, vid), tysc, ids)
-                                     | NONE => NONE
+
+(* Context * Env * SourcePos.span * Syntax.LongVId -> (USyntax.LongVId, USyntax.TypeScheme * Syntax.IdStatus) LookupResult *)
+fun lookupLongVIdInEnv (ctx, env : Env, span, longvid as Syntax.MkQualified ([], vid))
+    = (case Syntax.VIdMap.find (#valMap env, vid) of
+           SOME (tysc, ids, longvid) => Found (longvid, tysc, ids)
+         | NONE => ValueNotFound longvid
+      )
+  | lookupLongVIdInEnv (ctx, env, span, longvid as Syntax.MkQualified (strid0 :: strids, vid))
+    = (case Syntax.StrIdMap.find (#strMap env, strid0) of
+           SOME (s, USyntax.MkLongStrId (strid0, strids0)) =>
+           (case lookupStr' (ctx, s, [], strids) of
+                Found { valMap, ... } => (case Syntax.VIdMap.find(valMap, vid) of
+                                              SOME (tysc, ids) => Found (USyntax.MkLongVId(strid0, strids0 @ strids, vid), tysc, ids)
+                                            | NONE => ValueNotFound longvid
+                                         )
+             | StructureNotFound notfound => StructureNotFound notfound
+             | ValueNotFound notfound => ValueNotFound notfound (* cannot occur *)
            )
-         | NONE => NONE
+         | NONE => StructureNotFound (Syntax.MkQualified ([], strid0))
       )
 
 (* getConstructedType : Context * SourcePos.span * USyntax.Ty -> USyntax.TyCon *)
@@ -880,7 +896,7 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
       end
   | typeCheckPat(ctx, env, S.ConPat(span, longvid, optInnerPat))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
-           SOME (longvid, tysc, idstatus) =>
+           Found (longvid, tysc, idstatus) =>
            (if (case idstatus of Syntax.ValueConstructor _ => true | Syntax.ExceptionConstructor => true | _ => false) then
                 let val (ty, tyargs) = instantiate(ctx, span, tysc)
                     val isSoleConstructor = case idstatus of
@@ -901,7 +917,8 @@ fun typeCheckPat(ctx : Context, env : Env, S.WildcardPat span) : U.Ty * (U.VId *
             else (* idstatus = Syntax.ValueVariable *)
                 emitError(ctx, [span], "invalid pattern")
            )
-         | NONE => emitError(ctx, [span], "invalid pattern")
+         | ValueNotFound notfound => emitError(ctx, [span], "invalid pattern: value name '" ^ Syntax.print_LongVId notfound ^ "' nout found")
+         | StructureNotFound notfound => emitError(ctx, [span], "invalid pattern: structure name '" ^ Syntax.print_LongStrId notfound ^ "' not found")
       )
   | typeCheckPat(ctx, env, S.TypedPat(span1, S.WildcardPat span2, ty))
     = let val ty = evalTy(ctx, env, ty)
@@ -1090,10 +1107,11 @@ fun typeCheckExp(ctx : Context, env : Env, S.SConExp(span, scon)) : U.Ty * U.Exp
       end
   | typeCheckExp(ctx, env, exp as S.VarExp(span, longvid as Syntax.MkQualified(_, vid)))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
-           SOME (longvid, tysc, ids) => let val (ty, tyargs) = instantiate(ctx, span, tysc)
+           Found (longvid, tysc, ids) => let val (ty, tyargs) = instantiate(ctx, span, tysc)
                                in (ty, U.VarExp(span, longvid, ids, tyargs))
                                end
-         | NONE => emitError(ctx, [span], "unknown value name " ^ Syntax.getVIdName vid)
+         | ValueNotFound notfound => emitError(ctx, [span], "unknown value name " ^ Syntax.print_LongVId notfound)
+         | StructureNotFound notfound => emitError(ctx, [span], "unknown structure name " ^ Syntax.print_LongStrId notfound)
       )
   | typeCheckExp(ctx, env, S.RecordExp(span, fields, NONE))
     = let fun oneField(label, exp) = case typeCheckExp(ctx, env, exp) of
@@ -1558,14 +1576,16 @@ and typeCheckDec(ctx, env : Env, S.ValDec(span, tyvarseq, valbinds))
             | doExBind(S.ExReplication(span, vid, longvid), (valMap, exbinds))
               = let val vid' = newVId(ctx, vid)
                 in case lookupLongVIdInEnv(ctx, env, span, longvid) of
-                       SOME (longvid, tysc, ids as Syntax.ExceptionConstructor) =>
+                       Found (longvid, tysc, ids as Syntax.ExceptionConstructor) =>
                        let val optTy = case tysc of
                                            U.TypeScheme([], U.FnType(_, payloadTy, _)) => SOME payloadTy
                                          | U.TypeScheme([], _) => NONE
                                          | U.TypeScheme(_ :: _, _) => emitError(ctx, [span], "exception constructor must have monomorphic type")
                        in (S.VIdMap.insert(valMap, vid, (tysc, ids, U.MkShortVId(vid'))), U.ExReplication(span, vid', longvid, optTy) :: exbinds)
                        end
-                     | _ => emitError(ctx, [span], "exception replication: RHS must be an exception constructor")
+                     | Found _ => emitError(ctx, [span], "exception replication: RHS must be an exception constructor")
+                     | ValueNotFound notfound => emitError(ctx, [span], "exception replication: RHS must be an exception constructor, but value name '" ^ Syntax.print_LongVId notfound ^ "' was not found")
+                     | StructureNotFound notfound => emitError(ctx, [span], "exception replication: RHS must be an exception constructor, but structure name '" ^ Syntax.print_LongStrId notfound ^ "' was not found")
                 end
           val (valMap, exbinds) = List.foldr doExBind (Syntax.VIdMap.empty, []) exbinds
       in (envWithValEnv valMap, [U.ExceptionDec(span, exbinds)])
