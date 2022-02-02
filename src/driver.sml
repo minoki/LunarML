@@ -94,7 +94,7 @@ fun parse({ nextVId }, fixityEnv, name, lines, str) = let fun printError (s,p1 a
                                                )
                               end
 
-type Context = { typingContext : Typing.ProgramContext
+type Context = { typingContext : Typing.Context
                , toFContext : ToFSyntax.Context
                }
 fun newContext() : Context = let val typingContext = Typing.newContext()

@@ -389,7 +389,7 @@ fun applySubstTy subst
       end
 
 (* mapTy : Context * Ty TyVarMap.map * bool -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, ... } *)
-fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a, tyVarConstraints : 'c, tyVarSubst : 'd }, subst, avoidCollision)
+fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
     = let val doTy = applySubstTy subst
           val range = TyVarMap.foldl (fn (ty, tyvarset) => TyVarSet.union(freeTyVarsInTy(TyVarSet.empty, ty), tyvarset)) TyVarSet.empty subst
           fun genFreshTyVars(subst, tyvars) = List.foldr (fn (tv, (subst, tyvars)) => if avoidCollision andalso TyVarSet.member (range, tv) then
