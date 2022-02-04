@@ -993,20 +993,7 @@ fun doTypBind (S.TypBind (span, tyvarseq, tycon, ty))
       )
 
 val invalidBoundNames = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true", S.MkVId "false", S.MkVId "nil", S.MkVId "::", S.MkVId "ref"]
-
-(* doDatBind : S.DatBind -> unit *)
-fun doDatBind (S.DatBind (span, tyvarseq, tycon, conbinds))
-    = ( checkTyVarSeq (span, tyvarseq)
-      ; List.foldl (fn (S.ConBind (span, vid, optTy), seen) =>
-                       if S.VIdSet.member(seen, vid) then
-                           raise S.SyntaxError ([span], "no datbind may bind the same identifier twice")
-                       else
-                           if vid = S.MkVId "it" orelse S.VIdSet.member(invalidBoundNames, vid) then
-                               raise S.SyntaxError ([span], "invalid bound name")
-                           else
-                               S.VIdSet.add(seen, vid)
-                   ) S.VIdSet.empty conbinds
-      )
+val invalidConstructorNames = S.VIdSet.add (invalidBoundNames, S.MkVId "it")
 
 (* doExp : S.TyVarSet * S.Exp -> unit *)
 (* doDec : S.TyVarSet * S.Dec -> unit *)
@@ -1059,6 +1046,10 @@ and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val 
                                         ( checkTyVarSeq (span, tyvarseq)
                                         ; { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
                                                                ( Option.app doTy optTy
+                                                               ; if Syntax.VIdSet.member (invalidConstructorNames, vid) then
+                                                                     raise S.SyntaxError ([span], "invalid constructor name")
+                                                                 else
+                                                                     ()
                                                                ; if Syntax.VIdSet.member (set, vid) then
                                                                      raise S.SyntaxError ([span], "duplicate value identifier in datatype declaration")
                                                                  else
@@ -1114,16 +1105,25 @@ and doDec (env : S.TyVarSet.set, S.ValDec (span, tyvarseq, valbinds)) = let val 
       end
   | doDec (env, S.ExceptionDec (span, exbinds)) = ignore (List.foldl (fn (S.ExBind (span, vid, optTy), set) =>
                                                                          ( Option.app doTy optTy
+                                                                         ; if Syntax.VIdSet.member (invalidConstructorNames, vid) then
+                                                                               raise S.SyntaxError ([span], "invalid constructor name")
+                                                                           else
+                                                                               ()
                                                                          ; if Syntax.VIdSet.member (set, vid) then
                                                                                raise S.SyntaxError ([span], "duplicate exception constructor")
                                                                            else
                                                                                Syntax.VIdSet.add (set, vid)
                                                                          )
                                                                      | (S.ExReplication (span, vid, longvid), set) =>
-                                                                       if Syntax.VIdSet.member (set, vid) then
-                                                                           raise S.SyntaxError ([span], "duplicate exception constructor")
-                                                                       else
-                                                                           Syntax.VIdSet.add (set, vid)
+                                                                       ( if Syntax.VIdSet.member (invalidConstructorNames, vid) then
+                                                                             raise S.SyntaxError ([span], "invalid constructor name")
+                                                                         else
+                                                                             ()
+                                                                       ; if Syntax.VIdSet.member (set, vid) then
+                                                                             raise S.SyntaxError ([span], "duplicate exception constructor")
+                                                                         else
+                                                                             Syntax.VIdSet.add (set, vid)
+                                                                       )
                                                                      ) Syntax.VIdSet.empty exbinds)
   | doDec (env, S.LocalDec (span, decs1, decs2)) = ( List.app (fn dec => doDec (env, dec)) decs1
                                                    ; List.app (fn dec => doDec (env, dec)) decs2
@@ -1135,6 +1135,10 @@ and doValBinds (env, valbinds) = List.app (fn (S.PatBind (_, pat, exp)) => ( doP
 (* doSpec : Syntax.Spec -> unit *)
 fun doSpec (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), set) =>
                                                               ( doTy ty
+                                                              ; if Syntax.VIdSet.member (invalidBoundNames, vid) then
+                                                                    raise S.SyntaxError ([span], "invalid bound name")
+                                                                else
+                                                                    ()
                                                               ; if Syntax.VIdSet.member (set, vid) then
                                                                     raise S.SyntaxError ([span], "duplicate identifier in value description")
                                                                 else
@@ -1165,6 +1169,10 @@ fun doSpec (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), set) =
                                           else
                                               { v = List.foldl (fn (S.ConBind (span, vid, optTy), set) =>
                                                                    ( Option.app doTy optTy
+                                                                   ; if Syntax.VIdSet.member (invalidConstructorNames, vid) then
+                                                                         raise S.SyntaxError ([span], "invalid constructor name")
+                                                                     else
+                                                                         ()
                                                                    ; if Syntax.VIdSet.member (set, vid) then
                                                                          raise S.SyntaxError ([span], "duplicate value identifier in datatype description")
                                                                      else
@@ -1188,6 +1196,10 @@ fun doSpec (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), set) =
   | doSpec (S.DatatypeRepSpec (span, tycon, longtycon)) = ()
   | doSpec (S.ExDesc (span, descs)) = ignore (List.foldl (fn ((vid, optTy), set) =>
                                                              ( Option.app doTy optTy
+                                                             ; if Syntax.VIdSet.member (invalidConstructorNames, vid) then
+                                                                   raise S.SyntaxError ([span], "invalid constructor name")
+                                                               else
+                                                                   ()
                                                              ; if Syntax.VIdSet.member (set, vid) then
                                                                    raise S.SyntaxError ([span], "duplicate exception description")
                                                                else

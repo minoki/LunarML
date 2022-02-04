@@ -162,6 +162,16 @@ should_not_compile "should_not_compile/" {
   "sharing_structures2.sml",
   "functor1.sml",
   "space_in_qualified_id.sml",
+  "duplicate_datbind.sml",
+  "duplicate_exbind.sml",
+  "duplicate_typbind.sml",
+  "duplicate_val.sml",
+  "reserved_datbind.sml",
+  "reserved_datdesc.sml",
+  "reserved_exbind.sml",
+  "reserved_exdesc.sml",
+  "reserved_exrep.sml",
+  "reserved_valdesc.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
