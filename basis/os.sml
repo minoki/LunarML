@@ -18,10 +18,13 @@ structure OS :> sig
                             val parentArc : string
                             val currentArc : string
                             val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
+                            val toString : { isAbs : bool, vol : string, arcs : string list } -> string
                             val mkCanonical : string -> string
+                            val mkAbsolute : { path : string, relativeTo : string } -> string
                             val mkRelative : { path : string, relativeTo : string } -> string
                             val isAbsolute : string -> bool
                             val isRelative : string -> bool
+                            val concat : string * string -> string
                         end
               structure Process : sig
                             type status
@@ -214,6 +217,22 @@ fun fromString path = case String.fields (fn c => c = #"/") path of (* TODO: Win
                           "" :: xs => { isAbs = true, vol = "", arcs = xs }
                         | xs => { isAbs = false, vol = "", arcs = xs }
 local
+    fun isValidArc arc = CharVector.all (fn c => c <> #"/") arc
+in
+fun toString { isAbs, vol, arcs } = if vol <> "" then
+                                        raise Path (* invalid volume *)
+                                    else
+                                        case (isAbs, arcs) of
+                                            (false, "" :: _) => raise Path
+                                          | _ => if List.all isValidArc arcs then
+                                                     if isAbs then
+                                                         "/" ^ String.concatWith "/" arcs
+                                                     else
+                                                         String.concatWith "/" arcs
+                                                 else
+                                                     raise InvalidArc
+end
+local
     fun go (revArcs, []) = String.concatWith "/" (List.rev revArcs)
       | go (_ :: revArcs, #"." :: #"." :: #"/" :: xs) = go (revArcs, xs)
       | go (revArcs, #"." :: #"/" :: xs) = go (revArcs, xs)
@@ -229,6 +248,19 @@ fun mkCanonical path = case String.explode path of
                          | #"/" :: xs => "/" ^ go ([], xs)
                          | xs => go ([], xs)
 end
+fun concat (path, t) = case (fromString path, fromString t) of
+                           (_, { isAbs = true, ... }) => raise Path
+                         | ({ isAbs, vol = v1, arcs = arcs1 }, { vol = v2, arcs = arcs2, ... }) => if v2 = "" orelse v1 = v2 then
+                                                                                                       toString { isAbs = isAbs, vol = v1, arcs = concatArcs (arcs1, arcs2) }
+                                                                                                   else
+                                                                                                       raise Path
+and concatArcs ([], arcs2) = arcs2
+  | concatArcs ([""], arcs2) = arcs2
+  | concatArcs (x :: xs, arcs2) = x :: concatArcs (xs, arcs2)
+fun mkAbsolute { path, relativeTo } = if isAbsolute path then
+                                          path
+                                      else
+                                          mkCanonical (concat (relativeTo, path))
 fun mkRelative { path, relativeTo } = if isRelative path then
                                           path
                                       else if isRelative relativeTo then

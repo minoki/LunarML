@@ -31,6 +31,12 @@ signature INTEGER = sig
     val fromString : string -> int option
 end;
 
+signature REAL = sig
+    include REAL
+    val scan : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader
+    val fromString : string -> real option
+end;
+
 local
     fun skipInitialWhitespace (getc, strm) = case getc strm of
                                                  NONE => strm
@@ -585,5 +591,82 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
 fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
 end
 open Word64
+end;
+
+structure Real : REAL where type real = real = struct
+fun scanSubstring (getc, strm, s) = case Substring.getc s of
+                                        NONE => SOME strm
+                                      | SOME (c, s') => case getc strm of
+                                                            SOME (c', strm') => if c = c' orelse (Char.isAlpha c andalso Char.isAlpha c' andalso Char.toUpper c = Char.toUpper c') then
+                                                                                    scanSubstring (getc, strm', s')
+                                                                                else
+                                                                                    NONE
+fun scanZeroOrMoreDigits (getc, strm, revAcc) = case getc strm of
+                                                    SOME (c, strm') => if Char.isDigit c then
+                                                                           scanZeroOrMoreDigits (getc, strm', c :: revAcc)
+                                                                       else
+                                                                           (revAcc, strm)
+                                                  | NONE => (revAcc, strm)
+fun scanOneOrMoreDigits (getc, strm, revAcc) = case getc strm of
+                                                   SOME (c, strm') => if Char.isDigit c then
+                                                                          SOME (scanZeroOrMoreDigits (getc, strm', c :: revAcc))
+                                                                      else
+                                                                          NONE
+                                                 | NONE => NONE
+fun scanOptFracPart (getc, strm, revAcc) = case getc strm of
+                                               SOME (#".", strm') => (case scanOneOrMoreDigits (getc, strm', #"." :: revAcc) of
+                                                                          SOME (revAcc, strm'') => (revAcc, strm'')
+                                                                        | NONE => (revAcc, strm)
+                                                                     )
+                                             | NONE => (revAcc, strm)
+fun scanOptExpPart (getc, strm, revAcc) = case getc strm of
+                                              SOME (c, strm') => if c = #"e" orelse c = #"E" then
+                                                                     let val (isNegative, strm'') = scanSign (getc, strm')
+                                                                     in case scanOneOrMoreDigits (getc, strm'', if isNegative then [#"-", #"e"] else [#"e"]) of
+                                                                            SOME (revAcc, strm''') => (revAcc, strm''')
+                                                                          | NONE => (revAcc, strm)
+                                                                     end
+                                                                 else
+                                                                     (revAcc, strm)
+                                            | NONE => (revAcc, strm)
+fun toNumber s = let val results = Lua.call Lua.Lib.tonumber #[Lua.fromString s]
+                 in Lua.unsafeFromValue (Lua.* (Vector.sub (results, 0), Lua.fromReal 1.0))
+                 end
+(* [+~-]? ([0-9]+(.[0-9]+?)?|.[0-9]+)([eE][+~-]?[0-9]+?)? / [+~-]?(inf|infinity|nan) *)
+fun scan getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                         val (isNegative, strm) = scanSign (getc, strm)
+                         val signPart = if isNegative then [#"-"] else []
+                     in case getc strm of
+                            SOME (#".", strm') => (case scanOneOrMoreDigits (getc, strm', #"." :: #"0" :: signPart) of
+                                                       SOME (revAcc, strm'') => let val (revAcc, strm''') = scanOptExpPart (getc, strm'', revAcc)
+                                                                                in SOME (toNumber (String.implode (List.rev revAcc)), strm''')
+                                                                                end
+                                                     | NONE => NONE
+                                                  )
+                          | SOME (c, strm') => if c = #"i" orelse c = #"I" then
+                                                   (* inf|infinity *)
+                                                   case scanSubstring (getc, strm', Substring.full "nf") of
+                                                       SOME strm'' => let val inf = if isNegative then Real.negInf else Real.posInf
+                                                                      in case scanSubstring (getc, strm'', Substring.full "inity") of
+                                                                             SOME strm''' => SOME (inf, strm''')
+                                                                           | NONE => SOME (inf, strm'')
+                                                                      end
+                                                     | NONE => NONE
+                                               else if c = #"n" orelse c = #"N" then
+                                                   (* nan *)
+                                                   case scanSubstring (getc, strm', Substring.full "an") of
+                                                       SOME strm'' => SOME (0.0 / 0.0, strm'')
+                                                     | NONE => NONE
+                                               else if Char.isDigit c then
+                                                   let val (revAcc, strm'') = scanZeroOrMoreDigits (getc, strm', c :: signPart)
+                                                       val (revAcc, strm''') = scanOptFracPart (getc, strm'', revAcc)
+                                                       val (revAcc, strm'''') = scanOptExpPart (getc, strm''', revAcc)
+                                                   in SOME (toNumber (String.implode (List.rev revAcc)), strm'''')
+                                                   end
+                                               else
+                                                   NONE
+                     end
+fun fromString s = StringCvt.scanString scan s
+open Real
 end;
 end;

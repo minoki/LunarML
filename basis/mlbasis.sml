@@ -194,6 +194,7 @@ structure Lua : sig
                                           val maxinteger : value
                                           val mininteger : value
                                           val type' : value
+                                          val huge : value
                                       end
                             structure string : sig
                                           val byte : value
@@ -258,6 +259,7 @@ structure math = struct
 open math
 val atan = LunarML.assumeDiscardable (field (math, "atan"))
 val log = LunarML.assumeDiscardable (field (math, "log"))
+val huge = LunarML.assumeDiscardable (field (math, "huge"))
 end
 structure string = struct
 open string
@@ -958,38 +960,91 @@ datatype rounding_mode = TO_NEAREST | TO_NEGINF | TO_POSINF | TO_ZERO
 type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
 end;
 
-structure Real : sig
-              type real = real
-              val + : real * real -> real
-              val - : real * real -> real
-              val * : real * real -> real
-              val / : real * real -> real
-              val ~ : real -> real
-              val abs : real -> real
-              val compare : real * real -> order
-              val < : real * real -> bool
-              val <= : real * real -> bool
-              val > : real * real -> bool
-              val >= : real * real -> bool
-              val == : real * real -> bool
-              val != : real * real -> bool
-              val isNan : real -> bool
-              val fmt : StringCvt.realfmt -> real -> string
-              val toString : real -> string
-          end = struct
+signature REAL = sig
+    type real
+    val posInf : real
+    val negInf : real
+    val + : real * real -> real
+    val - : real * real -> real
+    val * : real * real -> real
+    val / : real * real -> real
+    val ~ : real -> real
+    val abs : real -> real
+    val signBit : real -> bool
+    val copySign : real * real -> real
+    val compare : real * real -> order
+    val < : real * real -> bool
+    val <= : real * real -> bool
+    val > : real * real -> bool
+    val >= : real * real -> bool
+    val == : real * real -> bool
+    val != : real * real -> bool
+    val ?= : real * real -> bool
+    val isFinite : real -> bool
+    val isNan : real -> bool
+    val isNormal : real -> bool
+    val class : real -> IEEEReal.float_class
+    val checkFloat : real -> real
+    val fmt : StringCvt.realfmt -> real -> string
+    val toString : real -> string
+end;
+
+structure Real : REAL where type real = real = struct
 type real = real
+val posInf = Lua.unsafeFromValue Lua.Lib.math.huge : real
+val negInf = Real.~ posInf
 fun == (x, y) = Lua.== (Lua.fromReal x, Lua.fromReal y)
 fun != (x, y) = Lua.~= (Lua.fromReal x, Lua.fromReal y)
-fun isNan x = != (x, x)
+infix 4 == !=
+fun isNan x = x != x
+fun ?= (x, y) = x == y orelse x != x orelse y != y (* EQUAL or UNORDERED *)
+fun isFinite x = negInf < x andalso x < posInf
+val minPositiveNormal = 2.2250738585072e~308 (* 0x1p-1022; assuming binary64 *)
+fun isNormal x = let val absX = abs x
+                 in minPositiveNormal <= absX andalso absX < posInf
+                 end
+fun class x = if x == 0.0 then
+                  IEEEReal.ZERO
+              else
+                  let val absX = abs x
+                  in if absX < posInf then
+                         (* normal or subnormal *)
+                         if minPositiveNormal <= absX then
+                             IEEEReal.NORMAL
+                         else
+                             IEEEReal.SUBNORMAL
+                     else
+                         (* infinity or NaN *)
+                         if x != x then
+                             IEEEReal.NAN
+                         else
+                             IEEEReal.INF
+                  end
+fun signBit x = if x < 0.0 then
+                    true
+                else if x > 0.0 then
+                    false
+                else
+                    1.0 / x < 0.0 (* handle negative zero; NaN is not handled *)
+fun copySign (x, y) = if signBit x = signBit y then
+                          x
+                      else
+                          ~ x
 fun compare (x, y) = if isNan x orelse isNan y then
                          raise IEEEReal.Unordered
                      else
                          if x < y then
                              LESS
-                         else if == (x, y) then
+                         else if x == y then
                              EQUAL
                          else
                              GREATER
+fun checkFloat x = if isNan x then
+                       raise Div
+                   else if x == posInf orelse x == negInf then
+                       raise Overflow
+                   else
+                       x
 fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                      val () = if prec < 0 then
                                                   raise Size
@@ -1320,6 +1375,7 @@ val ord = Char.ord;
 structure String : sig
               type string = string
               type char = char
+              val maxSize : int
               val size : string -> int
               val sub : string * int -> char
               val extract : string * int * int option -> string
@@ -1342,6 +1398,7 @@ structure String : sig
               val toString : string -> string
           end = struct
 open String
+val maxSize = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
 fun toString s = translate Char.toString s
 end;
 

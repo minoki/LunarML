@@ -39,27 +39,27 @@ exception Subscript = General.Subscript
 exception Empty = List.Empty
 exception Option = Option.Option
 
-val op = : ''a * ''a -> bool
-val op <> : ''a * ''a -> bool
+val = : ''a * ''a -> bool
+val <> : ''a * ''a -> bool
 val abs : ∀'a:realint. 'a -> 'a  (* overloaded *)
 val ~ : ∀'a:num. 'a -> 'a  (* overloaded *)
-val op + : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val op - : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val op * : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
-val op / : ∀'a:Real. 'a * 'a -> 'a  (* overloaded *)
-val op div : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
-val op mod : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
-val op < : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val op <= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val op > : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
-val op >= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val + : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val - : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val * : ∀'a:num. 'a * 'a -> 'a  (* overloaded *)
+val / : ∀'a:Real. 'a * 'a -> 'a  (* overloaded *)
+val div : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
+val mod : ∀'a:wordint. 'a * 'a -> 'a  (* overloaded *)
+val < : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val <= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val > : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
+val >= : ∀'a:numtxt. 'a * 'a -> bool  (* overloaded *)
 
 val ! : 'a ref -> 'a = General.!
-val op := : 'a ref * 'a -> unit = General.:=
-val op @ : ('a list * 'a list) -> 'a list = List.@
-val op ^ : string * string -> string = String.^
+val := : 'a ref * 'a -> unit = General.:=
+val @ : ('a list * 'a list) -> 'a list = List.@
+val ^ : string * string -> string = String.^
 val app : ('a -> unit) -> 'a list -> unit = List.app
-val op before : 'a * unit -> 'a = General.before
+val before : 'a * unit -> 'a = General.before
 (* val ceil : not implemented yet *)
 val chr : int -> char = Char.chr
 val concat : string list -> string = String.concat
@@ -78,7 +78,7 @@ val length : 'a list -> int = List.length
 val map : ('a -> 'b) -> 'a list -> 'b list = List.map
 val not : bool -> bool = Bool.not
 val null : 'a list -> bool = List.null
-val op o : ('b -> 'c) * ('a -> 'b) -> 'a -> c = General.o
+val o : ('b -> 'c) * ('a -> 'b) -> 'a -> c = General.o
 val ord : char -> int = Char.ord
 val print : string -> unit = TextIO.print
 (* val real = Real.fromInt : not implemented yet *)
@@ -231,6 +231,8 @@ structure Word8 :> sig
   val max : word * word -> word
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+  val fromString : string -> word option
 end
 
 structure Word16 :> sig
@@ -264,6 +266,8 @@ structure Word16 :> sig
   val max : word * word -> word
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+  val fromString : string -> word option
 end
 
 structure Word32 :> sig
@@ -297,6 +301,8 @@ structure Word32 :> sig
   val max : word * word -> word
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+  val fromString : string -> word option
 end
 
 structure Word64 :> sig
@@ -330,6 +336,8 @@ structure Word64 :> sig
   val max : word * word -> word
   val fmt : StringCvt.radix -> word -> string
   val toString : word -> string
+  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+  val fromString : string -> word option
 end
 
 structure LargeWord = Word64
@@ -344,12 +352,16 @@ end
 
 structure Real : sig
   type real = real
+  val posInf : real
+  val negInf : real
   val + : real * real -> real
   val - : real * real -> real
   val * : real * real -> real
   val / : real * real -> real
   val ~ : real -> real
   val abs : real -> real
+  val signBit : real -> bool
+  val copySign : real * real -> real
   val compare : real * real -> order
   val < : real * real -> bool
   val <= : real * real -> bool
@@ -357,9 +369,16 @@ structure Real : sig
   val >= : real * real -> bool
   val == : real * real -> bool
   val != : real * real -> bool
+  val ?= : real * real -> bool
+  val isFinite : real -> bool
   val isNan : real -> bool
+  val isNormal : real -> bool
+  val class : real -> IEEEReal.float_class
+  val checkFloat : real -> real
   val fmt : StringCvt.realfmt -> real -> string
   val toString : real -> string
+  val scan : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader
+  val fromString : string -> real option
 end
 
 structure Math : sig
@@ -411,11 +430,14 @@ structure Char : sig
   val isPunct : char -> bool
   val isUpper : char -> bool
   val toString : char -> String.string
+  val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
+  val fromString : String.string -> char option
 end
 
 structure String : sig
   type string = string
   type char = char
+  val maxSize : int
   val size : string -> int
   val sub : string * int -> char
   val extract : string * int * int option -> string
@@ -435,6 +457,8 @@ structure String : sig
   val > : string * string -> bool
   val >= : string * string -> bool
   val toString : string -> string
+  val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
+  val fromString : String.string -> string option
 end
 
 structure Substring :> sig
@@ -574,6 +598,20 @@ structure ArraySlice :> sig
   val copyVec : { src : 'a VectorSlice.slice, dst : 'a Array.array, di : int } -> unit
 end
 
+signature MONO_VECTOR = sig
+    type vector
+    type elem
+    val length : vector -> int
+    val sub : vector * int -> elem
+    val concat : vector list -> vector
+    val map : (elem -> elem) -> vector -> vector
+    val exists : (elem -> bool) -> vector -> bool
+    val all : (elem -> bool) -> vector -> bool
+end
+
+structure CharVector :> MONO_VECTOR where type vector = String.string
+                                    where type elem = char
+
 structure IO : sig
   exception Io of { name : string
                   , function : string
@@ -625,10 +663,13 @@ structure OS : sig
     val parentArc : string
     val currentArc : string
     val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
+    val toString : { isAbs : bool, vol : string, arcs : string list } -> string
     val mkCanonical : string -> string
+    val mkAbsolute : { path : string, relativeTo : string } -> string
     val mkRelative : { path : string, relativeTo : string } -> string
     val isAbsolute : string -> bool
     val isRelative : string -> bool
+    val concat : string * string -> string
   end
   structure Process : sig
     type status
