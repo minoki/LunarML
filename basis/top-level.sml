@@ -1,5 +1,5 @@
 val op <> : ''a * ''a -> bool = op <>;
-open General (* unit, exn, Bind, Match, Chr, Div, Domain, Fail, Overflow, Size, Span, Subscript, order (LESS, EQUAL, GREATER), !, :=, before, ignore, o *)
+open General (* unit, exn, Bind, Match, Chr, Div, Domain, Fail, Overflow, Size, Span, Subscript, exnName, order (LESS, EQUAL, GREATER), !, :=, before, ignore, o *)
 
 (* type unit *)
 type int = Int.int
@@ -31,7 +31,7 @@ val app : ('a -> unit) -> 'a list -> unit = List.app
 val chr : int -> char = Char.chr
 val concat : string list -> string = String.concat
 (* val exnMessage : not implemented yet *)
-(* val exnName : not implemented yet *)
+(* val exnName *)
 val explode : string -> char list = String.explode
 (* val floor : not implemented yet *)
 val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl

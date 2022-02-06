@@ -64,7 +64,7 @@ val before : 'a * unit -> 'a = General.before
 val chr : int -> char = Char.chr
 val concat : string list -> string = String.concat
 (* val exnMessage : not implemented yet *)
-(* val exnName : not implemented yet *)
+val exnName : exn -> string = General.exnName
 val explode : string -> char list = String.explode
 (* val floor : not implemented yet *)
 val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
@@ -109,6 +109,7 @@ structure General : sig
   exception Size
   exception Span
   exception Subscript
+  val exnName : exn -> string
   datatype order = LESS | EQUAL | GREATER
   val ! : 'a ref -> 'a
   val := : 'a ref * 'a -> unit

@@ -458,6 +458,7 @@ structure General : sig
               exception Size
               exception Span
               exception Subscript
+              val exnName : exn -> string
               datatype order = LESS | EQUAL | GREATER
               val ! : 'a ref -> 'a
               val := : 'a ref * 'a -> unit
@@ -477,8 +478,8 @@ exception Overflow = Overflow
 exception Size = Size
 exception Span
 exception Subscript = Subscript
+val exnName = exnName
 (*
-val exnName : exn -> string
 val exnMessage : exn -> string
 *)
 datatype order = LESS | EQUAL | GREATER

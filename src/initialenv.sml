@@ -106,6 +106,7 @@ val VId_Overflow_tag = newShortVId "Overflow"
 val VId_Size_tag = newShortVId "Size"
 val VId_Subscript_tag = newShortVId "Subscript"
 val VId_Fail_tag = newShortVId "Fail"
+val VId_exnName = newVId "exnName"
 
 (* Overloaded *)
 val VId_abs = newVId "abs"
@@ -417,6 +418,7 @@ val initialEnv : Typing.Env
                                            ,("Word.div", USyntax.MkShortVId VId_Word_div_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("Word.mod", USyntax.MkShortVId VId_Word_mod_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("Word.<", USyntax.MkShortVId VId_Word_LT_bin, TypeScheme([], function2 (primTy_bool, primTy_word, primTy_word)))
+                                           ,("exnName", USyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))

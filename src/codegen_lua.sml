@@ -103,6 +103,7 @@ val builtins
                     ,(VId_Size_tag, "_Size_tag")
                     ,(VId_Subscript_tag, "_Subscript_tag")
                     ,(VId_Fail_tag, "_Fail_tag")
+                    ,(USyntax.MkShortVId VId_exnName, "_exnName")
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
                     ,(VId_EQUAL_bool, "_EQUAL") (* Lua == *)
                     ,(VId_EQUAL_int, "_EQUAL") (* Lua == *)
@@ -276,6 +277,7 @@ val initialEnv : Env = { boundSymbols = StringSet.fromList
                                             , "_Subscript"
                                             , "_Fail_tag"
                                             , "_Fail"
+                                            , "_exnName"
                                             , "_raise"
                                             , "__Int_add"
                                             , "__Int_sub"
