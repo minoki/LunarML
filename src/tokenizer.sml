@@ -285,7 +285,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                           = if numericLitType <> NLTWord andalso (x1 = #"e" orelse x1 = #"E") andalso Char.isDigit x2 then
                                 parseExpPart (l, c+2, a, "", 1, digitToInt x2, rest1)
                             else
-                                parseMoreIntPart (l, c, a, rest0)
+                                ( if numericLitType <> NLTWord andalso (x1 = #"e" orelse x1 = #"E") andalso x2 = #"-" andalso (case rest1 of x3 :: _ => Char.isDigit x3 | _ => false) then
+                                      emitWarning (l, c + 1, "use tilde (~) for negative sign")
+                                  else
+                                      ()
+                                ; parseMoreIntPart (l, c, a, rest0)
+                                )
                         | parseIntPart (l, c, a, rest) = parseMoreIntPart (l, c, a, rest)
                       and parseMoreIntPart (l, c, a, rest0 as x1 :: rest1) = if Char.isDigit x1 then
                                                                                  parseIntPart (l, c+1, a * 10 + digitToLargeInt x1, rest1)
@@ -305,14 +310,32 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                     #"~" :: y :: ys => if Char.isDigit y then
                                                            parseExpPart (l, c+3, intPart, fracPart, ~1, digitToInt y, ys)
                                                        else
-                                                           SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
+                                                           ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
+                                                           ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                           )
+                                  | #"-" :: y :: _ => ( if Char.isDigit y then
+                                                            emitWarning (l, c + 1, "use tilde (~) for negative sign")
+                                                        else
+                                                            ()
+                                                      ; emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
+                                                      ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                      )
                                   | y :: ys => if Char.isDigit y then
                                                    parseExpPart (l, c+2, intPart, fracPart, 1, digitToInt y, ys)
                                                else
-                                                   SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
-                                  | _ => SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
+                                                   ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
+                                                   ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                   )
+                                  | [] => ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
+                                          ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                          )
                             else
-                                SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
+                                ( if Char.isAlpha x then
+                                      emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
+                                  else
+                                      ()
+                                ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                )
                         | parseFracPart (l, c, intPart, fracPart, rest0 as nil) = SOME (mkRealConst (pos(l,c-1), intPart, fracPart, 0), l, c, rest0)
                       and parseExpPart (l, c, intPart : IntInf.int, fracPart : string, expSign : int, expPart : int, rest0 as x :: rest1)
                           = if Char.isDigit x then
