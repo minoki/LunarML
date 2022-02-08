@@ -65,6 +65,10 @@ local function _Fail(message)
   return setmetatable({ tag = _Fail_tag, payload = message }, _exn_meta)
 end
 
+local function _exnName(e)
+  return e.tag[1]
+end
+
 local function __exn_instanceof(e, tag)
   return getmetatable(e) == _exn_meta and e.tag == tag
 end
