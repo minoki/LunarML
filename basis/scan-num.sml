@@ -1,34 +1,13 @@
 signature INTEGER = sig
-    eqtype int
-    (* val toLarge : int -> LargeInt.int *)
-    (* val fromLarge : LargeInt.int -> int *)
-    val toInt : int -> Int.int
-    val fromInt : Int.int -> int
-    val precision : int option
-    val minInt : int option
-    val maxInt : int option
-    val + : int * int -> int
-    val - : int * int -> int
-    val * : int * int -> int
-    val div : int * int -> int
-    val mod : int * int -> int
-    val quot : int * int -> int
-    val rem : int * int -> int
-    val compare : int * int -> order
-    val < : int * int -> bool
-    val <= : int * int -> bool
-    val > : int * int -> bool
-    val >= : int * int -> bool
-    val ~ : int -> int
-    val abs : int -> int
-    val min : int * int -> int
-    val max : int * int -> int
-    val sign : int -> int
-    val sameSign : int * int -> bool
-    val fmt : StringCvt.radix -> int -> string
-    val toString : int -> string
+    include INTEGER
     val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
     val fromString : string -> int option
+end;
+
+signature WORD = sig
+    include WORD
+    val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
+    val fromString : string -> word option
 end;
 
 signature REAL = sig
@@ -188,40 +167,7 @@ end
 open Int
 end;
 
-structure Word : sig
-              type word = word
-              val wordSize : int
-              val toLarge : word -> LargeWord.word
-              val toLargeX : word -> LargeWord.word
-              val fromLarge : LargeWord.word -> word
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * word -> word
-              val >> : word * word -> word
-              val ~>> : word * word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val ~ : word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
+structure Word :> WORD where type word = word = struct
 local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
@@ -269,40 +215,7 @@ end
 open Word
 end;
 
-structure Word8 : sig
-              type word = Word8.word
-              val wordSize : int
-              val toLarge : word -> LargeWord.word
-              val toLargeX : word -> LargeWord.word
-              val fromLarge : LargeWord.word -> word
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * Word.word -> word
-              val >> : word * Word.word -> word
-              val ~>> : word * Word.word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val ~ : word -> word
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
+structure Word8 :> WORD where type word = Word8.word = struct
 local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
@@ -350,40 +263,7 @@ end
 open Word8
 end;
 
-structure Word16 : sig
-              type word = Word16.word
-              val wordSize : int
-              val toLarge : word -> LargeWord.word
-              val toLargeX : word -> LargeWord.word
-              val fromLarge : LargeWord.word -> word
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * Word.word -> word
-              val >> : word * Word.word -> word
-              val ~>> : word * Word.word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val ~ : word -> word
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
+structure Word16 :> WORD where type word = Word16.word = struct
 local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
@@ -431,40 +311,7 @@ end
 open Word16
 end;
 
-structure Word32 : sig
-              type word = Word32.word
-              val wordSize : int
-              val toLarge : word -> LargeWord.word
-              val toLargeX : word -> LargeWord.word
-              val fromLarge : LargeWord.word -> word
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * Word.word -> word
-              val >> : word * Word.word -> word
-              val ~>> : word * Word.word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val ~ : word -> word
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
+structure Word32 :> WORD where type word = Word32.word = struct
 local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
@@ -512,40 +359,7 @@ end
 open Word32
 end;
 
-structure Word64 : sig
-              type word = Word64.word
-              val wordSize : int
-              val toLarge : word -> LargeWord.word
-              val toLargeX : word -> LargeWord.word
-              val fromLarge : LargeWord.word -> word
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * Word.word -> word
-              val >> : word * Word.word -> word
-              val ~>> : word * Word.word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val ~ : word -> word
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-              val fromString : string -> word option
-          end = struct
+structure Word64 :> WORD where type word = Word64.word = struct
 local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of

@@ -1,3 +1,15 @@
+signature CHAR = sig
+    include CHAR
+    val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
+    val fromString : String.string -> char option
+end;
+
+signature STRING = sig
+    include STRING
+    val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader (* The spec says 'char' here, but I think 'Char.char' is intended *)
+    val fromString : String.string -> string option
+end;
+
 local
     fun digitToInt c = if #"0" <= c andalso c <= #"9" then
                            Char.ord c - Char.ord #"0"
@@ -83,41 +95,7 @@ local
                                                            Error
                                   | NONE => Empty
 in
-structure Char : sig
-              type char = char
-              type string = string
-              val minChar : char
-              val maxChar : char
-              val maxOrd : int
-              val ord : char -> int
-              val chr : int -> char
-              val succ : char -> char
-              val pred : char -> char
-              val compare : char * char -> order
-              val < : char * char -> bool
-              val <= : char * char -> bool
-              val > : char * char -> bool
-              val >= : char * char -> bool
-              val contains : string -> char -> bool
-              val notContains : string -> char -> bool
-              val isAscii : char -> bool
-              val toLower : char -> char
-              val toUpper : char -> char
-              val isAlpha : char -> bool
-              val isAlphaNum : char -> bool
-              val isCntrl : char -> bool
-              val isDigit : char -> bool
-              val isGraph : char -> bool
-              val isHexDigit : char -> bool
-              val isLower : char -> bool
-              val isPrint : char -> bool
-              val isSpace : char -> bool
-              val isPunct : char -> bool
-              val isUpper : char -> bool
-              val toString : char -> String.string
-              val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
-              val fromString : String.string -> char option
-          end = struct
+structure Char : CHAR where type char = Char.char where type string = String.string = struct
 fun scan getc strm = case scanChar (getc, strm) of
                          Parsed (c, strm') => SOME (c, strm')
                        | Skipped strm' => scan getc strm'
@@ -127,33 +105,7 @@ fun fromString s = StringCvt.scanString scan s
 open Char
 end
 
-structure String : sig
-              type string = string
-              type char = char
-              val maxSize : int
-              val size : string -> int
-              val sub : string * int -> char
-              val extract : string * int * int option -> string
-              val substring : string * int * int -> string
-              val ^ : string * string -> string
-              val concat : string list -> string
-              val concatWith : string -> string list -> string
-              val str : char -> string
-              val implode : char list -> string
-              val explode : string -> char list
-              val map : (char -> char) -> string -> string
-              val translate : (char -> string) -> string -> string
-              val fields : (char -> bool) -> string -> string list
-              val isPrefix : string -> string -> bool
-              val compare : string * string -> order
-              val < : string * string -> bool
-              val <= : string * string -> bool
-              val > : string * string -> bool
-              val >= : string * string -> bool
-              val toString : string -> string
-              val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader (* char? Char.char? *)
-              val fromString : String.string -> string option
-          end = struct
+structure String :> STRING where type string = string where type char = Char.char = struct
 fun scan getc strm = let fun go (strm, revAcc) = case scanChar (getc, strm) of
                                                      Parsed (c, strm') => go (strm', c :: revAcc)
                                                    | Skipped strm' => go (strm', revAcc)

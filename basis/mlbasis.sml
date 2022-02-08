@@ -34,6 +34,7 @@ _overload "Int" [int] { + = Int.+
                       };
 
 structure Word = struct
+type word = word
 fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
@@ -63,6 +64,7 @@ _overload "Word" [word] { + = Word.+
 end
 
 structure Real = struct
+type real = real
 open Real (* abs *)
 fun ~ x = _primCall "Real.~" (x)
 fun x + y = _primCall "Real.+" (x, y)
@@ -87,6 +89,7 @@ _overload "Real" [real] { + = Real.+
                         };
 
 structure Char = struct
+type char = char
 fun x < y = _primCall "Char.<" (x, y)
 fun x <= y = _primCall "Char.<=" (x, y)
 fun x > y = _primCall "Char.>" (x, y)
@@ -99,6 +102,7 @@ _overload "Char" [char] { < = Char.<
                         };
 
 structure String = struct
+type string = string
 fun x < y = _primCall "String.<" (x, y)
 fun x <= y = _primCall "String.<=" (x, y)
 fun x > y = _primCall "String.>" (x, y)
@@ -190,11 +194,14 @@ structure Lua : sig
                             structure math : sig
                                           val abs : value
                                           val atan : value
+                                          val ceil : value
+                                          val floor : value
+                                          val huge : value
                                           val log : value
                                           val maxinteger : value
                                           val mininteger : value
+                                          val modf : value
                                           val type' : value
-                                          val huge : value
                                       end
                             structure string : sig
                                           val byte : value
@@ -258,8 +265,11 @@ val type' = LunarML.assumeDiscardable (global "type")
 structure math = struct
 open math
 val atan = LunarML.assumeDiscardable (field (math, "atan"))
-val log = LunarML.assumeDiscardable (field (math, "log"))
+val ceil = LunarML.assumeDiscardable (field (math, "ceil"))
+val floor = LunarML.assumeDiscardable (field (math, "floor"))
 val huge = LunarML.assumeDiscardable (field (math, "huge"))
+val log = LunarML.assumeDiscardable (field (math, "log"))
+val modf = LunarML.assumeDiscardable (field (math, "modf"))
 end
 structure string = struct
 open string
@@ -695,14 +705,13 @@ fun toString true = "true"
 end (* structure Bool *)
 val not : bool -> bool = Bool.not;
 
-(*
 signature INTEGER = sig
     eqtype int
     (* val toLarge : int -> LargeInt.int *)
     (* val fromLarge : LargeInt.int -> int *)
     val toInt : int -> Int.int
     val fromInt : Int.int -> int
-    val precision : int option
+    val precision : Int.int option
     val minInt : int option
     val maxInt : int option
     val + : int * int -> int
@@ -728,39 +737,8 @@ signature INTEGER = sig
     (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader; defined in scan-num.sml *)
     (* val fromString : string -> int option; defined in scan-num.sml *)
 end;
-*)
 
-structure Int : sig
-              type int = int
-              val toInt : int -> int
-              val fromInt : int -> int
-              val precision : int option
-              val minInt : int option
-              val maxInt : int option
-              val + : int * int -> int
-              val - : int * int -> int
-              val * : int * int -> int
-              val div : int * int -> int
-              val mod : int * int -> int
-              val quot : int * int -> int
-              val rem : int * int -> int
-              val compare : int * int -> order
-              val < : int * int -> bool
-              val <= : int * int -> bool
-              val > : int * int -> bool
-              val >= : int * int -> bool
-              val ~ : int -> int
-              val abs : int -> int
-              val min : int * int -> int
-              val max : int * int -> int
-              val sign : int -> int
-              val sameSign : int * int -> bool
-              val fmt : StringCvt.radix -> int -> string
-              val toString : int -> string
-              (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader; defined in scan-num.sml *)
-              (* val fromString : string -> int option; defined in scan-num.sml *)
-          end = struct
-type int = int
+structure Int : INTEGER where type int = int = struct
 open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
@@ -852,38 +830,48 @@ fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.str
 *)
 end; (* structure Int *)
 
-structure Word : sig
-              type word = word
-              val wordSize : int
-              val toInt : word -> int
-              val toIntX : word -> int
-              val fromInt : int -> word
-              val andb : word * word -> word
-              val orb : word * word -> word
-              val xorb : word * word -> word
-              val notb : word -> word
-              val << : word * word -> word
-              val >> : word * word -> word
-              val ~>> : word * word -> word
-              val + : word * word -> word
-              val - : word * word -> word
-              val * : word * word -> word
-              val div : word * word -> word
-              val mod : word * word -> word
-              val ~ : word -> word
-              val compare : word * word -> order
-              val < : word * word -> bool
-              val <= : word * word -> bool
-              val > : word * word -> bool
-              val >= : word * word -> bool
-              val min : word * word -> word
-              val max : word * word -> word
-              val fmt : StringCvt.radix -> word -> string
-              val toString : word -> string
-              (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader; defined in scan-num.sml *)
-              (* val fromString : string -> word option; defined in scan-num.sml *)
-          end = struct
-type word = word
+signature WORD = sig
+    eqtype word
+    val wordSize : int
+    (* val toLarge : word -> LargeWord.word; defined in word.sml *)
+    (* val toLargeX : word -> LargeWord.word; defined in word.sml *)
+    (* val toLargeWord : word -> LargeWord.word; defined in word.sml *)
+    (* val toLargeWordX : word -> LargeWord.word; defined in word.sml *)
+    (* val fromLarge : LargeWord.word -> word; defined in word.sml *)
+    (* val fromLargeWord : LargeWord.word -> word; defined in word.sml *)
+    (* val toLargeInt *)
+    (* val toLargeIntX *)
+    (* val fromLargeInt *)
+    val toInt : word -> int
+    val toIntX : word -> int
+    val fromInt : int -> word
+    val andb : word * word -> word
+    val orb : word * word -> word
+    val xorb : word * word -> word
+    val notb : word -> word
+    val << : word * Word.word -> word
+    val >> : word * Word.word -> word
+    val ~>> : word * Word.word -> word
+    val + : word * word -> word
+    val - : word * word -> word
+    val * : word * word -> word
+    val div : word * word -> word
+    val mod : word * word -> word
+    val compare : word * word -> order
+    val < : word * word -> bool
+    val <= : word * word -> bool
+    val > : word * word -> bool
+    val >= : word * word -> bool
+    val ~ : word -> word
+    val min : word * word -> word
+    val max : word * word -> word
+    val fmt : StringCvt.radix -> word -> string
+    val toString : word -> string
+    (* val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader; defined in scan-num.sml *)
+    (* val fromString : string -> word option; defined in scan-num.sml *)
+end;
+
+structure Word :> WORD where type word = word = struct
 open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 val wordSize : int = LunarML.assumeDiscardable
                          (let fun computeWordSize (x : int, n : int) = if x = 0 then
@@ -963,17 +951,31 @@ end;
 
 signature REAL = sig
     type real
+    (* structure Math *)
+    (* val radix : int *)
+    (* val precision : int *)
+    val maxFinite : real
+    val minPos : real
+    val minNormalPos : real
     val posInf : real
     val negInf : real
     val + : real * real -> real
     val - : real * real -> real
     val * : real * real -> real
     val / : real * real -> real
+    (* val rem : real * real -> real *)
+    (* val *+ : real * real * real -> real *)
+    (* val *- : real * real * real -> real *)
     val ~ : real -> real
     val abs : real -> real
+    (* val min : real * real -> real *)
+    (* val max : real * real -> real *)
+    val sign : real -> int
     val signBit : real -> bool
+    val sameSign : real * real -> bool
     val copySign : real * real -> real
     val compare : real * real -> order
+    val compareReal : real * real -> IEEEReal.real_order
     val < : real * real -> bool
     val <= : real * real -> bool
     val > : real * real -> bool
@@ -981,17 +983,40 @@ signature REAL = sig
     val == : real * real -> bool
     val != : real * real -> bool
     val ?= : real * real -> bool
+    val unordered : real * real -> bool
     val isFinite : real -> bool
     val isNan : real -> bool
     val isNormal : real -> bool
     val class : real -> IEEEReal.float_class
+    (* val toManExp : real -> { man : real, exp : int } *)
+    (* val fromManExp : { man : real, exp : int } -> real *)
+    (* val split : real -> { whole : real, frac : real } *)
+    (* val realMod : real -> real *)
+    (* val nextAfter : real * real -> real *)
     val checkFloat : real -> real
+    val realFloor : real -> real
+    val realCeil : real -> real
+    val realTrunc : real -> real
+    val realRound : real -> real
+    val floor : real -> int
+    val ceil : real -> int
+    val trunc : real -> int
+    val round : real -> int
+    val toInt : IEEEReal.rounding_mode -> real -> int
+    (* val toLargeInt : IEEEReal.rounding_mode -> real -> LargeInt.int *)
+    val fromInt : int -> real
+    (* val fromLargeInt : LargeInt.int -> real *)
+    (* val toLarge : real -> LargeReal.real *)
+    (* val fromLarge : IEEEReal.rounding_mode -> LargeReal.real -> real *)
     val fmt : StringCvt.realfmt -> real -> string
     val toString : real -> string
+    (* val scan : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader; implemented in scan-num.sml *)
+    (* val fromString : string -> real option; implemented in scan-num.sml *)
+    (* val toDecimal : real -> IEEEReal.decimal_approx *)
+    (* val fromDecimal : IEEEReal.decimal_approx -> real option *)
 end;
 
 structure Real : REAL where type real = real = struct
-type real = real
 val posInf = Lua.unsafeFromValue Lua.Lib.math.huge : real
 val negInf = Real.~ posInf
 fun == (x, y) = Lua.== (Lua.fromReal x, Lua.fromReal y)
@@ -999,10 +1024,13 @@ fun != (x, y) = Lua.~= (Lua.fromReal x, Lua.fromReal y)
 infix 4 == !=
 fun isNan x = x != x
 fun ?= (x, y) = x == y orelse x != x orelse y != y (* EQUAL or UNORDERED *)
+fun unordered (x, y) = x != x orelse y != y
 fun isFinite x = negInf < x andalso x < posInf
-val minPositiveNormal = 2.2250738585072e~308 (* 0x1p-1022; assuming binary64 *)
+val maxFinite = 1.7976931348623157e308 : real (* 0x1.fffffffffffffp1023; assuming binary64 *)
+val minPos = 5.0e~324 : real (* 0x1p-1074; assuming binary64 *)
+val minNormalPos = 2.2250738585072e~308 : real (* 0x1p-1022; assuming binary64 *)
 fun isNormal x = let val absX = abs x
-                 in minPositiveNormal <= absX andalso absX < posInf
+                 in minNormalPos <= absX andalso absX < posInf
                  end
 fun class x = if x == 0.0 then
                   IEEEReal.ZERO
@@ -1010,7 +1038,7 @@ fun class x = if x == 0.0 then
                   let val absX = abs x
                   in if absX < posInf then
                          (* normal or subnormal *)
-                         if minPositiveNormal <= absX then
+                         if minNormalPos <= absX then
                              IEEEReal.NORMAL
                          else
                              IEEEReal.SUBNORMAL
@@ -1021,12 +1049,21 @@ fun class x = if x == 0.0 then
                          else
                              IEEEReal.INF
                   end
+fun sign x = if x == 0.0 then
+                 0
+             else if x < 0.0 then
+                 ~1
+             else if x > 0.0 then
+                 1
+             else (* NaN *)
+                 raise Domain
 fun signBit x = if x < 0.0 then
                     true
                 else if x > 0.0 then
                     false
                 else
                     1.0 / x < 0.0 (* handle negative zero; NaN is not handled *)
+fun sameSign (x, y) = signBit x = signBit y
 fun copySign (x, y) = if signBit x = signBit y then
                           x
                       else
@@ -1040,12 +1077,133 @@ fun compare (x, y) = if isNan x orelse isNan y then
                              EQUAL
                          else
                              GREATER
+fun compareReal (x, y) = if isNan x orelse isNan y then
+                             IEEEReal.UNORDERED
+                         else
+                             if x < y then
+                                 IEEEReal.LESS
+                             else if x == y then
+                                 IEEEReal.EQUAL
+                             else
+                                 IEEEReal.GREATER
 fun checkFloat x = if isNan x then
                        raise Div
                    else if x == posInf orelse x == negInf then
                        raise Overflow
                    else
                        x
+fun realFloor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
+                      val result = Vector.sub (results, 0)
+                      val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
+                  in if result == 0.0 andalso 1.0 / x < 0.0 then
+                         x (* negative zero *)
+                     else
+                         result
+                  end
+fun realCeil x = let val results = Lua.call Lua.Lib.math.ceil #[Lua.fromReal x]
+                     val result = Vector.sub (results, 0)
+                     val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
+                 in if result == 0.0 andalso 1.0 / x < 0.0 then
+                        ~0.0 (* negative zero *)
+                    else
+                        result
+                 end
+fun realTrunc x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
+                      val result = Vector.sub (results, 0)
+                      val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
+                  in if result == 0.0 andalso 1.0 / x < 0.0 then
+                         ~0.0 (* negative zero *)
+                     else
+                         result
+                  end
+fun realRound x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
+                      val intPartRaw = Vector.sub (results, 0)
+                      val intPartIsEven = Lua.== (Lua.% (intPartRaw, Lua.fromInt 2), Lua.fromInt 0)
+                      val intPart = Lua.unsafeFromValue (Lua.* (intPartRaw, Lua.fromReal 1.0)) : real
+                      val fracPart = Lua.unsafeFromValue (Vector.sub (results, 1)) : real
+                      val absFracPart = abs fracPart
+                  in if ~0.5 < fracPart andalso fracPart < 0.5 then
+                         if intPart == 0.0 andalso 1.0 / x < 0.0 then
+                             ~0.0 (* negative zero *)
+                         else
+                             (* intPart may be infinity *)
+                             intPart
+                     else if fracPart < ~0.5 orelse (fracPart == ~0.5 andalso not intPartIsEven)then
+                         intPart - 1.0
+                     else if fracPart > 0.5 orelse (fracPart == 0.5 andalso not intPartIsEven) then
+                         intPart + 1.0
+                     else (* ((fracPart == 0.5 orelse fracPart == ~0.5) andalso intPartIsEven) orelse isNan x *)
+                         intPart
+                  end
+                      fun realFloor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
+                      val result = Vector.sub (results, 0)
+                      val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
+                  in if result == 0.0 andalso 1.0 / x < 0.0 then
+                         x (* negative zero *)
+                     else
+                         result
+                  end
+fun floor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
+                  val result = Vector.sub (results, 0)
+                  val isInteger = Lua.== (Vector.sub (Lua.call Lua.Lib.math.type' #[result], 0), Lua.fromString "integer")
+              in if isInteger then
+                     Lua.unsafeFromValue result : int
+                 else
+                     if isNan x then
+                         raise Domain (* NaN *)
+                     else
+                         raise Overflow
+              end
+fun ceil x = let val results = Lua.call Lua.Lib.math.ceil #[Lua.fromReal x]
+                 val result = Vector.sub (results, 0)
+                 val isInteger = Lua.== (Vector.sub (Lua.call Lua.Lib.math.type' #[result], 0), Lua.fromString "integer")
+             in if isInteger then
+                    Lua.unsafeFromValue result : int
+                else
+                    if isNan x then
+                        raise Domain (* NaN *)
+                    else
+                        raise Overflow
+             end
+fun trunc x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
+                  val result = Vector.sub (results, 0)
+                  val isInteger = Lua.== (Vector.sub (Lua.call Lua.Lib.math.type' #[result], 0), Lua.fromString "integer")
+              in if isInteger then
+                     Lua.unsafeFromValue result : int
+                 else
+                     if isNan x then
+                         raise Domain (* NaN *)
+                     else
+                         raise Overflow
+              end
+fun round x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
+                  val intPartRaw = Vector.sub (results, 0)
+                  val isInteger = Lua.== (Vector.sub (Lua.call Lua.Lib.math.type' #[intPartRaw], 0), Lua.fromString "integer")
+              in if isInteger then
+                     let val intPartIsEven = Lua.== (Lua.% (intPartRaw, Lua.fromInt 2), Lua.fromInt 0)
+                         val intPart = Lua.unsafeFromValue intPartRaw : int
+                         val fracPart = Lua.unsafeFromValue (Vector.sub (results, 1)) : real
+                         val absFracPart = abs fracPart
+                     in if ~0.5 < fracPart andalso fracPart < 0.5 then
+                            intPart
+                        else if fracPart < ~0.5 orelse (fracPart == ~0.5 andalso not intPartIsEven)then
+                            intPart - 1
+                        else if fracPart > 0.5 orelse (fracPart == 0.5 andalso not intPartIsEven) then
+                            intPart + 1
+                        else (* ((fracPart == 0.5 orelse fracPart == ~0.5) andalso intPartIsEven) orelse isNan x *)
+                            intPart
+                     end
+                 else
+                     if isNan x then
+                         raise Domain
+                     else
+                         raise Overflow
+              end
+fun toInt IEEEReal.TO_NEGINF = floor
+  | toInt IEEEReal.TO_POSINF = ceil
+  | toInt IEEEReal.TO_ZERO = trunc
+  | toInt IEEEReal.TO_NEAREST = round
+fun fromInt x = Lua.unsafeFromValue (Lua.* (Lua.fromInt x, Lua.fromReal 1.0)) : real
 fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                      val () = if prec < 0 then
                                                   raise Size
@@ -1084,6 +1242,7 @@ end; (* structure Real *)
 structure Math : sig
               type real = real
               val pi : real
+              val e : real
               val sqrt : real -> real
               val sin : real -> real
               val cos : real -> real
@@ -1096,10 +1255,12 @@ structure Math : sig
               val pow : real * real -> real
               val ln : real -> real
               val log10 : real -> real
+              val sinh : real -> real
+              val cosh : real -> real
+              val tanh : real -> real
           end = struct
 type real = real
 val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "pi")))
-(* val e : real *)
 val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sqrt")))
 val sin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sin")))
 val cos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "cos")))
@@ -1109,14 +1270,34 @@ val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.fi
 val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.atan)
 val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.atan #[Lua.fromReal y, Lua.fromReal x], 0))
 val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "exp")))
+val e = LunarML.assumeDiscardable (exp 1.0)
 val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
 val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.log)
 val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.log #[Lua.fromReal x, Lua.fromInt 10], 0))
-(*
-val sinh : real -> real
-val cosh : real -> real
-val tanh : real -> real
-*)
+val sinh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "sinh")
+                                                     in if Lua.isNil raw then
+                                                            fn x => (exp x - exp (~ x)) / 2.0
+                                                        else
+                                                            Lua.unsafeFromValue raw : real -> real
+                                                     end
+                                                    )
+val cosh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "cosh")
+                                                     in if Lua.isNil raw then
+                                                            fn x => (exp x + exp (~ x)) / 2.0
+                                                        else
+                                                            Lua.unsafeFromValue raw : real -> real
+                                                     end
+                                                    )
+val tanh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "tanh")
+                                                     in if Lua.isNil raw then
+                                                            fn x => let val ex = exp x
+                                                                        val e_x = exp (~ x)
+                                                                    in (ex - e_x) / (ex + e_x)
+                                                                    end
+                                                        else
+                                                            Lua.unsafeFromValue raw : real -> real
+                                                     end
+                                                    )
 end; (* structure Math *)
 
 structure String : sig
@@ -1261,39 +1442,45 @@ fun getc (s, i, z) = if z = 0 then
                          SOME (String.sub (s, i), (s, i + 1, z - 1))
 end;
 
-structure Char : sig
-              type char = char
-              type string = string
-              val minChar : char
-              val maxChar : char
-              val maxOrd : int
-              val ord : char -> int
-              val chr : int -> char
-              val succ : char -> char
-              val pred : char -> char
-              val compare : char * char -> order
-              val < : char * char -> bool
-              val <= : char * char -> bool
-              val > : char * char -> bool
-              val >= : char * char -> bool
-              val contains : string -> char -> bool
-              val notContains : string -> char -> bool
-              val isAscii : char -> bool
-              val toLower : char -> char
-              val toUpper : char -> char
-              val isAlpha : char -> bool
-              val isAlphaNum : char -> bool
-              val isCntrl : char -> bool
-              val isDigit : char -> bool
-              val isGraph : char -> bool
-              val isHexDigit : char -> bool
-              val isLower : char -> bool
-              val isPrint : char -> bool
-              val isSpace : char -> bool
-              val isPunct : char -> bool
-              val isUpper : char -> bool
-              val toString : char -> String.string
-          end = struct
+signature CHAR = sig
+    eqtype char
+    eqtype string
+    val minChar : char
+    val maxChar : char
+    val maxOrd : int
+    val ord : char -> int
+    val chr : int -> char
+    val succ : char -> char
+    val pred : char -> char
+    val compare : char * char -> order
+    val < : char * char -> bool
+    val <= : char * char -> bool
+    val > : char * char -> bool
+    val >= : char * char -> bool
+    val contains : string -> char -> bool
+    val notContains : string -> char -> bool
+    val isAscii : char -> bool
+    val toLower : char -> char
+    val toUpper : char -> char
+    val isAlpha : char -> bool
+    val isAlphaNum : char -> bool
+    val isCntrl : char -> bool
+    val isDigit : char -> bool
+    val isGraph : char -> bool
+    val isHexDigit : char -> bool
+    val isLower : char -> bool
+    val isPrint : char -> bool
+    val isSpace : char -> bool
+    val isPunct : char -> bool
+    val isUpper : char -> bool
+    val toString : char -> String.string
+    (* val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader; implemented in scan-text.sml *)
+    (* val fromString : String.string -> char option; implemented in scan-text.sml *)
+    (* val toCString : char -> String.string *)
+    (* val fromCString : String.string -> char option *)
+end;
+
+structure Char :> CHAR where type char = char where type string = String.string = struct
 type char = char
 type string = string
 val minChar = #"\000"
@@ -1373,31 +1560,41 @@ end (* structure Char *)
 val chr = Char.chr
 val ord = Char.ord;
 
-structure String : sig
-              type string = string
-              type char = char
-              val maxSize : int
-              val size : string -> int
-              val sub : string * int -> char
-              val extract : string * int * int option -> string
-              val substring : string * int * int -> string
-              val ^ : string * string -> string
-              val concat : string list -> string
-              val concatWith : string -> string list -> string
-              val str : char -> string
-              val implode : char list -> string
-              val explode : string -> char list
-              val map : (char -> char) -> string -> string
-              val translate : (char -> string) -> string -> string
-              val fields : (char -> bool) -> string -> string list
-              val isPrefix : string -> string -> bool
-              val compare : string * string -> order
-              val < : string * string -> bool
-              val <= : string * string -> bool
-              val > : string * string -> bool
-              val >= : string * string -> bool
-              val toString : string -> string
-          end = struct
+signature STRING = sig
+    eqtype string
+    eqtype char
+    val maxSize : int
+    val size : string -> int
+    val sub : string * int -> char
+    val extract : string * int * int option -> string
+    val substring : string * int * int -> string
+    val ^ : string * string -> string
+    val concat : string list -> string
+    val concatWith : string -> string list -> string
+    val str : char -> string
+    val implode : char list -> string
+    val explode : string -> char list
+    val map : (char -> char) -> string -> string
+    val translate : (char -> string) -> string -> string
+    (* val tokens : (char -> bool) -> string -> string list *)
+    val fields : (char -> bool) -> string -> string list
+    val isPrefix : string -> string -> bool
+    (* val isSubstring : string -> string -> bool *)
+    (* val isSuffix : string -> string -> bool *)
+    val compare : string * string -> order
+    (* val collate : (char * char -> order) -> string * string -> order *)
+    val < : string * string -> bool
+    val <= : string * string -> bool
+    val > : string * string -> bool
+    val >= : string * string -> bool
+    val toString : string -> string
+    (* val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader; implemented in scan-text.sml *)
+    (* val fromString : String.string -> string option; implemented in scan-text.sml *)
+    (* val toCString : string -> String.string *)
+    (* val fromCString : String.string -> string option *)
+end;
+
+structure String :> STRING where type string = string where type char = Char.char = struct
 open String
 val maxSize = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
 fun toString s = translate Char.toString s

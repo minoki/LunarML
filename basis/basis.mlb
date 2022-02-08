@@ -20,7 +20,10 @@ commandline.sml
 in
 _primOverloads
 signature INTEGER
+signature WORD
 signature REAL
+signature CHAR
+signature STRING
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure Int

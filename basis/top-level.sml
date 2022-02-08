@@ -27,13 +27,13 @@ val op @ : ('a list * 'a list) -> 'a list = List.@
 val op ^ : string * string -> string = String.^
 val app : ('a -> unit) -> 'a list -> unit = List.app
 (* val before *)
-(* val ceil : not implemented yet *)
+val ceil : real -> int = Real.ceil
 val chr : int -> char = Char.chr
 val concat : string list -> string = String.concat
 (* val exnMessage : not implemented yet *)
 (* val exnName *)
 val explode : string -> char list = String.explode
-(* val floor : not implemented yet *)
+val floor : real -> int = Real.floor
 val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
 val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
 val getOpt : 'a option * 'a -> 'a = Option.getOpt
@@ -48,15 +48,15 @@ val null : 'a list -> bool = List.null
 (* val o *)
 val ord : char -> int = Char.ord
 val print : string -> unit = TextIO.print
-(* val real = Real.fromInt : not implemented yet *)
+val real : int -> real = Real.fromInt
 (* val ref *)
 val rev : 'a list -> 'a list = List.rev
-(* val round : not implemented yet *)
+val round : real -> int = Real.round
 val size : string -> int = String.size
 val str : char -> string = String.str
 val substring : string * int * int -> string = String.substring
 val tl : 'a list -> 'a list = List.tl
-(* val trunc : not implemented yet *)
+val trunc : real -> int = Real.trunc
 (* val use : not supported *)
 val valOf : 'a option -> 'a = Option.valOf
 val vector : 'a list -> 'a vector = Vector.fromList;

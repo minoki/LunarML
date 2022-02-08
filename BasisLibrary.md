@@ -1,6 +1,6 @@
 # SML Basis Library
 
-Available types and functions:
+## Top-level
 
 ```sml
 infix  7  * / div mod
@@ -60,13 +60,13 @@ val @ : ('a list * 'a list) -> 'a list = List.@
 val ^ : string * string -> string = String.^
 val app : ('a -> unit) -> 'a list -> unit = List.app
 val before : 'a * unit -> 'a = General.before
-(* val ceil : not implemented yet *)
+val ceil : real -> int = Real.ceil
 val chr : int -> char = Char.chr
 val concat : string list -> string = String.concat
 (* val exnMessage : not implemented yet *)
 val exnName : exn -> string = General.exnName
 val explode : string -> char list = String.explode
-(* val floor : not implemented yet *)
+val floor : real -> int = Real.floor
 val foldl : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldl
 val foldr : ('a * 'b -> 'b) -> 'b -> 'a list -> 'b = List.foldr
 val getOpt : 'a option * 'a -> 'a = Option.getOpt
@@ -81,19 +81,21 @@ val null : 'a list -> bool = List.null
 val o : ('b -> 'c) * ('a -> 'b) -> 'a -> c = General.o
 val ord : char -> int = Char.ord
 val print : string -> unit = TextIO.print
-(* val real = Real.fromInt : not implemented yet *)
+val real : int -> real = Real.fromInt
 (* val ref *)
 val rev : 'a list -> 'a list = List.rev
-(* val round : not implemented yet *)
+val round : real -> int = Real.round
 val size : string -> int = String.size
 val str : char -> string = String.str
 val substring : string * int * int -> string = String.substring
 val tl : 'a list -> 'a list = List.tl
-(* val trunc : not implemented yet *)
+val trunc : real -> int = Real.trunc
 (* val use : not supported *)
 val valOf : 'a option -> 'a = Option.valOf
 val vector : 'a list -> 'a vector = Vector.fromList;
 ```
+
+## Signatures and structures
 
 ```sml
 structure General : sig
@@ -135,11 +137,13 @@ structure Bool : sig
   val toString : bool -> string
 end
 
-structure Int : sig
-  type int = int
-  val toInt : int -> int
-  val fromInt : int -> int
-  val precision : int option
+signature INTEGER = sig
+  eqtype int
+  (* val toLarge : int -> LargeInt.int *)
+  (* val fromLarge : LargeInt.int -> int *)
+  val toInt : int -> Int.int
+  val fromInt : Int.int -> int
+  val precision : Int.int option
   val minInt : int option
   val maxInt : int option
   val + : int * int -> int
@@ -166,47 +170,22 @@ structure Int : sig
   val fromString : string -> int option
 end
 
-structure Word : sig
-  type word = word
-  val wordSize : int
-  val toLarge : word -> LargeWord.word
-  val toLargeX : word -> LargeWord.word
-  val fromLarge : LargeWord.word -> word
-  val toInt : word -> int
-  val toIntX : word -> int
-  val fromInt : int -> word
-  val andb : word * word -> word
-  val orb : word * word -> word
-  val xorb : word * word -> word
-  val notb : word -> word
-  val << : word * word -> word
-  val >> : word * word -> word
-  val ~>> : word * word -> word
-  val + : word * word -> word
-  val - : word * word -> word
-  val * : word * word -> word
-  val div : word * word -> word
-  val mod : word * word -> word
-  val ~ : word -> word
-  val compare : word * word -> order
-  val < : word * word -> bool
-  val <= : word * word -> bool
-  val > : word * word -> bool
-  val >= : word * word -> bool
-  val min : word * word -> word
-  val max : word * word -> word
-  val fmt : StringCvt.radix -> word -> string
-  val toString : word -> string
-  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-  val fromString : string -> word option
+structure Int :> INTEGER where type int = int
+structure IntInf : sig
 end
 
-structure Word8 :> sig
+signature WORD = sig
   eqtype word
   val wordSize : int
   val toLarge : word -> LargeWord.word
   val toLargeX : word -> LargeWord.word
+  val toLargeWord : word -> LargeWord.word
+  val toLargeWordX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
+  val fromLargeWord : LargeWord.word -> word
+  (* val toLargeInt *)
+  (* val toLargeIntX *)
+  (* val fromLargeInt *)
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -236,111 +215,11 @@ structure Word8 :> sig
   val fromString : string -> word option
 end
 
-structure Word16 :> sig
-  eqtype word
-  val wordSize : int
-  val toLarge : word -> LargeWord.word
-  val toLargeX : word -> LargeWord.word
-  val fromLarge : LargeWord.word -> word
-  val toInt : word -> int
-  val toIntX : word -> int
-  val fromInt : int -> word
-  val andb : word * word -> word
-  val orb : word * word -> word
-  val xorb : word * word -> word
-  val notb : word -> word
-  val << : word * Word.word -> word
-  val >> : word * Word.word -> word
-  val ~>> : word * Word.word -> word
-  val + : word * word -> word
-  val - : word * word -> word
-  val * : word * word -> word
-  val div : word * word -> word
-  val mod : word * word -> word
-  val compare : word * word -> order
-  val < : word * word -> bool
-  val <= : word * word -> bool
-  val > : word * word -> bool
-  val >= : word * word -> bool
-  val ~ : word -> word
-  val min : word * word -> word
-  val max : word * word -> word
-  val fmt : StringCvt.radix -> word -> string
-  val toString : word -> string
-  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-  val fromString : string -> word option
-end
-
-structure Word32 :> sig
-  eqtype word
-  val wordSize : int
-  val toLarge : word -> LargeWord.word
-  val toLargeX : word -> LargeWord.word
-  val fromLarge : LargeWord.word -> word
-  val toInt : word -> int
-  val toIntX : word -> int
-  val fromInt : int -> word
-  val andb : word * word -> word
-  val orb : word * word -> word
-  val xorb : word * word -> word
-  val notb : word -> word
-  val << : word * Word.word -> word
-  val >> : word * Word.word -> word
-  val ~>> : word * Word.word -> word
-  val + : word * word -> word
-  val - : word * word -> word
-  val * : word * word -> word
-  val div : word * word -> word
-  val mod : word * word -> word
-  val compare : word * word -> order
-  val < : word * word -> bool
-  val <= : word * word -> bool
-  val > : word * word -> bool
-  val >= : word * word -> bool
-  val ~ : word -> word
-  val min : word * word -> word
-  val max : word * word -> word
-  val fmt : StringCvt.radix -> word -> string
-  val toString : word -> string
-  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-  val fromString : string -> word option
-end
-
-structure Word64 :> sig
-  eqtype word
-  val wordSize : int
-  val toLarge : word -> LargeWord.word
-  val toLargeX : word -> LargeWord.word
-  val fromLarge : LargeWord.word -> word
-  val toInt : word -> int
-  val toIntX : word -> int
-  val fromInt : int -> word
-  val andb : word * word -> word
-  val orb : word * word -> word
-  val xorb : word * word -> word
-  val notb : word -> word
-  val << : word * Word.word -> word
-  val >> : word * Word.word -> word
-  val ~>> : word * Word.word -> word
-  val + : word * word -> word
-  val - : word * word -> word
-  val * : word * word -> word
-  val div : word * word -> word
-  val mod : word * word -> word
-  val compare : word * word -> order
-  val < : word * word -> bool
-  val <= : word * word -> bool
-  val > : word * word -> bool
-  val >= : word * word -> bool
-  val ~ : word -> word
-  val min : word * word -> word
-  val max : word * word -> word
-  val fmt : StringCvt.radix -> word -> string
-  val toString : word -> string
-  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
-  val fromString : string -> word option
-end
-
+structure Word :> WORD where type word = word
+structure Word8 :> WORD
+structure Word16 :> WORD
+structure Word32 :> WORD
+structure Word64 :> WORD
 structure LargeWord = Word64
 
 structure IEEEReal : sig
@@ -351,19 +230,33 @@ structure IEEEReal : sig
   type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
 end
 
-structure Real : sig
-  type real = real
+signature REAL = sig
+  type real
+  (* structure Math *)
+  (* val radix : int *)
+  (* val precision : int *)
+  val maxFinite : real
+  val minPos : real
+  val minNormalPos : real
   val posInf : real
   val negInf : real
   val + : real * real -> real
   val - : real * real -> real
   val * : real * real -> real
   val / : real * real -> real
+  (* val rem : real * real -> real *)
+  (* val *+ : real * real * real -> real *)
+  (* val *- : real * real * real -> real *)
   val ~ : real -> real
   val abs : real -> real
+  (* val min : real * real -> real *)
+  (* val max : real * real -> real *)
+  val sign : real -> int
   val signBit : real -> bool
+  val sameSign : real * real -> bool
   val copySign : real * real -> real
   val compare : real * real -> order
+  val compareReal : real * real -> IEEEReal.real_order
   val < : real * real -> bool
   val <= : real * real -> bool
   val > : real * real -> bool
@@ -371,20 +264,45 @@ structure Real : sig
   val == : real * real -> bool
   val != : real * real -> bool
   val ?= : real * real -> bool
+  val unordered : real * real -> bool
   val isFinite : real -> bool
   val isNan : real -> bool
   val isNormal : real -> bool
   val class : real -> IEEEReal.float_class
+  (* val toManExp : real -> { man : real, exp : int } *)
+  (* val fromManExp : { man : real, exp : int } -> real *)
+  (* val split : real -> { whole : real, frac : real } *)
+  (* val realMod : real -> real *)
+  (* val nextAfter : real * real -> real *)
   val checkFloat : real -> real
+  val realFloor : real -> real
+  val realCeil : real -> real
+  val realTrunc : real -> real
+  val realRound : real -> real
+  val floor : real -> int
+  val ceil : real -> int
+  val trunc : real -> int
+  val round : real -> int
+  val toInt : IEEEReal.rounding_mode -> real -> int
+  (* val toLargeInt : IEEEReal.rounding_mode -> real -> LargeInt.int *)
+  val fromInt : int -> real
+  (* val fromLargeInt : LargeInt.int -> real *)
+  (* val toLarge : real -> LargeReal.real *)
+  (* val fromLarge : IEEEReal.rounding_mode -> LargeReal.real -> real *)
   val fmt : StringCvt.realfmt -> real -> string
   val toString : real -> string
   val scan : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader
   val fromString : string -> real option
+  (* val toDecimal : real -> IEEEReal.decimal_approx *)
+  (* val fromDecimal : IEEEReal.decimal_approx -> real option *)
 end
+
+structure Real : REAL where type real = real
 
 structure Math : sig
   type real = real
   val pi : real
+  val e : real
   val sqrt : real -> real
   val sin : real -> real
   val cos : real -> real
@@ -397,11 +315,14 @@ structure Math : sig
   val pow : real * real -> real
   val ln : real -> real
   val log10 : real -> real
+  val sinh : real -> real
+  val cosh : real -> real
+  val tanh : real -> real
 end
 
-structure Char : sig
-  type char = char
-  type string = string
+signature CHAR = sig
+  eqtype char
+  eqtype string
   val minChar : char
   val maxChar : char
   val maxOrd : int
@@ -433,11 +354,15 @@ structure Char : sig
   val toString : char -> String.string
   val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
   val fromString : String.string -> char option
+  (* val toCString : char -> String.string *)
+  (* val fromCString : String.string -> char option *)
 end
 
-structure String : sig
-  type string = string
-  type char = char
+structure Char :> CHAR where type char = char
+
+signature STRING = sig
+  eqtype string
+  eqtype char
   val maxSize : int
   val size : string -> int
   val sub : string * int -> char
@@ -451,8 +376,13 @@ structure String : sig
   val explode : string -> char list
   val map : (char -> char) -> string -> string
   val translate : (char -> string) -> string -> string
+  (* val tokens : (char -> bool) -> string -> string list *)
   val fields : (char -> bool) -> string -> string list
   val isPrefix : string -> string -> bool
+  (* val isSubstring : string -> string -> bool *)
+  (* val isSuffix : string -> string -> bool *)
+  val compare : string * string -> order
+  (* val collate : (char * char -> order) -> string * string -> order *)
   val < : string * string -> bool
   val <= : string * string -> bool
   val > : string * string -> bool
@@ -460,7 +390,11 @@ structure String : sig
   val toString : string -> string
   val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
   val fromString : String.string -> string option
+  (* val toCString : string -> String.string *)
+  (* val fromCString : String.string -> string option *)
 end
+
+structure String :> STRING where type string = string
 
 structure Substring :> sig
   type substring
