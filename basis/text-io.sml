@@ -3,10 +3,12 @@ structure TextIO :> sig
               type outstream
               type vector = string
               type elem = char
+              val input : instream -> vector
               val input1 : instream -> elem option
               val inputN : instream * int -> vector
               val inputAll : instream -> vector
               val closeIn : instream -> unit
+              val endOfStream : instream -> bool
               val output : outstream * vector -> unit
               val output1 : outstream * elem -> unit
               val flushOut : outstream -> unit
@@ -28,17 +30,29 @@ local
                   type instream
                   type vector = string
                   type elem = char
+                  val input : instream -> vector
                   val input1 : instream -> elem option
                   val inputN : instream * int -> vector
                   val inputAll : instream -> vector
+                  (* val canInput *)
+                  (* val lookahead *)
                   val closeIn : instream -> unit
+                  val endOfStream : instream -> bool
                   val inputLine : instream -> string option
                   val openIn : string -> instream
+                  (* val openString *)
                   val stdIn : instream
+                  (* val scanStream *)
               end = struct
     type instream = Lua.value
     type vector = string
     type elem = char
+    fun input f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromInt 1024], 0)
+                  in if Lua.isFalsy result then
+                         ""
+                     else
+                         Lua.unsafeFromValue result : vector
+                  end
     fun input1 f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
                    in if Lua.isNil result then
                           NONE
@@ -58,6 +72,12 @@ local
                      in Lua.unsafeFromValue result : vector
                      end
     fun closeIn f = (Lua.method (f, "close") (vector []); ())
+    fun endOfStream f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromInt 0], 0)
+                        in if Lua.isFalsy result then
+                               true
+                           else
+                               false
+                        end
 
     (* TEXT_IO *)
     fun inputLine f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "L"]), 0)

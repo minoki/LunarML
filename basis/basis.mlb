@@ -15,6 +15,7 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 mono-vector.sml
+mono-array.sml
 os.sml
 commandline.sml
 in
@@ -24,6 +25,9 @@ signature WORD
 signature REAL
 signature CHAR
 signature STRING
+signature MONO_VECTOR
+signature MONO_ARRAY
+signature MONO_ARRAY_SLICE
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure Int
@@ -54,7 +58,8 @@ structure Word32
 structure Word64
 structure LargeWord
 structure IntInf
-signature MONO_VECTOR
 structure CharVector
+structure CharArray
+structure CharArraySlice
 top-level.sml
 end

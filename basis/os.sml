@@ -19,6 +19,10 @@ structure OS :> sig
                             val currentArc : string
                             val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
                             val toString : { isAbs : bool, vol : string, arcs : string list } -> string
+                            val splitDirFile : string -> { dir : string, file : string }
+                            val joinDirFile : { dir : string, file : string } -> string
+                            val dir : string -> string
+                            val file : string -> string
                             val mkCanonical : string -> string
                             val mkAbsolute : { path : string, relativeTo : string } -> string
                             val mkRelative : { path : string, relativeTo : string } -> string
@@ -232,6 +236,17 @@ fun toString { isAbs, vol, arcs } = if vol <> "" then
                                                  else
                                                      raise InvalidArc
 end
+fun splitDirFile path = let val { isAbs, vol, arcs } = fromString path
+                            fun go (revAcc, [last]) = { dir = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, file = last }
+                              | go (revAcc, x :: xs) = go (x :: revAcc, xs)
+                              | go (revAcc, []) = raise Path
+                        in go ([], arcs)
+                        end
+fun joinDirFile { dir, file } = let val { isAbs, vol, arcs } = fromString dir
+                                in toString { isAbs = isAbs, vol = vol, arcs = arcs @ [file] }
+                                end
+val dir = #dir o splitDirFile
+val file = #file o splitDirFile
 local
     fun go (revArcs, []) = String.concatWith "/" (List.rev revArcs)
       | go (_ :: revArcs, #"." :: #"." :: #"/" :: xs) = go (revArcs, xs)

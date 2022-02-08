@@ -1315,6 +1315,7 @@ structure String : sig
               val explode : string -> char list
               val map : (char -> char) -> string -> string
               val translate : (char -> string) -> string -> string
+              val tokens : (char -> bool) -> string -> string list
               val fields : (char -> bool) -> string -> string list
               val isPrefix : string -> string -> bool
               val compare : string * string -> order
@@ -1364,7 +1365,13 @@ fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua
 fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
                                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                            end
-(* tokens *)
+fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implode (List.rev acc) :: revTokens)
+                       | go (revTokens, acc, x :: xs) = if f x then
+                                                            go (if List.null acc then revTokens else implode (List.rev acc) :: revTokens, [], xs)
+                                                        else
+                                                            go (revTokens, x :: acc, xs)
+                 in go ([], [], explode s)
+                 end
 fun fields f s = let fun go (revFields, acc, []) = List.rev (implode (List.rev acc) :: revFields)
                        | go (revFields, acc, x :: xs) = if f x then
                                                             go (implode (List.rev acc) :: revFields, [], xs)
@@ -1476,7 +1483,7 @@ signature CHAR = sig
     val toString : char -> String.string
     (* val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader; implemented in scan-text.sml *)
     (* val fromString : String.string -> char option; implemented in scan-text.sml *)
-    (* val toCString : char -> String.string *)
+    val toCString : char -> String.string
     (* val fromCString : String.string -> char option *)
 end;
 
@@ -1554,6 +1561,31 @@ fun toString #"\\" = "\\\\"
                                      "\\" ^ Int.toString x
                                  (* TODO: x >= 1000 *)
                               end
+fun toCString #"\\" = "\\\\"
+  | toCString #"\"" = "\\\""
+  | toCString #"?" = "\\?"
+  | toCString #"'" = "\\'"
+  | toCString c = if isPrint c then
+                      String.str c
+                  else
+                      case c of
+                          #"\\a" => "\\a"
+                        | #"\\b" => "\\b"
+                        | #"\\t" => "\\t"
+                        | #"\\n" => "\\n"
+                        | #"\\v" => "\\v"
+                        | #"\\f" => "\\f"
+                        | #"\\r" => "\\r"
+                        | _ => let val x = ord c
+                                   val s = Int.fmt StringCvt.OCT x
+                               in if x < 8 then
+                                      "\\00" ^ s
+                                  else if x < 64 then
+                                      "\\0" ^ s
+                                  else
+                                      "\\" ^ s
+                                  (* TODO: x >= 512 *)
+                               end
 open Char (* <, <=, >, >= *)
 (* scan, fromString, toCString, fromCString *)
 end (* structure Char *)
@@ -1576,7 +1608,7 @@ signature STRING = sig
     val explode : string -> char list
     val map : (char -> char) -> string -> string
     val translate : (char -> string) -> string -> string
-    (* val tokens : (char -> bool) -> string -> string list *)
+    val tokens : (char -> bool) -> string -> string list
     val fields : (char -> bool) -> string -> string list
     val isPrefix : string -> string -> bool
     (* val isSubstring : string -> string -> bool *)
@@ -1590,14 +1622,19 @@ signature STRING = sig
     val toString : string -> string
     (* val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader; implemented in scan-text.sml *)
     (* val fromString : String.string -> string option; implemented in scan-text.sml *)
-    (* val toCString : string -> String.string *)
+    val toCString : string -> String.string
     (* val fromCString : String.string -> string option *)
+    (* from https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING: *)
+    (* val rev : string -> string *)
+    (* val implodeRev : char list -> string *)
+    (* val concatWithMap : string -> ('a -> string) -> 'a list -> string *)
 end;
 
 structure String :> STRING where type string = string where type char = Char.char = struct
 open String
 val maxSize = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
 fun toString s = translate Char.toString s
+fun toCString s = translate Char.toCString s
 end;
 
 structure Vector : sig
@@ -1642,6 +1679,7 @@ end
 structure Array : sig
               datatype array = datatype array
               datatype vector = datatype vector
+              val maxLen : int
               val array : int * 'a -> 'a array
               val fromList : 'a list -> 'a array
               val tabulate : int * (int -> 'a) -> 'a array
@@ -1654,6 +1692,7 @@ structure Array : sig
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
+val maxLen = Vector.maxLen
 fun length arr = _primCall "Array.length" (arr)
 fun sub (arr, i) = if i < 0 orelse length arr <= i then
                        raise Subscript

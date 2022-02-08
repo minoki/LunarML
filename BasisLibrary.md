@@ -354,7 +354,7 @@ signature CHAR = sig
   val toString : char -> String.string
   val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
   val fromString : String.string -> char option
-  (* val toCString : char -> String.string *)
+  val toCString : char -> String.string
   (* val fromCString : String.string -> char option *)
 end
 
@@ -376,7 +376,7 @@ signature STRING = sig
   val explode : string -> char list
   val map : (char -> char) -> string -> string
   val translate : (char -> string) -> string -> string
-  (* val tokens : (char -> bool) -> string -> string list *)
+  val tokens : (char -> bool) -> string -> string list
   val fields : (char -> bool) -> string -> string list
   val isPrefix : string -> string -> bool
   (* val isSubstring : string -> string -> bool *)
@@ -390,7 +390,7 @@ signature STRING = sig
   val toString : string -> string
   val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
   val fromString : String.string -> string option
-  (* val toCString : string -> String.string *)
+  val toCString : string -> String.string
   (* val fromCString : String.string -> string option *)
 end
 
@@ -509,6 +509,7 @@ end
 structure Array : sig
   datatype array = datatype array
   datatype vector = datatype vector
+  val maxLen : int
   val array : int * 'a -> 'a array
   val fromList : 'a list -> 'a array
   val tabulate : int * (int -> 'a) -> 'a array
@@ -534,18 +535,61 @@ structure ArraySlice :> sig
 end
 
 signature MONO_VECTOR = sig
-    type vector
-    type elem
-    val length : vector -> int
-    val sub : vector * int -> elem
-    val concat : vector list -> vector
-    val map : (elem -> elem) -> vector -> vector
-    val exists : (elem -> bool) -> vector -> bool
-    val all : (elem -> bool) -> vector -> bool
+  type vector
+  type elem
+  val maxLen
+  val fromList : elem list -> vector
+  val tabulate : int * (int -> elem) -> vector
+  val length : vector -> int
+  val sub : vector * int -> elem
+  val update : vector * int * elem -> vector
+  val concat : vector list -> vector
+  val map : (elem -> elem) -> vector -> vector
+  val exists : (elem -> bool) -> vector -> bool
+  val all : (elem -> bool) -> vector -> bool
 end
 
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
+
+signature MONO_ARRAY = sig
+  eqtype array
+  type elem
+  type vector
+  val maxLen : int
+  val array : int * elem -> array
+  val fromList : elem list -> array
+  val tabulate : int * (int -> elem) -> array
+  val length : array -> int
+  val sub : array * int -> elem
+  val update : array * int * elem -> unit
+  val vector : array -> vector
+  val appi : (int * elem -> unit) -> array -> unit
+  val app : (elem -> unit) -> array -> unit
+end
+
+signature MONO_ARRAY_SLICE = sig
+  type elem
+  type array
+  type slice
+  type vector
+  type vector_slice
+  val length : slice -> int
+  val sub : slice * int -> elem
+  val update : slice * int * elem -> unit
+  val full : array -> slice
+  val slice : array * int * int option -> slice
+  val subslice : slice * int * int option -> slice
+  val vector : slice -> vector
+  val copy : { src : slice, dst : array, di : int } -> unit
+end
+
+structure CharArray : MONO_ARRAY where type vector = CharVector.vector
+                                 where type elem = char
+structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vector
+                                            where type vector_slice = Substring.substring
+                                            where type array = CharArray.array
+                                            where type elem = char
 
 structure IO : sig
   exception Io of { name : string
@@ -559,10 +603,12 @@ structure TextIO : sig
   type outstream
   type vector = string
   type elem = char
+  val input : instream -> vector
   val input1 : instream -> elem option
   val inputN : instream * int -> vector
   val inputAll : instream -> vector
   val closeIn : instream -> unit
+  val endOfStream : instream -> bool
   val output : outstream * vector -> unit
   val output1 : outstream * elem -> unit
   val flushOut : outstream -> unit
@@ -599,6 +645,10 @@ structure OS : sig
     val currentArc : string
     val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
     val toString : { isAbs : bool, vol : string, arcs : string list } -> string
+    val splitDirFile : string -> { dir : string, file : string }
+    val joinDirFile : { dir : string, file : string } -> string
+    val dir : string -> string
+    val file : string -> string
     val mkCanonical : string -> string
     val mkAbsolute : { path : string, relativeTo : string } -> string
     val mkRelative : { path : string, relativeTo : string } -> string
