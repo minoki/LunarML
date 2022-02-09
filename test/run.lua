@@ -203,6 +203,7 @@ should_run "successor_ml/should_run/" {
   "record_extension_2.sml",
   "record_update.sml",
   "num-underscore.sml",
+  "binary.sml",
 }
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
