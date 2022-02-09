@@ -39,8 +39,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
     | SymbolicIdent of string
     | QualifiedSymbolicIdent of string list * string
-    | PosInt of IntInf.int (* positive integer literal not starting with 0 *)
-    | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal *)
+    | PosInt of IntInf.int (* positive integer literal, not starting with 0, and not containing any underscore *)
+    | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
     | WordConst of IntInf.int (* non-negative *)
     | RealConst of string
     | StringConst of string

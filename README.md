@@ -31,6 +31,9 @@ Successor ML features:
 * [ ] Abolish sequenced type realizations
 * [ ] Line comments
 * [ ] Extended literal syntax
+    * [x] Underscores (`3.1415_9265`, `0xffff_ffff`)
+    * [ ] Binary (`0b`, `0wb`)
+    * [ ] Eight hex digits in text (`\Uxxxxxxxx`)
 * [ ] Record punning
 * [x] Record extension
 * [x] Record update

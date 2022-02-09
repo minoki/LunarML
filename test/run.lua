@@ -202,6 +202,7 @@ should_run "successor_ml/should_run/" {
   "record_extension.sml",
   "record_extension_2.sml",
   "record_update.sml",
+  "num-underscore.sml",
 }
 should_compile "successor_ml/should_compile/" {
   "typealias_in_signature.sml",
@@ -218,6 +219,8 @@ should_not_compile "successor_ml/should_not_compile/" {
   "record_extension_pattern.sml",
   "record_extension_expression.sml",
   "record_extension_type.sml",
+  "num-underscore-1.sml",
+  "num-underscore-2.sml",
 }
 should_run "extension/should_run/" {
   "vector_exp.sml",
