@@ -31,8 +31,8 @@ Successor ML features:
 * [ ] Abolish sequenced type realizations
 * [ ] Line comments
 * [ ] Extended literal syntax
-    * [x] Underscores (`3.1415_9265`, `0xffff_ffff`)
-    * [x] Binary (`0b`, `0wb`)
+    * [x] Underscores (e.g. `3.1415_9265`, `0xffff_ffff`)
+    * [x] Binary notation (`0b`, `0wb`)
     * [ ] Eight hex digits in text (`\Uxxxxxxxx`)
 * [ ] Record punning
 * [x] Record extension
@@ -50,5 +50,16 @@ Other extensions planned:
 
 * [x] Vector expressions and patterns
 * [ ] Packaged modules (like in Alice ML or HaMLet S)
-* [ ] Hexadecimal floating-point literals
+* [x] Hexadecimal floating-point constants (e.g. `0x1p1024`, `0x1.ffff_ffff_ffff_f`)
 * [ ] Variably-encoded Unicode escape sequence in string literals
+
+The syntax of hexadecimal floating-point constants is:
+
+```
+<hexadecimal-integer-constant> ::= '~'? '0' 'w'? 'x' <hexadecimal-digit-sequence>
+<hexadecimal-floating-point-constant> ::= '~'? '0x' <hexadecimal-digit-sequence> (<binary-exponent-part> | '.' <hexadecimal-digit-sequence> <binary-exponent-part>?)
+<hexadecimal-digit-sequence> ::= <hexadecimal-digit> ('_'* <hexadecimal-digit>)*
+<binary-exponent-part> ::= [pP] '~'? <digit> ('_'* <digit>)?
+```
+
+In short: the (binary) exponent part is optional and use tilde (`~`) for the negation symbol.

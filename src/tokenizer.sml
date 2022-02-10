@@ -388,16 +388,83 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                   end
             and readHexadecimalConstant (l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
                 (* x is a hexadecimal digit *)
+                (*
+                 * <hexadecimal-integer-constant> ::= '~'? '0' 'w'? 'x' <hexadecimal-digit-sequence>
+                 * <hexadecimal-floating-point-constant> ::= '~'? '0x' <hexadecimal-digit-sequence> (<binary-exponent-part> | '.' <hexadecimal-digit-sequence> <binary-exponent-part>?)
+                 * <hexadecimal-digit-sequence> ::= <hexadecimal-digit> ('_'* <hexadecimal-digit>)*
+                 * <binary-exponent-part> ::= [pP] '~'? <digit> ('_'* <digit>)?
+                 *)
                 = let fun mkIntConst (p2, a) = if numericLitType = NLTWord then
                                                    Tokens.WordConst (a,pos(l1,c1),p2)
                                                else if numericLitType = NLTNegative then
                                                    Tokens.ZNIntConst (~a,pos(l1,c1),p2)
                                                else
                                                    Tokens.ZNIntConst (a,pos(l1,c1),p2)
-                      fun parseIntPart (l, c, a, rest0) = (case skipUnderscoresAndReadHexDigit (c, rest0) of
-                                                               SOME (c', x1, rest1) => parseIntPart (l, c', a * 16 + hexDigitToLargeInt x1, rest1)
-                                                             | NONE => SOME (mkIntConst (pos (l, c - 1), a), l, c, rest0)
-                                                          )
+                      fun mkRealConst (p2, intPart : IntInf.int, fracPart : string, expPart : int)
+                          = let val s = if fracPart = "" then
+                                            "0x" ^ IntInf.fmt StringCvt.HEX intPart ^ "p" ^ Int.toString expPart
+                                        else
+                                            "0x" ^ IntInf.fmt StringCvt.HEX intPart ^ "." ^ fracPart ^ "p" ^ Int.toString expPart
+                                val s = if numericLitType = NLTNegative then
+                                            "~" ^ s
+                                        else
+                                            s
+                            in Tokens.RealConst (s, pos (l1, c1), p2)
+                            end
+                      fun parseIntPart (l, c, a : IntInf.int, rest0)
+                          = (case skipUnderscoresAndReadHexDigit (c, rest0) of
+                                 SOME (c', x1, rest1) => parseIntPart (l, c', a * 16 + hexDigitToLargeInt x1, rest1)
+                               | NONE => let val (c', optFracPart, rest1) = if numericLitType = NLTWord then
+                                                                                (c, NONE, rest0)
+                                                                            else
+                                                                                parseFracPart (l, c, rest0)
+                                             val (c'', optExpPart, rest2) = if numericLitType = NLTWord then
+                                                                                (c, NONE, rest0)
+                                                                            else
+                                                                                parseExpPart (c', rest1)
+                                         in case rest2 of
+                                                #"_" :: _ => emitWarning (l, c'', "extra underscore")
+                                              | x :: xs => ( if not (Option.isSome optExpPart) andalso (x = #"p" orelse x = #"P") andalso (case xs of #"-" :: y :: _ => Char.isDigit y | _ => false) then
+                                                                 emitWarning (l, c'' + 1, "use tilde (~) for negative sign")
+                                                             else
+                                                                 ()
+                                                           ; if Char.isAlpha x then
+                                                                 emitWarning (l, c'', "there should be a space between a numeric literal and an identifier")
+                                                             else
+                                                                 ()
+                                                           )
+                                              | _ => ()
+                                          ; case (optFracPart, optExpPart) of
+                                                (NONE, NONE) => SOME (mkIntConst (pos (l, c'' - 1), a), l, c'', rest2)
+                                              | (_, _) => SOME (mkRealConst (pos (l, c'' - 1), a, Option.getOpt (optFracPart, ""), Option.getOpt (optExpPart, 0)), l, c'', rest2) (* [extension] hexadecimal floating-point constant *)
+                                         end
+                            )
+                      and parseFracPart (l, c, #"." :: (xs as (x :: xss)))
+                          = if Char.isHexDigit x then
+                                parseMoreFracPart (c + 2, [x], xss)
+                            else
+                                ( emitError (l, c, "malformed number: fractional part must not be empty")
+                                ; (c + 1, SOME "", xs)
+                                )
+                        | parseFracPart (l, c, xs) = (c, NONE, xs)
+                      and parseMoreFracPart (c, revAcc, xs)
+                          = (case skipUnderscoresAndReadHexDigit (c, xs) of
+                                 SOME (c', x, xss) => parseMoreFracPart (c', x :: revAcc, xss)
+                               | NONE => (c, SOME (String.implode (List.rev revAcc)), xs)
+                            )
+                      and parseExpPart (c, xs as (p :: #"~" :: x :: xss)) = if (p = #"p" orelse p = #"P") andalso Char.isDigit x then
+                                                                                parseMoreExpPart (c + 2, ~1, digitToInt x, xss)
+                                                                            else
+                                                                                (c, NONE, xs)
+                        | parseExpPart (c, xs as (p :: x :: xss)) = if (p = #"p" orelse p = #"P") andalso Char.isDigit x then
+                                                                        parseMoreExpPart (c + 1, 1, digitToInt x, xss)
+                                                                    else
+                                                                        (c, NONE, xs)
+                        | parseExpPart (c, xs) = (c, NONE, xs)
+                      and parseMoreExpPart (c, sign, acc, xs) = (case skipUnderscoresAndReadDigit (false, c, xs) of
+                                                                     SOME (_, c', x, xss) => parseMoreExpPart (c', sign, acc * 10 + digitToInt x, xss)
+                                                                   | NONE => (c', SOME (sign * acc), xs)
+                                                                )
                   in parseIntPart (l1, c', x, xs)
                   end
             and readBinaryConstant (l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
