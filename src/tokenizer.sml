@@ -303,6 +303,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                             IntInf.toString intPart ^ "e" ^ Int.toString expPart
                                         else
                                             IntInf.toString intPart ^ "." ^ fracPart ^ "e" ^ Int.toString expPart
+                                val s = if numericLitType = NLTNegative then
+                                            "~" ^ s
+                                        else
+                                            s
                             in Tokens.RealConst (s,pos(l1,c1),p2)
                             end
                       fun parseIntPart (anyUnderscores, l, c, a : IntInf.int, rest0 as #"." :: x2 :: rest1)
