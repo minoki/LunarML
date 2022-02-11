@@ -46,12 +46,12 @@ datatype Exp = ConstExp of LuaConst
              | BinExp of BinaryOp * Exp * Exp
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
-     and Stat = LocalStat of Id vector * Exp vector (* vars must not be empty *)
+     and Stat = LocalStat of USyntax.VId vector * Exp vector (* vars must not be empty *)
               | AssignStat of Exp vector * Exp vector (* LHS must be non-empty prefixexps and RHS must not be empty*)
               | CallStat of Exp * Exp vector
               | MethodStat of Exp * string * Exp vector (* name must be a valid Lua identifier *)
               | IfStat of Exp * Block * Block (* 'elseif' will be synthesized by writer *)
-              | LocalFunctionStat of Id * Id vector * Block
+              | LocalFunctionStat of USyntax.VId * Id vector * Block
               | ReturnStat of Exp vector (* must be the last statement in a block *)
               | DoStat of Block
 withtype Block = Stat vector
@@ -170,6 +170,7 @@ fun processIndent (indent, []) = []
 fun buildProgram fragments = String.concat (processIndent (0, fragments))
 
 fun idToFragment id = [ Fragment (IdToLua id) ]
+fun vidToFragment id = [ Fragment (IdToLua (LuaSyntax.UserDefinedId id)) ]
 
 type Exp = { prec : int
            , exp : Fragment list
@@ -266,9 +267,9 @@ fun doExp (LuaSyntax.ConstExp ct) : Exp = (case ct of
                                                  | _ => { prec = ~1, exp = paren ~1 (doExp exp1) @ Fragment "[" :: #exp (doExp exp2) @ [ Fragment "]" ] }
                                               )
 and doStat (LuaSyntax.LocalStat (vars, exps)) = if Vector.length exps = 0 then
-                                                    Indent :: Fragment "local " :: commaSepV (Vector.map idToFragment vars) @ [ LineTerminator ]
+                                                    Indent :: Fragment "local " :: commaSepV (Vector.map vidToFragment vars) @ [ LineTerminator ]
                                                 else
-                                                    Indent :: Fragment "local " :: commaSepV (Vector.map idToFragment vars) @ Fragment " = " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
+                                                    Indent :: Fragment "local " :: commaSepV (Vector.map vidToFragment vars) @ Fragment " = " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
   | doStat (LuaSyntax.AssignStat (vars, exps)) = Indent :: commaSepV (Vector.map (#exp o doExp) vars) @ Fragment " = " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
   | doStat (LuaSyntax.CallStat (fnExp, args)) = Indent :: paren ~1 (doExp fnExp) @ Fragment "(" :: commaSepV (Vector.map (#exp o doExp) args) @ [ Fragment ")", OptSemicolon ]
   | doStat (LuaSyntax.MethodStat (self, name, args)) = Indent :: paren ~1 (doExp self) @ Fragment (":" ^ name ^ "(") :: commaSepV (Vector.map (#exp o doExp) args) @ [ Fragment ")", OptSemicolon ]
@@ -289,7 +290,7 @@ and doStat (LuaSyntax.LocalStat (vars, exps)) = if Vector.length exps = 0 then
                                     end
       in thenPart' @ doElse elsePart @ [ Indent, Fragment "end", LineTerminator ]
       end
-  | doStat (LuaSyntax.LocalFunctionStat (name, args, body)) = Indent :: Fragment "local function " :: idToFragment name @ Fragment "(" :: commaSepV (Vector.map idToFragment args) @ Fragment ")" :: LineTerminator :: IncreaseIndent :: doBlock body @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
+  | doStat (LuaSyntax.LocalFunctionStat (name, args, body)) = Indent :: Fragment "local function " :: vidToFragment name @ Fragment "(" :: commaSepV (Vector.map idToFragment args) @ Fragment ")" :: LineTerminator :: IncreaseIndent :: doBlock body @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
   | doStat (LuaSyntax.ReturnStat exps) = if Vector.length exps = 0 then
                                              [ Indent, Fragment "return", LineTerminator ]
                                          else

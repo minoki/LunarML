@@ -112,7 +112,7 @@ and doCompile opts fileName
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-      in emitLua opts fileName fdecs
+      in emitLua opts fileName (#nextVId (#toFContext (#driverContext ctx))) fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
                  ( print ("internal error: " ^ message ^ "\n")
@@ -151,7 +151,7 @@ and doMLB opts mlbfilename
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-      in emitLua opts mlbfilename fdecs
+      in emitLua opts mlbfilename (#nextVId (#toFContext (#driverContext ctx))) fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                 | DesugarPatternMatches.DesugarError ([], message) =>
                   ( print ("internal error: " ^ message ^ "\n")
@@ -168,13 +168,15 @@ and doMLB opts mlbfilename
                   ; OS.Process.exit OS.Process.failure
                   )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
-and emitLua opts fileName decs
+and emitLua opts fileName nextId decs
     = let val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit.lua" }
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = ref 0 }
-          val lua = LuaWriter.doChunk (CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs)
+          val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+          val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
+          val lua = LuaWriter.doChunk lua
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
           val () = TextIO.output (outs, lua)

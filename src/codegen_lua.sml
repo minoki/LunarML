@@ -169,7 +169,7 @@ fun declareIfNotHoisted (env : Env, vars : USyntax.VId list) : Env * LuaSyntax.S
                                                                  (addHoistedSymbol (env, v), v :: xs)) (env, []) vars
       in (env, case vars of
                    [] => []
-                 | _ => [ LuaSyntax.LocalStat (Vector.map LuaSyntax.UserDefinedId (vector vars), vector []) ]
+                 | _ => [ LuaSyntax.LocalStat (vector vars, vector []) ]
          )
       end
 fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoistedSymbols, level = level + 1 }
@@ -222,7 +222,7 @@ end
 fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                     stmts @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [exp]) ]
+                                                                                     stmts @ [ L.LocalStat (vector [destination], vector [exp]) ]
                                                                                  else
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
@@ -230,7 +230,7 @@ fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vect
 and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [exp]) ]
+                                                                                       stmts @ [ L.LocalStat (vector [destination], vector [exp]) ]
                                                                                    else
                                                                                        raise CodeGenError "invalid DeclareAndAssignTo"
   | putImpureTo ctx env Discard (stmts, exp) = stmts @ [ case exp of
@@ -240,7 +240,7 @@ and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (ve
                                                        ]
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
                                                            val env = addSymbol (env, dest)
-                                                       in cont (stmts @ [ L.LocalStat (vector [L.UserDefinedId dest], vector [exp]) ], env, L.VarExp (L.UserDefinedId dest))
+                                                       in cont (stmts @ [ L.LocalStat (vector [dest], vector [exp]) ], env, L.VarExp (L.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if Vector.length xs = 0 then
@@ -347,9 +347,9 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
           val exnName = exnName
           val env' = addSymbol (addSymbol (env, status), result)
           val env'' = addSymbol (env', exnName)
-          val stmts = [ L.LocalStat (vector [L.UserDefinedId status, L.UserDefinedId result], vector [L.CallExp (L.VarExp (L.PredefinedId "pcall"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
+          val stmts = [ L.LocalStat (vector [status, result], vector [L.CallExp (L.VarExp (L.PredefinedId "pcall"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
                       , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
-                                 , vector ( L.LocalStat (vector [L.UserDefinedId exnName], vector [L.VarExp (L.UserDefinedId result)])
+                                 , vector ( L.LocalStat (vector [exnName], vector [L.VarExp (L.UserDefinedId result)])
                                             :: doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
                                           )
                                  , vector []
@@ -378,7 +378,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
                         Continue cont => let val result = genSym ctx
                                              val env' = addSymbol (env, result)
                                          in cont ( stmts1
-                                                   @ [ L.LocalStat (vector [L.UserDefinedId result], vector [])
+                                                   @ [ L.LocalStat (vector [result], vector [])
                                                      , L.IfStat ( exp1'
                                                                 , vector (doExpTo ctx (increaseLevel env') exp2 (AssignTo result))
                                                                 , vector (doExpTo ctx (increaseLevel env') exp3 (AssignTo result))
@@ -389,7 +389,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
                                                  )
                                          end
                       | DeclareAndAssignTo { level, destination } => stmts1
-                                                                     @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [])
+                                                                     @ [ L.LocalStat (vector [destination], vector [])
                                                                        , L.IfStat ( exp1'
                                                                                   , vector (doExpTo ctx (increaseLevel env) exp2 (AssignTo destination))
                                                                                   , vector (doExpTo ctx (increaseLevel env) exp3 (AssignTo destination))
@@ -717,17 +717,17 @@ and doDec ctx env (F.ValDec (vid, _, exp))
     = [ if isHoisted (env, tagName) then
             L.AssignStat (vector [L.VarExp (L.UserDefinedId tagName)], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
         else
-            L.LocalStat (vector [L.UserDefinedId tagName], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
+            L.LocalStat (vector [tagName], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
       , case payloadTy of
             NONE => if isHoisted (env, conName) then
                         L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
                     else
-                        L.LocalStat (vector [L.UserDefinedId conName], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
+                        L.LocalStat (vector [conName], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
           | SOME _ => let val body = vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))]), L.VarExp (L.PredefinedId "_exn_meta")])])]
                       in if isHoisted (env, conName) then
                              L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
                          else
-                             L.LocalFunctionStat (L.UserDefinedId conName, vector [L.PredefinedId "payload"], body)
+                             L.LocalFunctionStat (conName, vector [L.PredefinedId "payload"], body)
                       end
       ]
   | doDec ctx env (F.ExceptionRepDec _) = raise Fail "internal error: ExceptionRepDec should have been desugared earlier"
@@ -742,12 +742,12 @@ and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.map (doConBin
 and doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), NONE)) = if isHoisted (env, vid) then
                                                                                L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
                                                                            else
-                                                                               L.LocalStat (vector [L.UserDefinedId vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
+                                                                               L.LocalStat (vector [vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
   | doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), SOME ty)) = let val body = vector [L.ReturnStat (vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))])])]
                                                                               in if isHoisted (env, vid) then
                                                                                      L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
                                                                                  else
-                                                                                     L.LocalFunctionStat (L.UserDefinedId vid, vector [L.PredefinedId "payload"], body)
+                                                                                     L.LocalFunctionStat (vid, vector [L.PredefinedId "payload"], body)
                                                                               end
 
 and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return

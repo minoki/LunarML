@@ -25,6 +25,7 @@ sources = \
   src/fprinter.sml \
   src/ftransform.sml \
   src/lua-syntax.sml \
+  src/lua-transform.sml \
   src/codegen_lua.sml \
   src/mlb-syntax.sml \
   src/mlb-parser.sml \
