@@ -69,9 +69,7 @@ datatype Pat = WildcardPat of SourcePos.span
                             }
              | SProjectionExp of Exp * SLabel
              | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
-     and ValBind = SimpleBind of USyntax.VId * Ty * Exp
-                 | TupleBind of (USyntax.VId * Ty) list * Exp
-     and Dec = ValDec of ValBind
+     and Dec = ValDec of USyntax.VId * Ty option * Exp
              | RecValDec of (USyntax.VId * Ty * Exp) list
              | UnpackDec of TyVar * Kind * USyntax.VId * (* the type of the new identifier *) Ty * Exp
              | IgnoreDec of Exp (* val _ = ... *)
@@ -88,6 +86,10 @@ fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
 fun RecordEqualityExp fields = PrimExp (RecordEqualityOp, vector [], vector [RecordExp fields])
 fun DataTagExp exp = PrimExp (DataTagOp, vector [], vector [exp])
 fun DataPayloadExp exp = PrimExp (DataPayloadOp, vector [], vector [exp])
+fun TupleType xs = let fun doFields i [] acc = acc
+                         | doFields i (x :: xs) acc = doFields (i + 1) xs (Syntax.LabelMap.insert (acc, Syntax.NumericLabel i, x))
+                   in RecordType (doFields 1 xs Syntax.LabelMap.empty)
+                   end
 fun PairType(a, b) = RecordType (Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
 fun TuplePat (span, xs) = let fun doFields i nil = nil
                                 | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -246,7 +248,7 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
                                                                         , exnTagMap = exnTagMap
                                                                         }
           | doExp (SProjectionExp (exp, label)) = SProjectionExp (doExp exp, label)
-        and doDec (ValDec valbind) = ValDec (doValBind valbind)
+        and doDec (ValDec (vid, optTy, exp)) = ValDec (vid, Option.map doTy optTy, doExp exp)
           | doDec (RecValDec valbinds) = RecValDec (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp)) valbinds)
           | doDec (UnpackDec (tv, kind, vid, ty, exp)) = UnpackDec (tv, kind, vid, if USyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
                                                                                        #doTy (substTy (#1 (USyntax.TyVarMap.remove (subst, tv)))) ty
@@ -259,8 +261,6 @@ fun substTy (subst : Ty USyntax.TyVarMap.map) =
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
-        and doValBind (SimpleBind (vid, ty, exp)) = SimpleBind (vid, doTy ty, doExp exp)
-          | doValBind (TupleBind (binds, exp)) = TupleBind (List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
     in { doTy = doTy
        , doConBind = doConBind
        , doPat = doPat
@@ -314,9 +314,11 @@ fun freeTyVarsInExp (bound : USyntax.TyVarSet.set, PrimExp (primOp, tyargs, args
   | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
   | freeTyVarsInExp (bound, SProjectionExp (exp, label)) = freeTyVarsInExp (bound, exp)
   | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = USyntax.TyVarSet.union (USyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInTy (bound, packageTy)), freeTyVarsInExp (bound, exp))
-and freeTyVarsInValBind (bound, SimpleBind (vid, ty, exp)) = USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
-  | freeTyVarsInValBind (bound, TupleBind (binds, exp)) = List.foldl (fn ((vid, ty), acc) => USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) (freeTyVarsInExp (bound, exp)) binds
-and freeTyVarsInDec (bound, ValDec valbind) = (bound, freeTyVarsInValBind (bound, valbind))
+and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) = (bound, (case optTy of
+                                                                     NONE => freeTyVarsInExp (bound, exp)
+                                                                   | SOME ty => USyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
+                                                                )
+                                                        )
   | freeTyVarsInDec (bound, RecValDec valbinds) = (bound, List.foldl (fn ((vid, ty, exp), acc) => USyntax.TyVarSet.union (USyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty)), freeTyVarsInExp (bound, exp))) USyntax.TyVarSet.empty valbinds)
   | freeTyVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = let val set1 = freeTyVarsInExp (bound, exp)
                                                                       val bound = USyntax.TyVarSet.add (bound, tv)
@@ -384,8 +386,7 @@ fun freeVarsInExp (bound : USyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) =
                                                                      end
   | freeVarsInExp (bound, SProjectionExp (exp, label)) = freeVarsInExp (bound, exp)
   | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = freeVarsInExp (bound, exp)
-and freeVarsInDec (bound, ValDec (SimpleBind (vid, ty, exp))) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
-  | freeVarsInDec (bound, ValDec (TupleBind (binds, exp))) = (List.foldl (fn ((vid, ty), bound) => USyntax.VIdSet.add (bound, vid)) bound binds, freeVarsInExp (bound, exp))
+and freeVarsInDec (bound, ValDec (vid, ty, exp)) = (USyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, RecValDec valbinds) = let val bound = List.foldl (fn ((vid, _, _), bound) => USyntax.VIdSet.add (bound, vid)) bound valbinds
                                                 in (bound, List.foldl (fn ((_, _, exp), acc) => USyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) USyntax.VIdSet.empty valbinds)
                                                 end
@@ -468,9 +469,10 @@ fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (StructExp { valMap, strMap, exnTagMap }) = "StructExp{valMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" valMap ^ "},strMap={" ^ Syntax.StrIdMap.foldri (fn (strid,path,acc) => Syntax.print_StrId strid ^ ":" ^ print_Path path ^ ";" ^ acc) "" strMap ^ "},exnTagMap={" ^ Syntax.VIdMap.foldri (fn (vid,path,acc) => Syntax.print_VId vid ^ ":" ^ print_Path path ^ ";" ^ acc) "" exnTagMap ^ "}}"
   | print_Exp (SProjectionExp _) = "SProjectionExp"
   | print_Exp (PackExp { payloadTy, exp, packageTy }) = "PackExp{payloadTy=" ^ print_Ty payloadTy ^ ",exp=" ^ print_Exp exp ^ ",packageTy=" ^ print_Ty packageTy ^ "}"
-and print_ValBind (SimpleBind (v, ty, exp)) = "SimpleBind(" ^ print_VId v ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
-  | print_ValBind (TupleBind (xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
-and print_Dec (ValDec (valbind)) = "ValDec(" ^ print_ValBind valbind ^ ")"
+and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
+                                                SOME ty => "ValDec(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
+                                              | NONE => "ValDec(" ^ print_VId vid ^ ",NONE," ^ print_Exp exp ^ ")"
+                                           )
   | print_Dec (RecValDec valbinds) = "RecValDec(" ^ Syntax.print_list (fn (vid, ty, exp) => "(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")") valbinds ^ ")"
   | print_Dec (UnpackDec (tv, kind, vid, ty, exp)) = "UnpackDec(" ^ USyntax.print_TyVar tv ^ "," ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
@@ -756,12 +758,12 @@ and toFExp(ctx, env, U.SConExp(span, Syntax.IntegerConstant value, ty)) = cookIn
           fun doField ((label, e), (decs, fields))
               = let val vid = freshVId (ctx, vidForLabel label)
                     val e = toFExp (ctx, env, e)
-                    val dec = F.ValDec (F.SimpleBind (vid, F.RecordType Syntax.LabelMap.empty (* dummy *), e))
+                    val dec = F.ValDec (vid, NONE, e)
                 in (dec :: decs, (label, F.VarExp vid) :: fields)
                 end
           val (decs, fields) = List.foldr doField ([], []) fields
           val baseVId = freshVId (ctx, "base")
-          val baseDec = F.ValDec (F.SimpleBind (baseVId, toFTy (ctx, env, baseTy), toFExp (ctx, env, baseExp)))
+          val baseDec = F.ValDec (baseVId, SOME (toFTy (ctx, env, baseTy)), toFExp (ctx, env, baseExp))
           val baseExp = F.VarExp baseVId
           val baseFields = Syntax.LabelMap.foldri (fn (label, _, fields) =>
                                                       (label, F.ProjectionExp { label = label, record = baseExp }) :: fields
@@ -818,7 +820,17 @@ and toFExp(ctx, env, U.SConExp(span, Syntax.IntegerConstant value, ty)) = cookIn
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.PrimExp(span, primOp, tyargs, args)) = F.PrimExp(F.PrimFnOp primOp, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)
-and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (fn (vid,ty) => (vid, toFTy(ctx, env, ty))) vars, toFExp(ctx, env, exp))
+and doValBind ctx env (U.TupleBind (span, vars, exp))
+    = let val tupleVId = freshVId (ctx, "tmp")
+          val exp = toFExp (ctx, env, exp)
+          val vars = List.map (fn (vid, ty) => (vid, toFTy (ctx, env, ty))) vars
+          val tupleTy = F.TupleType (List.map #2 vars)
+          val decs = let fun go (i, []) = []
+                           | go (i, (vid, ty) :: xs) = F.ValDec (vid, SOME ty, F.ProjectionExp { label = Syntax.NumericLabel i, record = F.VarExp tupleVId }) :: go (i + 1, xs)
+                     in go (1, vars)
+                     end
+      in F.ValDec (tupleVId, SOME tupleTy, exp) :: decs
+      end
   | doValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))
     = let val ty0 = toFTy (ctx, env, ty)
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
@@ -838,7 +850,29 @@ and doValBind ctx env (U.TupleBind (span, vars, exp)) = F.TupleBind (List.map (f
                                        end
                    | _ => raise Fail "invalid type constraint"
                 )
-      in F.SimpleBind (vid, ty', doExp(env, tvs))
+      in [F.ValDec (vid, SOME ty', doExp (env, tvs))]
+      end
+and doRecValBind ctx env (U.TupleBind (span, vars, exp)) = raise Fail "unexpected TupleBind in RecValDec"
+  | doRecValBind ctx env (U.PolyVarBind (span, vid, U.TypeScheme(tvs, ty), exp))
+    = let val ty0 = toFTy (ctx, env, ty)
+          val ty' = List.foldr (fn ((tv,cts),ty1) =>
+                                   case cts of
+                                       [] => F.ForallType (tv, F.TypeKind, ty1)
+                                     | [U.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
+                                     | _ => raise Fail "invalid type constraint"
+                               ) ty0 tvs
+          fun doExp (env', [])
+              = toFExp(ctx, env', exp)
+            | doExp (env', (tv,cts) :: rest)
+              = (case cts of
+                     [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
+                   | [U.IsEqType _] => let val vid = freshVId(ctx, "eq")
+                                           val env'' = updateEqualityForTyVarMap(fn m => USyntax.TyVarMap.insert(m, tv, vid), env')
+                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, F.EqualityType(F.TyVar tv), doExp(env'', rest)))
+                                       end
+                   | _ => raise Fail "invalid type constraint"
+                )
+      in (vid, ty', doExp(env, tvs))
       end
 and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
@@ -875,15 +909,12 @@ and getEquality(ctx, env, U.TyCon(span, [tyarg], tyname))
   | getEquality (ctx, env, U.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs(ctx, env, []) = (env, [])
   | toFDecs(ctx, env, U.ValDec(span, valbinds) :: decs)
-    = let val dec = List.map (fn valbind => F.ValDec (doValBind ctx env valbind)) valbinds
+    = let val dec = List.foldr (fn (valbind, decs) => doValBind ctx env valbind @ decs) [] valbinds
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec @ decs)
       end
   | toFDecs(ctx, env, U.RecValDec(span, valbinds) :: decs)
-    = let val dec = F.RecValDec (List.map (fn valbind => case doValBind ctx env valbind of
-                                                             F.SimpleBind (vid, ty, exp) => (vid, ty, exp)
-                                                           | F.TupleBind _ => raise Fail "unexpected TupleBind in RecValDec"
-                                          ) valbinds)
+    = let val dec = F.RecValDec (List.map (doRecValBind ctx env) valbinds)
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, dec :: decs)
       end
@@ -1084,7 +1115,8 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                 in if admitsEquality then
                                                        let val equalityVId = freshVId(ctx, "eq")
                                                            val strVId = freshVId(ctx, case vid of U.MkVId(name,_) => name)
-                                                       in ( F.ValDec (F.TupleBind ([(equalityVId, (* TODO *) F.RecordType Syntax.LabelMap.empty), (strVId, (* TODO *) F.RecordType Syntax.LabelMap.empty)], F.VarExp vid))
+                                                       in ( F.ValDec (equalityVId, NONE, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp vid })
+                                                            :: F.ValDec (strVId, NONE, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp vid })
                                                             :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp)
                                                             :: decs
                                                           , F.VarExp strVId
@@ -1095,7 +1127,7 @@ and strDecToFDecs(ctx, env : Env, U.CoreDec(span, dec)) = toFDecs(ctx, env, [dec
                                                        (F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp) :: decs, F.VarExp vid, env)
                                                 end
                                             ) ([], exp, env'') bound
-      in (env, [F.GroupDec(NONE, decs0 @ List.rev (F.ValDec(F.SimpleBind(vid, ty, exp)) :: decs))])
+      in (env, [F.GroupDec(NONE, decs0 @ List.rev (F.ValDec (vid, SOME ty, exp) :: decs))])
       end
   | strDecToFDecs(ctx, env, U.GroupStrDec(span, decs)) = let val (env, decs) = strDecsToFDecs(ctx, env, decs)
                                                          in (env, case decs of
@@ -1134,7 +1166,7 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : F.
           val funexp = F.FnExp (paramId, signatureToTy (ctx, env, paramSig), List.foldr F.LetExp bodyExp bodyDecs)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)
           val funexp = List.foldr (fn ({ tyname, arity, admitsEquality = _ }, funexp) => F.TyAbsExp (F.tyNameToTyVar tyname, F.arityToKind arity, funexp)) funexp types (* type parameters *)
-      in F.ValDec (F.SimpleBind (funid, F.RecordType Syntax.LabelMap.empty (* TODO *), funexp))
+      in F.ValDec (funid, NONE, funexp)
       end
 fun programToFDecs(ctx, env : Env, []) = (env, [])
   | programToFDecs(ctx, env, USyntax.StrDec dec :: topdecs) = let val (env, decs) = strDecToFDecs(ctx, env, dec)
