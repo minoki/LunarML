@@ -20,10 +20,14 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
                                                 \  --dump                 Dump intermediate code.\n\
+                                                \  --dump-final           Dump final intermediate code.\n\
+                                                \  -O,--optimize          Try to optimize hard.\n\
                                                 \")
+datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
-               , dump : bool
+               , dump : DumpMode
+               , optimizationLevel : int
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -36,7 +40,7 @@ fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
 fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
   | parseArgs opts (arg :: args)
     = let fun doOutput (outname, args) = case #output opts of
-                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts } args
+                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
                                            | SOME _ => showMessageAndFail "--output was given multiple times.\n"
       in if arg = "-o" orelse arg = "--output" then
              case args of
@@ -48,12 +52,12 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              doOutput (String.extract (arg, 9, NONE), args)
          else if arg = "-mexe" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
                | SOME Driver.ExecutableMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-mlib" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
                | SOME Driver.LibraryMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-h" orelse arg = "--help" then
@@ -63,7 +67,11 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
          else if arg = "--" then
              handleInputFile opts args
          else if arg = "--dump" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = true } args
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_INITIAL, optimizationLevel = #optimizationLevel opts } args
+         else if arg = "--dump-final" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_FINAL, optimizationLevel = #optimizationLevel opts } args
+         else if arg = "--optimize" orelse arg = "-O" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts + 1 } args
          else if String.isPrefix "-" arg then
              showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
          else
@@ -77,6 +85,8 @@ and handleInputFile opts [file] = if String.isSuffix ".sml" file then
                                       showMessageAndFail "Input filename must end with '.sml'\n"
   | handleInputFile opts [] = showMessageAndFail "No input given.\n"
   | handleInputFile opts _ = showMessageAndFail "Multiple input is not supported.\n"
+and optimize ctx fdecs 0 = fdecs
+  | optimize ctx fdecs n = optimize ctx (#2 (FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs)) (n - 1)
 and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
@@ -92,13 +102,16 @@ and doCompile opts fileName
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
                           Driver.ExecutableMode => fdecs
                         | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, fdecs)
-          val () = if #dump opts then
+          val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
-          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
+          val fdecs = optimize ctx fdecs (2 * (#optimizationLevel opts + 1))
           val fdecs = Driver.wholeProgramOptimization fdecs
+          val () = if #dump opts = DUMP_FINAL then
+                       print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
+                   else
+                       ()
       in emitLua opts fileName fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
@@ -128,13 +141,16 @@ and doMLB opts mlbfilename
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
                           Driver.ExecutableMode => fdecs
                         | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, fdecs)
-          val () = if #dump opts then
+          val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
-          val (_, fdecs) = FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs
+          val fdecs = optimize ctx fdecs (2 * (#optimizationLevel opts + 1))
           val fdecs = Driver.wholeProgramOptimization fdecs
+          val () = if #dump opts = DUMP_FINAL then
+                       print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
+                   else
+                       ()
       in emitLua opts mlbfilename fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                 | DesugarPatternMatches.DesugarError ([], message) =>
@@ -165,4 +181,4 @@ and emitLua opts fileName decs
           val () = TextIO.closeOut outs
       in ()
       end
-val _ = parseArgs { output = NONE, outputMode = NONE, dump = false } (CommandLine.arguments ());
+val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0 } (CommandLine.arguments ());
