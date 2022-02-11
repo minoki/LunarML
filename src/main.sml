@@ -174,7 +174,7 @@ and emitLua opts fileName decs
           val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit.lua" }
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = ref 0 }
-          val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+          val lua = LuaWriter.doChunk (CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs)
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
           val () = TextIO.output (outs, lua)

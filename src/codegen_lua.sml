@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure CodeGenLua = struct
@@ -18,56 +18,6 @@ exception CodeGenError of string
  * record { label1 = ..., label2 = ... } -> table
  * function -> function
  *)
-(* Mapping of local variable names:
- * SML -> Lua
- * MkVId(name, n) -> name ^ "_" ^ Int.toString n
- * _ -> __
- * ' -> _PRIME
- * ! -> _EXCLAM
- * % -> _PERCENT
- * & -> _AMPER
- * $ -> _DOLLAR
- * # -> _HASH
- * + -> _PLUS
- * - -> _MINUS
- * / -> _SLASH
- * : -> _COLON
- * < -> _LT
- * = -> _EQ
- * > -> _GT
- * ? -> _QUESTION
- * @ -> _AT
- * \ -> _BACKSLASH
- * ~ -> _TILDE
- * ` -> _GRAVE
- * ^ -> _HAT
- * | -> _BAR
- * * -> _ASTER
- *)
-fun smlNameToLuaChar #"_" = "__"
-  | smlNameToLuaChar #"'" = "_PRIME"
-  | smlNameToLuaChar #"!" = "_EXCLAM"
-  | smlNameToLuaChar #"%" = "_PERCENT"
-  | smlNameToLuaChar #"&" = "_AMPER"
-  | smlNameToLuaChar #"$" = "_DOLLAR"
-  | smlNameToLuaChar #"#" = "_HASH"
-  | smlNameToLuaChar #"+" = "_PLUS"
-  | smlNameToLuaChar #"-" = "_MINUS"
-  | smlNameToLuaChar #"/" = "_SLASH"
-  | smlNameToLuaChar #":" = "_COLON"
-  | smlNameToLuaChar #"<" = "_LT"
-  | smlNameToLuaChar #"=" = "_EQ"
-  | smlNameToLuaChar #">" = "_GT"
-  | smlNameToLuaChar #"?" = "_QUESTION"
-  | smlNameToLuaChar #"@" = "_AT"
-  | smlNameToLuaChar #"\\" = "_BACKSLASH"
-  | smlNameToLuaChar #"~" = "_TILDE"
-  | smlNameToLuaChar #"`" = "_GRAVE"
-  | smlNameToLuaChar #"^" = "_HAT"
-  | smlNameToLuaChar #"|" = "_BAR"
-  | smlNameToLuaChar #"*" = "_ASTER"
-  | smlNameToLuaChar x = if Char.isAlphaNum x then String.str x else raise Fail "smlNameToLua: invalid character"
-fun smlNameToLua(name) = String.translate smlNameToLuaChar name
 val builtins
     = let open InitialEnv
           val map = List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
@@ -163,25 +113,23 @@ val builtins
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
                     ]
       end
-datatype BinaryOp = InfixOp of (* prec *) int * string
-                  | InfixOpR of (* prec *) int * string
-val builtinBinaryOps : (BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
+val builtinBinaryOps : (LuaSyntax.BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
     = let open InitialEnv
       in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                    [(VId_EQUAL_bool,   (InfixOp (10, "=="), true))
-                    ,(VId_EQUAL_int,    (InfixOp (10, "=="), true))
-                    ,(VId_EQUAL_word,   (InfixOp (10, "=="), true))
-                    ,(VId_EQUAL_string, (InfixOp (10, "=="), true))
-                    ,(VId_EQUAL_char,   (InfixOp (10, "=="), true))
+                    [(VId_EQUAL_bool,   (LuaSyntax.EQUAL, true))
+                    ,(VId_EQUAL_int,    (LuaSyntax.EQUAL, true))
+                    ,(VId_EQUAL_word,   (LuaSyntax.EQUAL, true))
+                    ,(VId_EQUAL_string, (LuaSyntax.EQUAL, true))
+                    ,(VId_EQUAL_char,   (LuaSyntax.EQUAL, true))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
                                                   case USyntax.LongVIdMap.find (builtins, USyntax.MkShortVId vid) of
                                                       NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
-                                                    | SOME (SOME luaExpr) => luaExpr
+                                                    | SOME (SOME luaName) => LuaSyntax.PredefinedId luaName
                                                     | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_VId vid ^ " has no runtime counterpart")
                                               else
-                                                  smlNameToLua name ^ "_" ^ Int.toString n
+                                                  LuaSyntax.UserDefinedId vid
 
 structure StringSet = RedBlackSetFn(struct open String; type ord_key = string end)
 val LuaKeywords = StringSet.fromList
@@ -194,214 +142,68 @@ fun isLuaIdentifier name = case String.explode name of
                              | x0 :: xs => (Char.isAlpha x0 orelse x0 = #"_")
                                            andalso (List.all (fn c => Char.isAlphaNum c orelse c = #"_") xs)
                                            andalso (not (StringSet.member(LuaKeywords, name)))
-fun LabelToLua(Syntax.NumericLabel(n)) = Int.toString n
-  | LabelToLua(Syntax.IdentifierLabel(s)) = "\"" ^ String.toString s ^ "\"" (* TODO: pretty-printing? *)
-
-(* statements: local, assignment, if-then-else-end *)
-(* exp: false, true, Numeral, LiteralString, functiondef, var, functioncall, parens, binop, unop *)
-(* precedence:
- 12: or
- 11: and
- 10: < > <= >= ~= ==
- 9: |
- 8: ~
- 7: &
- 6: << >>
- 5: .. (right assoc)
- 4: + -
- 3: * / // %
- 2: unary operators (not # - ~)
- 1: ^ (right assoc)
- 0: literals
- ~1: prefixexp
- ~2: functioncall : allowed to appear as statements
- *)
-(* exp ::= nil | false | true | Numeral | LiteralString | '...' | functiondef |
-           prefixexp | tableconstructor | exp binop exp | unop exp
-   prefixexp ::= var | functioncall | '(' exp ')'
- *)
-
-datatype Fragment = Fragment of string
-                  | IncreaseIndent
-                  | DecreaseIndent
-                  | Indent
-                  | OptSemicolon
-                  | LineTerminator
-fun findNextFragment [] = NONE
-  | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
-  | findNextFragment (Fragment s :: _) = SOME s
-  | findNextFragment (_ :: fragments) = findNextFragment fragments
-fun processIndent (indent, []) = []
-  | processIndent (indent, Fragment s :: fragments) = s :: processIndent (indent, fragments)
-  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 2, fragments)
-  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 2, fragments)
-  | processIndent (indent, Indent :: fragments) = CharVector.tabulate(indent, fn _ => #" ") :: processIndent (indent, fragments)
-  | processIndent (indent, OptSemicolon :: fragments) = (case findNextFragment fragments of
-                                                            NONE => "\n" :: processIndent (indent, fragments)
-                                                          | SOME next => if String.sub (next, 0) = #"(" then
-                                                                             ";\n" :: processIndent (indent, fragments)
-                                                                         else
-                                                                             "\n" :: processIndent (indent, fragments)
-                                                        )
-  | processIndent (indent, LineTerminator :: fragments) = "\n" :: processIndent (indent, fragments)
-fun buildProgram fragments = String.concat (processIndent (0, fragments))
-
-type Exp = { prec : int
-           , exp : Fragment list
-           }
-
-fun paren allowed { prec, exp } = if allowed < prec then
-                                      [ Fragment "(" ] @ exp @ [ Fragment ")" ]
-                                  else
-                                      exp
+fun LabelToTableKey (Syntax.NumericLabel n) = LuaSyntax.IntKey n
+  | LabelToTableKey (Syntax.IdentifierLabel s) = LuaSyntax.StringKey s
 
 type Context = { nextLuaId : int ref }
-type Env = { boundSymbols : StringSet.set, hoistedSymbols : StringSet.set, level : int }
-val initialEnv : Env = { boundSymbols = StringSet.fromList
-                                            [ "_Unit_EQUAL"
-                                            , "_Record_EQUAL"
-                                            , "_EQUAL"
-                                            , "_id"
-                                            , "_exn_meta"
-                                            , "_Match_tag"
-                                            , "_Match"
-                                            , "_Bind_tag"
-                                            , "_Bind"
-                                            , "_Overflow_tag"
-                                            , "_Overflow"
-                                            , "_Div_tag"
-                                            , "_Div"
-                                            , "_Size_tag"
-                                            , "_Size"
-                                            , "_Subscript_tag"
-                                            , "_Subscript"
-                                            , "_Fail_tag"
-                                            , "_Fail"
-                                            , "_exnName"
-                                            , "_raise"
-                                            , "__Int_add"
-                                            , "__Int_sub"
-                                            , "__Int_mul"
-                                            , "__Int_div"
-                                            , "__Int_mod"
-                                            , "_Int_negate"
-                                            , "_Int_abs"
-                                            , "__Word_div"
-                                            , "__Word_mod"
-                                            , "__Word_LT"
-                                            , "_nil"
-                                            , "_cons"
-                                            , "_List_EQUAL"
-                                            , "_list"
-                                            , "_ref"
-                                            , "_Array_array"
-                                            , "_VectorOrArray_fromList"
-                                            , "_Vector_Array"
-                                            , "_EQUAL_vector"
-                                            , "_Lua_global"
-                                            , "_Lua_call"
-                                            , "_Lua_method"
-                                            , "_Lua_newTable"
-                                            , "_Lua_function"
-                                            , "assert"
-                                            , "error"
-                                            , "getmetatable"
-                                            , "pairs"
-                                            , "pcall"
-                                            , "setmetatable"
-                                            , "math"
-                                            , "math_abs"
-                                            , "math_type"
-                                            , "math_maxinteger"
-                                            , "math_mininteger"
-                                            , "string"
-                                            , "string_format"
-                                            , "table"
-                                            , "table_pack"
-                                            , "table_unpack"
-                                            ]
-                       , hoistedSymbols = StringSet.empty
+type Env = { hoistedSymbols : USyntax.VIdSet.set
+           , level : int
+           }
+val initialEnv : Env = { hoistedSymbols = USyntax.VIdSet.empty
                        , level = 0
                        }
-fun addSymbol ({ boundSymbols, hoistedSymbols, level } : Env, s)
-    = { boundSymbols = StringSet.add (boundSymbols, s)
-      , hoistedSymbols = hoistedSymbols
+fun addSymbol ({ hoistedSymbols, level } : Env, s)
+    = { hoistedSymbols = hoistedSymbols
       , level = level
       }
-fun addHoistedSymbol ({ boundSymbols, hoistedSymbols, level } : Env, s)
-    = { boundSymbols = StringSet.add (boundSymbols, s)
-      , hoistedSymbols = StringSet.add (hoistedSymbols, s)
+fun addHoistedSymbol ({ hoistedSymbols, level } : Env, s : USyntax.VId)
+    = { hoistedSymbols = USyntax.VIdSet.add (hoistedSymbols, s)
       , level = level
       }
-fun isHoisted ({ hoistedSymbols, ... } : Env, s)
-    = StringSet.member (hoistedSymbols, s)
-fun declareIfNotHoisted (env : Env, vars)
+fun isHoisted ({ hoistedSymbols, ... } : Env, s : USyntax.VId)
+    = USyntax.VIdSet.member (hoistedSymbols, s)
+fun declareIfNotHoisted (env : Env, vars : USyntax.VId list) : Env * LuaSyntax.Stat list
     = let val (env, vars) = List.foldr (fn (v, (env, xs)) => if isHoisted (env, v) then
                                                                  (env, xs)
                                                              else
                                                                  (addHoistedSymbol (env, v), v :: xs)) (env, []) vars
       in (env, case vars of
                    [] => []
-                 | _ => [ Indent, Fragment ("local " ^ String.concatWith ", " vars), LineTerminator ]
+                 | _ => [ LuaSyntax.LocalStat (Vector.map LuaSyntax.UserDefinedId (vector vars), vector []) ]
          )
       end
-fun increaseLevel ({ boundSymbols, hoistedSymbols, level } : Env) = { boundSymbols = boundSymbols, hoistedSymbols = hoistedSymbols, level = level + 1 }
+fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoistedSymbols, level = level + 1 }
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
-                            in "tmp" ^ Int.toString n
+                            in USyntax.MkVId ("tmp", n)
                             end
 
 structure F = FSyntax
+structure L = LuaSyntax
 
-fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
-                                                          | #"\a" => "\\a"
-                                                          | #"\b" => "\\b"
-                                                          | #"\f" => "\\f"
-                                                          | #"\n" => "\\n"
-                                                          | #"\r" => "\\r"
-                                                          | #"\t" => "\\t"
-                                                          | #"\v" => "\\v"
-                                                          | #"\"" => "\\\""
-                                                          | c => if Char.isAscii c andalso Char.isPrint c then
-                                                                     String.str c
-                                                                 else
-                                                                     let val x = Char.ord c
-                                                                     in
-                                                                         if x > 255 then
-                                                                             raise Fail ("this string cannot be expressed in Lua: " ^ String.toString s)
-                                                                         else if x < 0x10 then
-                                                                             "\\x0" ^ Int.fmt StringCvt.HEX x
-                                                                         else
-                                                                             "\\x" ^ Int.fmt StringCvt.HEX x
-                                                                     end
-                                                          ) s ^ "\""
-
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then { prec = 2, exp = [ Fragment ("-" ^ LargeInt.toString (~ x)) ] } else { prec = 0, exp = [ Fragment (LargeInt.toString x) ] }
-  | doLiteral (Syntax.WordConstant x) = { prec = 0, exp = [ Fragment ("0x" ^ LargeInt.fmt StringCvt.HEX x) ] }
+fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then
+                                               L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                           else
+                                               L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doLiteral (Syntax.WordConstant x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
   | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
-                                             { prec = 2, exp = [ Fragment (String.map (fn #"~" => #"-" | c => c) x) ] }
+                                             L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (String.map (fn #"~" => #"-" | c => c) (String.extract (x, 1, NONE)))))
                                          else
-                                             { prec = 0, exp = [ Fragment (String.map (fn #"~" => #"-" | c => c) x) ] }
+                                             L.ConstExp (L.Numeral (String.map (fn #"~" => #"-" | c => c) x))
                                         )
-  | doLiteral (Syntax.StringConstant x) = { prec = 0, exp = [ Fragment (toLuaStringLit x) ] }
-  | doLiteral (Syntax.CharacterConstant x) = { prec = 0, exp = [ Fragment (toLuaStringLit x) ] }
+  | doLiteral (Syntax.StringConstant x) = L.ConstExp (L.LiteralString x)
+  | doLiteral (Syntax.CharacterConstant x) = L.ConstExp (L.LiteralString x)
 
 datatype Destination = Return
-                     | AssignTo of string
-                     | UnpackingAssignTo of string list
-                     | DeclareAndAssignTo of { level : int, destination : string }
+                     | AssignTo of USyntax.VId
+                     | DeclareAndAssignTo of { level : int, destination : USyntax.VId }
                      | Discard
-                     | Continue of (* statements *) Fragment list * Env * (* pure expression *) Exp -> Fragment list (* the continuation should be called exactly once, and the expression should be used only once *)
+                     | Continue of (* statements *) L.Stat list * Env * (* pure expression *) L.Exp -> L.Stat list (* the continuation should be called exactly once, and the expression should be used only once *)
 
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
-
-fun commaSep ([] : (Fragment list) list) : Fragment list = []
-  | commaSep (x :: xs) = x @ commaSep1 xs
-and commaSep1 [] = []
-  | commaSep1 (x :: xs) = Fragment ", " :: x @ commaSep1 xs
 
 local
 fun extractStrId(F.VarExp(USyntax.MkVId(name, n))) = SOME (USyntax.MkStrId(name, n), [])
@@ -417,47 +219,48 @@ fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
 end
 
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> Fragment list *)
-fun putPureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
-  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
-  | putPureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
+  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                     stmts @ Indent :: Fragment "local " :: Fragment destination :: Fragment " = " :: #exp exp @ [ OptSemicolon ]
+                                                                                     stmts @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [exp]) ]
                                                                                  else
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
-and putImpureTo ctx env Return (stmts, exp : Exp) = stmts @ [ Indent, Fragment "return " ] @ #exp exp @ [ OptSemicolon ]
-  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (v ^ " = ") ] @ #exp exp @ [ OptSemicolon ]
-  | putImpureTo ctx env (UnpackingAssignTo v) (stmts, exp) = stmts @ [ Indent, Fragment (String.concatWith ", " v ^ " = table_unpack(") ] @ #exp exp @ [ Fragment (", 1, " ^ Int.toString (List.length v) ^ ")"), OptSemicolon ]
+and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
+  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ Indent :: Fragment "local " :: Fragment destination :: Fragment " = " :: #exp exp @ [ OptSemicolon ]
+                                                                                       stmts @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [exp]) ]
                                                                                    else
                                                                                        raise CodeGenError "invalid DeclareAndAssignTo"
-  | putImpureTo ctx env Discard (stmts, exp) = stmts @ (if #prec exp = ~2 then
-                                                            Indent :: #exp exp @ [ OptSemicolon ]
-                                                        else
-                                                            [ Indent, Fragment "_id(" ] @ #exp exp @ [ Fragment ")", OptSemicolon ]
-                                                       )
+  | putImpureTo ctx env Discard (stmts, exp) = stmts @ [ case exp of
+                                                             L.CallExp (f, args) => L.CallStat (f, args)
+                                                           | L.MethodExp (self, name, args) => L.MethodStat (self, name, args)
+                                                           | _ => L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [exp])
+                                                       ]
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
                                                            val env = addSymbol (env, dest)
-                                                       in cont (stmts @ [ Indent, Fragment ("local " ^ dest ^ " = ") ] @ #exp exp @ [ OptSemicolon ], env, { prec = ~1, exp = [ Fragment dest ] })
+                                                       in cont (stmts @ [ L.LocalStat (vector [L.UserDefinedId dest], vector [exp]) ], env, L.VarExp (L.UserDefinedId dest))
                                                        end
-and doExpCont ctx env exp (cont : Fragment list * Env * Exp -> Fragment list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if Vector.length xs = 0 then
-                                                                                  putPureTo ctx env dest ([], doLiteral scon)
-                                                                              else
-                                                                                  raise CodeGenError "PrimExp.SConOp: non-empty argument"
-  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment (VIdToLua vid) ] }) (* TODO: prec for true, false, nil *)
-  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "nil" ] })
+and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
+and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if Vector.length xs = 0 then
+                                                                                putPureTo ctx env dest ([], doLiteral scon)
+                                                                            else
+                                                                                raise CodeGenError "PrimExp.SConOp: non-empty argument"
+  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua vid of
+                                                                          L.PredefinedId "nil" => L.ConstExp L.Nil
+                                                                        | L.PredefinedId "false" => L.ConstExp L.False
+                                                                        | L.PredefinedId "true" => L.ConstExp L.True
+                                                                        | id => L.VarExp id
+                                                                 )
+  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], L.ConstExp L.Nil)
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
   | doExpTo ctx env (F.RecordExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
               fields
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
-                        in putPureTo ctx env dest (List.concat stmts
-                                                  , case Syntax.extractTuple(1, fields) of
-                                                        SOME _ => { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (#exp o #2) fields') @ [ Fragment "}" ] }
-                                                      | NONE => { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (fn (label, e) => [ Fragment ("[" ^ LabelToLua label ^ "] = ") ] @ #exp e) fields') @ [ Fragment "}" ] }
+                        in putPureTo ctx env dest ( List.concat stmts
+                                                  , L.TableExp (vector (List.map (fn (label, exp) => (LabelToTableKey label, exp)) fields'))
                                                   )
                         end
               )
@@ -475,14 +278,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                              let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, env, e1') => doExpCont ctx env e2 (fn (stmts2, env, e2') => f (stmts1 @ stmts2, env, e1', e2'))))
                              in case USyntax.LongVIdMap.find(builtinBinaryOps, longvid) of
                                     SOME (binop, pure) => wrap (fn (stmts, env, e1', e2') =>
-                                                                   let val e = case binop of
-                                                                                   InfixOp (prec, luaop) => { prec = prec, exp = paren prec e1' @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) e2' }
-                                                                                 | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) e1' @ Fragment (" " ^ luaop ^ " ") :: paren prec e2' }
-                                                                   in if pure then
-                                                                          putPureTo ctx env dest (stmts, e)
-                                                                      else
-                                                                          putImpureTo ctx env dest (stmts, e)
-                                                                   end
+                                                                   if pure then
+                                                                       putPureTo ctx env dest (stmts, L.BinExp (binop, e1', e2'))
+                                                                   else
+                                                                       putImpureTo ctx env dest (stmts, L.BinExp (binop, e1', e2'))
                                                                )
                                   | NONE => NONE
                              end
@@ -495,10 +294,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                                                                        (Vector.foldr (op ::) [] xs)
                                                                        (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                     val zs = List.map (#exp o #2) ys
+                                                                                     val zs = Vector.map #2 (vector ys)
                                                                                  in case dest of
-                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment ")" ] })
-                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table_pack(" :: paren ~1 f @ Fragment "(" :: commaSep zs @ [ Fragment "))" ] })
+                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (f, zs))
+                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, zs)]))
                                                                                  end
                                                                        )
                                                            )
@@ -514,10 +313,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                  mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                                                                          (Vector.foldr (op ::) [] xs)
                                                                          (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                       val zs = List.map (#exp o #2) ys
+                                                                                       val zs = Vector.map #2 (vector ys)
                                                                                    in case dest of
-                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment ")" ] })
-                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = Fragment "table_pack(" :: paren ~1 self @ Fragment (":" ^ method ^ "(") :: commaSep zs @ [ Fragment "))" ] })
+                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.MethodExp (self, method, zs))
+                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (self, method, zs)]))
                                                                                    end
                                                                          )
                                                              )
@@ -538,35 +337,36 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                  (fn (stmts1, env, e1') =>
                                      doExpCont ctx env exp2
                                                (fn (stmts2, env, e2') =>
-                                                   putImpureTo ctx env dest (stmts1 @ stmts2, { prec = ~2, exp = paren ~1 e1' @ Fragment "(" :: #exp e2' @ [ Fragment ")" ] })
+                                                   putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (e1', vector [e2']))
                                                )
                                  )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = let val status = genSym ctx
           val result = genSym ctx
-          val exnName = VIdToLua exnName
+          val exnName = exnName
           val env' = addSymbol (addSymbol (env, status), result)
           val env'' = addSymbol (env', exnName)
-          val stmts = [ Indent, Fragment ("local " ^ status ^ ", " ^ result ^ " = pcall(function()"), LineTerminator, IncreaseIndent ]
-                      @ doExpTo ctx (increaseLevel env') body Return
-                      @ [ DecreaseIndent, Indent, Fragment "end)", OptSemicolon
-                        , Indent, Fragment ("if not " ^ status ^ " then"), LineTerminator, IncreaseIndent
-                        , Indent, Fragment ("local " ^ exnName ^ " = " ^ result), OptSemicolon
-                        ]
-                      @ doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
-                      @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator
-                        ]
-      in putPureTo ctx env dest (stmts, { prec = ~1, exp = [ Fragment result ] })
+          val stmts = [ L.LocalStat (vector [L.UserDefinedId status, L.UserDefinedId result], vector [L.CallExp (L.VarExp (L.PredefinedId "pcall"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
+                      , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
+                                 , vector ( L.LocalStat (vector [L.UserDefinedId exnName], vector [L.VarExp (L.UserDefinedId result)])
+                                            :: doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
+                                          )
+                                 , vector []
+                                 )
+                      ]
+      in putPureTo ctx env dest (stmts, L.VarExp (L.UserDefinedId result))
       end
   | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start = { file, line, column }, ... }), _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp
                        (fn (stmts, env, exp') =>
-                           case dest of
-                               Continue cont => cont (stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column) ^ ")"), OptSemicolon ], env, { prec = 0, exp = [ Fragment "nil" ] })
-                             | _ => stmts @ [Indent, Fragment "_raise(" ] @ #exp exp' @ [ Fragment (", " ^ toLuaStringLit (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column) ^ ")"), OptSemicolon ]
+                           let val locationInfo = OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column
+                           in case dest of
+                                  Continue cont => cont (stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', L.ConstExp (L.LiteralString locationInfo)]) ], env, L.ConstExp L.Nil)
+                                | _ => stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', L.ConstExp (L.LiteralString locationInfo)]) ]
+                           end
                        )
           end
       else
@@ -574,73 +374,63 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
                 (fn (stmts1, env, exp1') =>
-                    let fun doElseIf env (F.IfThenElseExp(e1, e2, e3)) dest'
-                            = doExpCont ctx env e1
-                                        (fn (s1, env, e1') =>
-                                            if List.null s1 then
-                                                [ Indent, Fragment "elseif " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                @ doExpTo ctx (increaseLevel env) e2 dest'
-                                                @ [ DecreaseIndent ]
-                                                @ doElseIf env e3 dest'
-                                            else
-                                                [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
-                                                @ s1
-                                                @ [ Indent, Fragment "if " ] @ #exp e1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                @ doExpTo ctx (increaseLevel (increaseLevel env)) e2 dest'
-                                                @ [ DecreaseIndent ]
-                                                @ doElseIf (increaseLevel env) e3 dest'
-                                                @ [ Indent, Fragment "end", LineTerminator, DecreaseIndent ]
-                                        )
-                          | doElseIf env e dest' = case doExpTo ctx env e dest' of
-                                                       [] => []
-                                                     | else' => [ Indent, Fragment "else", LineTerminator, IncreaseIndent ]
-                                                                @ else'
-                                                                @ [ DecreaseIndent ]
-                    in case dest of
-                           Continue cont => let val result = genSym ctx
-                                                val env' = addSymbol (env, result)
-                                            in cont (stmts1
-                                                     @ [ Indent, Fragment ("local " ^ result), LineTerminator
-                                                       , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                     @ doExpTo ctx (increaseLevel env') exp2 (AssignTo result)
-                                                     @ [ DecreaseIndent ]
-                                                     @ doElseIf env' exp3 (AssignTo result)
-                                                     @ [ Indent, Fragment "end", LineTerminator ]
-                                                    , env', { prec = ~1, exp = [ Fragment result ] })
-                                            end
-                         | DeclareAndAssignTo { level, destination } => stmts1
-                                                                        @ [ Indent, Fragment ("local " ^ destination), LineTerminator
-                                                                            , Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                                                        @ doExpTo ctx (increaseLevel env) exp2 (AssignTo destination)
-                                                                        @ [ DecreaseIndent ]
-                                                                        @ doElseIf env exp3 (AssignTo destination)
-                                                                        @ [ Indent, Fragment "end", LineTerminator ]
-                         | _ => stmts1
-                                @ [ Indent, Fragment "if " ] @ #exp exp1' @ [ Fragment " then", LineTerminator, IncreaseIndent ]
-                                @ doExpTo ctx (increaseLevel env) exp2 dest
-                                @ [ DecreaseIndent ]
-                                @ doElseIf env exp3 dest
-                                @ [ Indent, Fragment "end", LineTerminator ]
-                    end
-              )
+                    case dest of
+                        Continue cont => let val result = genSym ctx
+                                             val env' = addSymbol (env, result)
+                                         in cont ( stmts1
+                                                   @ [ L.LocalStat (vector [L.UserDefinedId result], vector [])
+                                                     , L.IfStat ( exp1'
+                                                                , vector (doExpTo ctx (increaseLevel env') exp2 (AssignTo result))
+                                                                , vector (doExpTo ctx (increaseLevel env') exp3 (AssignTo result))
+                                                                )
+                                                     ]
+                                                 , env'
+                                                 , L.VarExp (L.UserDefinedId result)
+                                                 )
+                                         end
+                      | DeclareAndAssignTo { level, destination } => stmts1
+                                                                     @ [ L.LocalStat (vector [L.UserDefinedId destination], vector [])
+                                                                       , L.IfStat ( exp1'
+                                                                                  , vector (doExpTo ctx (increaseLevel env) exp2 (AssignTo destination))
+                                                                                  , vector (doExpTo ctx (increaseLevel env) exp3 (AssignTo destination))
+                                                                                  )
+                                                                       ]
+                      (* Return, AssignTo, Discard *)
+                      | _ => stmts1
+                             @ [ L.IfStat ( exp1'
+                                          , vector (doExpTo ctx (increaseLevel env) exp2 dest)
+                                          , vector (doExpTo ctx (increaseLevel env) exp3 dest)
+                                          )
+                               ]
+                )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], { prec = 0, exp = [ Fragment ("function(" ^ VIdToLua vid ^ ")"), LineTerminator, IncreaseIndent ] @ doExpTo ctx (increaseLevel env) exp Return @ [ DecreaseIndent, Indent, Fragment "end" ] }) (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 record' @ [ Fragment ("[" ^ LabelToLua label ^ "]") ] }))
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], L.FunctionExp (vector [VIdToLua vid], vector (doExpTo ctx (increaseLevel env) exp Return))) (* TODO: update environment *)
+  | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
+                                                                                            let val label = case label of
+                                                                                                                Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
+                                                                                                              | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
+                                                                                            in putPureTo ctx env dest (stmts, L.IndexExp (record', label))
+                                                                                            end
+                                                                                        )
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
-          putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_nil" ] })
+          putPureTo ctx env dest ([], L.VarExp (L.PredefinedId "_nil"))
       else
           mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
                   (Vector.foldr (op ::) [] xs)
                   (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                            in putPureTo ctx env dest (stmts, { prec = ~2, exp = Fragment ("_list{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
+                                fun doFields (i, []) = []
+                                  | doFields (i, (_, y) :: ys) = (L.IntKey i, y) :: doFields (i + 1, ys)
+                            in putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_list"), vector [L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (Vector.length xs)))) :: doFields (1, ys)))]))
                             end
                   )
   | doExpTo ctx env (F.PrimExp (F.VectorOp, _, xs)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
               (Vector.foldr (op ::) [] xs)
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                        in putPureTo ctx env dest (stmts, { prec = ~1, exp = Fragment ("{ n = " ^ Int.toString (Vector.length xs)) :: List.foldr (fn ((_, y), acc) => Fragment ", " :: #exp y @ acc) [ Fragment " }" ] ys })
+                                fun doFields (i, []) = []
+                                  | doFields (i, (_, y) :: ys) = (L.IntKey i, y) :: doFields (i + 1, ys)
+                        in putPureTo ctx env dest (stmts, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (Vector.length xs)))) :: doFields (1, ys))))
                         end
               )
   | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
@@ -649,10 +439,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in case exp of
-                 F.RecordExp [] => putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment "_Unit_EQUAL" ] })
+                 F.RecordExp [] => putPureTo ctx env dest ([], L.VarExp (L.PredefinedId "_Unit_EQUAL"))
                | _ => doExpCont ctx env exp
                                 (fn (stmts, env, e') =>
-                                    putPureTo ctx env dest (stmts, { prec = ~2, exp = Fragment "_Record_EQUAL(" :: #exp e' @ [ Fragment ")" ] })
+                                    putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_Record_EQUAL"), vector [e']))
                                 )
           end
       else
@@ -660,14 +450,14 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
   | doExpTo ctx env (F.PrimExp (F.DataTagOp, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".tag" ] }))
+          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString "tag"))))
           end
       else
           raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
   | doExpTo ctx env (F.PrimExp (F.DataPayloadOp, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ".payload" ] }))
+          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString "payload"))))
           end
       else
           raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
@@ -687,11 +477,11 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                exnTagMap'
                                                (fn exnTagMap' =>
                                                    let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
-                                                       val valFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "] = ") ] @ #exp e) valFields
-                                                       val strFields = List.map (fn (Syntax.MkStrId name, e) => [ Fragment ("[" ^ toLuaStringLit ("_" ^ name) ^ "] = ") ] @ #exp e) strFields
-                                                       val exnTagFields = List.map (fn (vid, e) => [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid ^ ".tag") ^ "] = ") ] @ #exp e) exnTagFields
+                                                       val valFields = List.map (fn (vid, e) => (L.StringKey (Syntax.getVIdName vid), e)) valFields
+                                                       val strFields = List.map (fn (Syntax.MkStrId name, e) => (L.StringKey ("_" ^ name), e)) strFields
+                                                       val exnTagFields = List.map (fn (vid, e) => (L.StringKey (Syntax.getVIdName vid ^ ".tag"), e)) exnTagFields
                                                    in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts' @ List.concat stmts''
-                                                                             , { prec = 0, exp = [ Fragment "{" ] @ commaSep (valFields @ strFields @ exnTagFields) @ [ Fragment "}" ] }
+                                                                             , L.TableExp (vector (valFields @ strFields @ exnTagFields))
                                                                              )
                                                    end
                                                )
@@ -700,22 +490,26 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                      end
                  )
       end
-  | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest = let val builtin = case extractLongVId exp of
-                                                                                           SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
-                                                                                                                SOME (SOME luaExpr) => SOME luaExpr
-                                                                                                              | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_LongVId longvid ^ " has no runtime counterpart")
-                                                                                                              | NONE => NONE
-                                                                                                           )
-                                                                                         | NONE => NONE
-                                                                     in case builtin of
-                                                                            SOME luaExpr => putPureTo ctx env dest ([], { prec = ~1, exp = [ Fragment luaExpr ] }) (* TODO: prec for true, false, nil *)
-                                                                          | NONE => doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit (Syntax.getVIdName vid) ^ "]") ] }))
-                                                                     end
+  | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest
+    = let val builtin = case extractLongVId exp of
+                            SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
+                                                 SOME (SOME "nil") => SOME (L.ConstExp L.Nil)
+                                               | SOME (SOME "true") => SOME (L.ConstExp L.True)
+                                               | SOME (SOME "false") => SOME (L.ConstExp L.False)
+                                               | SOME (SOME luaName) => SOME (L.VarExp (L.PredefinedId luaName))
+                                               | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_LongVId longvid ^ " has no runtime counterpart")
+                                               | NONE => NONE
+                                            )
+                          | NONE => NONE
+      in case builtin of
+             SOME luaExpr => putPureTo ctx env dest ([], luaExpr)
+           | NONE => doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString (Syntax.getVIdName vid)))))
+      end
   | doExpTo ctx env (exp as F.SProjectionExp (exp', label)) dest = let val field = case label of
                                                                                        F.ValueLabel vid => Syntax.getVIdName vid
                                                                                      | F.StructLabel (Syntax.MkStrId name) => "_" ^ name
                                                                                      | F.ExnTagLabel vid => Syntax.getVIdName vid ^ ".tag"
-                                                                   in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 exp' @ [ Fragment ("[" ^ toLuaStringLit field ^ "]") ] }))
+                                                                   in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString field))))
                                                                    end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.PrimExp (F.PrimFnOp primOp, _, args)) dest
@@ -737,14 +531,10 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                               else
                                   raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
           fun doBinaryOp (binop, pure) = doBinary (fn (stmts, env, (a, b)) =>
-                                                      let val e = case binop of
-                                                                      InfixOp (prec, luaop) => { prec = prec, exp = paren prec a @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) b }
-                                                                    | InfixOpR (prec, luaop) => { prec = prec, exp = paren (prec + 1) a @ Fragment (" " ^ luaop ^ " ") :: paren prec b }
-                                                      in if pure then
-                                                             putPureTo ctx env dest (stmts, e)
-                                                         else
-                                                             putImpureTo ctx env dest (stmts, e)
-                                                      end
+                                                      if pure then
+                                                          putPureTo ctx env dest (stmts, L.BinExp (binop, a, b))
+                                                      else
+                                                          putImpureTo ctx env dest (stmts, L.BinExp (binop, a, b))
                                                   )
           fun doTernary cont = if Vector.length args = 3 then
                                   let val a = Vector.sub (args, 0)
@@ -762,7 +552,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                   raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
       in case primOp of
              Syntax.PrimOp_call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
-                                                               putImpureTo ctx env dest (stmts, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ [ Fragment ")" ] })
+                                                               putImpureTo ctx env dest (stmts, L.CallExp (f, vector [a0, a1]))
                                               )
            | Syntax.PrimOp_call3 => if Vector.length args = 4 then
                                         let val f = Vector.sub (args, 0)
@@ -773,7 +563,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                                                    doExpCont ctx env a0 (fn (stmts1, env, a0) =>
                                                                                             doExpCont ctx env a1 (fn (stmts2, env, a1) =>
                                                                                                                      doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                                              putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, { prec = ~2, exp = paren ~1 f @ Fragment "(" :: #exp a0 @ Fragment ", " :: #exp a1 @ Fragment ", " :: #exp a2 @ [ Fragment ")" ] })
+                                                                                                                                              putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, L.CallExp (f, vector [a0, a1, a2]))
                                                                                                                                           )
                                                                                                                  )
                                                                                         )
@@ -783,112 +573,112 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
                                         raise CodeGenError "PrimExp.call3: invalid number of arguments"
            | Syntax.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                    (* REPRESENTATION_OF_REF *)
-                                                   let val stmts = stmts @ Indent :: paren ~1 a @ Fragment ".payload = " :: #exp b @ [ OptSemicolon ]
-                                                   in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                   let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], vector [b]) ]
+                                                   in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                    end
                                                )
            | Syntax.PrimOp_Ref_read => doUnary (fn (stmts, env, a) =>
                                                (* REPRESENTATION_OF_REF *)
-                                                   putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ [ Fragment ".payload" ] })
+                                                   putImpureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "payload")))
                                                )
            | Syntax.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
-                                                   putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 a })
+                                                   putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
                                                )
-           | Syntax.PrimOp_Int_LT => doBinaryOp (InfixOp (10, "<"), true)
-           | Syntax.PrimOp_Int_GT => doBinaryOp (InfixOp (10, ">"), true)
-           | Syntax.PrimOp_Int_LE => doBinaryOp (InfixOp (10, "<="), true)
-           | Syntax.PrimOp_Int_GE => doBinaryOp (InfixOp (10, ">="), true)
-           | Syntax.PrimOp_Word_PLUS => doBinaryOp (InfixOp (4, "+"), true)
-           | Syntax.PrimOp_Word_MINUS => doBinaryOp (InfixOp (4, "-"), true)
-           | Syntax.PrimOp_Word_TIMES => doBinaryOp (InfixOp (3, "*"), true)
+           | Syntax.PrimOp_Int_LT => doBinaryOp (L.LT, true)
+           | Syntax.PrimOp_Int_GT => doBinaryOp (L.GT, true)
+           | Syntax.PrimOp_Int_LE => doBinaryOp (L.LE, true)
+           | Syntax.PrimOp_Int_GE => doBinaryOp (L.GE, true)
+           | Syntax.PrimOp_Word_PLUS => doBinaryOp (L.PLUS, true)
+           | Syntax.PrimOp_Word_MINUS => doBinaryOp (L.MINUS, true)
+           | Syntax.PrimOp_Word_TIMES => doBinaryOp (L.TIMES, true)
            | Syntax.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
-                                                     putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                                     putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
                                                  )
-           | Syntax.PrimOp_Real_PLUS => doBinaryOp (InfixOp (4, "+"), true)
-           | Syntax.PrimOp_Real_MINUS => doBinaryOp (InfixOp (4, "-"), true)
-           | Syntax.PrimOp_Real_TIMES => doBinaryOp (InfixOp (3, "*"), true)
-           | Syntax.PrimOp_Real_DIVIDE => doBinaryOp (InfixOp (3, "/"), true)
+           | Syntax.PrimOp_Real_PLUS => doBinaryOp (L.PLUS, true)
+           | Syntax.PrimOp_Real_MINUS => doBinaryOp (L.MINUS, true)
+           | Syntax.PrimOp_Real_TIMES => doBinaryOp (L.TIMES, true)
+           | Syntax.PrimOp_Real_DIVIDE => doBinaryOp (L.DIV, true)
            | Syntax.PrimOp_Real_TILDE => doUnary (fn (stmts, env, a) =>
-                                                     putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                                     putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
                                                  )
-           | Syntax.PrimOp_Real_LT => doBinaryOp (InfixOp (10, "<"), true)
-           | Syntax.PrimOp_Real_GT => doBinaryOp (InfixOp (10, ">"), true)
-           | Syntax.PrimOp_Real_LE => doBinaryOp (InfixOp (10, "<="), true)
-           | Syntax.PrimOp_Real_GE => doBinaryOp (InfixOp (10, ">="), true)
-           | Syntax.PrimOp_Char_LT => doBinaryOp (InfixOp (10, "<"), true)
-           | Syntax.PrimOp_Char_GT => doBinaryOp (InfixOp (10, ">"), true)
-           | Syntax.PrimOp_Char_LE => doBinaryOp (InfixOp (10, "<="), true)
-           | Syntax.PrimOp_Char_GE => doBinaryOp (InfixOp (10, ">="), true)
-           | Syntax.PrimOp_String_LT => doBinaryOp (InfixOp (10, "<"), true)
-           | Syntax.PrimOp_String_GT => doBinaryOp (InfixOp (10, ">"), true)
-           | Syntax.PrimOp_String_LE => doBinaryOp (InfixOp (10, "<="), true)
-           | Syntax.PrimOp_String_GE => doBinaryOp (InfixOp (10, ">="), true)
-           | Syntax.PrimOp_String_HAT => doBinaryOp (InfixOpR (5, ".."), true)
+           | Syntax.PrimOp_Real_LT => doBinaryOp (L.LT, true)
+           | Syntax.PrimOp_Real_GT => doBinaryOp (L.GT, true)
+           | Syntax.PrimOp_Real_LE => doBinaryOp (L.LE, true)
+           | Syntax.PrimOp_Real_GE => doBinaryOp (L.GE, true)
+           | Syntax.PrimOp_Char_LT => doBinaryOp (L.LT, true)
+           | Syntax.PrimOp_Char_GT => doBinaryOp (L.GT, true)
+           | Syntax.PrimOp_Char_LE => doBinaryOp (L.LE, true)
+           | Syntax.PrimOp_Char_GE => doBinaryOp (L.GE, true)
+           | Syntax.PrimOp_String_LT => doBinaryOp (L.LT, true)
+           | Syntax.PrimOp_String_GT => doBinaryOp (L.GT, true)
+           | Syntax.PrimOp_String_LE => doBinaryOp (L.LE, true)
+           | Syntax.PrimOp_String_GE => doBinaryOp (L.GE, true)
+           | Syntax.PrimOp_String_HAT => doBinaryOp (L.CONCAT, true)
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
-                                                      putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 a })
+                                                      putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
                                                   )
            | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
-                                                        putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 a @ [ Fragment ".n" ] })
+                                                        putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                     )
            | Syntax.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
-                                                       putPureTo ctx env dest (stmts, { prec = 2, exp = paren ~1 a @ [ Fragment ".n" ] })
+                                                       putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                    )
            | Syntax.PrimOp_Unsafe_cast => if Vector.length args = 1 then
                                               doExpTo ctx env (Vector.sub (args, 0)) dest
                                           else
                                               raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
            | Syntax.PrimOp_Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
-                                                             putPureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 vec @ Fragment "[" :: paren 4 i @ [ Fragment " + 1]" ] })
+                                                             putPureTo ctx env dest (stmts, L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
                                                          )
            | Syntax.PrimOp_Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
-                                                             putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 arr @ Fragment "[" :: paren 4 i @ [ Fragment " + 1]" ] })
+                                                             putImpureTo ctx env dest (stmts, L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
                                                          )
            | Syntax.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                                let val stmts = stmts @ Indent :: paren ~1 arr @ Fragment "[" :: paren 4 i @ Fragment " + 1] = " :: #exp v @ [ OptSemicolon ]
-                                                                in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                                let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], vector [v]) ]
+                                                                in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                                 end
                                                             )
            | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
-                                                   putImpureTo ctx env dest (stmts, { prec = ~1, exp = paren ~1 a @ Fragment "[" :: #exp b @ [ Fragment "]" ] })
+                                                   putImpureTo ctx env dest (stmts, L.IndexExp (a, b))
                                                )
            | Syntax.PrimOp_Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
-                                                    let val stmts = stmts @ Indent :: paren ~1 a @ Fragment "[" :: #exp b @ Fragment "] = " :: #exp c @ [ OptSemicolon ]
-                                                    in putPureTo ctx env dest (stmts, { prec = 0, exp = [ Fragment "nil" ] })
+                                                    let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, b)], vector [c]) ]
+                                                    in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                     end
                                                 )
            | Syntax.PrimOp_Lua_isNil => doUnary (fn (stmts, env, a) =>
-                                                    putPureTo ctx env dest (stmts, { prec = 10, exp = paren 10 a @ [ Fragment " == nil" ] })
+                                                    putPureTo ctx env dest (stmts, L.BinExp (L.EQUAL, a, L.ConstExp L.Nil))
                                                 )
-           | Syntax.PrimOp_Lua_EQUAL => doBinaryOp (InfixOp (10, "=="), false)
-           | Syntax.PrimOp_Lua_NOTEQUAL => doBinaryOp (InfixOp (10, "~="), false)
-           | Syntax.PrimOp_Lua_LT => doBinaryOp (InfixOp (10, "<"), false)
-           | Syntax.PrimOp_Lua_GT => doBinaryOp (InfixOp (10, ">"), false)
-           | Syntax.PrimOp_Lua_LE => doBinaryOp (InfixOp (10, "<="), false)
-           | Syntax.PrimOp_Lua_GE => doBinaryOp (InfixOp (10, ">="), false)
-           | Syntax.PrimOp_Lua_PLUS => doBinaryOp (InfixOp (4, "+"), false)
-           | Syntax.PrimOp_Lua_MINUS => doBinaryOp (InfixOp (4, "-"), false)
-           | Syntax.PrimOp_Lua_TIMES => doBinaryOp (InfixOp (3, "*"), false)
-           | Syntax.PrimOp_Lua_DIVIDE => doBinaryOp (InfixOp (3, "/"), false)
-           | Syntax.PrimOp_Lua_INTDIV => doBinaryOp (InfixOp (3, "//"), false)
-           | Syntax.PrimOp_Lua_MOD => doBinaryOp (InfixOp (3, "%"), false)
-           | Syntax.PrimOp_Lua_pow => doBinaryOp (InfixOpR (1, "^"), false)
+           | Syntax.PrimOp_Lua_EQUAL => doBinaryOp (L.EQUAL, false)
+           | Syntax.PrimOp_Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, false)
+           | Syntax.PrimOp_Lua_LT => doBinaryOp (L.LT, false)
+           | Syntax.PrimOp_Lua_GT => doBinaryOp (L.GT, false)
+           | Syntax.PrimOp_Lua_LE => doBinaryOp (L.LE, false)
+           | Syntax.PrimOp_Lua_GE => doBinaryOp (L.GE, false)
+           | Syntax.PrimOp_Lua_PLUS => doBinaryOp (L.PLUS, false)
+           | Syntax.PrimOp_Lua_MINUS => doBinaryOp (L.MINUS, false)
+           | Syntax.PrimOp_Lua_TIMES => doBinaryOp (L.TIMES, false)
+           | Syntax.PrimOp_Lua_DIVIDE => doBinaryOp (L.DIV, false)
+           | Syntax.PrimOp_Lua_INTDIV => doBinaryOp (L.INTDIV, false)
+           | Syntax.PrimOp_Lua_MOD => doBinaryOp (L.MOD, false)
+           | Syntax.PrimOp_Lua_pow => doBinaryOp (L.POW, false)
            | Syntax.PrimOp_Lua_unm => doUnary (fn (stmts, env, a) =>
-                                                  putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "- " :: paren 2 a })
+                                                  putImpureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
                                               )
-           | Syntax.PrimOp_Lua_andb => doBinaryOp (InfixOp (7, "&"), false)
-           | Syntax.PrimOp_Lua_orb => doBinaryOp (InfixOp (9, "|"), false)
-           | Syntax.PrimOp_Lua_xorb => doBinaryOp (InfixOp (8, "~"), false)
+           | Syntax.PrimOp_Lua_andb => doBinaryOp (L.BITAND, false)
+           | Syntax.PrimOp_Lua_orb => doBinaryOp (L.BITOR, false)
+           | Syntax.PrimOp_Lua_xorb => doBinaryOp (L.BITXOR, false)
            | Syntax.PrimOp_Lua_notb => doUnary (fn (stmts, env, a) =>
-                                                   putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "~ " :: paren 2 a })
+                                                   putImpureTo ctx env dest (stmts, L.UnaryExp (L.BITNOT, a))
                                                )
-           | Syntax.PrimOp_Lua_LSHIFT => doBinaryOp (InfixOp (6, "<<"), false)
-           | Syntax.PrimOp_Lua_RSHIFT => doBinaryOp (InfixOp (6, ">>"), false)
-           | Syntax.PrimOp_Lua_concat => doBinaryOp (InfixOpR (5, ".."), false)
+           | Syntax.PrimOp_Lua_LSHIFT => doBinaryOp (L.LSHIFT, false)
+           | Syntax.PrimOp_Lua_RSHIFT => doBinaryOp (L.RSHIFT, false)
+           | Syntax.PrimOp_Lua_concat => doBinaryOp (L.CONCAT, false)
            | Syntax.PrimOp_Lua_length => doUnary (fn (stmts, env, a) =>
-                                                     putImpureTo ctx env dest (stmts, { prec = 2, exp = Fragment "#" :: paren 2 a })
+                                                     putImpureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
                                                  )
            | Syntax.PrimOp_Lua_isFalsy => doUnary (fn (stmts, env, a) =>
-                                                      putPureTo ctx env dest (stmts, { prec = 2, exp = Fragment "not " :: paren 2 a })
+                                                      putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
                                                   )
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
@@ -897,82 +687,81 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : Fragment list = if
               val a1 = Vector.sub (args, 1)
           in doExpCont ctx env a0 (fn (stmts0, env, a0') =>
                                       doExpCont ctx env a1 (fn (stmts1, env, a1') =>
-                                                               putPureTo ctx env dest (stmts0 @ stmts1, { prec = ~2, exp = Fragment "__exn_instanceof(" :: #exp a0' @ [ Fragment "," ] @ #exp a1' @ [ Fragment ")" ] })
+                                                               putPureTo ctx env dest (stmts0 @ stmts1, L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [a0', a1']))
                                                            )
                                   )
           end
       else
           raise CodeGenError "PrimExp.ExnInstanceofOp: invalid number of arguments"
 (* doDec : Context -> Env -> F.Dec -> string *)
-and doDec ctx env (F.ValDec (v, _, exp))
-    = let val luavid = VIdToLua v
-      in if isHoisted (env, luavid) then
-             doExpTo ctx env exp (AssignTo luavid)
-         else
-             doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = luavid })
-      end
+and doDec ctx env (F.ValDec (vid, _, exp))
+    = if isHoisted (env, vid) then
+          doExpTo ctx env exp (AssignTo vid)
+      else
+          doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
   | doDec ctx env (F.RecValDec valbinds)
-    = let val (decs, assignments) = List.foldr (fn ((v,_,exp), (decs, assignments)) => let val v' = VIdToLua v
-                                                                                           val (env, dec) = declareIfNotHoisted (env, [v'])
-                                                                                       in (dec @ decs, doExpTo ctx env exp (AssignTo v') @ assignments)
-                                                                                       end
+    = let val (decs, assignments) = List.foldr (fn ((vid, _, exp), (decs, assignments)) => let val (env, dec) = declareIfNotHoisted (env, [vid])
+                                                                                           in (dec @ decs, doExpTo ctx env exp (AssignTo vid) @ assignments)
+                                                                                           end
                                                ) ([], []) valbinds
       in decs @ assignments
       end
   | doDec ctx env (F.UnpackDec (tv, kind, vid, ty, exp))
-    = let val luavid = VIdToLua vid
-      in if isHoisted (env, luavid) then
-             doExpTo ctx env exp (AssignTo luavid)
-         else
-             doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = luavid })
-      end
+    = if isHoisted (env, vid) then
+          doExpTo ctx env exp (AssignTo vid)
+      else
+          doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
   | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
-    = let val conName' = VIdToLua conName
-          val tagName' = VIdToLua tagName
-      in [ Indent, Fragment ((if isHoisted (env, tagName') then "" else "local ") ^ tagName' ^ " = { " ^ toLuaStringLit name ^ " }"), LineTerminator ]
-         @ (case payloadTy of
-                NONE => [ Indent, Fragment ((if isHoisted (env, conName') then "" else "local ") ^ conName' ^ " = setmetatable({ tag = " ^ tagName' ^ " }, _exn_meta)"), LineTerminator ]
-              | SOME _ => [ Indent, Fragment ((if isHoisted (env, conName') then "function " else "local function ") ^ conName' ^ "(payload)"), LineTerminator, IncreaseIndent
-                          , Indent, Fragment ("return setmetatable({ tag = " ^ tagName' ^ ", payload = payload }, _exn_meta)"), LineTerminator
-                          , DecreaseIndent, Indent, Fragment "end", LineTerminator
-                          ]
-           )
-      end
+    = [ if isHoisted (env, tagName) then
+            L.AssignStat (vector [L.VarExp (L.UserDefinedId tagName)], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
+        else
+            L.LocalStat (vector [L.UserDefinedId tagName], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
+      , case payloadTy of
+            NONE => if isHoisted (env, conName) then
+                        L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
+                    else
+                        L.LocalStat (vector [L.UserDefinedId conName], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
+          | SOME _ => let val body = vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))]), L.VarExp (L.PredefinedId "_exn_meta")])])]
+                      in if isHoisted (env, conName) then
+                             L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
+                         else
+                             L.LocalFunctionStat (L.UserDefinedId conName, vector [L.PredefinedId "payload"], body)
+                      end
+      ]
   | doDec ctx env (F.ExceptionRepDec _) = raise Fail "internal error: ExceptionRepDec should have been desugared earlier"
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
-  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, List.map VIdToLua (USyntax.VIdSet.toList hoist))
+  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, USyntax.VIdSet.toList hoist)
                                                     in dec
-                                                       @ [ Indent, Fragment "do", LineTerminator, IncreaseIndent ]
-                                                       @ doDecs ctx (increaseLevel env) decs
-                                                       @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
+                                                       @ [ L.DoStat (vector (doDecs ctx (increaseLevel env) decs)) ]
                                                     end
   | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
-and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.concat (List.map (doConBind ctx env) conbinds) (* TODO: equality *)
-and doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), NONE)) = [ Indent, Fragment ((if isHoisted (env, VIdToLua vid) then "" else "local ") ^ VIdToLua vid ^ " = { tag = " ^ toLuaStringLit name ^ " }"), LineTerminator ]
-  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId(name,_), SOME ty)) = [ Indent, Fragment ((if isHoisted (env, VIdToLua vid) then "function " else "local function ") ^ VIdToLua vid ^ "(x)"), LineTerminator, IncreaseIndent
-                                                                            , Indent, Fragment ("return { tag = " ^ toLuaStringLit name ^ ", payload = x }"), LineTerminator
-                                                                            , DecreaseIndent, Indent, Fragment "end", LineTerminator
-                                                                            ]
+and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.map (doConBind ctx env) conbinds (* TODO: equality *)
+and doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), NONE)) = if isHoisted (env, vid) then
+                                                                               L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
+                                                                           else
+                                                                               L.LocalStat (vector [L.UserDefinedId vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
+  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), SOME ty)) = let val body = vector [L.ReturnStat (vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))])])]
+                                                                              in if isHoisted (env, vid) then
+                                                                                     L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
+                                                                                 else
+                                                                                     L.LocalFunctionStat (L.UserDefinedId vid, vector [L.PredefinedId "payload"], body)
+                                                                              end
 
 and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
   | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                                      (Vector.foldr (op ::) [] fields)
                                                      (fn ys => let val (stmts, fields') = ListPair.unzip ys
                                                                in putPureTo ctx env Return ( List.concat stmts
-                                                                                           , { prec = 0, exp = [ Fragment "{" ] @ commaSep (List.map (fn (label, e) => [ Fragment (if isLuaIdentifier label then
-                                                                                                                                                                                       label ^ " = "
-                                                                                                                                                                                   else
-                                                                                                                                                                                       "[" ^ toLuaStringLit label ^ "] = "
-                                                                                                                                                                       ) ] @ #exp e) fields') @ [ Fragment "}" ] }
+                                                                                           , L.TableExp (vector (List.map (fn (label, e) => (L.StringKey label, e)) fields'))
                                                                                            )
                                                                end
                                                      )
   | doDecs ctx env (dec :: decs) = doDec ctx env dec @ doDecs ctx env decs
   | doDecs ctx env [] = []
 
-fun doProgram ctx env decs = buildProgram (doDecs ctx env decs)
+fun doProgram ctx env decs = vector (doDecs ctx env decs)
 
 end (* structure CodeGenLua *)
