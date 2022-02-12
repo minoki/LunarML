@@ -357,36 +357,39 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector
 and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.RecValDec valbinds)
     = let val bound = List.foldl (fn ((vid, ty, exp), set) => USyntax.VIdSet.add (set, vid)) USyntax.VIdSet.empty valbinds
-          val map = List.foldl (fn ((vid, ty, exp), map) => let val exp = doExp exp
-                                                            in USyntax.VIdMap.insert (map, vid, (ty, exp, USyntax.VIdSet.intersection (F.freeVarsInExp (USyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
-                                                            end) USyntax.VIdMap.empty valbinds
-          fun dfs1 (from, vid) = let val (ty, exp, refs, invref, seen1, _) = USyntax.VIdMap.lookup (map, vid)
-                                     val () = case from of
-                                                  SOME vid' => invref := vid' :: !invref
-                                                | NONE => ()
-                                 in if !seen1 then
-                                        []
-                                    else
-                                        ( seen1 := true
-                                        ; USyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
-                                        )
-                                 end
-          val list = USyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
-          fun dfs2 vid = let val (ty, exp, refs, ref invrefs, _, seen2) = USyntax.VIdMap.lookup (map, vid)
-                         in if !seen2 then
-                                USyntax.VIdSet.empty
-                            else
-                                ( seen2 := true
-                                ; List.foldl (fn (vid', acc) => USyntax.VIdSet.union (acc, dfs2 vid')) (USyntax.VIdSet.singleton vid) invrefs
-                                )
-                         end
-          val sccs = List.foldl (fn (vid, acc) => let val set = dfs2 vid
-                                                  in if USyntax.VIdSet.isEmpty set then
-                                                         acc
-                                                     else
-                                                         set :: acc
-                                                  end) [] list
-      in List.foldl (fn (scc, decs) => let val dec = case USyntax.VIdSet.listItems scc of
+          val map : (F.Ty * F.Exp * (* refs *) USyntax.VIdSet.set * (* invref *) USyntax.VId list ref * (* seen1 *) bool ref * (* seen2 *) bool ref) USyntax.VIdMap.map
+              = List.foldl (fn ((vid, ty, exp), map) => let val exp = doExp exp
+                                                        in USyntax.VIdMap.insert (map, vid, (ty, exp, USyntax.VIdSet.intersection (F.freeVarsInExp (USyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
+                                                        end) USyntax.VIdMap.empty valbinds
+          fun dfs1 (from : USyntax.VId option, vid) : USyntax.VId list
+              = let val (ty, exp, refs, invref, seen1, _) = USyntax.VIdMap.lookup (map, vid)
+                    val () = case from of
+                                 SOME vid' => invref := vid' :: !invref
+                               | NONE => ()
+                in if !seen1 then
+                       []
+                   else
+                       ( seen1 := true
+                       ; USyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
+                       )
+                end
+          val list : USyntax.VId list = USyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
+          fun dfs2 vid : USyntax.VIdSet.set
+              = let val (ty, exp, refs, ref invrefs, _, seen2) = USyntax.VIdMap.lookup (map, vid)
+                in if !seen2 then
+                       USyntax.VIdSet.empty
+                   else
+                       ( seen2 := true
+                       ; List.foldl (fn (vid', acc) => USyntax.VIdSet.union (acc, dfs2 vid')) (USyntax.VIdSet.singleton vid) invrefs
+                       )
+                end
+          val sccs : USyntax.VIdSet.set list = List.foldl (fn (vid, acc) => let val set = dfs2 vid
+                                                                            in if USyntax.VIdSet.isEmpty set then
+                                                                                   acc
+                                                                               else
+                                                                                   set :: acc
+                                                                            end) [] list
+      in List.foldr (fn (scc, decs) => let val dec = case USyntax.VIdSet.listItems scc of
                                                          [vid] => let val (ty, exp, refs, _, _, _) = USyntax.VIdMap.lookup (map, vid)
                                                                   in if USyntax.VIdSet.member (refs, vid) then
                                                                          F.RecValDec [(vid, ty, exp)]
