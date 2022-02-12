@@ -257,6 +257,7 @@ local
                            end
     and takeArc (acc, #"/" :: xs) = (String.implode (List.rev acc), xs)
       | takeArc (acc, x :: xs) = takeArc (x :: acc, xs)
+      | takeArc (acc, xs as []) = (String.implode (List.rev acc), xs)
 in
 fun mkCanonical path = case String.explode path of
                            [] => "."
