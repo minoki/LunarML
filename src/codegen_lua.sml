@@ -359,15 +359,18 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
                       ]
       in putPureTo ctx env dest (stmts, L.VarExp (L.UserDefinedId result))
       end
-  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start = { file, line, column }, ... }), _, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp
                        (fn (stmts, env, exp') =>
-                           let val locationInfo = OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column
+                           let val locationInfo = if start = SourcePos.nullPos then
+                                                      L.ConstExp L.Nil
+                                                  else
+                                                      L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
                            in case dest of
-                                  Continue cont => cont (stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', L.ConstExp (L.LiteralString locationInfo)]) ], env, L.ConstExp L.Nil)
-                                | _ => stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', L.ConstExp (L.LiteralString locationInfo)]) ]
+                                  Continue cont => cont (stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', locationInfo]) ], env, L.ConstExp L.Nil)
+                                | _ => stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', locationInfo]) ]
                            end
                        )
           end

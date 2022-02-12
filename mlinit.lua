@@ -86,12 +86,14 @@ local function __exn_instanceof(e, tag)
 end
 
 local function _raise(x, location)
-  local traceback = debug.traceback(nil, 2)
   local e
   if x.tag == _LuaError_tag then
     e = x.payload
-  else
+  elseif location ~= nil then
+    local traceback = debug.traceback(nil, 2)
     e = setmetatable({ tag = x.tag, payload = x.payload, location = location, traceback = traceback }, _exn_meta)
+  else
+    e = x
   end
   error(e, 1)
 end
