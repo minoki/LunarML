@@ -14,9 +14,9 @@ local
     fun digitToInt c = if #"0" <= c andalso c <= #"9" then
                            Char.ord c - Char.ord #"0"
                        else if #"a" <= c andalso c <= #"f" then
-                           Char.ord c - Char.ord #"a"
+                           Char.ord c - Char.ord #"a" + 10
                        else
-                           Char.ord c - Char.ord #"A"
+                           Char.ord c - Char.ord #"A" + 10
     fun scanDecimalDigits (getc, strm, n, acc) = if n = 0 then
                                                      SOME (acc, strm)
                                                  else
