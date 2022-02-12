@@ -128,6 +128,7 @@ end
 
 structure Lua : sig
               type value
+              exception LuaError of value
               exception TypeError of string
               val sub : value * value -> value  (* t[k] *)
               val field : value * string -> value  (* t[k] *)
@@ -220,7 +221,7 @@ structure Lua : sig
                             val lfs : value option (* LuaFileSystem *)
                         end
           end = struct
-open Lua (* type value, global, call, method, NIL, newTable, function *)
+open Lua (* type value, LuaError, global, call, method, NIL, newTable, function *)
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue

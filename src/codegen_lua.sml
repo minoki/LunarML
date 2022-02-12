@@ -86,6 +86,8 @@ val builtins
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
+                    ,(VId_Lua_LuaError, "_LuaError")
+                    ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_global, "_Lua_global")
                     ,(VId_Lua_call, "_Lua_call")
                     ,(VId_Lua_method, "_Lua_method")
@@ -347,7 +349,7 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
           val exnName = exnName
           val env' = addSymbol (addSymbol (env, status), result)
           val env'' = addSymbol (env', exnName)
-          val stmts = [ L.LocalStat (vector [status, result], vector [L.CallExp (L.VarExp (L.PredefinedId "pcall"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
+          val stmts = [ L.LocalStat (vector [status, result], vector [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
                       , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
                                  , vector ( L.LocalStat (vector [exnName], vector [L.VarExp (L.UserDefinedId result)])
                                             :: doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)

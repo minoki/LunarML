@@ -28,14 +28,17 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n,
                                                                            ,("Char", mkSubstrMap [])
                                                                            ,("Array", mkSubstrMap [])
                                                                            ,("Vector", mkSubstrMap [])
-                                                                           ,("Lua", mkSubstrMap
-                                                                                        [("Lib", mkSubstrMap
-                                                                                                     [("math", mkSubstrMap [])
-                                                                                                     ,("table", mkSubstrMap [])
-                                                                                                     ,("string", mkSubstrMap [])
-                                                                                                     ]
-                                                                                         )
-                                                                                        ]
+                                                                           ,("Lua", { valMap = mkExConMap ["LuaError"]
+                                                                                    , tyConMap = Syntax.TyConMap.empty
+                                                                                    , strMap = mkStrMap
+                                                                                                   [("Lib", mkSubstrMap
+                                                                                                                [("math", mkSubstrMap [])
+                                                                                                                ,("table", mkSubstrMap [])
+                                                                                                                ,("string", mkSubstrMap [])
+                                                                                                                ]
+                                                                                                    )
+                                                                                                   ]
+                                                                                    }
                                                                             )
                                                                            ,("LunarML", mkSubstrMap [])
                                                                            ]
@@ -165,6 +168,8 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
+val VId_Lua_LuaError = newVId "LuaError"
+val VId_Lua_LuaError_tag = newVId "LuaError"
 val VId_Lua_global = newVId "global"
 val VId_Lua_call = newVId "call"
 val VId_Lua_method = newVId "method"
@@ -370,14 +375,18 @@ val initialEnv : Typing.Env
                                            ]
                             }
           val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
-                        , valMap = mkValMap
-                                       [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
-                                       ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                       ,("method", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                       ,("NIL", TypeScheme ([], primTy_Lua_value))
-                                       ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
-                                       ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
-                                       ]
+                        , valMap = Syntax.VIdMap.insert
+                                       ( mkValMap
+                                             [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
+                                             ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                             ,("method", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                             ,("NIL", TypeScheme ([], primTy_Lua_value))
+                                             ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
+                                             ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
+                                             ]
+                                       , Syntax.MkVId "LuaError"
+                                       , (TypeScheme ([], primTy_Lua_value --> primTy_exn), Syntax.ExceptionConstructor)
+                                       )
                         , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
                         }
           val sig_LunarML = { tyConMap = mkTyMap []

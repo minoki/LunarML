@@ -525,6 +525,7 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                                    ,(LongVId_Size, VId_Size_tag)
                                                    ,(LongVId_Subscript, VId_Subscript_tag)
                                                    ,(LongVId_Fail, VId_Fail_tag)
+                                                   ,(VId_Lua_LuaError, VId_Lua_LuaError_tag)
                                                    ]
                                      end
                        , overloadMap = USyntax.TyNameMap.empty
