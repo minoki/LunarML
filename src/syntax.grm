@@ -42,7 +42,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | PosInt of IntInf.int (* positive integer literal, not starting with 0, and not containing any underscore *)
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
     | WordConst of IntInf.int (* non-negative *)
-    | RealConst of string
+    | RealConst of Numeric.float_notation
     | StringConst of string
     | CharacterConst of string
     (* * *)

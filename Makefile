@@ -10,6 +10,7 @@ sources = \
   pluto/parser-combinator.fun \
   pluto/char-parser.sig \
   pluto/char-parser.fun \
+  src/numeric.sml \
   src/syntax.grm.sig \
   src/sourcepos.sml \
   src/tokenizer.sml \

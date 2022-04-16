@@ -189,10 +189,10 @@ fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then
                                            else
                                                L.ConstExp (L.Numeral (LargeInt.toString x))
   | doLiteral (Syntax.WordConstant x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-  | doLiteral (Syntax.RealConstant x) = (if String.sub (x, 0) = #"~" then
-                                             L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (String.map (fn #"~" => #"-" | c => c) (String.extract (x, 1, NONE)))))
+  | doLiteral (Syntax.RealConstant x) = (if Numeric.Notation.isNegative x then
+                                             L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
                                          else
-                                             L.ConstExp (L.Numeral (String.map (fn #"~" => #"-" | c => c) x))
+                                             L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
                                         )
   | doLiteral (Syntax.StringConstant x) = L.ConstExp (L.LiteralString x)
   | doLiteral (Syntax.CharacterConstant x) = L.ConstExp (L.LiteralString x)
