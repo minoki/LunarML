@@ -184,19 +184,6 @@ fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
 structure F = FSyntax
 structure L = LuaSyntax
 
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then
-                                               L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
-                                           else
-                                               L.ConstExp (L.Numeral (LargeInt.toString x))
-  | doLiteral (Syntax.WordConstant x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-  | doLiteral (Syntax.RealConstant x) = (if Numeric.Notation.isNegative x then
-                                             L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
-                                         else
-                                             L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
-                                        )
-  | doLiteral (Syntax.StringConstant x) = L.ConstExp (L.LiteralString x)
-  | doLiteral (Syntax.CharacterConstant x) = L.ConstExp (L.LiteralString x)
-
 datatype Destination = Return
                      | AssignTo of USyntax.VId
                      | DeclareAndAssignTo of { level : int, destination : USyntax.VId }
@@ -245,10 +232,52 @@ and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (ve
                                                        in cont (stmts @ [ L.LocalStat (vector [dest], vector [exp]) ], env, L.VarExp (L.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if Vector.length xs = 0 then
-                                                                                putPureTo ctx env dest ([], doLiteral scon)
-                                                                            else
-                                                                                raise CodeGenError "PrimExp.SConOp: non-empty argument"
+and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
+    = if Vector.length xs = 0 then
+          let val exp = if x < 0 then
+                            if x = ~0x800000000000 then
+                                L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
+                            else
+                                L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                        else
+                            L.ConstExp (L.Numeral (LargeInt.toString x))
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = if Numeric.Notation.isNegative x then
+                            L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
+                        else
+                            L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.RealConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = L.ConstExp (L.LiteralString (CharVector.tabulate (Vector.length x, fn i => Char.chr (Vector.sub (x, i)))))
+                        handle Chr => raise CodeGenError "character ordinal too large"
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.StringConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = L.ConstExp (L.LiteralString (String.str (Char.chr x)))
+                        handle Chr => raise CodeGenError "character ordinal too large"
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.CharConstOp: non-empty argument"
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua vid of
                                                                           L.PredefinedId "nil" => L.ConstExp L.Nil
                                                                         | L.PredefinedId "false" => L.ConstExp L.False
@@ -308,23 +337,27 @@ and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : L.Stat list = if V
                                   NONE
                             | _ => NONE
           val doLuaMethod = case (exp1, exp2) of
-                                (F.AppExp(vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.SConOp(Syntax.StringConstant method), _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
-                                if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
-                                    SOME (fn () => doExpCont ctx env self
-                                                             (fn (stmts1, env, self) =>
-                                                                 mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                         (Vector.foldr (op ::) [] xs)
-                                                                         (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                       val zs = Vector.map #2 (vector ys)
-                                                                                   in case dest of
-                                                                                          Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.MethodExp (self, method, zs))
-                                                                                        | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (self, method, zs)]))
-                                                                                   end
-                                                                         )
-                                                             )
-                                         )
-                                else
-                                    NONE
+                                (F.AppExp (vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
+                                (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
+                                     SOME method =>
+                                     if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
+                                         SOME (fn () => doExpCont ctx env self
+                                                                  (fn (stmts1, env, self) =>
+                                                                      mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+                                                                              (Vector.foldr (op ::) [] xs)
+                                                                              (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
+                                                                                            val zs = Vector.map #2 (vector ys)
+                                                                                        in case dest of
+                                                                                               Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.MethodExp (self, method, zs))
+                                                                                             | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (self, method, zs)]))
+                                                                                        end
+                                                                              )
+                                                                  )
+                                              )
+                                     else
+                                         NONE
+                                   | NONE => NONE
+                                )
                               | _ => NONE
           (* doLuaGlobal: VId_Lua_global *)
           val isNoop = case exp1 of

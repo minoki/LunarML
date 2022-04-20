@@ -42,11 +42,30 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"." :: #"." :: #"." :: xs) = SOME (Tokens.ELLIPSIS (pos(l,c),pos(l,c+2)), l, c+3, xs)
               | tokenizeOne (l, c, #"." :: xs) = SOME (Tokens.DOT (pos(l,c),pos(l,c)), l, c+1, xs)
               | tokenizeOne (l, c, #"#" :: #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+2, nil, xs)
-                                                          in SOME (Tokens.CharacterConst (implode str,pos(l,c),pos(l',c'-1)), l', c', rest)
+                                                              val value = case str of
+                                                                              StringElement.CODEUNIT x :: rest => ( if List.null rest then
+                                                                                                                      ()
+                                                                                                                    else
+                                                                                                                        emitError (l, c, "invalid character constant")
+                                                                                                                  ; x
+                                                                                                                  )
+                                                                            | StringElement.UNICODE_SCALAR x :: rest => ( if List.null rest then
+                                                                                                                              ()
+                                                                                                                          else
+                                                                                                                              emitError (l, c, "invalid character constant")
+                                                                                                                        ; x
+                                                                                                                        )
+                                                                            | [] => ( emitError (l, c, "invalid character constant")
+                                                                                    ; 0
+                                                                                    )
+                                                          in SOME (Tokens.CharacterConst (value, pos (l, c), pos (l', c' - 1)), l', c', rest)
                                                           end
               | tokenizeOne (l, c, #"#" :: #"[" :: xs) = SOME (Tokens.HASHLBRACK (pos(l,c),pos(l,c+1)), l, c+2, xs)
               | tokenizeOne (l, c, #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+1, nil, xs)
-                                                  in SOME (Tokens.StringConst (implode str,pos(l,c),pos(l',c'-1)), l', c', rest)
+                                                      val str = vector str
+                                                  in case StringElement.toAsciiString str of
+                                                         NONE => SOME (Tokens.StringConst (str, pos (l, c), pos (l', c' - 1)), l', c', rest)
+                                                       | SOME ascii => SOME (Tokens.AsciiStringConst ((ascii, str), pos (l, c), pos (l', c' - 1)), l', c', rest)
                                                   end
               | tokenizeOne (l, c, #"~" :: #"0" :: (zr as #"x" :: x :: xs)) = if Char.isHexDigit x then
                                                                                   readHexadecimalConstant (l, c, c+4, NLTNegative, hexDigitToLargeInt x, xs)
@@ -488,47 +507,71 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                            ; (l, c, rev accum, nil)
                                                            )
               | readStringLit (l0, c0, l, c, accum, #"\"" :: xs) = (l, c+1, rev accum, xs)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"a" :: xs) = readStringLit (l0, c0, l, c+2, #"\a" :: accum, xs) (* bell *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"b" :: xs) = readStringLit (l0, c0, l, c+2, #"\b" :: accum, xs) (* backspace *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"t" :: xs) = readStringLit (l0, c0, l, c+2, #"\t" :: accum, xs) (* horizontal tab *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"n" :: xs) = readStringLit (l0, c0, l, c+2, #"\n" :: accum, xs) (* line feed *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"v" :: xs) = readStringLit (l0, c0, l, c+2, #"\v" :: accum, xs) (* vertical tab *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"f" :: xs) = readStringLit (l0, c0, l, c+2, #"\f" :: accum, xs) (* form feed *)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"r" :: xs) = readStringLit (l0, c0, l, c+2, #"\r" :: accum, xs) (* carriage return *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"a" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\a") :: accum, xs) (* bell *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"b" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\b") :: accum, xs) (* backspace *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"t" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\t") :: accum, xs) (* horizontal tab *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"n" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\n") :: accum, xs) (* line feed *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"v" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\v") :: accum, xs) (* vertical tab *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"f" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\f") :: accum, xs) (* form feed *)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"r" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\r") :: accum, xs) (* carriage return *)
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"^" :: x :: xs) (* control character *)
                 = if 64 <= ord x andalso ord x <= 95 then
-                      readStringLit (l0, c0, l, c+3, chr (ord x - 64) :: accum, xs)
+                      readStringLit (l0, c0, l, c+3, StringElement.CODEUNIT (ord x - 64) :: accum, xs)
                   else
                       ( emitError (l, c, "invalid control character")
                       ; readStringLit (l0, c0, l, c+3, accum, xs)
                       )
+              | readStringLit (l0, c0, l, c1, accum, #"\\" :: #"u" :: #"{" :: x0 :: xs)
+                = let fun go (c, scalar, #"}" :: ys) = if scalar > 0x10FFFF then
+                                                           ( emitError (l, c1, "invalid \\u{} escape sequence: ordinal too large")
+                                                           ; readStringLit (l0, c0, l, c, accum, ys)
+                                                           )
+                                                       else if 0xD800 <= scalar andalso scalar <= 0xDFFF then
+                                                           ( emitError (l, c1, "invalid \\u{} escape sequence: surrogate code point not allowed")
+                                                           ; readStringLit (l0, c0, l, c, accum, ys)
+                                                           )
+                                                       else
+                                                           readStringLit (l0, c0, l, c + 1, StringElement.UNICODE_SCALAR scalar :: accum, ys)
+                        | go (c, scalar, y :: ys) = if Char.isHexDigit y then
+                                                        go (c + 1, scalar * 16 + hexDigitToInt y, ys)
+                                                    else
+                                                        ( emitError (l, c, "invalid \\u{} escape sequence")
+                                                        ; readStringLit (l0, c0, l, c, accum, y :: ys)
+                                                        )
+                        | go (c, scalar, ys as []) = readStringLit (l0, c0, l, c, accum, ys) (* unterminated string literal *)
+                  in if Char.isHexDigit x0 then
+                         go (c1 + 4, hexDigitToInt x0, xs)
+                     else
+                         ( emitError (l, c1, "invalid \\u{} escape sequence")
+                         ; readStringLit (l0, c0, l, c1 + 3, accum, x0 :: xs)
+                         )
+                  end
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"u" :: (xs' as (x0 :: x1 :: x2 :: x3 :: xs)))
                 = if Char.isHexDigit x0 andalso Char.isHexDigit x1 andalso Char.isHexDigit x2 andalso Char.isHexDigit x3 then
-                      let val charOrd = ((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x3) * 16 + hexDigitToInt x3;
-                      in if charOrd > Char.maxOrd then
-                             ( emitError (l, c, "char ordinal too large")
-                             ; readStringLit (l0, c0, l, c+6, accum, xs)
-                             )
-                         else
-                             readStringLit (l0, c0, l, c+6, chr charOrd :: accum, xs)
+                      let val charOrd = ((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x2) * 16 + hexDigitToInt x3;
+                      in readStringLit (l0, c0, l, c + 6, StringElement.CODEUNIT charOrd :: accum, xs)
                       end
                   else
                       ( emitError (l, c, "invalid \\u escape sequence")
                       ; readStringLit (l0, c0, l, c+2, accum, xs')
                       )
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"\"" :: xs) = readStringLit (l0, c0, l, c+2, #"\"" :: accum, xs)
-              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"\\" :: xs) = readStringLit (l0, c0, l, c+2, #"\\" :: accum, xs)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"U" :: (xs' as (x0 :: x1 :: x2 :: x3 :: x4 :: x5 :: x6 :: x7 :: xs)))
+                = if Char.isHexDigit x0 andalso Char.isHexDigit x1 andalso Char.isHexDigit x2 andalso Char.isHexDigit x3 andalso Char.isHexDigit x4 andalso Char.isHexDigit x5 andalso Char.isHexDigit x6 andalso Char.isHexDigit x7 then
+                      let val charOrd = ((((((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x2) * 16 + hexDigitToInt x3) * 16 + hexDigitToInt x4) * 16 + hexDigitToInt x5) * 16 + hexDigitToInt x6) * 16 + hexDigitToInt x7;
+                      in readStringLit (l0, c0, l, c + 6, StringElement.CODEUNIT charOrd :: accum, xs)
+                      end
+                  else
+                      ( emitError (l, c, "invalid \\U escape sequence")
+                      ; readStringLit (l0, c0, l, c + 2, accum, xs')
+                      )
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"\"" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\"") :: accum, xs)
+              | readStringLit (l0, c0, l, c, accum, #"\\" :: #"\\" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\\") :: accum, xs)
               | readStringLit (l0, c0, l, c, accum, #"\\" :: x :: xs)
                 = if Char.isDigit x then
                       case xs of
                           d1 :: d2 :: xs' => if Char.isDigit d1 andalso Char.isDigit d2 then
                                                  let val charOrd = digitToInt x * 100 + digitToInt d1 * 10 + digitToInt d2;
-                                                 in if charOrd > Char.maxOrd then
-                                                        ( emitError (l, c, "char ordinal too large")
-                                                        ; readStringLit (l0, c0, l, c+4, accum, xs')
-                                                        )
-                                                    else
-                                                        readStringLit (l0, c0, l, c+4, chr charOrd :: accum, xs')
+                                                 in readStringLit (l0, c0, l, c + 4, StringElement.CODEUNIT charOrd :: accum, xs')
                                                  end
                                              else
                                                  ( emitError (l, c, "invalid \\<digits> escape sequence")
@@ -545,7 +588,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                       ( emitError (l, c, "unknown escape sequence")
                       ; readStringLit (l0, c0, l, c+2, accum, xs)
                       )
-              | readStringLit (l0, c0, l, c, accum, x :: xs) = readStringLit (l0, c0, l, c+1, x :: accum, xs)
+              | readStringLit (l0, c0, l, c, accum, x :: xs) = readStringLit (l0, c0, l, c+1, StringElement.CODEUNIT (ord x) :: accum, xs) (* TODO: Check if the character is printable *)
             and digitToInt x = ord x - ord #"0"
             and digitToLargeInt x = Int.toLarge (digitToInt x)
             and hexDigitToInt x = if ord #"A" <= ord x andalso ord x <= ord #"F" then

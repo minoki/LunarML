@@ -153,25 +153,6 @@ fun genSym (ctx: Context) = let val n = !(#nextJsId ctx)
 structure F = FSyntax
 structure J = JsSyntax
 
-fun doLiteral (Syntax.IntegerConstant x) = if x < 0 then
-                                               J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x))))
-                                           else
-                                               J.ConstExp (J.Numeral (LargeInt.toString x))
-  | doLiteral (Syntax.WordConstant x) = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-  | doLiteral (Syntax.RealConstant x) = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
-                                            (* JavaScript does not support hexadecimal floating-point literals *)
-                                        in case y of
-                                               SOME z => if Numeric.Notation.isNegative z then
-                                                             J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs z))))
-                                                         else
-                                                             J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
-                                             | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
-                                        end
-  | doLiteral (Syntax.StringConstant x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString o Char.ord) (Vector.fromList (String.explode x)))
-  | doLiteral (Syntax.CharacterConstant x) = let val y = Char.ord (String.sub (x, 0))
-                                             in J.ConstExp (J.Numeral (Int.toString y))
-                                             end
-
 datatype Destination = Return
                      | AssignTo of USyntax.VId
                      | DeclareAndAssignTo of { level : int, destination : USyntax.VId }
@@ -216,10 +197,68 @@ and putImpureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SO
                                                        in cont (stmts @ [ J.VarStat (vector [(dest, SOME exp)]) ], env, J.VarExp (J.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : J.Stat list * Env * J.Exp -> J.Stat list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.SConOp scon, _, xs)) dest : J.Stat list = if Vector.length xs = 0 then
-                                                                                putPureTo ctx env dest ([], doLiteral scon)
-                                                                            else
-                                                                                raise CodeGenError "PrimExp.SConOp: non-empty argument"
+and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
+    = if Vector.length xs = 0 then
+          let val exp = if x < 0 then
+                            J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x))))
+                        else
+                            J.ConstExp (J.Numeral (LargeInt.toString x))
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, xs)) dest
+    = if Vector.length xs = 0 then
+          let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
+                            (* JavaScript does not support hexadecimal floating-point literals *)
+                        in case y of
+                               SOME z => if Numeric.Notation.isNegative z then
+                                             J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs z))))
+                                         else
+                                             J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
+                             | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
+                        end
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.RealConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, tys, xs)) dest
+    = if Vector.length xs = 0 andalso Vector.length tys = 1 then
+          let val ty = Vector.sub (tys, 0)
+              val exp = case ty of
+                            F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_string then
+                                              J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
+                                          else if tv = F.tyNameToTyVar Typing.primTyName_wideString then
+                                              J.ConstExp (J.WideString x)
+                                          else
+                                              raise CodeGenError "PrimExp.StringConstOp: invalid type"
+                          | _ => raise CodeGenError "PrimExp.StringConstOp: invalid type"
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.StringConstOp: invalid argument"
+  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, tys, xs)) dest
+    = if Vector.length xs = 0 andalso Vector.length tys = 1 then
+          let val ty = Vector.sub (tys, 0)
+              val exp = case ty of
+                            F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_char then
+                                              J.ConstExp (J.Numeral (Int.toString x))
+                                          else if tv = F.tyNameToTyVar Typing.primTyName_wideChar then
+                                              J.ConstExp (J.WideString (vector [x]))
+                                          else
+                                              raise CodeGenError "PrimExp.CharConstOp: invalid type"
+                          | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
+          in putPureTo ctx env dest ([], exp)
+          end
+      else
+          raise CodeGenError "PrimExp.StringConstOp: invalid argument"
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToJs vid of
                                                                           J.PredefinedId "null" => J.ConstExp J.Null
                                                                         | J.PredefinedId "false" => J.ConstExp J.False

@@ -11,6 +11,8 @@ sources = \
   pluto/char-parser.sig \
   pluto/char-parser.fun \
   src/numeric.sml \
+  src/text.sml \
+  src/target-info.sml \
   src/syntax.grm.sig \
   src/sourcepos.sml \
   src/tokenizer.sml \

@@ -43,8 +43,9 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
     | WordConst of IntInf.int (* non-negative *)
     | RealConst of Numeric.float_notation
-    | StringConst of string
-    | CharacterConst of string
+    | StringConst of StringElement.char vector
+    | AsciiStringConst of string * StringElement.char vector
+    | CharacterConst of int
     (* * *)
     | ASTERISK
     (* . *)
@@ -200,6 +201,7 @@ SCon : IntConst (Syntax.IntegerConstant IntConst)
      | WordConst (Syntax.WordConstant WordConst)
      | RealConst (Syntax.RealConstant RealConst)
      | StringConst (Syntax.StringConstant StringConst)
+     | AsciiStringConst (Syntax.StringConstant (#2 AsciiStringConst))
      | CharacterConst (Syntax.CharacterConstant CharacterConst)
 
 (* type variable *)
@@ -322,7 +324,7 @@ AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
      | LPAREN Ty RPAREN (Ty)
 
 LongTyConOrPrimTyCon : LongTyCon (LongTyCon)
-                     | PRIMTYPE StringConst (Syntax.MkQualified([], Syntax.MkTyCon StringConst))
+                     | PRIMTYPE AsciiStringConst (Syntax.MkQualified([], Syntax.MkTyCon (#1 AsciiStringConst)))
 
 ConTy : AtTy (AtTy)
       | ConTy LongTyConOrPrimTyCon (Syntax.TyCon (span(ConTyleft, LongTyConOrPrimTyConright), [ConTy], LongTyConOrPrimTyCon)) (* type construction *)
@@ -381,11 +383,11 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
       | HASHLBRACK RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), [])) (* [extension] vector expression *)
       | HASHLBRACK Exp ExpCSeqRest RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [extension] vector expression *)
       | HASH Lab (UnfixedSyntax.ProjectionExp(span(HASHleft,Labright), Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
-      | PRIMVAL StringConst (UnfixedSyntax.PrimValExp(span(PRIMVALleft, StringConstright), StringConst)) (* [extension] _primVal "name" *)
-      | PRIMCALL StringConst LBRACK Ty TySeqRest RBRACK LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector (Ty :: TySeqRest), vector [])) (* [extension] _primCall "name" [tyargs] () *)
-      | PRIMCALL StringConst LBRACK Ty TySeqRest RBRACK LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector (Ty :: TySeqRest), vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" [tyargs] (args) *)
-      | PRIMCALL StringConst LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector [], vector [])) (* [extension] _primCall "name" () *)
-      | PRIMCALL StringConst LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), StringConst, vector [], vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" (args) *)
+      | PRIMVAL AsciiStringConst (UnfixedSyntax.PrimValExp(span(PRIMVALleft, AsciiStringConstright), #1 AsciiStringConst)) (* [extension] _primVal "name" *)
+      | PRIMCALL AsciiStringConst LBRACK Ty TySeqRest RBRACK LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector (Ty :: TySeqRest), vector [])) (* [extension] _primCall "name" [tyargs] () *)
+      | PRIMCALL AsciiStringConst LBRACK Ty TySeqRest RBRACK LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector (Ty :: TySeqRest), vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" [tyargs] (args) *)
+      | PRIMCALL AsciiStringConst LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector [], vector [])) (* [extension] _primCall "name" () *)
+      | PRIMCALL AsciiStringConst LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector [], vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" (args) *)
 
 (* comma-separated list of expressions *)
 ExpCSeqRest : COMMA Exp ExpCSeqRest (Exp :: ExpCSeqRest)
@@ -486,7 +488,7 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc (Int.fromLarge IntConst)), VIds)) (* infix (R) directive *)
             | INFIXR VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
             | NONFIX VIds (UnfixedSyntax.FixityDec (span(NONFIXleft, VIdsright), Syntax.Nonfix, VIds)) (* nonfix directive *)
-            | OVERLOAD StringConst LBRACK LongTyCon RBRACK LBRACE OverloadSpecs RBRACE (UnfixedSyntax.OverloadDec (span(OVERLOADleft, RBRACEright), StringConst, LongTyCon, OverloadSpecs)) (* [extension] _overload "class" [ty] { + = ..., - = ..., ... } *)
+            | OVERLOAD AsciiStringConst LBRACK LongTyCon RBRACK LBRACE OverloadSpecs RBRACE (UnfixedSyntax.OverloadDec (span(OVERLOADleft, RBRACEright), #1 AsciiStringConst, LongTyCon, OverloadSpecs)) (* [extension] _overload "class" [ty] { + = ..., - = ..., ... } *)
 
 OverloadSpec : AlnumIdent EQUALS Exp ((AlnumIdent, Exp))
              | SymbolicIdent EQUALS Exp ((SymbolicIdent, Exp))

@@ -7,6 +7,7 @@ exception DesugarError of SourcePos.span list * string
 structure F = FSyntax
 type Context = { nextVId : int ref
                , nextTyVar : int ref
+               , targetInfo : TargetInfo.target_info
                }
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
@@ -248,7 +249,10 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                        | F.Child (parent, F.ValueLabel vid) => Syntax.getVIdName vid
                                        | _ => raise DesugarError ([span], "internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val (env, payload) = genMatcher env (F.DataPayloadExp exp) payloadTy innerPat
-                       in (env, F.SimplifyingAndalsoExp(F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant tag)]), payload))
+                           val equal_string = case #nativeString (#targetInfo ctx) of
+                                                  TargetInfo.NARROW_STRING => InitialEnv.VId_EQUAL_string
+                                                | TargetInfo.WIDE_STRING => InitialEnv.VId_EQUAL_wideString
+                       in (env, F.SimplifyingAndalsoExp (F.AppExp (F.LongVarExp equal_string, F.TupleExp [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload))
                        end
                 end
             | genMatcher (env as { exnTagMap, ... }) exp ty (F.ConPat (span, path, NONE, tyargs))
@@ -271,19 +275,23 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                       F.Root (USyntax.MkVId (name, _)) => name
                                     | F.Child (parent, F.ValueLabel vid) => Syntax.getVIdName vid
                                     | _ => raise Fail ("internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
-                    in (env, F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_string), F.TupleExp [F.DataTagExp exp, F.SConExp (Syntax.StringConstant tag)]))
+                           val equal_string = case #nativeString (#targetInfo ctx) of
+                                                  TargetInfo.NARROW_STRING => InitialEnv.VId_EQUAL_string
+                                                | TargetInfo.WIDE_STRING => InitialEnv.VId_EQUAL_wideString
+                    in (env, F.AppExp (F.LongVarExp equal_string, F.TupleExp [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]))
                     end
             | genMatcher env exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = let val env = addVar(env, vid, ty1)
                                                                                  in genMatcher env exp ty0 innerPat
                                                                                  end
             | genMatcher env exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
               = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Syntax.PrimOp_Vector_length, vector [elemTy], vector [exp])
-                    val expectedLengthExp = F.SConExp (Syntax.IntegerConstant (Int.toLarge (Vector.length pats)))
+                    val intTy = F.TyCon ([], Typing.primTyName_int)
+                    val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
                                  F.PrimExp (F.PrimFnOp Syntax.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
                              else
                                  F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant (Int.toLarge i))])) elemTy pat
+                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                            in (env, F.SimplifyingAndalsoExp(e, exp))
                                                            end
                                  ) (env, e0) pats
@@ -310,7 +318,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                 end
             | genBinders env exp ty (F.ConPat(span, path, NONE, tyargs)) = []
             | genBinders env exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders env exp ty pat
-            | genBinders env exp ty (F.VectorPat(span, pats, ellipsis, elemTy)) = Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.SConExp (Syntax.IntegerConstant (Int.toLarge i))])) elemTy pat @ acc) [] pats
+            | genBinders env exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
+                                                                                   in Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                                   end
           and isExhaustive env (F.WildcardPat _) = true
             | isExhaustive env (F.SConPat _) = false
             | isExhaustive env (F.VarPat _) = true
@@ -1025,23 +1035,31 @@ end (* local *)
 end (* structure FlattenLet *)
 
 structure FTransform = struct
+type Context = { nextVId : int ref
+               , nextTyVar : int ref
+               , targetInfo : TargetInfo.target_info
+               }
 type Env = { desugarPatternMatches : DesugarPatternMatches.Env
            , inliner : Inliner.Env
            }
 val initialEnv : Env = { desugarPatternMatches = DesugarPatternMatches.initialEnv
                        , inliner = Inliner.emptyEnv
                        }
-fun doDecs ctx (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
-                                      val decs = DecomposeValRec.doDecs decs
-                                      val decs = FlattenLet.doDecs ctx decs
-                                      val (inlinerEnv, decs) = #doDecs (Inliner.run ctx) (#inliner env) decs
-                              in ({desugarPatternMatches = dpEnv, inliner = inlinerEnv }, decs)
-                              end
+fun doDecs (ctx : Context) (env : Env) decs = let val (dpEnv, decs) = #doDecs (DesugarPatternMatches.desugarPatternMatches ctx) (#desugarPatternMatches env) decs
+                                                  val decs = DecomposeValRec.doDecs decs
+                                                  val decs = FlattenLet.doDecs { nextVId = #nextVId ctx, nextTyVar = #nextTyVar ctx } decs
+                                                  val (inlinerEnv, decs) = #doDecs (Inliner.run { nextVId = #nextVId ctx, nextTyVar = #nextTyVar ctx }) (#inliner env) decs
+                                              in ({ desugarPatternMatches = dpEnv, inliner = inlinerEnv }, decs)
+                                              end
 end (* structure FTransform *)
 
 structure DeadCodeElimination = struct
 structure F = FSyntax
-fun isDiscardablePrimOp (F.SConOp _) = true
+fun isDiscardablePrimOp (F.IntConstOp _) = true
+  | isDiscardablePrimOp (F.WordConstOp _) = true
+  | isDiscardablePrimOp (F.RealConstOp _) = true
+  | isDiscardablePrimOp (F.StringConstOp _) = true
+  | isDiscardablePrimOp (F.CharConstOp _) = true
   | isDiscardablePrimOp (F.RaiseOp _) = false
   | isDiscardablePrimOp F.ListOp = true
   | isDiscardablePrimOp F.VectorOp = true

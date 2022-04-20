@@ -3,6 +3,8 @@ $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 pluto/pluto.mlb
 src/numeric.sml
+src/text.sml
+src/target-info.sml
 src/syntax.grm.sig
 src/sourcepos.sml
 src/tokenizer.sml

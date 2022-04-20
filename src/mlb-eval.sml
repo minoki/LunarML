@@ -3,6 +3,7 @@ local structure M = MLBSyntax in
 type Context = { driverContext : Driver.Context
                , baseDir : string
                , pathMap : string M.StringMap.map
+               , targetInfo : TargetInfo.target_info
                }
 datatype Env' = MkEnv of Env
 withtype Env = { bas : Env' M.BasMap.map
@@ -31,13 +32,13 @@ val initialCode = { tynameset = InitialEnv.initialTyNameSet
                   , fdecs = []
                   , cache = M.StringMap.empty
                   }
-fun doDec ctx env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn ((basid, basexp), (bas, acc)) =>
-                                                                               let val (env', acc) = doExp ctx env basexp acc
-                                                                               in (M.BasMap.insert (bas, basid, MkEnv env'), acc)
-                                                                               end
-                                                                           ) (M.BasMap.empty, acc) binds
-                                           in (envWithBasis bas, acc)
-                                           end
+fun doDec (ctx : Context) env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn ((basid, basexp), (bas, acc)) =>
+                                                                                           let val (env', acc) = doExp ctx env basexp acc
+                                                                                           in (M.BasMap.insert (bas, basid, MkEnv env'), acc)
+                                                                                           end
+                                                                                       ) (M.BasMap.empty, acc) binds
+                                                       in (envWithBasis bas, acc)
+                                                       end
   | doDec ctx env (M.OpenDec basids) acc = let val env' = List.foldl (fn (basid, newenv) =>
                                                                          case M.BasMap.find (#bas env, basid) of
                                                                              SOME (MkEnv env) => mergeEnv (newenv, env)
@@ -139,7 +140,7 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                                    in TextIO.inputAll ins before TextIO.closeIn ins
                                                                    end
                                                   in case MLBParser.P.runParser MLBParser.basfile () path (StringStream.fromString { file = path, content = content }) of
-                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx, baseDir = OS.Path.dir path, pathMap = #pathMap ctx }
+                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx, baseDir = OS.Path.dir path, pathMap = #pathMap ctx, targetInfo = #targetInfo ctx }
                                                                                           val (env', acc) = doDecs ctx' emptyEnv decs acc
                                                                                           val cache = M.StringMap.insert (#cache acc, path, env')
                                                                                       in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })

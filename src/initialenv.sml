@@ -138,6 +138,8 @@ val VId_EQUAL_list = newShortVId "=@list"
 val VId_EQUAL_ref = newShortVId "=@ref"
 val VId_EQUAL_array  = newShortVId "=@array"
 val VId_EQUAL_vector = newShortVId "=@vector"
+val VId_EQUAL_wideString = newShortVId "=@WideString.string"
+val VId_EQUAL_wideChar = newShortVId "=@WideChar.char"
 
 (* Int *)
 local val newVId = newLongVId (StrId_Int, [])

@@ -33,7 +33,11 @@ fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
   | doPat prec (F.ConPat (_, path, SOME innerPat, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ P.Fragment "] " :: doPat 1 innerPat)
   | doPat prec (F.LayeredPat (_, vid, ty, pat)) = showParen (prec >= 1) (P.Fragment (USyntax.print_VId vid) :: P.Fragment " : " :: doTy 1 ty @ P.Fragment " as " :: doPat 1 pat)
   | doPat prec (F.VectorPat (_, pats, wildcard, elemTy)) = P.Fragment "#[" :: P.commaSep (Vector.foldr (fn (pat, xs) => doPat 0 pat :: xs) (if wildcard then [[P.Fragment "..."]] else []) pats) @ [P.Fragment "]"] (* elemTy? *)
-fun doPrimOp (F.SConOp scon) = [P.Fragment (Syntax.print_SCon scon)]
+fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
+  | doPrimOp (F.WordConstOp x) = [P.Fragment ("word " ^ IntInf.toString x)]
+  | doPrimOp (F.RealConstOp x) = [P.Fragment ("real " ^ Numeric.Notation.toString "~" x)]
+  | doPrimOp (F.StringConstOp x) = [P.Fragment ("string \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\"" x)]
+  | doPrimOp (F.CharConstOp x) = [P.Fragment ("char \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\"")]
   | doPrimOp (F.RaiseOp span) = [P.Fragment "raise"]
   | doPrimOp F.ListOp = [P.Fragment "list"]
   | doPrimOp F.VectorOp = [P.Fragment "vector"]

@@ -25,7 +25,11 @@ datatype Ty = TyVar of TyVar
                          }
 datatype ConBind = ConBind of USyntax.VId * Ty option
 datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
-datatype PrimOp = SConOp of Syntax.SCon (* nullary *)
+datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
+                | WordConstOp of IntInf.int (* 1 type argument *)
+                | RealConstOp of Numeric.float_notation (* 1 type argument *)
+                | StringConstOp of int vector (* narrow / wide, 1 type argument *)
+                | CharConstOp of int (* narrow / wide, 1 type argument *)
                 | RaiseOp of SourcePos.span (* type argument: result type, value argument: the exception *)
                 | ListOp (* type argument: element type, value arguments: the elements *)
                 | VectorOp (* type argument: element type, value arguments: the elements *)
@@ -79,7 +83,8 @@ datatype Pat = WildcardPat of SourcePos.span
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of USyntax.VIdSet.set option * Dec list
-fun SConExp scon = PrimExp (SConOp scon, vector [], vector [])
+fun IntConstExp (value, ty) = PrimExp (IntConstOp value, vector [ty], vector [])
+fun WordConstExp (value, ty) = PrimExp (WordConstOp value, vector [ty], vector [])
 fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp span, vector [ty], vector [exp])
 fun ListExp (exps, elemTy) = PrimExp (ListOp, vector [elemTy], exps)
 fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
@@ -101,6 +106,11 @@ fun TupleExp xs = let fun doFields i nil = nil
                   end
 fun tyNameToTyVar (USyntax.MkTyName (name, n)) = USyntax.NamedTyVar (name, false, n)
 fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
+fun AsciiStringAsNativeString (targetInfo : TargetInfo.target_info, s : string) = let val ty = case #nativeString targetInfo of
+                                                                                                   TargetInfo.NARROW_STRING => TyCon ([], Typing.primTyName_string)
+                                                                                                 | TargetInfo.WIDE_STRING => TyCon ([], Typing.primTyName_wideString)
+                                                                                  in PrimExp (StringConstOp (StringElement.encodeAscii s), vector [ty], vector [])
+                                                                                  end
 fun strIdToVId(USyntax.MkStrId(name, n)) = USyntax.MkVId(name, n)
 fun LongVarExp(USyntax.MkShortVId vid) = VarExp vid
   | LongVarExp(USyntax.MkLongVId(strid0, strids, vid)) = SProjectionExp (List.foldl (fn (label, x) => SProjectionExp (x, StructLabel label)) (VarExp (strIdToVId strid0)) strids, ValueLabel vid)
@@ -442,7 +452,11 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
       )
   | print_Pat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) fields ^ ",SOME(" ^ print_Pat basePat ^ "))"
   | print_Pat (VectorPat _) = "VectorPat"
-fun print_PrimOp (SConOp scon) = "SConOp " ^ Syntax.print_SCon scon
+fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
+  | print_PrimOp (WordConstOp x) = "WordConstOp " ^ IntInf.toString x
+  | print_PrimOp (RealConstOp x) = "RealConstOp " ^ Numeric.Notation.toString "~" x
+  | print_PrimOp (StringConstOp x) = "StringConstOp \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\"" x
+  | print_PrimOp (CharConstOp x) = "CharConstOp \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
   | print_PrimOp (RaiseOp span) = "RaiseOp"
   | print_PrimOp ListOp = "ListOp"
   | print_PrimOp VectorOp = "VectorOp"
@@ -588,10 +602,16 @@ local structure U = USyntax
                                     ]
                       end
 in
+fun toFTy (ctx : Context, env : Env, U.TyVar (span, tv)) = F.TyVar tv
+  | toFTy (ctx, env, U.RecordType (span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy (ctx, env, ty)) fields)
+  | toFTy (ctx, env, U.TyCon (span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
+  | toFTy (ctx, env, U.FnType (span, paramTy, resultTy)) = let fun doTy ty = toFTy (ctx, env, ty)
+                                                           in F.FnType (doTy paramTy, doTy resultTy)
+                                                           end
 fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
     = (case ty of
            U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_int) then
-                                        F.SConExp (Syntax.IntegerConstant value)
+                                        F.IntConstExp (value, toFTy (ctx, env, ty))
                                     else
                                         let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                   SOME m => m
@@ -608,18 +628,19 @@ fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
                                             val TILDE = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TILDE) of
                                                             SOME x => x
                                                           | NONE => raise Fail "invalid integer constant"
+                                            val intTy = toFTy (ctx, env, Typing.primTy_int)
                                             fun decompose x = if ~0x80000000 <= x andalso x <= 0x7fffffff then
-                                                                  F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant x))
+                                                                  F.AppExp (fromInt, F.IntConstExp (x, intTy))
                                                               else
                                                                   let val (q, r) = IntInf.quotRem (x, ~0x80000000)
                                                                       val y = case q of
-                                                                                  1 => F.SConExp (Syntax.IntegerConstant ~0x80000000)
-                                                                                | ~1 => F.AppExp (TILDE, F.SConExp (Syntax.IntegerConstant ~0x80000000))
-                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant ~0x80000000))])
+                                                                                  1 => F.IntConstExp (~0x80000000, intTy)
+                                                                                | ~1 => F.AppExp (TILDE, F.IntConstExp (~0x80000000, intTy))
+                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromInt, F.IntConstExp (~0x80000000, intTy))])
                                                                   in if r = 0 then
                                                                          y
                                                                      else
-                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromInt, F.SConExp (Syntax.IntegerConstant r))])
+                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromInt, F.IntConstExp (r, intTy))])
                                                                   end
                                         in decompose value
                                         end
@@ -628,7 +649,7 @@ fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
 fun cookWordConstant(ctx, env, span, value : IntInf.int, ty)
     = (case ty of
            U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_word) then
-                                        F.SConExp (Syntax.WordConstant value)
+                                        F.WordConstExp (value, toFTy (ctx, env, ty))
                                     else
                                         let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                   SOME m => m
@@ -642,29 +663,57 @@ fun cookWordConstant(ctx, env, span, value : IntInf.int, ty)
                                             val TIMES = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TIMES) of
                                                             SOME x => x
                                                           | NONE => raise Fail "invalid word constant: * is not defined"
+                                            val wordTy = toFTy (ctx, env, Typing.primTy_word)
                                             fun decompose x = if x <= 0xffffffff then
-                                                                  F.AppExp (fromWord, F.SConExp (Syntax.WordConstant x))
+                                                                  F.AppExp (fromWord, F.WordConstExp (x, wordTy))
                                                               else
                                                                   let val (q, r) = IntInf.quotRem (x, 0xffffffff)
                                                                       val y = case q of
-                                                                                  1 => F.SConExp (Syntax.WordConstant 0xffffffff)
-                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromWord, F.SConExp (Syntax.WordConstant 0xffffffff))])
+                                                                                  1 => F.WordConstExp (0xffffffff, wordTy)
+                                                                                | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromWord, F.WordConstExp (0xffffffff, wordTy))])
                                                                   in if r = 0 then
                                                                          y
                                                                      else
-                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromWord, F.SConExp (Syntax.WordConstant r))])
+                                                                         F.AppExp (PLUS, F.TupleExp [y, F.AppExp (fromWord, F.WordConstExp (r, wordTy))])
                                                                   end
                                         in decompose value
                                         end
          | _ => raise Fail "invalid word constant: invalid type"
       ) (* TODO: check range *)
-fun toFTy(ctx : Context, env : Env, U.TyVar(span, tv)) = F.TyVar tv
-  | toFTy(ctx, env, U.RecordType(span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy(ctx, env, ty)) fields)
-  | toFTy(ctx, env, U.TyCon(span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy(ctx, env, arg)) tyargs, tyname)
-  | toFTy(ctx, env, U.FnType(span, paramTy, resultTy)) = let fun doTy ty = toFTy(ctx, env, ty)
-                                                         in F.FnType(doTy paramTy, doTy resultTy)
-                                                         end
-and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat span)
+fun cookCharacterConstant (ctx, env, span, value : int, ty)
+    = (case ty of
+           U.TyCon (_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_char) then
+                                         if 0 <= value andalso value <= 255 then
+                                             F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+                                         else
+                                             raise Fail "invalid character constant: out of range"
+                                     else if U.eqTyName (tycon, Typing.primTyName_wideChar) then
+                                         if 0 <= value andalso value <= 0xffff then (* TODO: target dependence *)
+                                             F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+                                         else
+                                             raise Fail "invalid character constant: out of range"
+                                     else
+                                         raise Fail "invalid character constant: type"
+         | _ => raise Fail "invalid character constant: type"
+      )
+fun cookStringConstant (ctx, env, span, value, ty)
+    = (case ty of
+           U.TyCon (_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_string) then
+                                         let val cooked = StringElement.encode8bit value
+                                                          handle Chr => raise Fail "invalid string constant: out of range"
+                                         in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])
+                                         end
+                                     else if U.eqTyName (tycon, Typing.primTyName_wideString) then
+                                         (* TODO: target dependence *)
+                                         let val cooked = StringElement.encode16bit value
+                                                          handle Chr => raise Fail "invalid string constant: out of range"
+                                         in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])
+                                         end
+                                     else
+                                         raise Fail "invalid string constant: type"
+         | _ => raise Fail "invalid string constant: type"
+      )
+fun toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat span)
   | toFPat(ctx, env, U.SConPat(span, scon as Syntax.IntegerConstant value, ty))
     = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
                                        , scon = scon
@@ -684,14 +733,14 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat 
     = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
                                        , scon = scon
                                        , equality = getEquality (ctx, env, ty)
-                                       , cookedValue = F.SConExp scon (* TODO: overloaded literals *)
+                                       , cookedValue = cookCharacterConstant (ctx, env, span, value, ty)
                                        }
       )
   | toFPat(ctx, env, U.SConPat(span, scon as Syntax.StringConstant value, ty))
     = (USyntax.VIdMap.empty, F.SConPat { sourceSpan = span
                                        , scon = scon
                                        , equality = getEquality (ctx, env, ty)
-                                       , cookedValue = F.SConExp scon (* TODO: overloaded literals *)
+                                       , cookedValue = cookStringConstant (ctx, env, span, value, ty)
                                        }
       )
   | toFPat(ctx, env, U.VarPat(span, vid, ty)) = (USyntax.VIdMap.empty, F.VarPat(span, vid, toFTy(ctx, env, ty))) (* TODO *)
@@ -718,11 +767,11 @@ and toFPat(ctx, env, U.WildcardPat span) = (USyntax.VIdMap.empty, F.WildcardPat 
   | toFPat(ctx, env, U.VectorPat(span, pats, ellipsis, elemTy)) = let val pats = Vector.map (fn pat => toFPat(ctx, env, pat)) pats
                                                                   in (USyntax.VIdMap.empty, F.VectorPat(span, Vector.map #2 pats, ellipsis, toFTy(ctx, env, elemTy)))
                                                                   end
-and toFExp(ctx, env, U.SConExp(span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
-  | toFExp(ctx, env, U.SConExp(span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
-  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.RealConstant _, ty)) = F.SConExp(scon)
-  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.StringConstant _, ty)) = F.SConExp(scon)
-  | toFExp(ctx, env, U.SConExp(span, scon as Syntax.CharacterConstant _, ty)) = F.SConExp(scon)
+and toFExp (ctx, env, U.SConExp (span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
+  | toFExp (ctx, env, U.SConExp (span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
+  | toFExp (ctx, env, U.SConExp (span, Syntax.RealConstant value, ty)) = F.PrimExp (F.RealConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+  | toFExp (ctx, env, U.SConExp (span, Syntax.StringConstant value, ty)) = cookStringConstant (ctx, env, span, value, ty)
+  | toFExp (ctx, env, U.SConExp (span, Syntax.CharacterConstant value, ty)) = cookCharacterConstant (ctx, env, span, value, ty)
   | toFExp(ctx, env, U.VarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
     = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
           getEquality(ctx, env, tyarg)

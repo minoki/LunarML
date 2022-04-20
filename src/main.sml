@@ -90,8 +90,21 @@ and handleInputFile opts [file] = if String.isSuffix ".sml" file then
                                       showMessageAndFail "Input filename must end with '.sml'\n"
   | handleInputFile opts [] = showMessageAndFail "No input given.\n"
   | handleInputFile opts _ = showMessageAndFail "Multiple input is not supported.\n"
+and getTargetInfo opts = (case #backend opts of
+                              BACKEND_LUA => { wideChar = TargetInfo.CHAR8
+                                             , nativeString = TargetInfo.NARROW_STRING
+                                             }
+                            | BACKEND_JS => { wideChar = TargetInfo.CHAR16
+                                            , nativeString = TargetInfo.WIDE_STRING
+                                            }
+                         )
 and optimize ctx fdecs 0 = fdecs
-  | optimize ctx fdecs n = optimize ctx (#2 (FTransform.doDecs (#toFContext (#driverContext ctx)) FTransform.initialEnv fdecs)) (n - 1)
+  | optimize ctx fdecs n = let val ctx' = { nextVId = #nextVId (#toFContext (#driverContext ctx))
+                                          , nextTyVar = #nextTyVar (#toFContext (#driverContext ctx))
+                                          , targetInfo = #targetInfo ctx
+                                          }
+                           in optimize ctx (#2 (FTransform.doDecs ctx' FTransform.initialEnv fdecs)) (n - 1)
+                           end
 and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
@@ -99,6 +112,7 @@ and doCompile opts fileName
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap
+                    , targetInfo = getTargetInfo opts
                     }
           val mlbdecs = [MLBSyntax.PathDec "$(SML_LIB)/basis/basis.mlb"
                         ,MLBSyntax.PathDec fileName
@@ -142,6 +156,7 @@ and doMLB opts mlbfilename
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap
+                    , targetInfo = getTargetInfo opts
                     }
           val (env, { tynameset, toFEnv, fdecs, cache }) = MLBEval.doMlbSource ctx MLBEval.emptyEnv mlbfilename MLBEval.initialCode
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of

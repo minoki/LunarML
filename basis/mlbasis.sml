@@ -1546,13 +1546,13 @@ fun toString #"\\" = "\\\\"
                      String.str c
                  else
                      case c of
-                         #"\\a" => "\\a"
-                       | #"\\b" => "\\b"
-                       | #"\\t" => "\\t"
-                       | #"\\n" => "\\n"
-                       | #"\\v" => "\\v"
-                       | #"\\f" => "\\f"
-                       | #"\\r" => "\\r"
+                         #"\a" => "\\a"
+                       | #"\b" => "\\b"
+                       | #"\t" => "\\t"
+                       | #"\n" => "\\n"
+                       | #"\v" => "\\v"
+                       | #"\f" => "\\f"
+                       | #"\r" => "\\r"
                        | _ => let val x = ord c
                               in if x < 32 then
                                      "\\^" ^ String.str (chr (x + 64))
@@ -1570,13 +1570,13 @@ fun toCString #"\\" = "\\\\"
                       String.str c
                   else
                       case c of
-                          #"\\a" => "\\a"
-                        | #"\\b" => "\\b"
-                        | #"\\t" => "\\t"
-                        | #"\\n" => "\\n"
-                        | #"\\v" => "\\v"
-                        | #"\\f" => "\\f"
-                        | #"\\r" => "\\r"
+                          #"\a" => "\\a"
+                        | #"\b" => "\\b"
+                        | #"\t" => "\\t"
+                        | #"\n" => "\\n"
+                        | #"\v" => "\\v"
+                        | #"\f" => "\\f"
+                        | #"\r" => "\\r"
                         | _ => let val x = ord c
                                    val s = Int.fmt StringCvt.OCT x
                                in if x < 8 then

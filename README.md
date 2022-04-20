@@ -30,10 +30,10 @@ Successor ML features:
 * [x] Fixed manifest type specifications
 * [ ] Abolish sequenced type realizations
 * [ ] Line comments
-* [ ] Extended literal syntax
+* [x] Extended literal syntax
     * [x] Underscores (e.g. `3.1415_9265`, `0xffff_ffff`)
     * [x] Binary notation (`0b`, `0wb`)
-    * [ ] Eight hex digits in text (`\Uxxxxxxxx`)
+    * [x] Eight hex digits in text (`\Uxxxxxxxx`)
 * [ ] Record punning
 * [x] Record extension
 * [x] Record update
@@ -51,7 +51,7 @@ Other extensions planned:
 * [x] Vector expressions and patterns
 * [ ] Packaged modules (like in Alice ML or HaMLet S)
 * [x] Hexadecimal floating-point constants (e.g. `0x1p1024`, `0x1.ffff_ffff_ffff_f`)
-* [ ] Variably-encoded Unicode escape sequence in string literals
+* [x] Variably-encoded Unicode escape sequence in string literals (e.g. `\u{3042}`)
 
 The syntax of hexadecimal floating-point constants is:
 
@@ -63,3 +63,6 @@ The syntax of hexadecimal floating-point constants is:
 ```
 
 In short: the (binary) exponent part is optional and use tilde (`~`) for the negation symbol.
+
+The `\u{}` escape sequence allows you to embed a Unicode scalar value in a string literal.
+The compiler encodes the character in UTF-(8|16|32), depending on the string type.

@@ -6,8 +6,8 @@ structure Syntax = struct
 datatype SCon = IntegerConstant of IntInf.int (* decimal / hexadecimal *)
               | WordConstant of IntInf.int (* decimal / hexadecimal *)
               | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
-              | StringConstant of string
-              | CharacterConstant of string
+              | StringConstant of StringElement.char vector
+              | CharacterConstant of int
 datatype VId = MkVId of string
              | GeneratedVId of string * int
 datatype TyVar = MkTyVar of string
@@ -469,8 +469,8 @@ fun print_pair (f,g) (x,y) = "(" ^ f x ^ "," ^ g y ^ ")"
 fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ IntInf.toString x
   | print_SCon (WordConstant x) = "WordConstant " ^ IntInf.toString x
   | print_SCon (RealConstant x) = "RealConstant " ^ Numeric.Notation.toString "~" x
-  | print_SCon (StringConstant x) = "StringConstant \"" ^ String.toString x ^ "\""
-  | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ String.toString x ^ "\""
+  | print_SCon (StringConstant x) = "StringConstant \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString c ^ acc) "\"" x
+  | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
 fun print_VId (MkVId x) = String.toString x
   | print_VId (GeneratedVId (x,i)) = String.toString x ^ "@" ^ Int.toString i
 fun print_TyVar (MkTyVar x) = "MkTyVar \"" ^ String.toString x ^ "\""
