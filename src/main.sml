@@ -14,9 +14,10 @@ fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  " ^ progName ^ " [options] file.sml\n\
                                                 \Options:\n\
-                                                \  -o,--output=file.lua   File name to output.\n\
+                                                \  -o,--output=file.ext   File name to output.\n\
                                                 \  -mexe                  Produce a standalone script.\n\
                                                 \  -mlib                  Produce a Lua module.\n\
+                                                \  --js                   Produce JavaScript code.\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
                                                 \  --dump                 Dump intermediate code.\n\
@@ -24,10 +25,12 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -O,--optimize          Try to optimize hard.\n\
                                                 \")
 datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
+datatype Backend = BACKEND_LUA | BACKEND_JS
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
                , dump : DumpMode
                , optimizationLevel : int
+               , backend : Backend
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -40,7 +43,7 @@ fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
 fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
   | parseArgs opts (arg :: args)
     = let fun doOutput (outname, args) = case #output opts of
-                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
+                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
                                            | SOME _ => showMessageAndFail "--output was given multiple times.\n"
       in if arg = "-o" orelse arg = "--output" then
              case args of
@@ -52,14 +55,16 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              doOutput (String.extract (arg, 9, NONE), args)
          else if arg = "-mexe" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
                | SOME Driver.ExecutableMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-mlib" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts } args
+                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
                | SOME Driver.LibraryMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
+         else if arg = "--js" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS } args
          else if arg = "-h" orelse arg = "--help" then
              ( showHelp (); OS.Process.exit OS.Process.success )
          else if arg = "-v" orelse arg = "--version" then
@@ -67,11 +72,11 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
          else if arg = "--" then
              handleInputFile opts args
          else if arg = "--dump" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_INITIAL, optimizationLevel = #optimizationLevel opts } args
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_INITIAL, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
          else if arg = "--dump-final" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_FINAL, optimizationLevel = #optimizationLevel opts } args
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_FINAL, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
          else if arg = "--optimize" orelse arg = "-O" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts + 1 } args
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts + 1, backend = #backend opts } args
          else if String.isPrefix "-" arg then
              showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
          else
@@ -112,7 +117,7 @@ and doCompile opts fileName
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-      in emitLua opts fileName (#nextVId (#toFContext (#driverContext ctx))) fdecs
+      in emit opts fileName (#nextVId (#toFContext (#driverContext ctx))) fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
                  ( print ("internal error: " ^ message ^ "\n")
@@ -129,6 +134,7 @@ and doCompile opts fileName
                  ; OS.Process.exit OS.Process.failure
                  )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
+               | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
@@ -151,7 +157,7 @@ and doMLB opts mlbfilename
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-      in emitLua opts mlbfilename (#nextVId (#toFContext (#driverContext ctx))) fdecs
+      in emit opts mlbfilename (#nextVId (#toFContext (#driverContext ctx))) fdecs
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                 | DesugarPatternMatches.DesugarError ([], message) =>
                   ( print ("internal error: " ^ message ^ "\n")
@@ -168,7 +174,8 @@ and doMLB opts mlbfilename
                   ; OS.Process.exit OS.Process.failure
                   )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
-and emitLua opts fileName nextId decs
+               | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
+and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
     = let val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit.lua" }
@@ -183,4 +190,18 @@ and emitLua opts fileName nextId decs
           val () = TextIO.closeOut outs
       in ()
       end
-val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0 } (CommandLine.arguments ());
+  | emit (opts as { backend = BACKEND_JS, ... }) fileName nextId decs
+    = let val progDir = OS.Path.dir progName
+          val base = OS.Path.base fileName
+          val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit.js" }
+          val mlinit = readFile mlinit_js
+          val jsctx = { nextJsId = ref 0 }
+          val js = CodeGenJs.doProgram jsctx CodeGenJs.initialEnv decs
+          val js = JsWriter.doProgram js
+          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
+          val () = TextIO.output (outs, mlinit)
+          val () = TextIO.output (outs, js)
+          val () = TextIO.closeOut outs
+      in ()
+      end
+val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA } (CommandLine.arguments ());

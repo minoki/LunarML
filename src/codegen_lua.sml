@@ -220,7 +220,7 @@ fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
   | extractLongVId _ = NONE
 end
 
-(* doExpTo : Context -> Env -> F.Exp -> Destination -> Fragment list *)
+(* doExpTo : Context -> Env -> F.Exp -> Destination -> L.Stat list *)
 fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then

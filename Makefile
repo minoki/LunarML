@@ -28,6 +28,8 @@ sources = \
   src/lua-syntax.sml \
   src/lua-transform.sml \
   src/codegen_lua.sml \
+  src/js-syntax.sml \
+  src/codegen-js.sml \
   src/mlb-syntax.sml \
   src/mlb-parser.sml \
   src/driver.sml \

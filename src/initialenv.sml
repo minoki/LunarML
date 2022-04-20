@@ -40,6 +40,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n,
                                                                                                    ]
                                                                                     }
                                                                             )
+                                                                           ,("JavaScript", mkSubstrMap [])
                                                                            ,("LunarML", mkSubstrMap [])
                                                                            ]
                                                        }
@@ -69,6 +70,7 @@ val StrId_String = newStrId "String"
 val StrId_Vector = newStrId "Vector"
 val StrId_Array = newStrId "Array"
 val StrId_Lua = newStrId "Lua"
+val StrId_JavaScript = newStrId "JavaScript"
 val StrId_LunarML = newStrId "LunarML"
 
 (* Ref *)
@@ -204,6 +206,13 @@ val VId_Lua_Lib_table_pack = newVId "pack"
 val VId_Lua_Lib_table_unpack = newVId "unpack"
 end
 end
+end
+
+(* JavaScript interface *)
+local val newVId = newLongVId (StrId_JavaScript, [])
+in
+val VId_Js_global = newVId "global"
+val VId_Js_call = newVId "call"
 end
 
 (* Other primitives *)
