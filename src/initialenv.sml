@@ -213,8 +213,8 @@ end
 (* JavaScript interface *)
 local val newVId = newLongVId (StrId_JavaScript, [])
 in
-val VId_Js_global = newVId "global"
-val VId_Js_call = newVId "call"
+val VId_JavaScript_global = newVId "global"
+val VId_JavaScript_call = newVId "call"
 end
 
 (* Other primitives *)
@@ -284,12 +284,18 @@ val initialEnv : Typing.Env
           val tyStr_real = { typeFunction = TypeFunction([], primTy_real)
                            , valEnv = emptyValEnv
                            }
-          val tyStr_string = { typeFunction = TypeFunction([], primTy_string)
-                             , valEnv = emptyValEnv
-                             }
           val tyStr_char = { typeFunction = TypeFunction([], primTy_char)
                            , valEnv = emptyValEnv
                            }
+          val tyStr_wideChar = { typeFunction = TypeFunction([], primTy_wideChar)
+                               , valEnv = emptyValEnv
+                               }
+          val tyStr_string = { typeFunction = TypeFunction([], primTy_string)
+                             , valEnv = emptyValEnv
+                             }
+          val tyStr_wideString = { typeFunction = TypeFunction([], primTy_wideString)
+                                 , valEnv = emptyValEnv
+                                 }
           val tyStr_list = { typeFunction = TypeFunction([tyVarA], listOf tyA)
                            , valEnv = mkValConMap [("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
@@ -311,6 +317,9 @@ val initialEnv : Typing.Env
           val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
                                 , valEnv = emptyValEnv
                                 }
+          val tyStr_JavaScript_value = { typeFunction = TypeFunction([], primTy_JavaScript_value)
+                                       , valEnv = emptyValEnv
+                                       }
           val tyStr_function2 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
                                 , valEnv = emptyValEnv
                                 }
@@ -400,6 +409,13 @@ val initialEnv : Typing.Env
                                        )
                         , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
                         }
+          val sig_JavaScript = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_JavaScript_value)]
+                               , valMap = mkValMap
+                                              [("global", TypeScheme ([], primTy_wideString --> primTy_JavaScript_value))
+                                              ,("call", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                              ]
+                               , strMap = mkStrMap []
+                               }
           val sig_LunarML = { tyConMap = mkTyMap []
                             , valMap = mkValMap
                                            [("assumePure", TypeScheme ([(tyVarA, [])], tyA --> tyA))
@@ -454,6 +470,8 @@ val initialEnv : Typing.Env
                                  ,("exn", tyStr_exn)
                                  ,("array", tyStr_array)
                                  ,("vector", tyStr_vector)
+                                 ,("WideChar.char", tyStr_wideChar)
+                                 ,("WideString.string", tyStr_wideString)
                                  ,("Function2.function2", tyStr_function2)
                                  ,("Function3.function3", tyStr_function3)
                                  ]
@@ -463,14 +481,17 @@ val initialEnv : Typing.Env
                                   ,(primTyName_int, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
                                   ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = NONE (* SOME Syntax.CLASS_REAL *) })
-                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
                                   ,(primTyName_char, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
+                                  ,(primTyName_wideChar, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
+                                  ,(primTyName_wideString, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
                                   ,(primTyName_list, { arity = 1, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_vector, { arity = 1, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_JavaScript_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
                                   ]
@@ -481,6 +502,7 @@ val initialEnv : Typing.Env
                                ,("Array", StrId_Array, sig_Array)
                                ,("Vector", StrId_Vector, sig_Vector)
                                ,("Lua", StrId_Lua, sig_Lua)
+                               ,("JavaScript", StrId_JavaScript, sig_JavaScript)
                                ,("LunarML", StrId_LunarML, sig_LunarML)
                                ]
          , sigMap = Syntax.SigIdMap.empty
@@ -537,8 +559,10 @@ val initialTyNameSet = let open Typing
                               [primTyName_int
                               ,primTyName_word
                               ,primTyName_real
-                              ,primTyName_string
                               ,primTyName_char
+                              ,primTyName_wideChar
+                              ,primTyName_string
+                              ,primTyName_wideString
                               ,primTyName_exn
                               ,primTyName_bool
                               ,primTyName_ref
@@ -546,6 +570,7 @@ val initialTyNameSet = let open Typing
                               ,primTyName_array
                               ,primTyName_vector
                               ,primTyName_Lua_value
+                              ,primTyName_JavaScript_value
                               ,primTyName_function2
                               ,primTyName_function3
                               ]

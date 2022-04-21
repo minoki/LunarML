@@ -240,9 +240,10 @@ val primTyName_vector = USyntax.MkTyName("vector", 10)
 val primTyName_exntag = USyntax.MkTyName("exntag", 11)
 val primTyName_function2 = USyntax.MkTyName("function2", 12)
 val primTyName_function3 = USyntax.MkTyName("function3", 13)
-val primTyName_Lua_value = USyntax.MkTyName("Lua.value", 14)
-val primTyName_wideChar = USyntax.MkTyName ("WideChar.char", 15)
-val primTyName_wideString = USyntax.MkTyName ("WideString.string", 16)
+val primTyName_wideChar = USyntax.MkTyName ("WideChar.char", 14)
+val primTyName_wideString = USyntax.MkTyName ("WideString.string", 15)
+val primTyName_Lua_value = USyntax.MkTyName ("Lua.value", 16)
+val primTyName_JavaScript_value = USyntax.MkTyName ("JavaScript.value", 17)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_word)
@@ -251,9 +252,10 @@ val primTy_string = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_string)
 val primTy_char   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_char)
 val primTy_exn    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_exn)
 val primTy_bool   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_bool)
-val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
 val primTy_wideChar = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideChar)
 val primTy_wideString = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideString)
+val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
+val primTy_JavaScript_value = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_JavaScript_value)
 val VId_Bind = USyntax.MkVId("Bind", ~1)
 val LongVId_Bind = USyntax.MkShortVId(VId_Bind)
 
@@ -283,6 +285,10 @@ local
                                , argTypes = vector [primTy_Lua_value, primTy_Lua_value]
                                , resultType = resultType
                                }
+    fun JsBinary resultType = { typeVariables = []
+                              , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value]
+                              , resultType = resultType
+                              }
 in
 (* PRIMITIVES *)
 fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
@@ -341,6 +347,10 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
   | typeOfPrimCall Syntax.PrimOp_Char_LE = Compare primTy_char
   | typeOfPrimCall Syntax.PrimOp_Char_GT = Compare primTy_char
   | typeOfPrimCall Syntax.PrimOp_Char_GE = Compare primTy_char
+  | typeOfPrimCall Syntax.PrimOp_WideChar_LT = Compare primTy_wideChar
+  | typeOfPrimCall Syntax.PrimOp_WideChar_LE = Compare primTy_wideChar
+  | typeOfPrimCall Syntax.PrimOp_WideChar_GT = Compare primTy_wideChar
+  | typeOfPrimCall Syntax.PrimOp_WideChar_GE = Compare primTy_wideChar
   | typeOfPrimCall Syntax.PrimOp_String_LT = Compare primTy_string
   | typeOfPrimCall Syntax.PrimOp_String_LE = Compare primTy_string
   | typeOfPrimCall Syntax.PrimOp_String_GT = Compare primTy_string
@@ -350,6 +360,15 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                                , argTypes = vector [primTy_string]
                                                , resultType = primTy_int
                                                }
+  | typeOfPrimCall Syntax.PrimOp_WideString_LT = Compare primTy_wideString
+  | typeOfPrimCall Syntax.PrimOp_WideString_LE = Compare primTy_wideString
+  | typeOfPrimCall Syntax.PrimOp_WideString_GT = Compare primTy_wideString
+  | typeOfPrimCall Syntax.PrimOp_WideString_GE = Compare primTy_wideString
+  | typeOfPrimCall Syntax.PrimOp_WideString_HAT = HomoBinary primTy_wideString
+  | typeOfPrimCall Syntax.PrimOp_WideString_size = { typeVariables = []
+                                                   , argTypes = vector [primTy_wideString]
+                                                   , resultType = primTy_int
+                                                   }
   | typeOfPrimCall Syntax.PrimOp_Vector_length = { typeVariables = [(tyVarA, [])]
                                                  , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_vector)]
                                                  , resultType = primTy_int
@@ -403,6 +422,11 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
   | typeOfPrimCall Syntax.PrimOp_Lua_concat = LuaBinary primTy_Lua_value
   | typeOfPrimCall Syntax.PrimOp_Lua_length = LuaUnary primTy_Lua_value
   | typeOfPrimCall Syntax.PrimOp_Lua_isFalsy = LuaUnary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_sub = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_set = { typeVariables = []
+                                                  , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value, primTy_JavaScript_value]
+                                                  , resultType = primTy_unit
+                                                  }
 end
 
 fun newContext() : Context
@@ -881,8 +905,28 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                                                                  )
                                          )
          | Syntax.RealConstant _      => emitTypeError (ctx, [span], "no real constant may occur in a pattern")
-         | Syntax.CharacterConstant _ => (primTy_char, S.VIdMap.empty, U.SConPat(span, scon, primTy_char)) (* TODO: overloaded literals *)
-         | Syntax.StringConstant _    => (primTy_string, S.VIdMap.empty, U.SConPat(span, scon, primTy_string)) (* TODO: overloaded literals *)
+         | Syntax.CharacterConstant _ => (case typeHint of
+                                              NONE => let val tv = freshTyVar (#context ctx)
+                                                          val ty = U.TyVar (span, tv)
+                                                      in addTyVarConstraint (ctx, tv, U.IsChar span)
+                                                       ; addTyVarConstraint (ctx, tv, U.IsEqType span)
+                                                       ; (ty, S.VIdMap.empty, U.SConPat (span, scon, ty))
+                                                      end
+                                            | SOME expectedTy => ( unify (ctx, env, [U.UnaryConstraint (span, expectedTy, U.IsChar span), U.UnaryConstraint (span, expectedTy, U.IsEqType span)])
+                                                                 ; (expectedTy, S.VIdMap.empty, U.SConPat (span, scon, expectedTy))
+                                                                 )
+                                         )
+         | Syntax.StringConstant _    => (case typeHint of
+                                              NONE => let val tv = freshTyVar (#context ctx)
+                                                          val ty = U.TyVar (span, tv)
+                                                      in addTyVarConstraint (ctx, tv, U.IsString span)
+                                                       ; addTyVarConstraint (ctx, tv, U.IsEqType span)
+                                                       ; (ty, S.VIdMap.empty, U.SConPat (span, scon, ty))
+                                                      end
+                                            | SOME expectedTy => ( unify (ctx, env, [U.UnaryConstraint (span, expectedTy, U.IsString span), U.UnaryConstraint (span, expectedTy, U.IsEqType span)])
+                                                                 ; (expectedTy, S.VIdMap.empty, U.SConPat (span, scon, expectedTy))
+                                                                 )
+                                         )
       )
   | typeCheckPat (ctx, env, S.VarPat (span, vid), typeHint)
     = (case Syntax.VIdMap.find(#valMap env, vid) of
@@ -1138,8 +1182,26 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                                                              )
                                                      )
                      | Syntax.RealConstant x      => primTy_real (* TODO: overloaded literals *)
-                     | Syntax.CharacterConstant x => primTy_char (* TODO: overloaded literals *)
-                     | Syntax.StringConstant x    => primTy_string (* TODO: overloaded literals *)
+                     | Syntax.CharacterConstant x => (case typeHint of
+                                                          NONE => let val tv = freshTyVar (#context ctx)
+                                                                      val ty = U.TyVar (span, tv)
+                                                                  in addTyVarConstraint (ctx, tv, U.IsChar span)
+                                                                   ; ty
+                                                                  end
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, U.UnaryConstraint (span, expectedTy, U.IsChar span))
+                                                                             ; expectedTy
+                                                                             )
+                                                     )
+                     | Syntax.StringConstant x    => (case typeHint of
+                                                          NONE => let val tv = freshTyVar (#context ctx)
+                                                                      val ty = U.TyVar (span, tv)
+                                                                  in addTyVarConstraint (ctx, tv, U.IsString span)
+                                                                   ; ty
+                                                                  end
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, U.UnaryConstraint (span, expectedTy, U.IsString span))
+                                                                             ; expectedTy
+                                                                             )
+                                                     )
       in (ty, U.SConExp(span, scon, ty))
       end
   | typeCheckExp (ctx, env, exp as S.VarExp (span, longvid), typeHint)

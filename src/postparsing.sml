@@ -374,12 +374,22 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "Char.<=" => Syntax.PrimOp_Char_LE
                          | "Char.>" => Syntax.PrimOp_Char_GT
                          | "Char.>=" => Syntax.PrimOp_Char_GE
+                         | "WideChar.<" => Syntax.PrimOp_WideChar_LT
+                         | "WideChar.<=" => Syntax.PrimOp_WideChar_LE
+                         | "WideChar.>" => Syntax.PrimOp_WideChar_GT
+                         | "WideChar.>=" => Syntax.PrimOp_WideChar_GE
                          | "String.<" => Syntax.PrimOp_String_LT
                          | "String.<=" => Syntax.PrimOp_String_LE
                          | "String.>" => Syntax.PrimOp_String_GT
                          | "String.>=" => Syntax.PrimOp_String_GE
                          | "String.^" => Syntax.PrimOp_String_HAT
                          | "String.size" => Syntax.PrimOp_String_size
+                         | "WideString.<" => Syntax.PrimOp_WideString_LT
+                         | "WideString.<=" => Syntax.PrimOp_WideString_LE
+                         | "WideString.>" => Syntax.PrimOp_WideString_GT
+                         | "WideString.>=" => Syntax.PrimOp_WideString_GE
+                         | "WideString.^" => Syntax.PrimOp_WideString_HAT
+                         | "WideString.size" => Syntax.PrimOp_WideString_size
                          | "Vector.length" => Syntax.PrimOp_Vector_length
                          | "Array.length" => Syntax.PrimOp_Array_length
                          | "Unsafe.cast" => Syntax.PrimOp_Unsafe_cast
@@ -412,6 +422,8 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "Lua.concat" => Syntax.PrimOp_Lua_concat
                          | "Lua.length" => Syntax.PrimOp_Lua_length
                          | "Lua.isFalsy" => Syntax.PrimOp_Lua_isFalsy
+                         | "JavaScript.sub" => Syntax.PrimOp_JavaScript_sub
+                         | "JavaScript.set" => Syntax.PrimOp_JavaScript_set
                          | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
           val args = Vector.map (fn e => doExp(ctx, env, e)) args
       in Syntax.PrimExp(span, primOp, tyargs, args)

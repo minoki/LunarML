@@ -647,6 +647,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_Char_GT => doBinaryOp (L.GT, true)
            | Syntax.PrimOp_Char_LE => doBinaryOp (L.LE, true)
            | Syntax.PrimOp_Char_GE => doBinaryOp (L.GE, true)
+           | Syntax.PrimOp_WideChar_LT => raise CodeGenError "PrimOp_WideChar_LT not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideChar_GT => raise CodeGenError "PrimOp_WideChar_GT not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideChar_LE => raise CodeGenError "PrimOp_WideChar_LE not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideChar_GE => raise CodeGenError "PrimOp_WideChar_GE not supported on Lua backend (yet)"
            | Syntax.PrimOp_String_LT => doBinaryOp (L.LT, true)
            | Syntax.PrimOp_String_GT => doBinaryOp (L.GT, true)
            | Syntax.PrimOp_String_LE => doBinaryOp (L.LE, true)
@@ -655,6 +659,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
                                                   )
+           | Syntax.PrimOp_WideString_LT => raise CodeGenError "PrimOp_WideString_LT not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideString_GT => raise CodeGenError "PrimOp_WideString_GT not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideString_LE => raise CodeGenError "PrimOp_WideString_LE not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideString_GE => raise CodeGenError "PrimOp_WideString_GE not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideString_HAT => raise CodeGenError "PrimOp_WideString_HAT not supported on Lua backend (yet)"
+           | Syntax.PrimOp_WideString_size => raise CodeGenError "PrimOp_WideString_size not supported on Lua backend (yet)"
            | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
                                                         putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                     )
@@ -718,6 +728,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_Lua_isFalsy => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
                                                   )
+           | Syntax.PrimOp_JavaScript_sub => raise CodeGenError "PrimOp_JavaScript_sub not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_set => raise CodeGenError "PrimOp_JavaScript_set not supported on Lua backend"
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

@@ -108,7 +108,9 @@ and optimize ctx fdecs 0 = fdecs
 and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
-                                   [("SML_LIB", progDir)]
+                                   [("SML_LIB", progDir)
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js")
+                                   ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap
@@ -152,7 +154,9 @@ and doCompile opts fileName
 and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
-                                   [("SML_LIB", OS.Path.mkAbsolute { path = progDir, relativeTo = OS.FileSys.getDir () })]
+                                   [("SML_LIB", OS.Path.mkAbsolute { path = progDir, relativeTo = OS.FileSys.getDir () })
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js")
+                                   ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap

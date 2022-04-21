@@ -88,8 +88,8 @@ val builtins
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* JS interface *)
-                    ,(VId_Js_global, "_global")
-                    ,(VId_Js_call, "_call")
+                    ,(VId_JavaScript_global, "_global")
+                    ,(VId_JavaScript_call, "_call")
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
@@ -300,7 +300,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
                            | _ => NONE
           val doJsCall = case (exp1, exp2) of
                               (F.AppExp (vid_jscall, f), F.PrimExp (F.VectorOp, _, xs)) =>
-                              if F.isLongVId (vid_jscall, InitialEnv.VId_Js_call) then
+                              if F.isLongVId (vid_jscall, InitialEnv.VId_JavaScript_call) then
                                   SOME (fn () => doExpCont ctx env f
                                                            (fn (stmts1, env, f) =>
                                                                mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
@@ -604,6 +604,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_Char_GT => doBinaryOp (J.GT, true)
            | Syntax.PrimOp_Char_LE => doBinaryOp (J.LE, true)
            | Syntax.PrimOp_Char_GE => doBinaryOp (J.GE, true)
+           | Syntax.PrimOp_WideChar_LT => doBinaryOp (J.LT, true)
+           | Syntax.PrimOp_WideChar_GT => doBinaryOp (J.GT, true)
+           | Syntax.PrimOp_WideChar_LE => doBinaryOp (J.LE, true)
+           | Syntax.PrimOp_WideChar_GE => doBinaryOp (J.GE, true)
            | Syntax.PrimOp_String_LT => raise CodeGenError "PrimOp_String_LT not supported on JavaScript backend"
            | Syntax.PrimOp_String_GT => raise CodeGenError "PrimOp_String_GT not supported on JavaScript backend"
            | Syntax.PrimOp_String_LE => raise CodeGenError "PrimOp_String_LE not supported on JavaScript backend"
@@ -612,6 +616,14 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                   )
+           | Syntax.PrimOp_WideString_LT => doBinaryOp (J.LT, true)
+           | Syntax.PrimOp_WideString_GT => doBinaryOp (J.GT, true)
+           | Syntax.PrimOp_WideString_LE => doBinaryOp (J.LE, true)
+           | Syntax.PrimOp_WideString_GE => doBinaryOp (J.GE, true)
+           | Syntax.PrimOp_WideString_HAT => doBinaryOp (J.PLUS, true)
+           | Syntax.PrimOp_WideString_size => doUnary (fn (stmts, env, a) =>
+                                                          putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
+                                                      )
            | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
                                                         putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                     )
@@ -659,6 +671,14 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_Lua_concat => raise CodeGenError "PrimOp_Lua_concat not supported on JavaScript backend"
            | Syntax.PrimOp_Lua_length => raise CodeGenError "PrimOp_Lua_length not supported on JavaScript backend"
            | Syntax.PrimOp_Lua_isFalsy => raise CodeGenError "PrimOp_Lua_isFalsy not supported on JavaScript backend"
+           | Syntax.PrimOp_JavaScript_sub => doBinary (fn (stmts, env, (a, b)) =>
+                                                          putImpureTo ctx env dest (stmts, J.IndexExp (a, b))
+                                                      )
+           | Syntax.PrimOp_JavaScript_set => doTernary (fn (stmts, env, (a, b, c)) =>
+                                                           let val stmts = stmts @ [ J.AssignStat (J.IndexExp (a, b), c) ]
+                                                           in putPureTo ctx env dest (stmts, J.UndefinedExp)
+                                                           end
+                                                       )
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

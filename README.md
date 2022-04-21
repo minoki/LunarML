@@ -14,6 +14,20 @@ $ lua example/hello.lua
 Hello world!
 ```
 
+## Usage
+
+```
+./lunarml [options] input.(sml|mlb)
+```
+
+Modes of operation:
+
+* `-mexe` (default): Produce Lua program.
+* `-mlib`: Produce a Lua module.
+* `--js`: Produce a JavaScript program.
+
+See `--help` for more information.
+
 ## Features
 
 * Most of SML '97 language, including signatures and functors

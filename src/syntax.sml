@@ -174,12 +174,22 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Char_LE (* # of arguments: 2 *)
                 | PrimOp_Char_GT (* # of arguments: 2 *)
                 | PrimOp_Char_GE (* # of arguments: 2 *)
+                | PrimOp_WideChar_LT (* # of arguments: 2 *)
+                | PrimOp_WideChar_LE (* # of arguments: 2 *)
+                | PrimOp_WideChar_GT (* # of arguments: 2 *)
+                | PrimOp_WideChar_GE (* # of arguments: 2 *)
                 | PrimOp_String_LT (* # of arguments: 2 *)
                 | PrimOp_String_LE (* # of arguments: 2 *)
                 | PrimOp_String_GT (* # of arguments: 2 *)
                 | PrimOp_String_GE (* # of arguments: 2 *)
                 | PrimOp_String_HAT (* # of arguments: 2 *)
                 | PrimOp_String_size (* # of arguments: 1 *)
+                | PrimOp_WideString_LT (* # of arguments: 2 *)
+                | PrimOp_WideString_LE (* # of arguments: 2 *)
+                | PrimOp_WideString_GT (* # of arguments: 2 *)
+                | PrimOp_WideString_GE (* # of arguments: 2 *)
+                | PrimOp_WideString_HAT (* # of arguments: 2 *)
+                | PrimOp_WideString_size (* # of arguments: 1 *)
                 | PrimOp_Vector_length (* # of arguments: 1 *)
                 | PrimOp_Array_length (* # of arguments: 1 *)
                 | PrimOp_Unsafe_cast (* # of arguments: 1 *)
@@ -212,6 +222,8 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Lua_concat (* # of arguments: 2 *)
                 | PrimOp_Lua_length (* # of arguments: 1 *)
                 | PrimOp_Lua_isFalsy (* # of arguments: 1 *)
+                | PrimOp_JavaScript_sub (* # of arguments: 2 *)
+                | PrimOp_JavaScript_set (* # of arguments: 3 *)
 fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_call3 = "call3"
   | primOpToString PrimOp_Ref_set = "Ref.:="
@@ -234,16 +246,26 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Real_LE = "Real.<="
   | primOpToString PrimOp_Real_GT = "Real.>"
   | primOpToString PrimOp_Real_GE = "Real.>="
-  | primOpToString PrimOp_Char_LT = "Real.<"
-  | primOpToString PrimOp_Char_LE = "Real.<="
-  | primOpToString PrimOp_Char_GT = "Real.>"
-  | primOpToString PrimOp_Char_GE = "Real.>="
+  | primOpToString PrimOp_Char_LT = "Char.<"
+  | primOpToString PrimOp_Char_LE = "Char.<="
+  | primOpToString PrimOp_Char_GT = "Char.>"
+  | primOpToString PrimOp_Char_GE = "Char.>="
+  | primOpToString PrimOp_WideChar_LT = "WideChar.<"
+  | primOpToString PrimOp_WideChar_LE = "WideChar.<="
+  | primOpToString PrimOp_WideChar_GT = "WideChar.>"
+  | primOpToString PrimOp_WideChar_GE = "WideChar.>="
   | primOpToString PrimOp_String_LT = "String.<"
   | primOpToString PrimOp_String_LE = "String.<="
   | primOpToString PrimOp_String_GT = "String.>"
   | primOpToString PrimOp_String_GE = "String.>="
   | primOpToString PrimOp_String_HAT = "String.^"
   | primOpToString PrimOp_String_size = "String.size"
+  | primOpToString PrimOp_WideString_LT = "WideString.<"
+  | primOpToString PrimOp_WideString_LE = "WideString.<="
+  | primOpToString PrimOp_WideString_GT = "WideString.>"
+  | primOpToString PrimOp_WideString_GE = "WideString.>="
+  | primOpToString PrimOp_WideString_HAT = "WideString.^"
+  | primOpToString PrimOp_WideString_size = "WideString.size"
   | primOpToString PrimOp_Vector_length = "Vector.length"
   | primOpToString PrimOp_Array_length = "Array.length"
   | primOpToString PrimOp_Unsafe_cast = "Unsafe.cast"
@@ -276,6 +298,8 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Lua_concat = "Lua.concat"
   | primOpToString PrimOp_Lua_length = "Lua.length"
   | primOpToString PrimOp_Lua_isFalsy = "Lua.isFalsy"
+  | primOpToString PrimOp_JavaScript_sub = "JavaScript.sub"
+  | primOpToString PrimOp_JavaScript_set = "JavaScript.set"
 
 datatype OverloadClass = CLASS_INT
                        | CLASS_WORD
