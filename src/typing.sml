@@ -285,6 +285,10 @@ local
                                , argTypes = vector [primTy_Lua_value, primTy_Lua_value]
                                , resultType = resultType
                                }
+    fun JsUnary resultType = { typeVariables = []
+                             , argTypes = vector [primTy_JavaScript_value]
+                             , resultType = resultType
+                             }
     fun JsBinary resultType = { typeVariables = []
                               , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value]
                               , resultType = resultType
@@ -331,6 +335,10 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                               , argTypes = vector [primTy_word]
                                               , resultType = primTy_word
                                               }
+  | typeOfPrimCall Syntax.PrimOp_Word_LT = Compare primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_LE = Compare primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_GT = Compare primTy_word
+  | typeOfPrimCall Syntax.PrimOp_Word_GE = Compare primTy_word
   | typeOfPrimCall Syntax.PrimOp_Real_PLUS = HomoBinary primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_MINUS = HomoBinary primTy_real
   | typeOfPrimCall Syntax.PrimOp_Real_TIMES = HomoBinary primTy_real
@@ -427,6 +435,26 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                                   , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value, primTy_JavaScript_value]
                                                   , resultType = primTy_unit
                                                   }
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_EQUAL = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_NOTEQUAL = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_LT = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_GT = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_LE = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_GE = JsBinary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_PLUS = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_MINUS = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_TIMES = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_DIVIDE = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_MOD = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_negate = JsUnary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_andb = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_orb = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_xorb = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_notb = JsUnary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_LSHIFT = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_RSHIFT = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_URSHIFT = JsBinary primTy_JavaScript_value
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_isFalsy = JsUnary primTy_bool
 end
 
 fun newContext() : Context

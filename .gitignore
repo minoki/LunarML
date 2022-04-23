@@ -5,4 +5,6 @@ src/syntax.grm.sig
 src/syntax.grm.sml
 test/*/*.lua
 test/*/*/*.lua
+test/*/*.js
+test/*/*/*.js
 lunarml

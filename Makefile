@@ -1,4 +1,5 @@
 LUA = lua
+NODE = node
 
 all: lunarml
 
@@ -47,4 +48,7 @@ src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)
 
-.PHONY: all test
+test-nodejs: lunarml
+	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
+
+.PHONY: all test test-nodejs

@@ -161,6 +161,10 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Word_MINUS (* # of arguments: 2 *)
                 | PrimOp_Word_TIMES (* # of arguments: 2 *)
                 | PrimOp_Word_TILDE (* # of arguments: 1 *)
+                | PrimOp_Word_LT (* # of arguments: 2 *)
+                | PrimOp_Word_LE (* # of arguments: 2 *)
+                | PrimOp_Word_GT (* # of arguments: 2 *)
+                | PrimOp_Word_GE (* # of arguments: 2 *)
                 | PrimOp_Real_PLUS (* # of arguments: 2 *)
                 | PrimOp_Real_MINUS (* # of arguments: 2 *)
                 | PrimOp_Real_TIMES (* # of arguments: 2 *)
@@ -224,6 +228,26 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_Lua_isFalsy (* # of arguments: 1 *)
                 | PrimOp_JavaScript_sub (* # of arguments: 2 *)
                 | PrimOp_JavaScript_set (* # of arguments: 3 *)
+                | PrimOp_JavaScript_EQUAL (* # of arguments: 2 *)
+                | PrimOp_JavaScript_NOTEQUAL (* # of arguments: 2 *)
+                | PrimOp_JavaScript_LT (* # of arguments: 2 *)
+                | PrimOp_JavaScript_GT (* # of arguments: 2 *)
+                | PrimOp_JavaScript_LE (* # of arguments: 2 *)
+                | PrimOp_JavaScript_GE (* # of arguments: 2 *)
+                | PrimOp_JavaScript_PLUS (* # of arguments: 2 *)
+                | PrimOp_JavaScript_MINUS (* # of arguments: 2 *)
+                | PrimOp_JavaScript_TIMES (* # of arguments: 2 *)
+                | PrimOp_JavaScript_DIVIDE (* # of arguments: 2 *)
+                | PrimOp_JavaScript_MOD (* # of arguments: 2 *)
+                | PrimOp_JavaScript_negate (* # of arguments: 1 *)
+                | PrimOp_JavaScript_andb (* # of arguments: 2 *)
+                | PrimOp_JavaScript_orb (* # of arguments: 2 *)
+                | PrimOp_JavaScript_xorb (* # of arguments: 2 *)
+                | PrimOp_JavaScript_notb (* # of arguments: 1 *)
+                | PrimOp_JavaScript_LSHIFT (* # of arguments: 2 *)
+                | PrimOp_JavaScript_RSHIFT (* # of arguments: 2 *)
+                | PrimOp_JavaScript_URSHIFT (* # of arguments: 2 *)
+                | PrimOp_JavaScript_isFalsy (* # of arguments: 1 *)
 fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_call3 = "call3"
   | primOpToString PrimOp_Ref_set = "Ref.:="
@@ -237,6 +261,10 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Word_MINUS = "Word.-"
   | primOpToString PrimOp_Word_TIMES = "Word.*"
   | primOpToString PrimOp_Word_TILDE = "Word.~"
+  | primOpToString PrimOp_Word_LT = "Word.<"
+  | primOpToString PrimOp_Word_LE = "Word.<="
+  | primOpToString PrimOp_Word_GT = "Word.>"
+  | primOpToString PrimOp_Word_GE = "Word.>="
   | primOpToString PrimOp_Real_PLUS = "Real.+"
   | primOpToString PrimOp_Real_MINUS = "Real.-"
   | primOpToString PrimOp_Real_TIMES = "Real.*"
@@ -300,6 +328,26 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_Lua_isFalsy = "Lua.isFalsy"
   | primOpToString PrimOp_JavaScript_sub = "JavaScript.sub"
   | primOpToString PrimOp_JavaScript_set = "JavaScript.set"
+  | primOpToString PrimOp_JavaScript_EQUAL = "JavaScript.==="
+  | primOpToString PrimOp_JavaScript_NOTEQUAL = "JavaScript.!=="
+  | primOpToString PrimOp_JavaScript_LT = "JavaScript.<"
+  | primOpToString PrimOp_JavaScript_GT = "JavaScript.>"
+  | primOpToString PrimOp_JavaScript_LE = "JavaScript.<="
+  | primOpToString PrimOp_JavaScript_GE = "JavaScript.>="
+  | primOpToString PrimOp_JavaScript_PLUS = "JavaScript.+"
+  | primOpToString PrimOp_JavaScript_MINUS = "JavaScript.-"
+  | primOpToString PrimOp_JavaScript_TIMES = "JavaScript.*"
+  | primOpToString PrimOp_JavaScript_DIVIDE = "JavaScript./"
+  | primOpToString PrimOp_JavaScript_MOD = "JavaScript.%"
+  | primOpToString PrimOp_JavaScript_negate = "JavaScript.negate"
+  | primOpToString PrimOp_JavaScript_andb = "JavaScript.andb"
+  | primOpToString PrimOp_JavaScript_orb = "JavaScript.orb"
+  | primOpToString PrimOp_JavaScript_xorb = "JavaScript.xorb"
+  | primOpToString PrimOp_JavaScript_notb = "JavaScript.notb"
+  | primOpToString PrimOp_JavaScript_LSHIFT = "JavaScript.<<"
+  | primOpToString PrimOp_JavaScript_RSHIFT = "JavaScript.>>"
+  | primOpToString PrimOp_JavaScript_URSHIFT = "JavaScript.>>>"
+  | primOpToString PrimOp_JavaScript_isFalsy = "JavaScript.isFalsy"
 
 datatype OverloadClass = CLASS_INT
                        | CLASS_WORD

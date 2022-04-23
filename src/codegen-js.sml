@@ -60,8 +60,10 @@ val builtins
                     ,(VId_EQUAL_bool, "_EQUAL") (* JS === *)
                     ,(VId_EQUAL_int, "_EQUAL") (* JS === *)
                     ,(VId_EQUAL_word, "_EQUAL") (* JS === *)
-                    (* ,(VId_EQUAL_string, "_EQUAL") (* JS === *) *)
                     ,(VId_EQUAL_char, "_EQUAL") (* JS === *)
+                    ,(VId_EQUAL_wideChar, "_EQUAL") (* JS === *)
+                    ,(VId_EQUAL_string, "_String_EQUAL") (* JS === *)
+                    ,(VId_EQUAL_wideString, "_EQUAL") (* JS === *)
                     ,(VId_EQUAL_list, "_List_EQUAL")
                     ,(VId_EQUAL_ref, "_EQUAL") (* JS === *)
                     ,(VId_EQUAL_array, "_EQUAL") (* JS === *)
@@ -74,6 +76,8 @@ val builtins
                     ,(USyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
                     ,(USyntax.MkShortVId VId_Int_div_bin, "__Int_div")
                     ,(USyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
+                    ,(USyntax.MkShortVId VId_Int_quot_bin, "__Int_quot")
+                    ,(USyntax.MkShortVId VId_Int_rem_bin, "__Int_rem")
                     (* word *)
                     ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
                     ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
@@ -90,6 +94,10 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_global, "_global")
                     ,(VId_JavaScript_call, "_call")
+                    ,(VId_JavaScript_method, "_method")
+                    ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
+                    ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
+                    ,(VId_JavaScript_require, "require")
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
@@ -98,11 +106,12 @@ val builtins
 val builtinBinaryOps : (JsSyntax.BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
     = let open InitialEnv
       in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                    [(VId_EQUAL_bool,   (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_int,    (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_word,   (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_string, (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_char,   (JsSyntax.EQUAL, true))
+                    [(VId_EQUAL_bool,       (JsSyntax.EQUAL, true))
+                    ,(VId_EQUAL_int,        (JsSyntax.EQUAL, true))
+                    ,(VId_EQUAL_word,       (JsSyntax.EQUAL, true))
+                    ,(VId_EQUAL_char,       (JsSyntax.EQUAL, true))
+                    ,(VId_EQUAL_wideChar,   (JsSyntax.EQUAL, true))
+                    ,(VId_EQUAL_wideString, (JsSyntax.EQUAL, true))
                     ]
       end
 fun VIdToJs (vid as USyntax.MkVId (name, n)) = if n < 0 then
@@ -315,10 +324,31 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
                               else
                                   NONE
                             | _ => NONE
+          val doJsMethod = case (exp1, exp2) of
+                               (F.AppExp (vid_jsmethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
+                                (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
+                                     SOME method =>
+                                     if F.isLongVId(vid_jsmethod, InitialEnv.VId_JavaScript_method) andalso JsWriter.isIdentifier method then
+                                         SOME (fn () => doExpCont ctx env self
+                                                                  (fn (stmts1, env, self) =>
+                                                                      mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+                                                                              (Vector.foldr (op ::) [] xs)
+                                                                              (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
+                                                                                            val zs = Vector.map #2 (vector ys)
+                                                                                        in putImpureTo ctx env dest (stmts1 @ stmts2, J.MethodExp (self, method, zs))
+                                                                                        end
+                                                                              )
+                                                                  )
+                                              )
+                                     else
+                                         NONE
+                                   | NONE => NONE
+                                )
+                              | _ => NONE
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
-      in case List.mapPartial (fn x => x) [doBinary, doJsCall] of
+      in case List.mapPartial (fn x => x) [doBinary, doJsCall, doJsMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
@@ -589,6 +619,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
                                                      putPureTo ctx env dest (stmts, J.ToUint32Exp (J.UnaryExp (J.NEGATE, a)))
                                                  )
+           | Syntax.PrimOp_Word_LT => doBinaryOp (J.LT, true)
+           | Syntax.PrimOp_Word_GT => doBinaryOp (J.GT, true)
+           | Syntax.PrimOp_Word_LE => doBinaryOp (J.LE, true)
+           | Syntax.PrimOp_Word_GE => doBinaryOp (J.GE, true)
            | Syntax.PrimOp_Real_PLUS => doBinaryOp (J.PLUS, true)
            | Syntax.PrimOp_Real_MINUS => doBinaryOp (J.MINUS, true)
            | Syntax.PrimOp_Real_TIMES => doBinaryOp (J.TIMES, true)
@@ -608,11 +642,15 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_WideChar_GT => doBinaryOp (J.GT, true)
            | Syntax.PrimOp_WideChar_LE => doBinaryOp (J.LE, true)
            | Syntax.PrimOp_WideChar_GE => doBinaryOp (J.GE, true)
-           | Syntax.PrimOp_String_LT => raise CodeGenError "PrimOp_String_LT not supported on JavaScript backend"
+           | Syntax.PrimOp_String_LT => doBinary (fn (stmts, env, (a, b)) =>
+                                                     putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]))
+                                                 )
            | Syntax.PrimOp_String_GT => raise CodeGenError "PrimOp_String_GT not supported on JavaScript backend"
            | Syntax.PrimOp_String_LE => raise CodeGenError "PrimOp_String_LE not supported on JavaScript backend"
            | Syntax.PrimOp_String_GE => raise CodeGenError "PrimOp_String_GE not supported on JavaScript backend"
-           | Syntax.PrimOp_String_HAT => raise CodeGenError "PrimOp_String_HAT not supported on JavaScript backend"
+           | Syntax.PrimOp_String_HAT => doBinary (fn (stmts, env, (a, b)) =>
+                                                      putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_append"), vector [a, b]))
+                                                  )
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                   )
@@ -679,6 +717,32 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
                                                            in putPureTo ctx env dest (stmts, J.UndefinedExp)
                                                            end
                                                        )
+           | Syntax.PrimOp_JavaScript_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Syntax.PrimOp_JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, true)
+           | Syntax.PrimOp_JavaScript_LT => doBinaryOp (J.LT, false)
+           | Syntax.PrimOp_JavaScript_GT => doBinaryOp (J.GT, false)
+           | Syntax.PrimOp_JavaScript_LE => doBinaryOp (J.LE, false)
+           | Syntax.PrimOp_JavaScript_GE => doBinaryOp (J.GE, false)
+           | Syntax.PrimOp_JavaScript_PLUS => doBinaryOp (J.PLUS, false)
+           | Syntax.PrimOp_JavaScript_MINUS => doBinaryOp (J.MINUS, false)
+           | Syntax.PrimOp_JavaScript_TIMES => doBinaryOp (J.TIMES, false)
+           | Syntax.PrimOp_JavaScript_DIVIDE => doBinaryOp (J.DIV, false)
+           | Syntax.PrimOp_JavaScript_MOD => doBinaryOp (J.MOD, false)
+           | Syntax.PrimOp_JavaScript_negate => doUnary (fn (stmts, env, a) =>
+                                                            putImpureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
+                                                        )
+           | Syntax.PrimOp_JavaScript_andb => doBinaryOp (J.BITAND, false)
+           | Syntax.PrimOp_JavaScript_orb => doBinaryOp (J.BITOR, false)
+           | Syntax.PrimOp_JavaScript_xorb => doBinaryOp (J.BITXOR, false)
+           | Syntax.PrimOp_JavaScript_notb => doUnary (fn (stmts, env, a) =>
+                                                          putImpureTo ctx env dest (stmts, J.UnaryExp (J.BITNOT, a))
+                                                      )
+           | Syntax.PrimOp_JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, false)
+           | Syntax.PrimOp_JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, false)
+           | Syntax.PrimOp_JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, false)
+           | Syntax.PrimOp_JavaScript_isFalsy => doUnary (fn (stmts, env, a) =>
+                                                             putImpureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
+                                                         )
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

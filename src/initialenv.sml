@@ -215,6 +215,10 @@ local val newVId = newLongVId (StrId_JavaScript, [])
 in
 val VId_JavaScript_global = newVId "global"
 val VId_JavaScript_call = newVId "call"
+val VId_JavaScript_method = newVId "method"
+val VId_JavaScript_encodeUtf8 = newVId "encodeUtf8"
+val VId_JavaScript_decodeUtf8 = newVId "decodeUtf8"
+val VId_JavaScript_require = newVId "require" (* Node.js *)
 end
 
 (* Other primitives *)
@@ -230,6 +234,8 @@ val VId_Int_sub_bin = newVId "Int.-"
 val VId_Int_mul_bin = newVId "Int.*"
 val VId_Int_div_bin = newVId "Int.div"
 val VId_Int_mod_bin = newVId "Int.mod"
+val VId_Int_quot_bin = newVId "Int.quot"
+val VId_Int_rem_bin = newVId "Int.rem"
 val VId_Word_div_bin = newVId "Word.div"
 val VId_Word_mod_bin = newVId "Word.mod"
 val VId_Word_LT_bin = newVId "Word.<"
@@ -413,6 +419,10 @@ val initialEnv : Typing.Env
                                , valMap = mkValMap
                                               [("global", TypeScheme ([], primTy_wideString --> primTy_JavaScript_value))
                                               ,("call", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                              ,("method", TypeScheme ([], mkPairType(primTy_JavaScript_value, primTy_wideString) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                              ,("encodeUtf8", TypeScheme ([], primTy_wideString --> primTy_string))
+                                              ,("decodeUtf8", TypeScheme ([], primTy_string --> primTy_wideString))
+                                              ,("require", TypeScheme ([], primTy_JavaScript_value))
                                               ]
                                , strMap = mkStrMap []
                                }
@@ -451,6 +461,8 @@ val initialEnv : Typing.Env
                                            ,("Int.*", USyntax.MkShortVId VId_Int_mul_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("Int.div", USyntax.MkShortVId VId_Int_div_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("Int.mod", USyntax.MkShortVId VId_Int_mod_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.quot", USyntax.MkShortVId VId_Int_div_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.rem", USyntax.MkShortVId VId_Int_mod_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("Word.div", USyntax.MkShortVId VId_Word_div_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("Word.mod", USyntax.MkShortVId VId_Word_mod_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("Word.<", USyntax.MkShortVId VId_Word_LT_bin, TypeScheme([], function2 (primTy_bool, primTy_word, primTy_word)))

@@ -632,6 +632,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
                                                      putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
                                                  )
+           | Syntax.PrimOp_Word_LT => raise CodeGenError "PrimOp_Word_LT not supported on Lua backend"
+           | Syntax.PrimOp_Word_LE => raise CodeGenError "PrimOp_Word_LE not supported on Lua backend"
+           | Syntax.PrimOp_Word_GT => raise CodeGenError "PrimOp_Word_GT not supported on Lua backend"
+           | Syntax.PrimOp_Word_GE => raise CodeGenError "PrimOp_Word_GE not supported on Lua backend"
            | Syntax.PrimOp_Real_PLUS => doBinaryOp (L.PLUS, true)
            | Syntax.PrimOp_Real_MINUS => doBinaryOp (L.MINUS, true)
            | Syntax.PrimOp_Real_TIMES => doBinaryOp (L.TIMES, true)
@@ -730,6 +734,26 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                   )
            | Syntax.PrimOp_JavaScript_sub => raise CodeGenError "PrimOp_JavaScript_sub not supported on Lua backend"
            | Syntax.PrimOp_JavaScript_set => raise CodeGenError "PrimOp_JavaScript_set not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_EQUAL => raise CodeGenError "PrimOp_JavaScript_EQUAL not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_NOTEQUAL => raise CodeGenError "PrimOp_JavaScript_NOTEQUAL not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_LT => raise CodeGenError "PrimOp_JavaScript_LT not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_GT => raise CodeGenError "PrimOp_JavaScript_GT not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_LE => raise CodeGenError "PrimOp_JavaScript_LE not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_GE => raise CodeGenError "PrimOp_JavaScript_GE not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_PLUS => raise CodeGenError "PrimOp_JavaScript_PLUS not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_MINUS => raise CodeGenError "PrimOp_JavaScript_MINUS not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_TIMES => raise CodeGenError "PrimOp_JavaScript_TIMES not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_DIVIDE => raise CodeGenError "PrimOp_JavaScript_DIVIDE not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_MOD => raise CodeGenError "PrimOp_JavaScript_MOD not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_negate => raise CodeGenError "PrimOp_JavaScript_negate not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_andb => raise CodeGenError "PrimOp_JavaScript_andb not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_orb => raise CodeGenError "PrimOp_JavaScript_orb not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_xorb => raise CodeGenError "PrimOp_JavaScript_xorb not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_notb => raise CodeGenError "PrimOp_JavaScript_notb not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_LSHIFT => raise CodeGenError "PrimOp_JavaScript_LSHIFT not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_RSHIFT => raise CodeGenError "PrimOp_JavaScript_RSHIFT not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_URSHIFT => raise CodeGenError "PrimOp_JavaScript_URSHIFT not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_isFalsy => raise CodeGenError "PrimOp_JavaScript_isFalsy not supported on Lua backend"
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

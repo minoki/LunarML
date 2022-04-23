@@ -361,6 +361,10 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "Word.-" => Syntax.PrimOp_Word_MINUS
                          | "Word.*" => Syntax.PrimOp_Word_TIMES
                          | "Word.~" => Syntax.PrimOp_Word_TILDE
+                         | "Word.<" => Syntax.PrimOp_Word_LT
+                         | "Word.<=" => Syntax.PrimOp_Word_LE
+                         | "Word.>" => Syntax.PrimOp_Word_GT
+                         | "Word.>=" => Syntax.PrimOp_Word_GE
                          | "Real.+" => Syntax.PrimOp_Real_PLUS
                          | "Real.-" => Syntax.PrimOp_Real_MINUS
                          | "Real.*" => Syntax.PrimOp_Real_TIMES
@@ -424,6 +428,26 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "Lua.isFalsy" => Syntax.PrimOp_Lua_isFalsy
                          | "JavaScript.sub" => Syntax.PrimOp_JavaScript_sub
                          | "JavaScript.set" => Syntax.PrimOp_JavaScript_set
+                         | "JavaScript.===" => Syntax.PrimOp_JavaScript_EQUAL
+                         | "JavaScript.!==" => Syntax.PrimOp_JavaScript_NOTEQUAL
+                         | "JavaScript.<" => Syntax.PrimOp_JavaScript_LT
+                         | "JavaScript.>" => Syntax.PrimOp_JavaScript_GT
+                         | "JavaScript.<=" => Syntax.PrimOp_JavaScript_LE
+                         | "JavaScript.>=" => Syntax.PrimOp_JavaScript_GE
+                         | "JavaScript.+" => Syntax.PrimOp_JavaScript_PLUS
+                         | "JavaScript.-" => Syntax.PrimOp_JavaScript_MINUS
+                         | "JavaScript.*" => Syntax.PrimOp_JavaScript_TIMES
+                         | "JavaScript./" => Syntax.PrimOp_JavaScript_DIVIDE
+                         | "JavaScript.%" => Syntax.PrimOp_JavaScript_MOD
+                         | "JavaScript.negate" => Syntax.PrimOp_JavaScript_negate
+                         | "JavaScript.andb" => Syntax.PrimOp_JavaScript_andb
+                         | "JavaScript.orb" => Syntax.PrimOp_JavaScript_orb
+                         | "JavaScript.xorb" => Syntax.PrimOp_JavaScript_xorb
+                         | "JavaScript.notb" => Syntax.PrimOp_JavaScript_notb
+                         | "JavaScript.<<" => Syntax.PrimOp_JavaScript_LSHIFT
+                         | "JavaScript.>>" => Syntax.PrimOp_JavaScript_RSHIFT
+                         | "JavaScript.>>>" => Syntax.PrimOp_JavaScript_URSHIFT
+                         | "JavaScript.isFalsy" => Syntax.PrimOp_JavaScript_isFalsy
                          | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
           val args = Vector.map (fn e => doExp(ctx, env, e)) args
       in Syntax.PrimExp(span, primOp, tyargs, args)
