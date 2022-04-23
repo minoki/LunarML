@@ -188,6 +188,7 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_String_GE (* # of arguments: 2 *)
                 | PrimOp_String_HAT (* # of arguments: 2 *)
                 | PrimOp_String_size (* # of arguments: 1 *)
+                | PrimOp_String_str (* # of arguments: 1 *)
                 | PrimOp_WideString_LT (* # of arguments: 2 *)
                 | PrimOp_WideString_LE (* # of arguments: 2 *)
                 | PrimOp_WideString_GT (* # of arguments: 2 *)
@@ -288,6 +289,7 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_String_GE = "String.>="
   | primOpToString PrimOp_String_HAT = "String.^"
   | primOpToString PrimOp_String_size = "String.size"
+  | primOpToString PrimOp_String_str = "String.str"
   | primOpToString PrimOp_WideString_LT = "WideString.<"
   | primOpToString PrimOp_WideString_LE = "WideString.<="
   | primOpToString PrimOp_WideString_GT = "WideString.>"

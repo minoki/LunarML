@@ -663,6 +663,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
                                                   )
+           | Syntax.PrimOp_String_str => if Vector.length args = 1 then
+                                             doExpTo ctx env (Vector.sub (args, 0)) dest
+                                         else
+                                             raise CodeGenError "PrimExp.PrimOp_String_str: invalid number of arguments"
            | Syntax.PrimOp_WideString_LT => raise CodeGenError "PrimOp_WideString_LT not supported on Lua backend (yet)"
            | Syntax.PrimOp_WideString_GT => raise CodeGenError "PrimOp_WideString_GT not supported on Lua backend (yet)"
            | Syntax.PrimOp_WideString_LE => raise CodeGenError "PrimOp_WideString_LE not supported on Lua backend (yet)"

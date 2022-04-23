@@ -240,6 +240,11 @@ val VId_Word_div_bin = newVId "Word.div"
 val VId_Word_mod_bin = newVId "Word.mod"
 val VId_Word_LT_bin = newVId "Word.<"
 
+val VId_String_concat = newVId "String.concat"
+val VId_String_concatWith = newVId "String.concatWith"
+val VId_String_implode = newVId "String.implode"
+val VId_String_translate = newVId "String.translate"
+
 val initialEnv : Typing.Env
     = let open Typing
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
@@ -467,6 +472,10 @@ val initialEnv : Typing.Env
                                            ,("Word.mod", USyntax.MkShortVId VId_Word_mod_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("Word.<", USyntax.MkShortVId VId_Word_LT_bin, TypeScheme([], function2 (primTy_bool, primTy_word, primTy_word)))
                                            ,("exnName", USyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
+                                           ,("String.concat", USyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
+                                           ,("String.concatWith", USyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
+                                           ,("String.implode", USyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
+                                           ,("String.translate", USyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))

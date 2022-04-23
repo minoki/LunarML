@@ -368,6 +368,10 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                                , argTypes = vector [primTy_string]
                                                , resultType = primTy_int
                                                }
+  | typeOfPrimCall Syntax.PrimOp_String_str = { typeVariables = []
+                                              , argTypes = vector [primTy_char]
+                                              , resultType = primTy_string
+                                              }
   | typeOfPrimCall Syntax.PrimOp_WideString_LT = Compare primTy_wideString
   | typeOfPrimCall Syntax.PrimOp_WideString_LE = Compare primTy_wideString
   | typeOfPrimCall Syntax.PrimOp_WideString_GT = Compare primTy_wideString

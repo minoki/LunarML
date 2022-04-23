@@ -198,8 +198,8 @@ fun findNextFragment [] = NONE
   | findNextFragment (_ :: fragments) = findNextFragment fragments
 fun processIndent (indent, []) = []
   | processIndent (indent, Fragment s :: fragments) = s :: processIndent (indent, fragments)
-  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 2, fragments)
-  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 2, fragments)
+  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 4, fragments)
+  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 4, fragments)
   | processIndent (indent, Indent :: fragments) = CharVector.tabulate (indent, fn _ => #" ") :: processIndent (indent, fragments)
   | processIndent (indent, LineTerminator :: fragments) = "\n" :: processIndent (indent, fragments)
 fun buildProgram fragments = String.concat (processIndent (0, fragments))
@@ -273,7 +273,7 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
   | doExp (prec, S.CallExp (fnExp, arguments)) = paren (prec < Precedence.CallExpression) (doExp (Precedence.CallExpression, fnExp) @ Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
   | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) = paren (prec < Precedence.CallExpression) (doExp (Precedence.MemberExpression, objectExp) @ Fragment "." :: Fragment methodName :: Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
   | doExp (prec, S.NewExp (constructorExp, arguments)) = paren (prec < Precedence.MemberExpression) (Fragment "new " :: doExp (Precedence.MemberExpression, constructorExp) @ Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
-  | doExp (prec, S.FunctionExp (parameters, body)) = Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => [ Fragment (idToJs id) ]) parameters) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body @ [ DecreaseIndent, Fragment "}" ]
+  | doExp (prec, S.FunctionExp (parameters, body)) = Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => [ Fragment (idToJs id) ]) parameters) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body @ [ DecreaseIndent, Indent, Fragment "}" ]
   | doExp (prec, S.BinExp (binOp, x, y)) = (case binOpInfo binOp of
                                                 InfixOp (prec', symbol) => paren (prec < prec') (doExp (prec', x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec' - 1, y))
                                               | InfixOpR (prec', symbol) => paren (prec < prec') (doExp (prec' - 1, x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec', y))
@@ -302,9 +302,9 @@ and doStat (S.VarStat variables) = Indent :: Fragment "var " :: commaSepV (Vecto
                              end
   | doStat (S.IfStat (cond, thenBlock, elseBlock)) = let val thenPart = Indent :: Fragment "if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock thenBlock @ [ DecreaseIndent, Indent, Fragment "}" ]
                                                      in if Vector.length elseBlock = 0 then
-                                                            thenPart
+                                                            thenPart @ [ LineTerminator ]
                                                         else
-                                                            thenPart @ Fragment " else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock @ [ DecreaseIndent, Indent, Fragment "}" ]
+                                                            thenPart @ Fragment " else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
                                                      end
   | doStat (S.ReturnStat NONE) = [ Indent, Fragment "return;", LineTerminator ]
   | doStat (S.ReturnStat (SOME exp)) = Indent :: Fragment "return " :: doExp (Precedence.Expression, exp) @ [ Fragment ";", LineTerminator ]

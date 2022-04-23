@@ -388,6 +388,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "String.>=" => Syntax.PrimOp_String_GE
                          | "String.^" => Syntax.PrimOp_String_HAT
                          | "String.size" => Syntax.PrimOp_String_size
+                         | "String.str" => Syntax.PrimOp_String_str
                          | "WideString.<" => Syntax.PrimOp_WideString_LT
                          | "WideString.<=" => Syntax.PrimOp_WideString_LE
                          | "WideString.>" => Syntax.PrimOp_WideString_GT

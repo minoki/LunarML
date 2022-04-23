@@ -82,6 +82,11 @@ val builtins
                     ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
                     ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
                     ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
+                    (* string *)
+                    ,(USyntax.MkShortVId VId_String_concat, "_String_concat")
+                    ,(USyntax.MkShortVId VId_String_concatWith, "_String_concatWith")
+                    ,(USyntax.MkShortVId VId_String_implode, "_String_implode")
+                    ,(USyntax.MkShortVId VId_String_translate, "_String_translate")
                     (* real *)
                     ,(VId_Real_abs, "Math_abs") (* JS Math.abs *)
                     (* Array and Vector *)
@@ -654,6 +659,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : J.Stat list
            | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
                                                       putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                   )
+           | Syntax.PrimOp_String_str => doUnary (fn (stmts, env, a) =>
+                                                     putPureTo ctx env dest (stmts, J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]))
+                                                 )
            | Syntax.PrimOp_WideString_LT => doBinaryOp (J.LT, true)
            | Syntax.PrimOp_WideString_GT => doBinaryOp (J.GT, true)
            | Syntax.PrimOp_WideString_LE => doBinaryOp (J.LE, true)

@@ -122,7 +122,7 @@ fun x > y = y < x
 fun x >= y = Bool.not (x < y)
 fun x ^ y = _primCall "String.^" (x, y)
 fun size x = _primCall "String.size" (x)
-fun str (x : char) : string = _primCall "Unsafe.cast" (x)
+fun str x = _primCall "String.str" (x)
 end
 _overload "String" [string] { < = String.<
                             , <= = String.<=
@@ -1129,6 +1129,267 @@ val sinh : real -> real = LunarML.assumeDiscardable (JavaScript.unsafeFromValue 
 val cosh : real -> real = LunarML.assumeDiscardable (JavaScript.unsafeFromValue JavaScript.Lib.Math.cosh)
 val tanh : real -> real = LunarML.assumeDiscardable (JavaScript.unsafeFromValue JavaScript.Lib.Math.tanh)
 end; (* structure Math *)
+
+structure String : sig
+              type string = string
+              type char = char
+              val size : string -> int
+              val sub : string * int -> char
+              val extract : string * int * int option -> string
+              val substring : string * int * int -> string
+              val ^ : string * string -> string
+              val concat : string list -> string
+              val concatWith : string -> string list -> string
+              val str : char -> string
+              val implode : char list -> string
+              val explode : string -> char list
+              val map : (char -> char) -> string -> string
+              val translate : (char -> string) -> string -> string
+              val tokens : (char -> bool) -> string -> string list
+              val fields : (char -> bool) -> string -> string list
+              val isPrefix : string -> string -> bool
+              val compare : string * string -> order
+              val < : string * string -> bool
+              val <= : string * string -> bool
+              val > : string * string -> bool
+              val >= : string * string -> bool
+          end = struct
+type string = string
+type char = char
+val size = String.size
+val str = String.str
+val op ^ = String.^
+fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
+                                           raise Subscript
+                                       else
+                                           JavaScript.unsafeFromValue (JavaScript.sub (JavaScript.unsafeToValue s, JavaScript.fromInt i)) : char
+fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
+                                                            raise Subscript
+                                                        else
+                                                            JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue s, "subarray") #[JavaScript.fromInt i, JavaScript.fromInt (i + j)])
+fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
+                                                                    raise Subscript
+                                                                else
+                                                                    JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue s, "subarray") #[JavaScript.fromInt i, JavaScript.fromInt (size s)])
+  | extract (s, i, SOME j) = substring (s, i, j)
+val concat : string list -> string = _primVal "String.concat"
+fun concatWith (s : string) (l : string list) : string = _primCall "call2" (_primVal "String.concatWith", s, l)
+val implode : char list -> string = _primVal "String.implode"
+fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
+fun map (f : char -> char) (s : string) : string = let val s = JavaScript.unsafeToValue s
+                                                   in JavaScript.unsafeFromValue (JavaScript.method (s, "map") #[JavaScript.unsafeToValue f])
+                                                   end
+fun translate (f : char -> string) (s : string) : string = _primCall "call2" (_primVal "String.translate", f, s)
+fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implode (List.rev acc) :: revTokens)
+                       | go (revTokens, acc, x :: xs) = if f x then
+                                                            go (if List.null acc then revTokens else implode (List.rev acc) :: revTokens, [], xs)
+                                                        else
+                                                            go (revTokens, x :: acc, xs)
+                 in go ([], [], explode s)
+                 end
+fun fields f s = let fun go (revFields, acc, []) = List.rev (implode (List.rev acc) :: revFields)
+                       | go (revFields, acc, x :: xs) = if f x then
+                                                            go (implode (List.rev acc) :: revFields, [], xs)
+                                                        else
+                                                            go (revFields, x :: acc, xs)
+                 in go ([], [], explode s)
+                 end
+fun isPrefix prefix s = let val n = size prefix
+                        in if n > size s then
+                               false
+                           else
+                               substring (s, 0, n) = prefix
+                        end
+(* isSubstring, isSuffix, collate, toString, scan, fromString, toCString, fromCString *)
+fun compare (s, t) = if s = t then
+                         EQUAL
+                     else if String.< (s, t) then
+                         LESS
+                     else
+                         GREATER
+open String (* size, ^, str, <, <=, >, >= *)
+end (* structure String *)
+val op ^ : string * string -> string = String.^;
+
+structure StringCvt :> sig
+              datatype radix = BIN | OCT | DEC | HEX
+              datatype realfmt = SCI of int option
+                               | FIX of int option
+                               | GEN of int option
+                               | EXACT
+              type ('a, 'b) reader = 'b -> ('a * 'b) option
+              type cs
+              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
+          end where type radix = StringCvt.radix
+              where type realfmt = StringCvt.realfmt = struct
+open StringCvt
+type cs = string * int (* the underlying string, the starting index *)
+fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
+                                                    SOME (String.sub (s, i), (s, i + 1))
+                                                else
+                                                    NONE
+                                  ) (s, 0) of
+                            SOME (x, _) => SOME x
+                          | NONE => NONE
+end
+
+structure Substring :> sig
+              type substring
+              type char = char
+              type string = string
+              val sub : substring * int -> char
+              val size : substring -> int
+              val base : substring -> string * int * int
+              val full : string -> substring
+              val string : substring -> string
+              val getc : substring -> (char * substring) option
+          end = struct
+type char = char
+type string = string
+type substring = string * int * int (* the underlying string, the starting index, the size *)
+fun sub ((s, i, z), j) = if 0 <= j andalso j < z then
+                             String.sub (s, i + j)
+                         else
+                             raise Subscript
+fun size (_, _, z) = z
+fun base x = x
+fun full s = (s, 0, String.size s)
+fun string (s, i, z) = String.substring (s, i, z)
+fun getc (s, i, z) = if z = 0 then
+                         NONE
+                     else
+                         SOME (String.sub (s, i), (s, i + 1, z - 1))
+end;
+
+signature CHAR = sig
+    eqtype char
+    eqtype string
+    val minChar : char
+    val maxChar : char
+    val maxOrd : int
+    val ord : char -> int
+    val chr : int -> char
+    val succ : char -> char
+    val pred : char -> char
+    val compare : char * char -> order
+    val < : char * char -> bool
+    val <= : char * char -> bool
+    val > : char * char -> bool
+    val >= : char * char -> bool
+    val contains : string -> char -> bool
+    val notContains : string -> char -> bool
+    val isAscii : char -> bool
+    val toLower : char -> char
+    val toUpper : char -> char
+    val isAlpha : char -> bool
+    val isAlphaNum : char -> bool
+    val isCntrl : char -> bool
+    val isDigit : char -> bool
+    val isGraph : char -> bool
+    val isHexDigit : char -> bool
+    val isLower : char -> bool
+    val isPrint : char -> bool
+    val isSpace : char -> bool
+    val isPunct : char -> bool
+    val isUpper : char -> bool
+    val toString : char -> String.string
+    (* val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader; implemented in scan-text.sml *)
+    (* val fromString : String.string -> char option; implemented in scan-text.sml *)
+    val toCString : char -> String.string
+    (* val fromCString : String.string -> char option *)
+end;
+
+structure Char :> CHAR where type char = char where type string = String.string = struct
+type char = char
+type string = string
+val minChar = #"\000"
+val maxChar = #"\255"
+val maxOrd = 255
+val ord : char -> int = Unsafe.cast
+val chr : int -> char = fn x => if x < 0 orelse x > 255 then
+                                    raise Chr
+                                else
+                                    Unsafe.cast x : char
+fun succ c = chr (ord c + 1)
+fun pred c = chr (ord c - 1)
+fun compare (x : char, y : char) = if x = y then
+                                       EQUAL
+                                   else if x < y then
+                                       LESS
+                                   else
+                                       GREATER
+fun contains (s : string) (c : char) : bool = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue s, "includes") #[JavaScript.unsafeToValue c])
+fun notContains s c = not (contains s c)
+fun isAscii (c : char) = c <= #"\127"
+fun isUpper (c : char) = #"A" <= c andalso c <= #"Z"
+fun isLower (c : char) = #"a" <= c andalso c <= #"z"
+fun isDigit (c : char) = #"0" <= c andalso c <= #"9"
+fun isAlpha (c : char) = isUpper c orelse isLower c
+fun isAlphaNum (c : char) = isAlpha c orelse isDigit c
+fun isHexDigit (c : char) = isDigit c orelse (#"a" <= c andalso c <= #"f") orelse (#"A" <= c andalso c <= #"Z")
+fun isGraph (c : char) = #"!" <= c andalso c <= #"~"
+fun isPrint (c : char) = isGraph c orelse c = #" "
+fun isPunct (c : char) = isGraph c andalso not (isAlphaNum c)
+fun isCntrl (c : char) = isAscii c andalso not (isPrint c)
+fun isSpace (c : char) = (#"\t" <= c andalso c <= #"\r") orelse c = #" "
+fun toLower (c : char) = if isUpper c then
+                             chr (ord c - (ord #"A" - ord #"a"))
+                         else
+                             c
+fun toUpper (c : char) = if isLower c then
+                             chr (ord c - (ord #"a" - ord #"A"))
+                         else
+                             c
+fun toString #"\\" = "\\\\"
+  | toString #"\"" = "\\\""
+  | toString c = if isPrint c then
+                     String.str c
+                 else
+                     case c of
+                         #"\a" => "\\a"
+                       | #"\b" => "\\b"
+                       | #"\t" => "\\t"
+                       | #"\n" => "\\n"
+                       | #"\v" => "\\v"
+                       | #"\f" => "\\f"
+                       | #"\r" => "\\r"
+                       | _ => let val x = ord c
+                              in if x < 32 then
+                                     "\\^" ^ String.str (chr (x + 64))
+                                 else if x < 100 then
+                                     "\\0" ^ Int.toString x
+                                 else
+                                     "\\" ^ Int.toString x
+                                 (* TODO: x >= 1000 *)
+                              end
+fun toCString #"\\" = "\\\\"
+  | toCString #"\"" = "\\\""
+  | toCString #"?" = "\\?"
+  | toCString #"'" = "\\'"
+  | toCString c = if isPrint c then
+                      String.str c
+                  else
+                      case c of
+                          #"\a" => "\\a"
+                        | #"\b" => "\\b"
+                        | #"\t" => "\\t"
+                        | #"\n" => "\\n"
+                        | #"\v" => "\\v"
+                        | #"\f" => "\\f"
+                        | #"\r" => "\\r"
+                        | _ => let val x = ord c
+                                   val s = Int.fmt StringCvt.OCT x
+                               in if x < 8 then
+                                      "\\00" ^ s
+                                  else if x < 64 then
+                                      "\\0" ^ s
+                                  else
+                                      "\\" ^ s
+                                  (* TODO: x >= 512 *)
+                               end
+open Char (* <, <=, >, >= *)
+(* scan, fromString, toCString, fromCString *)
+end (* structure Char *)
 
 structure Vector : sig
               datatype vector = datatype vector
