@@ -395,6 +395,20 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "WideString.>=" => Syntax.PrimOp_WideString_GE
                          | "WideString.^" => Syntax.PrimOp_WideString_HAT
                          | "WideString.size" => Syntax.PrimOp_WideString_size
+                         | "IntInf.+" => Syntax.PrimOp_IntInf_PLUS
+                         | "IntInf.-" => Syntax.PrimOp_IntInf_MINUS
+                         | "IntInf.*" => Syntax.PrimOp_IntInf_TIMES
+                         | "IntInf.~" => Syntax.PrimOp_IntInf_TILDE
+                         | "IntInf.<" => Syntax.PrimOp_IntInf_LT
+                         | "IntInf.<=" => Syntax.PrimOp_IntInf_LE
+                         | "IntInf.>" => Syntax.PrimOp_IntInf_GT
+                         | "IntInf.>=" => Syntax.PrimOp_IntInf_GE
+                         | "IntInf.andb" => Syntax.PrimOp_IntInf_andb
+                         | "IntInf.orb" => Syntax.PrimOp_IntInf_orb
+                         | "IntInf.xorb" => Syntax.PrimOp_IntInf_xorb
+                         | "IntInf.notb" => Syntax.PrimOp_IntInf_notb
+                         | "IntInf.quot.unchecked" => Syntax.PrimOp_IntInf_quot_unchecked
+                         | "IntInf.rem.unchecked" => Syntax.PrimOp_IntInf_rem_unchecked
                          | "Vector.length" => Syntax.PrimOp_Vector_length
                          | "Array.length" => Syntax.PrimOp_Array_length
                          | "Unsafe.cast" => Syntax.PrimOp_Unsafe_cast
@@ -449,6 +463,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                          | "JavaScript.>>" => Syntax.PrimOp_JavaScript_RSHIFT
                          | "JavaScript.>>>" => Syntax.PrimOp_JavaScript_URSHIFT
                          | "JavaScript.isFalsy" => Syntax.PrimOp_JavaScript_isFalsy
+                         | "JavaScript.**" => Syntax.PrimOp_JavaScript_EXP
                          | _ => emitError(ctx, [span], "unknown primop: " ^ String.toString name)
           val args = Vector.map (fn e => doExp(ctx, env, e)) args
       in Syntax.PrimExp(span, primOp, tyargs, args)

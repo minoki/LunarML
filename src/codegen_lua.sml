@@ -673,6 +673,20 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_WideString_GE => raise CodeGenError "PrimOp_WideString_GE not supported on Lua backend (yet)"
            | Syntax.PrimOp_WideString_HAT => raise CodeGenError "PrimOp_WideString_HAT not supported on Lua backend (yet)"
            | Syntax.PrimOp_WideString_size => raise CodeGenError "PrimOp_WideString_size not supported on Lua backend (yet)"
+           | Syntax.PrimOp_IntInf_PLUS => raise CodeGenError "PrimOp_IntInf_PLUS not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_MINUS => raise CodeGenError "PrimOp_IntInf_MINUS not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_TIMES => raise CodeGenError "PrimOp_IntInf_TIMES not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_TILDE => raise CodeGenError "PrimOp_IntInf_TILDE not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_LT => raise CodeGenError "PrimOp_IntInf_LT not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_LE => raise CodeGenError "PrimOp_IntInf_LE not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_GT => raise CodeGenError "PrimOp_IntInf_GT not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_GE => raise CodeGenError "PrimOp_IntInf_GE not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_andb => raise CodeGenError "PrimOp_IntInf_andb not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_orb => raise CodeGenError "PrimOp_IntInf_orb not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_xorb => raise CodeGenError "PrimOp_IntInf_xorb not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_notb => raise CodeGenError "PrimOp_IntInf_notb not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_quot_unchecked => raise CodeGenError "PrimOp_IntInf_quot_unchecked not supported on Lua backend"
+           | Syntax.PrimOp_IntInf_rem_unchecked => raise CodeGenError "PrimOp_IntInf_rem_unchecked not supported on Lua backend"
            | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
                                                         putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                     )
@@ -758,6 +772,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Syntax.PrimOp_JavaScript_RSHIFT => raise CodeGenError "PrimOp_JavaScript_RSHIFT not supported on Lua backend"
            | Syntax.PrimOp_JavaScript_URSHIFT => raise CodeGenError "PrimOp_JavaScript_URSHIFT not supported on Lua backend"
            | Syntax.PrimOp_JavaScript_isFalsy => raise CodeGenError "PrimOp_JavaScript_isFalsy not supported on Lua backend"
+           | Syntax.PrimOp_JavaScript_EXP => raise CodeGenError "PrimOp_JavaScript_EXP not supported on Lua backend"
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

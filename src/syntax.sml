@@ -195,6 +195,20 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_WideString_GE (* # of arguments: 2 *)
                 | PrimOp_WideString_HAT (* # of arguments: 2 *)
                 | PrimOp_WideString_size (* # of arguments: 1 *)
+                | PrimOp_IntInf_PLUS (* # of arguments: 2 *)
+                | PrimOp_IntInf_MINUS (* # of arguments: 2 *)
+                | PrimOp_IntInf_TIMES (* # of arguments: 2 *)
+                | PrimOp_IntInf_TILDE (* # of arguments: 1 *)
+                | PrimOp_IntInf_LT (* # of arguments: 2 *)
+                | PrimOp_IntInf_LE (* # of arguments: 2 *)
+                | PrimOp_IntInf_GT (* # of arguments: 2 *)
+                | PrimOp_IntInf_GE (* # of arguments: 2 *)
+                | PrimOp_IntInf_andb (* # of arguments: 2 *)
+                | PrimOp_IntInf_orb (* # of arguments: 2 *)
+                | PrimOp_IntInf_xorb (* # of arguments: 2 *)
+                | PrimOp_IntInf_notb (* # of arguments: 1 *)
+                | PrimOp_IntInf_quot_unchecked (* # of arguments: 2 *)
+                | PrimOp_IntInf_rem_unchecked (* # of arguments: 2 *)
                 | PrimOp_Vector_length (* # of arguments: 1 *)
                 | PrimOp_Array_length (* # of arguments: 1 *)
                 | PrimOp_Unsafe_cast (* # of arguments: 1 *)
@@ -249,6 +263,7 @@ datatype PrimOp = PrimOp_call2 (* # of arguments: 3 *)
                 | PrimOp_JavaScript_RSHIFT (* # of arguments: 2 *)
                 | PrimOp_JavaScript_URSHIFT (* # of arguments: 2 *)
                 | PrimOp_JavaScript_isFalsy (* # of arguments: 1 *)
+                | PrimOp_JavaScript_EXP (* # of arguments: 1 *)
 fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_call3 = "call3"
   | primOpToString PrimOp_Ref_set = "Ref.:="
@@ -296,6 +311,20 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_WideString_GE = "WideString.>="
   | primOpToString PrimOp_WideString_HAT = "WideString.^"
   | primOpToString PrimOp_WideString_size = "WideString.size"
+  | primOpToString PrimOp_IntInf_PLUS = "IntInf.+"
+  | primOpToString PrimOp_IntInf_MINUS = "IntInf.-"
+  | primOpToString PrimOp_IntInf_TIMES = "IntInf.*"
+  | primOpToString PrimOp_IntInf_TILDE = "IntInf.~"
+  | primOpToString PrimOp_IntInf_LT = "IntInf.<"
+  | primOpToString PrimOp_IntInf_LE = "IntInf.<="
+  | primOpToString PrimOp_IntInf_GT = "IntInf.>"
+  | primOpToString PrimOp_IntInf_GE = "IntInf.>="
+  | primOpToString PrimOp_IntInf_andb = "IntInf.andb"
+  | primOpToString PrimOp_IntInf_orb = "IntInf.orb"
+  | primOpToString PrimOp_IntInf_xorb = "IntInf.xorb"
+  | primOpToString PrimOp_IntInf_notb = "IntInf.notb"
+  | primOpToString PrimOp_IntInf_quot_unchecked = "IntInf.quot.unchecked"
+  | primOpToString PrimOp_IntInf_rem_unchecked = "IntInf.rem.unchecked"
   | primOpToString PrimOp_Vector_length = "Vector.length"
   | primOpToString PrimOp_Array_length = "Array.length"
   | primOpToString PrimOp_Unsafe_cast = "Unsafe.cast"
@@ -350,6 +379,7 @@ fun primOpToString PrimOp_call2 = "call2"
   | primOpToString PrimOp_JavaScript_RSHIFT = "JavaScript.>>"
   | primOpToString PrimOp_JavaScript_URSHIFT = "JavaScript.>>>"
   | primOpToString PrimOp_JavaScript_isFalsy = "JavaScript.isFalsy"
+  | primOpToString PrimOp_JavaScript_EXP = "JavaScript.**"
 
 datatype OverloadClass = CLASS_INT
                        | CLASS_WORD

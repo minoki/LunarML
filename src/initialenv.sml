@@ -129,17 +129,18 @@ val VId_GE = newVId ">="
 
 (* Equality *)
 val VId_EQUAL = newVId "="
-val VId_EQUAL_bool = newShortVId "=@bool"
-val VId_EQUAL_int = newShortVId "=@int"
-val VId_EQUAL_word = newShortVId "=@word"
-val VId_EQUAL_string = newShortVId "=@string"
-val VId_EQUAL_char = newShortVId "=@char"
-val VId_EQUAL_list = newShortVId "=@list"
-val VId_EQUAL_ref = newShortVId "=@ref"
-val VId_EQUAL_array  = newShortVId "=@array"
-val VId_EQUAL_vector = newShortVId "=@vector"
-val VId_EQUAL_wideString = newShortVId "=@WideString.string"
-val VId_EQUAL_wideChar = newShortVId "=@WideChar.char"
+val VId_EQUAL_bool = newShortVId "Bool.="
+val VId_EQUAL_int = newShortVId "Int.="
+val VId_EQUAL_word = newShortVId "Word.="
+val VId_EQUAL_string = newShortVId "String.="
+val VId_EQUAL_char = newShortVId "Char.="
+val VId_EQUAL_list = newShortVId "List.="
+val VId_EQUAL_ref = newShortVId "Ref.="
+val VId_EQUAL_array  = newShortVId "Array.="
+val VId_EQUAL_vector = newShortVId "Vector.="
+val VId_EQUAL_wideString = newShortVId "WideString.="
+val VId_EQUAL_wideChar = newShortVId "WideChar.="
+val VId_EQUAL_intInf = newShortVId "IntInf.="
 
 (* Int *)
 local val newVId = newLongVId (StrId_Int, [])
@@ -307,6 +308,9 @@ val initialEnv : Typing.Env
           val tyStr_wideString = { typeFunction = TypeFunction([], primTy_wideString)
                                  , valEnv = emptyValEnv
                                  }
+          val tyStr_intInf = { typeFunction = TypeFunction ([], primTy_intInf)
+                             , valEnv = emptyValEnv
+                             }
           val tyStr_list = { typeFunction = TypeFunction([tyVarA], listOf tyA)
                            , valEnv = mkValConMap [("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType(tyA, listOf tyA) --> listOf tyA))
@@ -493,6 +497,7 @@ val initialEnv : Typing.Env
                                  ,("vector", tyStr_vector)
                                  ,("WideChar.char", tyStr_wideChar)
                                  ,("WideString.string", tyStr_wideString)
+                                 ,("IntInf.int", tyStr_intInf)
                                  ,("Function2.function2", tyStr_function2)
                                  ,("Function3.function3", tyStr_function3)
                                  ]
@@ -506,6 +511,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_wideChar, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
                                   ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
                                   ,(primTyName_wideString, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
+                                  ,(primTyName_intInf, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_list, { arity = 1, admitsEquality = true, overloadClass = NONE })
                                   ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
@@ -584,6 +590,7 @@ val initialTyNameSet = let open Typing
                               ,primTyName_wideChar
                               ,primTyName_string
                               ,primTyName_wideString
+                              ,primTyName_intInf
                               ,primTyName_exn
                               ,primTyName_bool
                               ,primTyName_ref

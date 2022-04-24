@@ -1,4 +1,8 @@
 local
+    fun BigIntToWord (x : IntInf.int) : word = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
+    fun WordToBigInt (x : word) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
+    fun asBigInt64 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asIntN #[JavaScript.fromInt 64, JavaScript.unsafeToValue x])
+    fun asBigUint64 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asUintN #[JavaScript.fromInt 64, JavaScript.unsafeToValue x])
     structure WordImpl :> sig
                   structure LargeWord : sig
                                 eqtype word
@@ -188,12 +192,12 @@ local
     type word = Word.word
     val FULL : word = 0wxFF
     val wordSize = 8
-    fun toLarge x = x
+    val toLarge = WordToBigInt
     fun toLargeX x = if x >= 0wx80 then
-                         x - 0wx80
+                         asBigUint64 (WordToBigInt x - 0x80)
                      else
-                         x
-    fun fromLarge x = Word.andb (x, FULL)
+                         WordToBigInt x
+    fun fromLarge x = BigIntToWord (IntInf.andb (x, 0xFF))
     val toInt = Word.toInt
     fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
                        Word.toInt x
@@ -233,12 +237,12 @@ local
     type word = Word.word
     val FULL : word = 0wxFFFF
     val wordSize = 16
-    fun toLarge x = x
+    val toLarge = WordToBigInt
     fun toLargeX x = if x >= 0wx8000 then
-                         x - 0wx8000
+                         asBigUint64 (WordToBigInt x - 0x8000)
                      else
-                         x
-    fun fromLarge x = Word.andb (x, FULL)
+                         WordToBigInt x
+    fun fromLarge x = BigIntToWord (IntInf.andb (x, 0xFFFF))
     val toInt = Word.toInt
     fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
                        Word.toInt x
@@ -275,71 +279,61 @@ local
     val fromLargeWord = fromLarge
     end
     structure Word32 = struct
-    type word = Word.word
-    val FULL : word = 0wxFFFFFFFF
-    val wordSize = 32
-    fun toLarge x = x
+    fun toLarge x = WordToBigInt x
     fun toLargeX x = if x >= 0wx80000000 then
-                         x - 0wx80000000
+                         asBigUint64 (WordToBigInt x - 0x80000000)
                      else
-                         x
-    fun fromLarge x = Word.andb (x, FULL)
-    val toInt = Word.toInt
-    fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
-                       Word.toInt x
-                   else
-                       ~ (Word.toInt (FULL - x) + 1)
-    fun fromInt x = Word.andb (Word.fromInt x, FULL)
-    val andb = Word.andb
-    val orb = Word.orb
-    val xorb = Word.xorb
-    fun notb x = Word.andb (Word.notb x, FULL)
-    fun << (x, y) = Word.andb (Word.<< (x, y), FULL)
-    val >> = Word.>>
-    fun ~>> (x, y) = if x >= 0wx80000000 then
-                         Word.andb (Word.~>> (x - 0wx80000000, y), FULL)
-                     else
-                         Word.>> (x, y)
-    fun x + y = Word.andb (Word.+ (x, y), FULL)
-    fun x - y = Word.andb (Word.- (x, y), FULL)
-    fun x * y = Word.andb (Word.* (x, y), FULL)
-    fun x div y = Word.andb (Word.div (x, y), FULL)
-    fun x mod y = Word.andb (Word.mod (x, y), FULL)
-    val compare = Word.compare
-    val op < = Word.<
-    val op <= = Word.<=
-    val op > = Word.>
-    val op >= = Word.>=
-    fun ~ x = Word.andb (Word.~ x, FULL)
-    val min = Word.min
-    val max = Word.max
-    val fmt = Word.fmt
-    val toString = Word.toString
+                         WordToBigInt x
+    fun fromLarge x = BigIntToWord (IntInf.andb (x, 0xFFFFFFFF))
     val toLargeWord = toLarge
     val toLargeWordX = toLargeX
     val fromLargeWord = fromLarge
+    open Word
     end
     structure Word64 = struct
-    open Word
+    type word = IntInf.int
+    val FULL : word = 0xFFFF_FFFF_FFFF_FFFF
+    val wordSize = 64
     fun toLarge x = x
     fun toLargeX x = x
     fun fromLarge x = x
+    val toInt = IntInf.toInt
+    fun toIntX x = IntInf.toInt (asBigInt64 x)
+    fun fromInt x = asBigUint64 (IntInf.fromInt x)
+    val andb = IntInf.andb
+    val orb = IntInf.orb
+    val xorb = IntInf.xorb
+    fun notb x = asBigUint64 (IntInf.notb x)
+    fun << (x, y) = asBigUint64 (IntInf.<< (x, y))
+    fun >> (x, y) = IntInf.~>> (x, y)
+    fun ~>> (x, y) = IntInf.~>> (asBigInt64 x, y)
+    fun x + y = asBigUint64 (x + y)
+    fun x - y = asBigUint64 (x - y)
+    fun x * y = asBigUint64 (x * y)
+    fun ~ x = asBigUint64 (~ x)
+    fun x div y = IntInf.quot (x, y)
+    fun x mod y = IntInf.rem (x, y)
+    val compare = IntInf.compare
+    val op < = IntInf.<
+    val op <= = IntInf.<=
+    val op > = IntInf.>
+    val op >= = IntInf.>=
+    val min = IntInf.min
+    val max = IntInf.max
+    val fmt = IntInf.fmt
+    fun toString x = fmt StringCvt.HEX x
     val toLargeWord = toLarge
     val toLargeWordX = toLargeX
     val fromLargeWord = fromLarge
     end
     structure LargeWord = Word64
-    val () = if Word.wordSize <> 64 then
-                 raise Fail "Word64 is not available"
-             else
-                 ()
     fun wordToWord8 x = Word.andb (x, Word8.FULL)
     fun wordToWord16 x = Word.andb (x, Word16.FULL)
-    fun wordToWord32 x = Word.andb (x, Word32.FULL)
-    fun wordToWord64 x = x
-    fun wordToLarge x = x
-    fun wordToLargeX x = x
-    fun wordFromLarge x = x
+    fun wordToWord32 x = x
+    fun wordToWord64 x = WordToBigInt x
+    fun wordToLarge x = WordToBigInt x
+    val wordToLargeX = Word32.toLargeX
+    val wordFromLarge = Word32.fromLarge
     end
 in
 structure LargeWord = WordImpl.LargeWord

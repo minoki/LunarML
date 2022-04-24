@@ -1,9 +1,60 @@
 infixes.sml
 _prim
 _primOverloads
+local
 unsafe.sml
 equal.sml
 mlbasis-js.sml
+int-inf-js.sml
+word-js.sml
 io.sml
 text-io-node.sml
+vector-slice.sml
+array-slice.sml
+list-pair.sml
+(* mono-vector.sml
+mono-array.sml *)
+in
+signature INTEGER
+signature WORD
+signature REAL
+signature CHAR
+signature STRING
+(* signature MONO_VECTOR *)
+(* signature MONO_ARRAY *)
+(* signature MONO_ARRAY_SLICE *)
+structure Unsafe (* extension; to be moved... *)
+structure JavaScript (* extension; to be moved... *)
+structure Int
+structure Word
+structure Real
+structure Char
+structure String
+structure Vector
+structure General
+structure List
+structure Option
+structure Bool
+structure IEEEReal
+structure Math
+structure StringCvt
+structure Substring
+structure Array
+structure IO
+structure TextIO
+(* structure OS *)
+(* structure CommandLine *)
+structure VectorSlice
+structure ArraySlice
+structure ListPair
+structure Word8
+structure Word16
+structure Word32
+structure Word64
+structure LargeWord
+structure IntInf
+(* structure CharVector
+structure CharArray
+structure CharArraySlice *)
 top-level.sml
+end

@@ -242,8 +242,9 @@ val primTyName_function2 = USyntax.MkTyName("function2", 12)
 val primTyName_function3 = USyntax.MkTyName("function3", 13)
 val primTyName_wideChar = USyntax.MkTyName ("WideChar.char", 14)
 val primTyName_wideString = USyntax.MkTyName ("WideString.string", 15)
-val primTyName_Lua_value = USyntax.MkTyName ("Lua.value", 16)
-val primTyName_JavaScript_value = USyntax.MkTyName ("JavaScript.value", 17)
+val primTyName_intInf = USyntax.MkTyName ("IntInf.int", 16)
+val primTyName_Lua_value = USyntax.MkTyName ("Lua.value", 17)
+val primTyName_JavaScript_value = USyntax.MkTyName ("JavaScript.value", 18)
 val primTy_unit   = USyntax.RecordType(SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_int)
 val primTy_word   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_word)
@@ -254,6 +255,7 @@ val primTy_exn    = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_exn)
 val primTy_bool   = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_bool)
 val primTy_wideChar = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideChar)
 val primTy_wideString = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideString)
+val primTy_intInf = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_intInf)
 val primTy_Lua_value = USyntax.TyCon(SourcePos.nullSpan, [], primTyName_Lua_value)
 val primTy_JavaScript_value = USyntax.TyCon (SourcePos.nullSpan, [], primTyName_JavaScript_value)
 val VId_Bind = USyntax.MkVId("Bind", ~1)
@@ -381,6 +383,26 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
                                                    , argTypes = vector [primTy_wideString]
                                                    , resultType = primTy_int
                                                    }
+  | typeOfPrimCall Syntax.PrimOp_IntInf_PLUS = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_MINUS = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_TIMES = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_TILDE = { typeVariables = []
+                                                , argTypes = vector [primTy_intInf]
+                                                , resultType = primTy_intInf
+                                                }
+  | typeOfPrimCall Syntax.PrimOp_IntInf_LT = Compare primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_LE = Compare primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_GT = Compare primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_GE = Compare primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_andb = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_orb = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_xorb = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_notb = { typeVariables = []
+                                               , argTypes = vector [primTy_intInf]
+                                               , resultType = primTy_intInf
+                                               }
+  | typeOfPrimCall Syntax.PrimOp_IntInf_quot_unchecked = HomoBinary primTy_intInf
+  | typeOfPrimCall Syntax.PrimOp_IntInf_rem_unchecked = HomoBinary primTy_intInf
   | typeOfPrimCall Syntax.PrimOp_Vector_length = { typeVariables = [(tyVarA, [])]
                                                  , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_vector)]
                                                  , resultType = primTy_int
@@ -459,6 +481,7 @@ fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
   | typeOfPrimCall Syntax.PrimOp_JavaScript_RSHIFT = JsBinary primTy_JavaScript_value
   | typeOfPrimCall Syntax.PrimOp_JavaScript_URSHIFT = JsBinary primTy_JavaScript_value
   | typeOfPrimCall Syntax.PrimOp_JavaScript_isFalsy = JsUnary primTy_bool
+  | typeOfPrimCall Syntax.PrimOp_JavaScript_EXP = JsBinary primTy_JavaScript_value
 end
 
 fun newContext() : Context
@@ -793,6 +816,8 @@ fun unify(ctx : InferenceContext, env : Env, nil : U.Constraint list) : unit = (
          | U.UnaryConstraint(span1, U.TyCon(span2, tyargs, tyname), U.IsInt span3) =>
            if USyntax.eqTyName(tyname, primTyName_int) then
                unify(ctx, env, ctrs) (* do nothing *)
+           else if USyntax.eqTyName(tyname, primTyName_intInf) then
+               unify(ctx, env, ctrs) (* do nothing *)
            else
                let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                in if overloadClass = SOME Syntax.CLASS_INT then
@@ -1026,7 +1051,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
             else (* idstatus = Syntax.ValueVariable *)
                 emitTypeError (ctx, [span], "invalid pattern")
            )
-         | ValueNotFound notfound => emitTypeError (ctx, [span], "invalid pattern: value name '" ^ Syntax.print_LongVId notfound ^ "' nout found")
+         | ValueNotFound notfound => emitTypeError (ctx, [span], "invalid pattern: value name '" ^ Syntax.print_LongVId notfound ^ "' not found")
          | StructureNotFound notfound => emitTypeError (ctx, [span], "invalid pattern: structure name '" ^ Syntax.print_LongStrId notfound ^ "' not found")
       )
   | typeCheckPat (ctx, env, S.TypedPat (span, pat, ty), typeHint)

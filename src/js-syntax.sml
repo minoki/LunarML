@@ -33,6 +33,8 @@ datatype BinaryOp = PLUS
                   | OR (* || *)
                   | ASSIGN
                   | INSTANCEOF
+                  | IN
+                  | EXP (* ** *)
 datatype UnaryOp = VOID
                  | TYPEOF
                  | TONUMBER (* unary + *)
@@ -158,29 +160,30 @@ fun toWideStringLit (s : int vector) = "\"" ^ Vector.foldr (fn (x, acc) => doCha
 end
 
 (* precedence:
- * 17: Expression (comma; left-assoc)
- * 16: AssignmentExpression (= *= /= %= += -= <<= >>= >>>= &= ^= |=, right-assoc)
- * 15: ConditionalExpression
- * 14: LogicalORExpression (||; left-assoc)
- * 13: LogicalANDExpression (&&; left-assoc)
- * 12: BitwiseORExpression (|; left-assoc)
- * 11: BitwiseXORExpression (^; left-assoc)
- * 10: BitwiseANDExpression (&; left-assoc)
- * 9: EqualityExpression (== != === !==; left-assoc)
- * 8: RelationalExpression (< > <= >= instanceof in; left-assoc)
- * 7: ShiftExpression (<< >> >>>; left-assoc)
- * 6: AdditiveExpression ('+', '-'; left-assoc)
- * 5: MultiplicativeExpression ('*', '/', '%'; left-assoc)
+ * 18: Expression (comma; left-assoc)
+ * 17: AssignmentExpression (= *= /= %= += -= <<= >>= >>>= &= ^= |=, right-assoc)
+ * 16: ConditionalExpression
+ * 15: LogicalORExpression (||; left-assoc)
+ * 14: LogicalANDExpression (&&; left-assoc)
+ * 13: BitwiseORExpression (|; left-assoc)
+ * 12: BitwiseXORExpression (^; left-assoc)
+ * 11: BitwiseANDExpression (&; left-assoc)
+ * 10: EqualityExpression (== != === !==; left-assoc)
+ * 9: RelationalExpression (< > <= >= instanceof in; left-assoc)
+ * 8: ShiftExpression (<< >> >>>; left-assoc)
+ * 7: AdditiveExpression ('+', '-'; left-assoc)
+ * 6: MultiplicativeExpression ('*', '/', '%'; left-assoc)
+ * 5: ExponentiationExpression ('**'; right-assoc)
  * 4: UnaryExpression
- * 3: PostfixExpression
+ * 3: PostfixExpression / UpdateExpression
  * 2: CallExpression (LeftHandSideExpression)
  * 1: MemberExpression
  * 0: PrimaryExpression: this | Identifier | Literal | ArrayLiteral | ObjectLiteral | FunctionExpression | '(' Expression ')'
  *)
 
 structure Precedence = struct
-val Expression = 17
-val AssignmentExpression = 16
+val Expression = 18
+val AssignmentExpression = 17
 val UnaryExpression = 4
 val CallExpression = 2
 val MemberExpression = 1
@@ -235,29 +238,32 @@ and commaSepV1 xs = (case VectorSlice.getItem xs of
 
 datatype BinaryOp = InfixOp of (* prec *) int * string
                   | InfixOpR of (* prec *) int * string
-fun binOpInfo S.PLUS = InfixOp (6, "+")
-  | binOpInfo S.MINUS = InfixOp (6, "-")
-  | binOpInfo S.TIMES = InfixOp (5, "*")
-  | binOpInfo S.DIV = InfixOp (5, "/")
-  | binOpInfo S.MOD = InfixOp (5, "%")
-  | binOpInfo S.BITAND = InfixOp (10, "&")
-  | binOpInfo S.BITXOR = InfixOp (11, "^")
-  | binOpInfo S.BITOR = InfixOp (12, "|")
-  | binOpInfo S.RSHIFT = InfixOp (7, ">>")
-  | binOpInfo S.LSHIFT = InfixOp (7, "<<")
-  | binOpInfo S.URSHIFT = InfixOp (7, ">>>")
-  | binOpInfo S.LT = InfixOp (8, "<")
-  | binOpInfo S.LE = InfixOp (8, "<=")
-  | binOpInfo S.GT = InfixOp (8, ">")
-  | binOpInfo S.GE = InfixOp (8, ">=")
-  | binOpInfo S.EQUAL = InfixOp (9, "===")
-  | binOpInfo S.NOTEQUAL = InfixOp (9, "!==")
-  | binOpInfo S.LAXEQUAL = InfixOp (9, "==")
-  | binOpInfo S.NOTLAXEQUAL = InfixOp (9, "!=")
-  | binOpInfo S.AND = InfixOp (13, "&&")
-  | binOpInfo S.OR = InfixOp (14, "||")
-  | binOpInfo S.ASSIGN = InfixOp (16, "=")
+                  | ExponentiationOp
+fun binOpInfo S.PLUS = InfixOp (7, "+")
+  | binOpInfo S.MINUS = InfixOp (7, "-")
+  | binOpInfo S.TIMES = InfixOp (6, "*")
+  | binOpInfo S.DIV = InfixOp (6, "/")
+  | binOpInfo S.MOD = InfixOp (6, "%")
+  | binOpInfo S.BITAND = InfixOp (11, "&")
+  | binOpInfo S.BITXOR = InfixOp (12, "^")
+  | binOpInfo S.BITOR = InfixOp (13, "|")
+  | binOpInfo S.RSHIFT = InfixOp (8, ">>")
+  | binOpInfo S.LSHIFT = InfixOp (8, "<<")
+  | binOpInfo S.URSHIFT = InfixOp (8, ">>>")
+  | binOpInfo S.LT = InfixOp (9, "<")
+  | binOpInfo S.LE = InfixOp (9, "<=")
+  | binOpInfo S.GT = InfixOp (9, ">")
+  | binOpInfo S.GE = InfixOp (9, ">=")
+  | binOpInfo S.EQUAL = InfixOp (10, "===")
+  | binOpInfo S.NOTEQUAL = InfixOp (10, "!==")
+  | binOpInfo S.LAXEQUAL = InfixOp (10, "==")
+  | binOpInfo S.NOTLAXEQUAL = InfixOp (10, "!=")
+  | binOpInfo S.AND = InfixOp (14, "&&")
+  | binOpInfo S.OR = InfixOp (15, "||")
+  | binOpInfo S.ASSIGN = InfixOp (17, "=")
   | binOpInfo S.INSTANCEOF = InfixOp (9, "instanceof")
+  | binOpInfo S.IN = InfixOp (9, "in")
+  | binOpInfo S.EXP = ExponentiationOp
 
 fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
                                              S.Null => [ Fragment "null" ]
@@ -277,6 +283,7 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
   | doExp (prec, S.BinExp (binOp, x, y)) = (case binOpInfo binOp of
                                                 InfixOp (prec', symbol) => paren (prec < prec') (doExp (prec', x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec' - 1, y))
                                               | InfixOpR (prec', symbol) => paren (prec < prec') (doExp (prec' - 1, x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec', y))
+                                              | ExponentiationOp => paren (prec < 5) (doExp (3, x) @ Fragment " ** " :: doExp (5, y))
                                            )
   | doExp (prec, S.UnaryExp (unOp, x)) = let val symbol = case unOp of
                                                               S.VOID => "void"

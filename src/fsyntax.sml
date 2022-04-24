@@ -523,9 +523,12 @@ val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
                                                 in List.foldl USyntax.TyNameMap.insert' USyntax.TyNameMap.empty
                                                               [(primTyName_int, VId_EQUAL_int)
                                                               ,(primTyName_word, VId_EQUAL_word)
-                                                              ,(primTyName_string, VId_EQUAL_string)
                                                               ,(primTyName_char, VId_EQUAL_char)
+                                                              ,(primTyName_wideChar, VId_EQUAL_wideChar)
+                                                              ,(primTyName_string, VId_EQUAL_string)
+                                                              ,(primTyName_wideString, VId_EQUAL_wideString)
                                                               ,(primTyName_bool, VId_EQUAL_bool)
+                                                              ,(primTyName_intInf, VId_EQUAL_intInf)
                                                               ,(primTyName_list, VId_EQUAL_list)
                                                               ,(primTyName_vector, VId_EQUAL_vector)
                                                               ]
@@ -611,6 +614,8 @@ fun toFTy (ctx : Context, env : Env, U.TyVar (span, tv)) = F.TyVar tv
 fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
     = (case ty of
            U.TyCon(_, [], tycon) => if U.eqTyName (tycon, Typing.primTyName_int) then
+                                        F.IntConstExp (value, toFTy (ctx, env, ty))
+                                    else if U.eqTyName (tycon, Typing.primTyName_intInf) then
                                         F.IntConstExp (value, toFTy (ctx, env, ty))
                                     else
                                         let val overloadMap = case USyntax.TyNameMap.find (#overloadMap env, tycon) of

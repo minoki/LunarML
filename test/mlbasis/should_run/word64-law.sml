@@ -1,9 +1,9 @@
 infix $
 fun f $ x = f x;
 
-fun checkOrdering (x : word, y : word)
+fun checkOrdering (x : Word64.word, y : Word64.word)
     = let val result = (x < y, x <= y, x > y, x >= y)
-          val list = List.map (fn f => f (x, y)) [Word.<, Word.<=, Word.>, Word.>=]
+          val list = List.map (fn f => f (x, y)) [Word64.<, Word64.<=, Word64.>, Word64.>=]
       in if x = y then
              result = (false, true, false, true)
              andalso list = [false, true, false, true]
@@ -15,15 +15,15 @@ fun checkOrdering (x : word, y : word)
              andalso list = [false, false, true, true]
       end;
 
-fun checkDivMod (x : word, y : word)
+fun checkDivMod (x : Word64.word, y : Word64.word)
     = if y = 0w0 then
-          ((Word.div (x, y); false) handle Div => true)
-          andalso ((Word.mod (x, y); false) handle Div => true)
+          ((Word64.div (x, y); false) handle Div => true)
+          andalso ((Word64.mod (x, y); false) handle Div => true)
       else
           let val q = x div y
               val r = x mod y
-              val q' = Word.div $ (x, y)
-              val r' = Word.mod $ (x, y)
+              val q' = Word64.div $ (x, y)
+              val r' = Word64.mod $ (x, y)
           in q = q' andalso r = r' andalso r < y andalso x = q * y + r
           end;
 
@@ -35,7 +35,7 @@ fun checkSmall (x, y)
       else if checkOrdering (x, y) andalso checkDivMod (x, y) then
           checkSmall (x, y + 0w1)
       else
-          ( print ("Error with (x, y) = (0wx" ^ Word.toString x ^ ", 0wx" ^ Word.toString y ^ ")\n")
+          ( print ("Error with (x, y) = (0wx" ^ Word64.toString x ^ ", 0wx" ^ Word64.toString y ^ ")\n")
           ; false
           );
 if checkSmall (0w0, 0w0) then
@@ -59,12 +59,12 @@ val gen = xorshift64 0wxBADCAFE;
 fun loop n = if n <= 0 then
                  true
              else
-                 let val x = Word.fromLarge (Word64.toLarge (gen ()))
-                     val y = Word.fromLarge (Word64.toLarge (gen ()))
+                 let val x = Word64.fromLarge (Word64.toLarge (gen ()))
+                     val y = Word64.fromLarge (Word64.toLarge (gen ()))
                  in if checkOrdering (x, y) andalso checkDivMod (x, y) then
                         loop (n - 1)
                     else
-                        ( print ("Error with (x, y) = (0wx" ^ Word.toString x ^ ", 0wx" ^ Word.toString y ^ ")\n")
+                        ( print ("Error with (x, y) = (0wx" ^ Word64.toString x ^ ", 0wx" ^ Word64.toString y ^ ")\n")
                         ; false
                         )
                  end;
