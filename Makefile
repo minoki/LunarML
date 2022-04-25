@@ -14,6 +14,7 @@ sources = \
   src/numeric.sml \
   src/text.sml \
   src/target-info.sml \
+  src/primitives.sml \
   src/syntax.grm.sig \
   src/sourcepos.sml \
   src/tokenizer.sml \
@@ -44,6 +45,9 @@ lunarml: LunarML.mlb $(sources)
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
+
+src/primitives.sml: src/primitives.lua
+	$(LUA) src/primitives.lua $@ > /dev/null
 
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)

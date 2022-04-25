@@ -36,7 +36,7 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | RecordEqualityOp (* value argument: the record of equalities *)
                 | DataTagOp (* value argument: the data *)
                 | DataPayloadOp (* value argument: the data *)
-                | PrimFnOp of Syntax.PrimOp
+                | PrimFnOp of Primitives.PrimOp
                 | ExnInstanceofOp (* type argument: none, value arguments: exception, exception tag *)
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of { sourceSpan : SourcePos.span
@@ -464,7 +464,7 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp DataTagOp = "DataTagOp"
   | print_PrimOp DataPayloadOp = "DataPayloadOp"
   | print_PrimOp ExnInstanceofOp = "ExnInstanceofOp"
-  | print_PrimOp (PrimFnOp x) = Syntax.primOpToString x
+  | print_PrimOp (PrimFnOp x) = Primitives.toString x
 fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Ty x :: xs) [] tyargs) ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of

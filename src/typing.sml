@@ -206,7 +206,7 @@ fun isNonexpansive(env : Env, USyntax.SConExp _) = true
   | isNonexpansive(env, USyntax.ProjectionExp _) = true
   | isNonexpansive(env, USyntax.ListExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
   | isNonexpansive(env, USyntax.VectorExp(_, xs, _)) = Vector.all (fn x => isNonexpansive(env, x)) xs
-  | isNonexpansive(env, USyntax.PrimExp(_, Syntax.PrimOp_call2, _, args)) = false
+  | isNonexpansive(env, USyntax.PrimExp (_, Primitives.PrimOp_call2, _, args)) = false
   | isNonexpansive(env, _) = false
 and isConexp(env : Env, USyntax.TypedExp(_, e, _)) = isConexp(env, e)
   | isConexp(env, USyntax.VarExp(_, _, Syntax.ValueVariable, _)) = false
@@ -263,226 +263,36 @@ val LongVId_Bind = USyntax.MkShortVId(VId_Bind)
 
 fun isRefOrArray (tyname : USyntax.TyName) = USyntax.eqTyName (tyname, primTyName_ref) orelse USyntax.eqTyName (tyname, primTyName_array)
 
-type PrimTypeScheme = { typeVariables : (USyntax.TyVar * USyntax.UnaryConstraint list) list, argTypes : USyntax.Ty vector, resultType : USyntax.Ty }
-local
-    val tyVarA = USyntax.AnonymousTyVar 0
-    val tyVarB = USyntax.AnonymousTyVar 1
-    val tyVarC = USyntax.AnonymousTyVar 2
-    val tyVarD = USyntax.AnonymousTyVar 3
-    val tyA = USyntax.TyVar (SourcePos.nullSpan, tyVarA)
-    val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
-    val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
-    val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
-    fun Binary (a, b) result = { typeVariables = []
-                               , argTypes = vector [a, b]
-                               , resultType = result
-                               }
-    fun HomoBinary a = Binary (a, a) a
-    fun Compare a = Binary (a, a) primTy_bool
-    fun LuaUnary resultType = { typeVariables = []
-                              , argTypes = vector [primTy_Lua_value]
-                              , resultType = resultType
-                              }
-    fun LuaBinary resultType = { typeVariables = []
-                               , argTypes = vector [primTy_Lua_value, primTy_Lua_value]
-                               , resultType = resultType
-                               }
-    fun JsUnary resultType = { typeVariables = []
-                             , argTypes = vector [primTy_JavaScript_value]
-                             , resultType = resultType
-                             }
-    fun JsBinary resultType = { typeVariables = []
-                              , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value]
-                              , resultType = resultType
-                              }
-in
-(* PRIMITIVES *)
-fun typeOfPrimCall Syntax.PrimOp_call2 : PrimTypeScheme
-    = { typeVariables = [(tyVarA, []) (* result *)
-                        ,(tyVarB, []) (* arg1 *)
-                        ,(tyVarC, []) (* arg2 *)
-                        ]
-      , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC], primTyName_function2), tyB, tyC]
-      , resultType = tyA
-      }
-  | typeOfPrimCall Syntax.PrimOp_call3
-    = { typeVariables = [(tyVarA, []) (* result *)
-                        ,(tyVarB, []) (* arg1 *)
-                        ,(tyVarC, []) (* arg2 *)
-                        ,(tyVarD, []) (* arg3 *)
-                        ]
-      , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA, tyB, tyC, tyD], primTyName_function3), tyB, tyC, tyD]
-      , resultType = tyA
-      }
-  | typeOfPrimCall Syntax.PrimOp_Ref_set = { typeVariables = [(tyVarA, [])]
-                                           , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_ref), tyA]
-                                           , resultType = primTy_unit
-                                           }
-  | typeOfPrimCall Syntax.PrimOp_Ref_read = { typeVariables = [(tyVarA, [])]
-                                            , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_ref)]
-                                            , resultType = tyA
-                                            }
-  | typeOfPrimCall Syntax.PrimOp_Bool_not = { typeVariables = []
-                                            , argTypes = vector [primTy_bool]
-                                            , resultType = primTy_bool
-                                            }
-  | typeOfPrimCall Syntax.PrimOp_Int_LT = Compare primTy_int
-  | typeOfPrimCall Syntax.PrimOp_Int_LE = Compare primTy_int
-  | typeOfPrimCall Syntax.PrimOp_Int_GT = Compare primTy_int
-  | typeOfPrimCall Syntax.PrimOp_Int_GE = Compare primTy_int
-  | typeOfPrimCall Syntax.PrimOp_Word_PLUS = HomoBinary primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_MINUS = HomoBinary primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_TIMES = HomoBinary primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_TILDE = { typeVariables = []
-                                              , argTypes = vector [primTy_word]
-                                              , resultType = primTy_word
-                                              }
-  | typeOfPrimCall Syntax.PrimOp_Word_LT = Compare primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_LE = Compare primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_GT = Compare primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Word_GE = Compare primTy_word
-  | typeOfPrimCall Syntax.PrimOp_Real_PLUS = HomoBinary primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_MINUS = HomoBinary primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_TIMES = HomoBinary primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_DIVIDE = HomoBinary primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_TILDE = { typeVariables = []
-                                              , argTypes = vector [primTy_real]
-                                              , resultType = primTy_real
-                                              }
-  | typeOfPrimCall Syntax.PrimOp_Real_LT = Compare primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_LE = Compare primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_GT = Compare primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Real_GE = Compare primTy_real
-  | typeOfPrimCall Syntax.PrimOp_Char_LT = Compare primTy_char
-  | typeOfPrimCall Syntax.PrimOp_Char_LE = Compare primTy_char
-  | typeOfPrimCall Syntax.PrimOp_Char_GT = Compare primTy_char
-  | typeOfPrimCall Syntax.PrimOp_Char_GE = Compare primTy_char
-  | typeOfPrimCall Syntax.PrimOp_WideChar_LT = Compare primTy_wideChar
-  | typeOfPrimCall Syntax.PrimOp_WideChar_LE = Compare primTy_wideChar
-  | typeOfPrimCall Syntax.PrimOp_WideChar_GT = Compare primTy_wideChar
-  | typeOfPrimCall Syntax.PrimOp_WideChar_GE = Compare primTy_wideChar
-  | typeOfPrimCall Syntax.PrimOp_String_LT = Compare primTy_string
-  | typeOfPrimCall Syntax.PrimOp_String_LE = Compare primTy_string
-  | typeOfPrimCall Syntax.PrimOp_String_GT = Compare primTy_string
-  | typeOfPrimCall Syntax.PrimOp_String_GE = Compare primTy_string
-  | typeOfPrimCall Syntax.PrimOp_String_HAT = HomoBinary primTy_string
-  | typeOfPrimCall Syntax.PrimOp_String_size = { typeVariables = []
-                                               , argTypes = vector [primTy_string]
-                                               , resultType = primTy_int
-                                               }
-  | typeOfPrimCall Syntax.PrimOp_String_str = { typeVariables = []
-                                              , argTypes = vector [primTy_char]
-                                              , resultType = primTy_string
-                                              }
-  | typeOfPrimCall Syntax.PrimOp_WideString_LT = Compare primTy_wideString
-  | typeOfPrimCall Syntax.PrimOp_WideString_LE = Compare primTy_wideString
-  | typeOfPrimCall Syntax.PrimOp_WideString_GT = Compare primTy_wideString
-  | typeOfPrimCall Syntax.PrimOp_WideString_GE = Compare primTy_wideString
-  | typeOfPrimCall Syntax.PrimOp_WideString_HAT = HomoBinary primTy_wideString
-  | typeOfPrimCall Syntax.PrimOp_WideString_size = { typeVariables = []
-                                                   , argTypes = vector [primTy_wideString]
-                                                   , resultType = primTy_int
-                                                   }
-  | typeOfPrimCall Syntax.PrimOp_IntInf_PLUS = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_MINUS = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_TIMES = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_TILDE = { typeVariables = []
-                                                , argTypes = vector [primTy_intInf]
-                                                , resultType = primTy_intInf
-                                                }
-  | typeOfPrimCall Syntax.PrimOp_IntInf_LT = Compare primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_LE = Compare primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_GT = Compare primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_GE = Compare primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_andb = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_orb = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_xorb = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_notb = { typeVariables = []
-                                               , argTypes = vector [primTy_intInf]
-                                               , resultType = primTy_intInf
-                                               }
-  | typeOfPrimCall Syntax.PrimOp_IntInf_quot_unchecked = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_IntInf_rem_unchecked = HomoBinary primTy_intInf
-  | typeOfPrimCall Syntax.PrimOp_Vector_length = { typeVariables = [(tyVarA, [])]
-                                                 , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_vector)]
-                                                 , resultType = primTy_int
-                                                 }
-  | typeOfPrimCall Syntax.PrimOp_Array_length = { typeVariables = [(tyVarA, [])]
-                                                , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_array)]
-                                                , resultType = primTy_int
-                                                }
-  | typeOfPrimCall Syntax.PrimOp_Unsafe_cast = { typeVariables = [(tyVarA, []), (tyVarB, [])]
-                                                , argTypes = vector [tyA]
-                                                , resultType = tyB
-                                                }
-  | typeOfPrimCall Syntax.PrimOp_Unsafe_Vector_sub = { typeVariables = [(tyVarA, [])]
-                                                     , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_vector), primTy_int]
-                                                     , resultType = tyA
-                                                     }
-  | typeOfPrimCall Syntax.PrimOp_Unsafe_Array_sub = { typeVariables = [(tyVarA, [])]
-                                                    , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_array), primTy_int]
-                                                    , resultType = tyA
-                                                    }
-  | typeOfPrimCall Syntax.PrimOp_Unsafe_Array_update = { typeVariables = [(tyVarA, [])]
-                                                       , argTypes = vector [USyntax.TyCon (SourcePos.nullSpan, [tyA], primTyName_array), primTy_int, tyA]
-                                                       , resultType = primTy_unit
-                                                       }
-  | typeOfPrimCall Syntax.PrimOp_Lua_sub = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_set = { typeVariables = []
-                                           , argTypes = vector [primTy_Lua_value, primTy_Lua_value, primTy_Lua_value]
-                                           , resultType = primTy_unit
-                                           }
-  | typeOfPrimCall Syntax.PrimOp_Lua_isNil = LuaUnary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_EQUAL = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_NOTEQUAL = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_LT = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_GT = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_LE = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_GE = LuaBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_Lua_PLUS = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_MINUS = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_TIMES = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_DIVIDE = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_INTDIV = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_MOD = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_pow = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_unm = LuaUnary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_andb = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_orb = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_xorb = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_notb = LuaUnary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_LSHIFT = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_RSHIFT = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_concat = LuaBinary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_length = LuaUnary primTy_Lua_value
-  | typeOfPrimCall Syntax.PrimOp_Lua_isFalsy = LuaUnary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_sub = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_set = { typeVariables = []
-                                                  , argTypes = vector [primTy_JavaScript_value, primTy_JavaScript_value, primTy_JavaScript_value]
-                                                  , resultType = primTy_unit
-                                                  }
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_EQUAL = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_NOTEQUAL = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_LT = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_GT = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_LE = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_GE = JsBinary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_PLUS = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_MINUS = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_TIMES = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_DIVIDE = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_MOD = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_negate = JsUnary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_andb = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_orb = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_xorb = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_notb = JsUnary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_LSHIFT = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_RSHIFT = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_URSHIFT = JsBinary primTy_JavaScript_value
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_isFalsy = JsUnary primTy_bool
-  | typeOfPrimCall Syntax.PrimOp_JavaScript_EXP = JsBinary primTy_JavaScript_value
-end
+structure TypeOfPrimitives = TypeOfPrimitives (type ty = USyntax.Ty
+                                               type tv = USyntax.TyVar
+                                               val tyVarA = USyntax.AnonymousTyVar 0
+                                               val tyVarB = USyntax.AnonymousTyVar 1
+                                               val tyVarC = USyntax.AnonymousTyVar 2
+                                               val tyVarD = USyntax.AnonymousTyVar 3
+                                               val tyA = USyntax.TyVar (SourcePos.nullSpan, tyVarA)
+                                               val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
+                                               val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
+                                               val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
+                                               val unit = primTy_unit
+                                               val bool = primTy_bool
+                                               val int = primTy_int
+                                               val word = primTy_word
+                                               val real = primTy_real
+                                               val char = primTy_char
+                                               val wideChar = primTy_wideChar
+                                               val string = primTy_string
+                                               val wideString = primTy_wideString
+                                               val intInf = primTy_intInf
+                                               val LuaValue = primTy_Lua_value
+                                               val JavaScriptValue = primTy_JavaScript_value
+                                               fun refOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_ref)
+                                               fun vectorOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_vector)
+                                               fun arrayOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
+                                               fun function2Of (a, b, c) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
+                                               fun function3Of (a, b, c, d) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
+                                              ) : sig
+                                 val typeOf : Primitives.PrimOp -> { vars : (USyntax.TyVar * USyntax.UnaryConstraint list) list, args : USyntax.Ty vector, result : USyntax.Ty }
+                                 end
 
 fun newContext() : Context
     = { nextTyVar = ref 100
@@ -1395,7 +1205,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                        ()
                    else
                        emitTypeError (ctx, [span], "type arguments to _primCall is not supported currently")
-          val { typeVariables, argTypes, resultType } = typeOfPrimCall primOp
+          val { vars = typeVariables, args = argTypes, result = resultType } = TypeOfPrimitives.typeOf primOp
           val () = if Vector.length args = Vector.length argTypes then
                        ()
                    else

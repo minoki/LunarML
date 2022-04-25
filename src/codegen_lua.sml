@@ -556,7 +556,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                  in doExpCont ctx env a cont
                                  end
                              else
-                                 raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+                                 raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
           fun doBinary cont = if Vector.length args = 2 then
                                   let val a = Vector.sub (args, 0)
                                       val b = Vector.sub (args, 1)
@@ -567,7 +567,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                          )
                                   end
                               else
-                                  raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
           fun doBinaryOp (binop, pure) = doBinary (fn (stmts, env, (a, b)) =>
                                                       if pure then
                                                           putPureTo ctx env dest (stmts, L.BinExp (binop, a, b))
@@ -587,192 +587,142 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                          )
                                   end
                               else
-                                  raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
+                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
       in case primOp of
-             Syntax.PrimOp_call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
-                                                               putImpureTo ctx env dest (stmts, L.CallExp (f, vector [a0, a1]))
-                                              )
-           | Syntax.PrimOp_call3 => if Vector.length args = 4 then
-                                        let val f = Vector.sub (args, 0)
-                                            val a0 = Vector.sub (args, 1)
-                                            val a1 = Vector.sub (args, 2)
-                                            val a2 = Vector.sub (args, 3)
-                                        in doExpCont ctx env f (fn (stmts0, env, f) =>
-                                                                   doExpCont ctx env a0 (fn (stmts1, env, a0) =>
-                                                                                            doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                                                     doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                                              putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, L.CallExp (f, vector [a0, a1, a2]))
-                                                                                                                                          )
-                                                                                                                 )
-                                                                                        )
-                                                               )
-                                        end
-                                    else
-                                        raise CodeGenError "PrimExp.call3: invalid number of arguments"
-           | Syntax.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
-                                                   (* REPRESENTATION_OF_REF *)
-                                                   let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], vector [b]) ]
-                                                   in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
-                                                   end
-                                               )
-           | Syntax.PrimOp_Ref_read => doUnary (fn (stmts, env, a) =>
-                                               (* REPRESENTATION_OF_REF *)
-                                                   putImpureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "payload")))
-                                               )
-           | Syntax.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
-                                                   putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
-                                               )
-           | Syntax.PrimOp_Int_LT => doBinaryOp (L.LT, true)
-           | Syntax.PrimOp_Int_GT => doBinaryOp (L.GT, true)
-           | Syntax.PrimOp_Int_LE => doBinaryOp (L.LE, true)
-           | Syntax.PrimOp_Int_GE => doBinaryOp (L.GE, true)
-           | Syntax.PrimOp_Word_PLUS => doBinaryOp (L.PLUS, true)
-           | Syntax.PrimOp_Word_MINUS => doBinaryOp (L.MINUS, true)
-           | Syntax.PrimOp_Word_TIMES => doBinaryOp (L.TIMES, true)
-           | Syntax.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
-                                                     putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                                 )
-           | Syntax.PrimOp_Word_LT => raise CodeGenError "PrimOp_Word_LT not supported on Lua backend"
-           | Syntax.PrimOp_Word_LE => raise CodeGenError "PrimOp_Word_LE not supported on Lua backend"
-           | Syntax.PrimOp_Word_GT => raise CodeGenError "PrimOp_Word_GT not supported on Lua backend"
-           | Syntax.PrimOp_Word_GE => raise CodeGenError "PrimOp_Word_GE not supported on Lua backend"
-           | Syntax.PrimOp_Real_PLUS => doBinaryOp (L.PLUS, true)
-           | Syntax.PrimOp_Real_MINUS => doBinaryOp (L.MINUS, true)
-           | Syntax.PrimOp_Real_TIMES => doBinaryOp (L.TIMES, true)
-           | Syntax.PrimOp_Real_DIVIDE => doBinaryOp (L.DIV, true)
-           | Syntax.PrimOp_Real_TILDE => doUnary (fn (stmts, env, a) =>
-                                                     putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                                 )
-           | Syntax.PrimOp_Real_LT => doBinaryOp (L.LT, true)
-           | Syntax.PrimOp_Real_GT => doBinaryOp (L.GT, true)
-           | Syntax.PrimOp_Real_LE => doBinaryOp (L.LE, true)
-           | Syntax.PrimOp_Real_GE => doBinaryOp (L.GE, true)
-           | Syntax.PrimOp_Char_LT => doBinaryOp (L.LT, true)
-           | Syntax.PrimOp_Char_GT => doBinaryOp (L.GT, true)
-           | Syntax.PrimOp_Char_LE => doBinaryOp (L.LE, true)
-           | Syntax.PrimOp_Char_GE => doBinaryOp (L.GE, true)
-           | Syntax.PrimOp_WideChar_LT => raise CodeGenError "PrimOp_WideChar_LT not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideChar_GT => raise CodeGenError "PrimOp_WideChar_GT not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideChar_LE => raise CodeGenError "PrimOp_WideChar_LE not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideChar_GE => raise CodeGenError "PrimOp_WideChar_GE not supported on Lua backend (yet)"
-           | Syntax.PrimOp_String_LT => doBinaryOp (L.LT, true)
-           | Syntax.PrimOp_String_GT => doBinaryOp (L.GT, true)
-           | Syntax.PrimOp_String_LE => doBinaryOp (L.LE, true)
-           | Syntax.PrimOp_String_GE => doBinaryOp (L.GE, true)
-           | Syntax.PrimOp_String_HAT => doBinaryOp (L.CONCAT, true)
-           | Syntax.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
-                                                      putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
+             Primitives.PrimOp_call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
+                                                      putImpureTo ctx env dest (stmts, L.CallExp (f, vector [a0, a1]))
                                                   )
-           | Syntax.PrimOp_String_str => if Vector.length args = 1 then
-                                             doExpTo ctx env (Vector.sub (args, 0)) dest
-                                         else
-                                             raise CodeGenError "PrimExp.PrimOp_String_str: invalid number of arguments"
-           | Syntax.PrimOp_WideString_LT => raise CodeGenError "PrimOp_WideString_LT not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideString_GT => raise CodeGenError "PrimOp_WideString_GT not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideString_LE => raise CodeGenError "PrimOp_WideString_LE not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideString_GE => raise CodeGenError "PrimOp_WideString_GE not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideString_HAT => raise CodeGenError "PrimOp_WideString_HAT not supported on Lua backend (yet)"
-           | Syntax.PrimOp_WideString_size => raise CodeGenError "PrimOp_WideString_size not supported on Lua backend (yet)"
-           | Syntax.PrimOp_IntInf_PLUS => raise CodeGenError "PrimOp_IntInf_PLUS not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_MINUS => raise CodeGenError "PrimOp_IntInf_MINUS not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_TIMES => raise CodeGenError "PrimOp_IntInf_TIMES not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_TILDE => raise CodeGenError "PrimOp_IntInf_TILDE not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_LT => raise CodeGenError "PrimOp_IntInf_LT not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_LE => raise CodeGenError "PrimOp_IntInf_LE not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_GT => raise CodeGenError "PrimOp_IntInf_GT not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_GE => raise CodeGenError "PrimOp_IntInf_GE not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_andb => raise CodeGenError "PrimOp_IntInf_andb not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_orb => raise CodeGenError "PrimOp_IntInf_orb not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_xorb => raise CodeGenError "PrimOp_IntInf_xorb not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_notb => raise CodeGenError "PrimOp_IntInf_notb not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_quot_unchecked => raise CodeGenError "PrimOp_IntInf_quot_unchecked not supported on Lua backend"
-           | Syntax.PrimOp_IntInf_rem_unchecked => raise CodeGenError "PrimOp_IntInf_rem_unchecked not supported on Lua backend"
-           | Syntax.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
-                                                        putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
-                                                    )
-           | Syntax.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
-                                                       putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
+           | Primitives.PrimOp_call3 => if Vector.length args = 4 then
+                                            let val f = Vector.sub (args, 0)
+                                                val a0 = Vector.sub (args, 1)
+                                                val a1 = Vector.sub (args, 2)
+                                                val a2 = Vector.sub (args, 3)
+                                            in doExpCont ctx env f (fn (stmts0, env, f) =>
+                                                                       doExpCont ctx env a0 (fn (stmts1, env, a0) =>
+                                                                                                doExpCont ctx env a1 (fn (stmts2, env, a1) =>
+                                                                                                                         doExpCont ctx env a2 (fn (stmts3, env, a2) =>
+                                                                                                                                                  putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, L.CallExp (f, vector [a0, a1, a2]))
+                                                                                                                                              )
+                                                                                                                     )
+                                                                                            )
+                                                                   )
+                                            end
+                                        else
+                                            raise CodeGenError "primop call3: invalid number of arguments"
+           | Primitives.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
+                                                       (* REPRESENTATION_OF_REF *)
+                                                       let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], vector [b]) ]
+                                                       in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+                                                       end
                                                    )
-           | Syntax.PrimOp_Unsafe_cast => if Vector.length args = 1 then
-                                              doExpTo ctx env (Vector.sub (args, 0)) dest
-                                          else
-                                              raise CodeGenError ("PrimExp." ^ Syntax.primOpToString primOp ^ ": invalid number of arguments")
-           | Syntax.PrimOp_Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
-                                                             putPureTo ctx env dest (stmts, L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
-                                                         )
-           | Syntax.PrimOp_Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
-                                                             putImpureTo ctx env dest (stmts, L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
-                                                         )
-           | Syntax.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                                let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], vector [v]) ]
-                                                                in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
-                                                                end
+           | Primitives.PrimOp_Ref_read => doUnary (fn (stmts, env, a) =>
+                                                       (* REPRESENTATION_OF_REF *)
+                                                       putImpureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "payload")))
+                                                   )
+           | Primitives.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
+                                                       putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
+                                                   )
+           | Primitives.PrimOp_Int_LT => doBinaryOp (L.LT, true)
+           | Primitives.PrimOp_Int_GT => doBinaryOp (L.GT, true)
+           | Primitives.PrimOp_Int_LE => doBinaryOp (L.LE, true)
+           | Primitives.PrimOp_Int_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_Word_PLUS => doBinaryOp (L.PLUS, true)
+           | Primitives.PrimOp_Word_MINUS => doBinaryOp (L.MINUS, true)
+           | Primitives.PrimOp_Word_TIMES => doBinaryOp (L.TIMES, true)
+           | Primitives.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
+                                                         putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
+                                                     )
+           | Primitives.PrimOp_Real_PLUS => doBinaryOp (L.PLUS, true)
+           | Primitives.PrimOp_Real_MINUS => doBinaryOp (L.MINUS, true)
+           | Primitives.PrimOp_Real_TIMES => doBinaryOp (L.TIMES, true)
+           | Primitives.PrimOp_Real_DIVIDE => doBinaryOp (L.DIV, true)
+           | Primitives.PrimOp_Real_TILDE => doUnary (fn (stmts, env, a) =>
+                                                         putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
+                                                     )
+           | Primitives.PrimOp_Real_LT => doBinaryOp (L.LT, true)
+           | Primitives.PrimOp_Real_GT => doBinaryOp (L.GT, true)
+           | Primitives.PrimOp_Real_LE => doBinaryOp (L.LE, true)
+           | Primitives.PrimOp_Real_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_Char_LT => doBinaryOp (L.LT, true)
+           | Primitives.PrimOp_Char_GT => doBinaryOp (L.GT, true)
+           | Primitives.PrimOp_Char_LE => doBinaryOp (L.LE, true)
+           | Primitives.PrimOp_Char_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_String_LT => doBinaryOp (L.LT, true)
+           | Primitives.PrimOp_String_GT => doBinaryOp (L.GT, true)
+           | Primitives.PrimOp_String_LE => doBinaryOp (L.LE, true)
+           | Primitives.PrimOp_String_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_String_HAT => doBinaryOp (L.CONCAT, true)
+           | Primitives.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
+                                                          putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
+                                                      )
+           | Primitives.PrimOp_String_str => if Vector.length args = 1 then
+                                                 doExpTo ctx env (Vector.sub (args, 0)) dest
+                                             else
+                                                 raise CodeGenError "primop String.str: invalid number of arguments"
+           | Primitives.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
+                                                            putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
+                                                        )
+           | Primitives.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
+                                                           putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
+                                                       )
+           | Primitives.PrimOp_Unsafe_cast => if Vector.length args = 1 then
+                                                  doExpTo ctx env (Vector.sub (args, 0)) dest
+                                              else
+                                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.PrimOp_Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
+                                                                 putPureTo ctx env dest (stmts, L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
+                                                             )
+           | Primitives.PrimOp_Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
+                                                                putImpureTo ctx env dest (stmts, L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
                                                             )
-           | Syntax.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
-                                                   putImpureTo ctx env dest (stmts, L.IndexExp (a, b))
-                                               )
-           | Syntax.PrimOp_Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
-                                                    let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, b)], vector [c]) ]
-                                                    in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
-                                                    end
-                                                )
-           | Syntax.PrimOp_Lua_isNil => doUnary (fn (stmts, env, a) =>
-                                                    putPureTo ctx env dest (stmts, L.BinExp (L.EQUAL, a, L.ConstExp L.Nil))
-                                                )
-           | Syntax.PrimOp_Lua_EQUAL => doBinaryOp (L.EQUAL, false)
-           | Syntax.PrimOp_Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, false)
-           | Syntax.PrimOp_Lua_LT => doBinaryOp (L.LT, false)
-           | Syntax.PrimOp_Lua_GT => doBinaryOp (L.GT, false)
-           | Syntax.PrimOp_Lua_LE => doBinaryOp (L.LE, false)
-           | Syntax.PrimOp_Lua_GE => doBinaryOp (L.GE, false)
-           | Syntax.PrimOp_Lua_PLUS => doBinaryOp (L.PLUS, false)
-           | Syntax.PrimOp_Lua_MINUS => doBinaryOp (L.MINUS, false)
-           | Syntax.PrimOp_Lua_TIMES => doBinaryOp (L.TIMES, false)
-           | Syntax.PrimOp_Lua_DIVIDE => doBinaryOp (L.DIV, false)
-           | Syntax.PrimOp_Lua_INTDIV => doBinaryOp (L.INTDIV, false)
-           | Syntax.PrimOp_Lua_MOD => doBinaryOp (L.MOD, false)
-           | Syntax.PrimOp_Lua_pow => doBinaryOp (L.POW, false)
-           | Syntax.PrimOp_Lua_unm => doUnary (fn (stmts, env, a) =>
-                                                  putImpureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                              )
-           | Syntax.PrimOp_Lua_andb => doBinaryOp (L.BITAND, false)
-           | Syntax.PrimOp_Lua_orb => doBinaryOp (L.BITOR, false)
-           | Syntax.PrimOp_Lua_xorb => doBinaryOp (L.BITXOR, false)
-           | Syntax.PrimOp_Lua_notb => doUnary (fn (stmts, env, a) =>
-                                                   putImpureTo ctx env dest (stmts, L.UnaryExp (L.BITNOT, a))
-                                               )
-           | Syntax.PrimOp_Lua_LSHIFT => doBinaryOp (L.LSHIFT, false)
-           | Syntax.PrimOp_Lua_RSHIFT => doBinaryOp (L.RSHIFT, false)
-           | Syntax.PrimOp_Lua_concat => doBinaryOp (L.CONCAT, false)
-           | Syntax.PrimOp_Lua_length => doUnary (fn (stmts, env, a) =>
-                                                     putImpureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
-                                                 )
-           | Syntax.PrimOp_Lua_isFalsy => doUnary (fn (stmts, env, a) =>
-                                                      putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
+           | Primitives.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
+                                                                    let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], vector [v]) ]
+                                                                    in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+                                                                    end
+                                                                )
+           | Primitives.PrimOp_Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
+                                                       putImpureTo ctx env dest (stmts, L.IndexExp (a, b))
+                                                   )
+           | Primitives.PrimOp_Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
+                                                        let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, b)], vector [c]) ]
+                                                        in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+                                                        end
+                                                    )
+           | Primitives.PrimOp_Lua_isNil => doUnary (fn (stmts, env, a) =>
+                                                        putPureTo ctx env dest (stmts, L.BinExp (L.EQUAL, a, L.ConstExp L.Nil))
+                                                    )
+           | Primitives.PrimOp_Lua_EQUAL => doBinaryOp (L.EQUAL, false)
+           | Primitives.PrimOp_Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, false)
+           | Primitives.PrimOp_Lua_LT => doBinaryOp (L.LT, false)
+           | Primitives.PrimOp_Lua_GT => doBinaryOp (L.GT, false)
+           | Primitives.PrimOp_Lua_LE => doBinaryOp (L.LE, false)
+           | Primitives.PrimOp_Lua_GE => doBinaryOp (L.GE, false)
+           | Primitives.PrimOp_Lua_PLUS => doBinaryOp (L.PLUS, false)
+           | Primitives.PrimOp_Lua_MINUS => doBinaryOp (L.MINUS, false)
+           | Primitives.PrimOp_Lua_TIMES => doBinaryOp (L.TIMES, false)
+           | Primitives.PrimOp_Lua_DIVIDE => doBinaryOp (L.DIV, false)
+           | Primitives.PrimOp_Lua_INTDIV => doBinaryOp (L.INTDIV, false)
+           | Primitives.PrimOp_Lua_MOD => doBinaryOp (L.MOD, false)
+           | Primitives.PrimOp_Lua_pow => doBinaryOp (L.POW, false)
+           | Primitives.PrimOp_Lua_unm => doUnary (fn (stmts, env, a) =>
+                                                      putImpureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
                                                   )
-           | Syntax.PrimOp_JavaScript_sub => raise CodeGenError "PrimOp_JavaScript_sub not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_set => raise CodeGenError "PrimOp_JavaScript_set not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_EQUAL => raise CodeGenError "PrimOp_JavaScript_EQUAL not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_NOTEQUAL => raise CodeGenError "PrimOp_JavaScript_NOTEQUAL not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_LT => raise CodeGenError "PrimOp_JavaScript_LT not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_GT => raise CodeGenError "PrimOp_JavaScript_GT not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_LE => raise CodeGenError "PrimOp_JavaScript_LE not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_GE => raise CodeGenError "PrimOp_JavaScript_GE not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_PLUS => raise CodeGenError "PrimOp_JavaScript_PLUS not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_MINUS => raise CodeGenError "PrimOp_JavaScript_MINUS not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_TIMES => raise CodeGenError "PrimOp_JavaScript_TIMES not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_DIVIDE => raise CodeGenError "PrimOp_JavaScript_DIVIDE not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_MOD => raise CodeGenError "PrimOp_JavaScript_MOD not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_negate => raise CodeGenError "PrimOp_JavaScript_negate not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_andb => raise CodeGenError "PrimOp_JavaScript_andb not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_orb => raise CodeGenError "PrimOp_JavaScript_orb not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_xorb => raise CodeGenError "PrimOp_JavaScript_xorb not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_notb => raise CodeGenError "PrimOp_JavaScript_notb not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_LSHIFT => raise CodeGenError "PrimOp_JavaScript_LSHIFT not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_RSHIFT => raise CodeGenError "PrimOp_JavaScript_RSHIFT not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_URSHIFT => raise CodeGenError "PrimOp_JavaScript_URSHIFT not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_isFalsy => raise CodeGenError "PrimOp_JavaScript_isFalsy not supported on Lua backend"
-           | Syntax.PrimOp_JavaScript_EXP => raise CodeGenError "PrimOp_JavaScript_EXP not supported on Lua backend"
+           | Primitives.PrimOp_Lua_andb => doBinaryOp (L.BITAND, false)
+           | Primitives.PrimOp_Lua_orb => doBinaryOp (L.BITOR, false)
+           | Primitives.PrimOp_Lua_xorb => doBinaryOp (L.BITXOR, false)
+           | Primitives.PrimOp_Lua_notb => doUnary (fn (stmts, env, a) =>
+                                                       putImpureTo ctx env dest (stmts, L.UnaryExp (L.BITNOT, a))
+                                                   )
+           | Primitives.PrimOp_Lua_LSHIFT => doBinaryOp (L.LSHIFT, false)
+           | Primitives.PrimOp_Lua_RSHIFT => doBinaryOp (L.RSHIFT, false)
+           | Primitives.PrimOp_Lua_concat => doBinaryOp (L.CONCAT, false)
+           | Primitives.PrimOp_Lua_length => doUnary (fn (stmts, env, a) =>
+                                                         putImpureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
+                                                     )
+           | Primitives.PrimOp_Lua_isFalsy => doUnary (fn (stmts, env, a) =>
+                                                          putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
+                                                      )
+           | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
     = if Vector.length args = 2 then

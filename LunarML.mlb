@@ -5,6 +5,7 @@ pluto/pluto.mlb
 src/numeric.sml
 src/text.sml
 src/target-info.sml
+src/primitives.sml
 src/syntax.grm.sig
 src/sourcepos.sml
 src/tokenizer.sml

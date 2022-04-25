@@ -259,7 +259,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
               = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_true) | _ => false) then
                     (env, exp)
                 else if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_false) | _ => false) then
-                    (env, F.PrimExp(F.PrimFnOp Syntax.PrimOp_Bool_not, vector [], vector [exp]))
+                    (env, F.PrimExp(F.PrimFnOp Primitives.PrimOp_Bool_not, vector [], vector [exp]))
                 else if isExnType ty then
                     let val tag = case path of
                                       F.Root vid => (case USyntax.VIdMap.find(exnTagMap, vid) of
@@ -284,14 +284,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                                                                  in genMatcher env exp ty0 innerPat
                                                                                  end
             | genMatcher env exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
-              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Syntax.PrimOp_Vector_length, vector [elemTy], vector [exp])
+              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.PrimOp_Vector_length, vector [elemTy], vector [exp])
                     val intTy = F.TyCon ([], Typing.primTyName_int)
                     val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
-                                 F.PrimExp (F.PrimFnOp Syntax.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimFnOp Primitives.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
                              else
                                  F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
+                in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                            in (env, F.SimplifyingAndalsoExp(e, exp))
                                                            end
                                  ) (env, e0) pats
@@ -311,7 +311,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     val payloadTy = getPayloadTy(tyargs, conTy)
                 in if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
                        case tyargs of
-                           [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Syntax.PrimOp_Ref_read, vector [tyarg], vector [exp])) payloadTy innerPat
+                           [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Primitives.PrimOp_Ref_read, vector [tyarg], vector [exp])) payloadTy innerPat
                          | _ => raise Fail "invalid type arguments to 'ref'"
                    else
                        genBinders env (F.DataPayloadExp exp) payloadTy innerPat
@@ -319,7 +319,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
             | genBinders env exp ty (F.ConPat(span, path, NONE, tyargs)) = []
             | genBinders env exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders env exp ty pat
             | genBinders env exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
-                                                                                   in Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Syntax.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                                   in Vector.foldri (fn (i, pat, acc) => genBinders env (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
                                                                                    end
           and isExhaustive env (F.WildcardPat _) = true
             | isExhaustive env (F.SConPat _) = false
@@ -785,7 +785,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
           and doExp' (env : Env) exp0 : F.Exp * InlineExp option
               = (case exp0 of
                      F.PrimExp (primOp, tyargs, args) => let val shouldInline = case primOp of
-                                                                                    F.PrimFnOp Syntax.PrimOp_Unsafe_cast => true
+                                                                                    F.PrimFnOp Primitives.PrimOp_Unsafe_cast => true
                                                                                   | _ => false
                                                          in if shouldInline then
                                                                 let val (exps, iexps) = Vector.foldr (fn (exp, (exps, SOME iexps)) => (case doExp' env exp of

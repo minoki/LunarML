@@ -183,7 +183,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of SourcePos.span * Exp vector * Ty
              | VectorExp of SourcePos.span * Exp vector * Ty
-             | PrimExp of SourcePos.span * Syntax.PrimOp * Ty vector * Exp vector
+             | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
      and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
