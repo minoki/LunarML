@@ -18,7 +18,7 @@ exception CodeGenError of string
  * non-tuple record -> immutable object, with integer index starting with 0
  * vector -> immutable Array
  * array -> mutable Array
- * function -> function with arity 1 (TODO: trampolines)
+ * function -> function with arity 1, with optional _MLTAIL_ field
  *)
 val builtins
     = let open InitialEnv
@@ -193,7 +193,7 @@ fun extractLongVId (F.VarExp vid) = SOME (USyntax.MkShortVId vid)
 end
 
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> J.Stat list *)
-fun putPureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME exp) ]
+fun putPureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.True, exp]))) ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId v), exp)) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
                                                                                      stmts @ [ J.VarStat (vector [(destination, SOME exp)]) ]
@@ -201,7 +201,7 @@ fun putPureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
-and putImpureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME exp) ]
+and putImpureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.True, exp]))) ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId v), exp)) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
                                                                                        stmts @ [ J.VarStat (vector [(destination, SOME exp)]) ]
@@ -372,7 +372,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                  (fn (stmts1, env, e1') =>
                                      doExpCont ctx env exp2
                                                (fn (stmts2, env, e2') =>
-                                                   putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
+                                                   case dest of
+                                                       Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
+                                                     | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
                                                )
                                  )
       end
@@ -442,7 +444,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                ]
                 )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], J.FunctionExp (vector [VIdToJs vid], vector (doExpTo ctx (increaseLevel (addSymbol (env, vid))) exp Return)))
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (vector [VIdToJs vid], vector (doExpTo ctx (increaseLevel (addSymbol (env, vid))) exp Return))]))
   | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
                                                                                             let val label = case label of
                                                                                                                 Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
