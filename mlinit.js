@@ -10,20 +10,26 @@ function _list(a) {
     return x;
 }
 function _Match_tag() {}
+_Match_tag.prototype.name = "Match";
 const _Match = new _Match_tag();
 function _Bind_tag() {}
+_Bind_tag.prototype.name = "Bind";
 const _Bind = new _Bind_tag();
 function _Div_tag() {}
+_Div_tag.prototype.name = "Div";
 const _Div = new _Div_tag();
 function _Overflow_tag() {}
+_Overflow_tag.prototype.name = "Overflow";
 const _Overflow = new _Overflow_tag();
 function _Size_tag() {}
+_Size_tag.prototype.name = "Size";
 const _Size = new _Size_tag();
 function _Subscript_tag() {}
+_Subscript_tag.prototype.name = "Subscript";
 const _Subscript = new _Subscript_tag();
 function _Fail_tag(payload) { this.payload = payload; }
+_Fail_tag.prototype.name = "Fail";
 function _Fail(payload) { return new _Fail_tag(payload); }
-// const _exnName
 function _EQUAL(a) { return a[0] === a[1]; }
 function _String_EQUAL(a) {
     var s = a[0], t = a[1];
@@ -186,6 +192,7 @@ function _decodeUtf8(s) {
     var decoder = new TextDecoder();
     return decoder.decode(s);
 }
+function _exnName(e) { return _encodeUtf8(e.name); }
 function _String_LT(a, b) {
     var i = 0;
     var m = a.length, n = b.length;

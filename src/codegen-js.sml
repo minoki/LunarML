@@ -800,7 +800,7 @@ and doDec ctx env (F.ValDec (vid, _, exp))
            else
                J.VarStat (vector [(tagName, SOME value)])
         end
-      , J.AssignStat (J.IndexExp (J.VarExp (J.UserDefinedId tagName), J.ConstExp (J.asciiStringAsWide "ML_name")), J.ConstExp (J.asciiStringAsWide name))
+      , J.AssignStat (J.IndexExp (J.IndexExp (J.VarExp (J.UserDefinedId tagName), J.ConstExp (J.asciiStringAsWide "prototype")), J.ConstExp (J.asciiStringAsWide "name")), J.ConstExp (J.asciiStringAsWide name))
       , case payloadTy of
             NONE => let val value = J.NewExp (J.VarExp (J.UserDefinedId tagName), vector [])
                     in if isHoisted (env, conName) then
