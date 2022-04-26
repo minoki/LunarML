@@ -117,6 +117,7 @@ datatype PrimOp = PrimOp_call2 (* call2 *)
                 | PrimOp_JavaScript_URSHIFT (* JavaScript.>>> *)
                 | PrimOp_JavaScript_EXP (* JavaScript.** *)
                 | PrimOp_JavaScript_isFalsy (* JavaScript.isFalsy *)
+                | PrimOp_JavaScript_typeof (* JavaScript.typeof *)
 fun toString PrimOp_call2 = "call2"
   | toString PrimOp_call3 = "call3"
   | toString PrimOp_Ref_set = "Ref.:="
@@ -234,6 +235,7 @@ fun toString PrimOp_call2 = "call2"
   | toString PrimOp_JavaScript_URSHIFT = "JavaScript.>>>"
   | toString PrimOp_JavaScript_EXP = "JavaScript.**"
   | toString PrimOp_JavaScript_isFalsy = "JavaScript.isFalsy"
+  | toString PrimOp_JavaScript_typeof = "JavaScript.typeof"
 fun fromString "call2" = SOME PrimOp_call2
   | fromString "call3" = SOME PrimOp_call3
   | fromString "Ref.:=" = SOME PrimOp_Ref_set
@@ -351,6 +353,7 @@ fun fromString "call2" = SOME PrimOp_call2
   | fromString "JavaScript.>>>" = SOME PrimOp_JavaScript_URSHIFT
   | fromString "JavaScript.**" = SOME PrimOp_JavaScript_EXP
   | fromString "JavaScript.isFalsy" = SOME PrimOp_JavaScript_isFalsy
+  | fromString "JavaScript.typeof" = SOME PrimOp_JavaScript_typeof
   | fromString _ = NONE
 end;
 
@@ -501,4 +504,5 @@ fun typeOf Primitives.PrimOp_call2 = { vars = [(tyVarA, []), (tyVarB, []), (tyVa
   | typeOf Primitives.PrimOp_JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.PrimOp_JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.PrimOp_JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], result = bool }
+  | typeOf Primitives.PrimOp_JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = wideString }
 end;

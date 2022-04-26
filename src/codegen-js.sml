@@ -100,6 +100,7 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_global, "_global")
                     ,(VId_JavaScript_call, "_call")
+                    ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
@@ -753,10 +754,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.PrimOp_JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, false)
            | Primitives.PrimOp_JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, false)
            | Primitives.PrimOp_JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, false)
+           | Primitives.PrimOp_JavaScript_EXP => doBinaryOp (J.EXP, true)
            | Primitives.PrimOp_JavaScript_isFalsy => doUnary (fn (stmts, env, a) =>
                                                                  putImpureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
                                                              )
-           | Primitives.PrimOp_JavaScript_EXP => doBinaryOp (J.EXP, true)
+           | Primitives.PrimOp_JavaScript_typeof => doUnary (fn (stmts, env, a) =>
+                                                                putPureTo ctx env dest (stmts, J.UnaryExp (J.TYPEOF, a))
+                                                            )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest

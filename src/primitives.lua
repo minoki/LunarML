@@ -633,6 +633,11 @@ do
       srcname = "JavaScript_isFalsy",
       type = { vars = {}, args = {JSValue}, result = bool },
     },
+    {
+      name = "JavaScript.typeof",
+      srcname = "JavaScript_typeof",
+      type = { vars = {}, args = {JSValue}, result = wideString },
+    },
   }
 end
 

@@ -177,6 +177,11 @@ function _call(f) {
         return f.apply(undefined, args);
     };
 }
+function _new(f) {
+    return function(args) {
+        return Reflect.construct(f, args);
+    };
+}
 function _method(a) {
     var obj = a[0];
     var f = obj[a[1]];

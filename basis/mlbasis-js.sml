@@ -163,6 +163,7 @@ structure JavaScript : sig
               val set : value * value * value -> unit
               val global : WideString.string -> value
               val call : value -> value vector -> value
+              val new : value -> value vector -> value
               val method : value * WideString.string -> value vector -> value
               val fromBool : bool -> value
               val fromInt : int -> value
@@ -192,6 +193,8 @@ structure JavaScript : sig
               val >>> : value * value -> value
               val ** : value * value -> value
               val isFalsy : value -> bool
+              val typeof : value -> WideString.string
+              val newObject : unit -> value
               val encodeUtf8 : WideString.string -> string
               val decodeUtf8 : string -> WideString.string
               val toInt32 : value -> int
@@ -253,6 +256,7 @@ structure JavaScript : sig
                                           val asIntN : value
                                           val asUintN : value
                                       end
+                            val Uint8Array : value
                         end
           end = struct
 open JavaScript (* type value, global, call, method, encodeUtf8, decodeUtf8, require *)
@@ -287,9 +291,11 @@ fun x > y = _primCall "JavaScript.>" (x, y)
 fun x <= y = _primCall "JavaScript.<=" (x, y)
 fun x >= y = _primCall "JavaScript.>=" (x, y)
 fun ** (x, y) = _primCall "JavaScript.**" (x, y)
+fun typeof x = _primCall "JavaScript.typeof" (x)
 fun toInt32 x = unsafeFromValue (orb (x, fromInt 0)) : int
 fun toUint32 x = unsafeFromValue (>>> (x, fromInt 0)) : word
 structure Lib = struct
+val Object = LunarML.assumeDiscardable (global "Object")
 val Number = LunarML.assumeDiscardable (global "Number")
 structure Number = struct
 val isFinite = LunarML.assumeDiscardable (field (Number, "isFinite"))
@@ -345,7 +351,9 @@ structure BigInt = struct
 val asIntN = LunarML.assumeDiscardable (field (BigInt, "asIntN"))
 val asUintN = LunarML.assumeDiscardable (field (BigInt, "asUintN"))
 end
+val Uint8Array = LunarML.assumeDiscardable (global "Uint8Array")
 end
+fun newObject () = new Lib.Object #[]
 end;
 
 structure Vector : sig
@@ -624,6 +632,7 @@ fun collate compare ([], []) = EQUAL
                                              EQUAL => collate compare (xs, ys)
                                            | c => c
 end (* structure List *)
+val op @ = List.@;
 
 structure Option : sig
               datatype 'a option = NONE | SOME of 'a

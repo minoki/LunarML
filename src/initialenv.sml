@@ -216,6 +216,7 @@ local val newVId = newLongVId (StrId_JavaScript, [])
 in
 val VId_JavaScript_global = newVId "global"
 val VId_JavaScript_call = newVId "call"
+val VId_JavaScript_new = newVId "new"
 val VId_JavaScript_method = newVId "method"
 val VId_JavaScript_encodeUtf8 = newVId "encodeUtf8"
 val VId_JavaScript_decodeUtf8 = newVId "decodeUtf8"
@@ -428,6 +429,7 @@ val initialEnv : Typing.Env
                                , valMap = mkValMap
                                               [("global", TypeScheme ([], primTy_wideString --> primTy_JavaScript_value))
                                               ,("call", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                              ,("new", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                               ,("method", TypeScheme ([], mkPairType(primTy_JavaScript_value, primTy_wideString) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                               ,("encodeUtf8", TypeScheme ([], primTy_wideString --> primTy_string))
                                               ,("decodeUtf8", TypeScheme ([], primTy_string --> primTy_wideString))
