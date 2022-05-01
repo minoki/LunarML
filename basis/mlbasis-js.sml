@@ -259,7 +259,7 @@ structure JavaScript : sig
                             val Uint8Array : value
                         end
           end = struct
-open JavaScript (* type value, global, call, method, encodeUtf8, decodeUtf8, require *)
+open JavaScript (* type value, call, method, encodeUtf8, decodeUtf8, require *)
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
@@ -270,6 +270,7 @@ val fromWideString : WideString.string -> value = unsafeToValue
 fun sub (obj, key) = _primCall "JavaScript.sub" (obj, key)
 fun field (obj, key : WideString.string) = _primCall "JavaScript.sub" (obj, _primCall "Unsafe.cast" (key))
 fun set (obj, key, value) = _primCall "JavaScript.set" (obj, key, value)
+fun global name = _primCall "JavaScript.global" (name)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)
 fun x + y = _primCall "JavaScript.+" (x, y)
 fun x - y = _primCall "JavaScript.-" (x, y)

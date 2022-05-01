@@ -638,6 +638,11 @@ do
       srcname = "JavaScript_typeof",
       type = { vars = {}, args = {JSValue}, result = wideString },
     },
+    {
+      name = "JavaScript.global",
+      srcname = "JavaScript_global",
+      type = { vars = {}, args = {wideString}, result = JSValue },
+    },
   }
 end
 

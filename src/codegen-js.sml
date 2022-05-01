@@ -98,7 +98,6 @@ val builtins
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* JS interface *)
-                    ,(VId_JavaScript_global, "_global")
                     ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
@@ -760,6 +759,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                              )
            | Primitives.PrimOp_JavaScript_typeof => doUnary (fn (stmts, env, a) =>
                                                                 putPureTo ctx env dest (stmts, J.UnaryExp (J.TYPEOF, a))
+                                                            )
+           | Primitives.PrimOp_JavaScript_global => doUnary (fn (stmts, env, a) =>
+                                                                putImpureTo ctx env dest (stmts, J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a))
                                                             )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end

@@ -169,9 +169,6 @@ function __Word_mod(x, y) {
 }
 const Math_abs = Math.abs;
 const Math_imul = Math.imul;
-function _global(name) {
-    return globalThis[name];
-}
 function _call(f) {
     return function(args) {
         return f.apply(undefined, args);
