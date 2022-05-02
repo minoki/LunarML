@@ -778,25 +778,22 @@ and toFExp (ctx, env, U.SConExp (span, Syntax.IntegerConstant value, ty)) = cook
   | toFExp (ctx, env, U.SConExp (span, Syntax.StringConstant value, ty)) = cookStringConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, U.SConExp (span, Syntax.CharacterConstant value, ty)) = cookCharacterConstant (ctx, env, span, value, ty)
   | toFExp(ctx, env, U.VarExp(span, longvid as USyntax.MkShortVId vid, _, [(tyarg, cts)]))
-    = if U.eqVId(vid, InitialEnv.VId_EQUAL) then
-          getEquality(ctx, env, tyarg)
-      else
-          (case USyntax.VIdMap.find(overloads, vid) of
-               SOME key => (case tyarg of
-                               U.TyCon(_, [], tycon) => (case USyntax.TyNameMap.find (#overloadMap env, tycon) of
-                                                             SOME m => (case Syntax.OverloadKeyMap.find (m, key) of
-                                                                            SOME exp => exp
-                                                                          | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
-                                                                       )
-                                                           | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
-                                                        )
-                             | _ => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
-                          )
-             | NONE => if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
-                           F.AppExp(F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
-                       else
-                           F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg))
-          )
+    = (case USyntax.VIdMap.find(overloads, vid) of
+           SOME key => (case tyarg of
+                            U.TyCon(_, [], tycon) => (case USyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                          SOME m => (case Syntax.OverloadKeyMap.find (m, key) of
+                                                                         SOME exp => exp
+                                                                       | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
+                                                                    )
+                                                        | NONE => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
+                                                     )
+                          | _ => raise Fail ("invalid use of " ^ USyntax.print_VId vid)
+                       )
+         | NONE => if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
+                       F.AppExp(F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
+                   else
+                       F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg))
+      )
   | toFExp(ctx, env, U.VarExp(span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
                      if List.exists (fn USyntax.IsEqType _ => true | _ => false) cts then
@@ -874,6 +871,14 @@ and toFExp (ctx, env, U.SConExp (span, Syntax.IntegerConstant value, ty)) = cook
   | toFExp(ctx, env, U.RaiseExp(span, ty, exp)) = F.RaiseExp(span, toFTy(ctx, env, ty), toFExp(ctx, env, exp))
   | toFExp(ctx, env, U.ListExp(span, xs, ty)) = F.ListExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
   | toFExp(ctx, env, U.VectorExp(span, xs, ty)) = F.VectorExp(Vector.map (fn x => toFExp(ctx, env, x)) xs, toFTy(ctx, env, ty))
+  | toFExp (ctx, env, U.PrimExp (span, Primitives.PrimOp_EQUAL, tyargs, args)) = if Vector.length tyargs = 1 andalso Vector.length args = 2 then
+                                                                                     let val tyarg = Vector.sub (tyargs, 0)
+                                                                                         val x = toFExp (ctx, env, Vector.sub (args, 0))
+                                                                                         val y = toFExp (ctx, env, Vector.sub (args, 1))
+                                                                                     in F.AppExp (getEquality (ctx, env, tyarg), F.TupleExp [x, y])
+                                                                                     end
+                                                                                 else
+                                                                                     raise Fail ("invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
   | toFExp(ctx, env, U.PrimExp(span, primOp, tyargs, args)) = F.PrimExp(F.PrimFnOp primOp, Vector.map (fn ty => toFTy(ctx, env, ty)) tyargs, Vector.map (fn x => toFExp(ctx, env, x)) args)
 and doValBind ctx env (U.TupleBind (span, vars, exp))
     = let val tupleVId = freshVId (ctx, "tmp")

@@ -1,9 +1,11 @@
 infixes.sml
 _prim
+ann "allowBindEqual true" in
+equal.sml
+end
 local
 _primOverloads
 unsafe.sml
-equal.sml
 mlbasis.sml
 word.sml
 scan-num.sml

@@ -265,14 +265,17 @@ fun isRefOrArray (tyname : USyntax.TyName) = USyntax.eqTyName (tyname, primTyNam
 
 structure TypeOfPrimitives = TypeOfPrimitives (type ty = USyntax.Ty
                                                type tv = USyntax.TyVar
+                                               type constraint = USyntax.UnaryConstraint
                                                val tyVarA = USyntax.AnonymousTyVar 0
                                                val tyVarB = USyntax.AnonymousTyVar 1
                                                val tyVarC = USyntax.AnonymousTyVar 2
                                                val tyVarD = USyntax.AnonymousTyVar 3
+                                               val tyVarEqA = USyntax.AnonymousTyVar 0
                                                val tyA = USyntax.TyVar (SourcePos.nullSpan, tyVarA)
                                                val tyB = USyntax.TyVar (SourcePos.nullSpan, tyVarB)
                                                val tyC = USyntax.TyVar (SourcePos.nullSpan, tyVarC)
                                                val tyD = USyntax.TyVar (SourcePos.nullSpan, tyVarD)
+                                               val tyEqA = USyntax.TyVar (SourcePos.nullSpan, tyVarEqA)
                                                val unit = primTy_unit
                                                val bool = primTy_bool
                                                val int = primTy_int
@@ -290,6 +293,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = USyntax.Ty
                                                fun arrayOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
                                                fun function2Of (a, b, c) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
+                                               val IsEqType = USyntax.IsEqType SourcePos.nullSpan
                                               ) : sig
                                  val typeOf : Primitives.PrimOp -> { vars : (USyntax.TyVar * USyntax.UnaryConstraint list) list, args : USyntax.Ty vector, result : USyntax.Ty }
                                  end
@@ -1210,11 +1214,11 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                        ()
                    else
                        emitTypeError (ctx, [span], "wrong number of arguments to _primCall; expected " ^ Int.toString (Vector.length argTypes) ^ ", but got " ^ Int.toString (Vector.length args))
-          val (subst, tyargs) = List.foldl (fn ((v, preds), (m, rest)) =>
+          val (subst, tyargs) = List.foldr (fn ((v, preds), (m, rest)) =>
                                                let val tv = freshTyVar (#context ctx)
                                                    val tyarg = U.TyVar (span, tv)
                                                in List.app (fn pred => addTyVarConstraint (ctx, tv, pred)) preds
-                                                ; (U.TyVarMap.insert (m, v, tyarg), (tyarg, preds) :: rest)
+                                                ; (U.TyVarMap.insert (m, v, tyarg), tyarg :: rest)
                                                end
                                            ) (U.TyVarMap.empty, []) typeVariables
           val argTypes = Vector.map (applySubstTy subst) argTypes
@@ -1225,7 +1229,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                       ; arg
                                      end
                                  ) argTypes
-      in (resultType, U.PrimExp (span, primOp, argTypes, args))
+      in (resultType, U.PrimExp (span, primOp, vector tyargs, args))
       end
 (* typeCheckDec : InferenceContext * Env * S.Dec -> (* created environment *) Env * U.Dec list *)
 and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, valbinds))

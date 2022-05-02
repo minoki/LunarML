@@ -128,7 +128,6 @@ val VId_LE = newVId "<="
 val VId_GE = newVId ">="
 
 (* Equality *)
-val VId_EQUAL = newVId "="
 val VId_EQUAL_bool = newShortVId "Bool.="
 val VId_EQUAL_int = newShortVId "Int.="
 val VId_EQUAL_word = newShortVId "Word.="
@@ -558,8 +557,7 @@ val primOverloadEnv : Typing.Env
           fun mkPairType (a, b) = USyntax.PairType (SourcePos.nullSpan, a, b)
       in { valMap = List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, USyntax.MkShortVId vid)))
                                Syntax.VIdMap.empty
-                               [("=",   VId_EQUAL,  TypeScheme ([(tyVarEqA, [IsEqType SourcePos.nullSpan])],   mkPairType (tyEqA, tyEqA) --> primTy_bool)) (* forall ''a.        ''a * ''a -> bool *)
-                               ,("abs", VId_abs,    TypeScheme ([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA))                               (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
+                               [("abs", VId_abs,    TypeScheme ([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA))                               (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
                                ,("~",   VId_TILDE,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       tyA --> tyA))                               (* forall 'a:num.     'a -> 'a,        default: int -> int *)
                                ,("div", VId_div,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
                                ,("mod", VId_mod,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)

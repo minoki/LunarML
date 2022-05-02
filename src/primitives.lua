@@ -3,6 +3,7 @@ local TV = {
   b = {"tyB", "tyVarB"},
   c = {"tyC", "tyVarC"},
   d = {"tyD", "tyVarD"},
+  eqA = {"tyEqA", "tyVarEqA", "IsEqType"},
 }
 local PRIMITIVES
 do
@@ -40,6 +41,11 @@ do
   end
 
   PRIMITIVES = {
+    {
+      name = "=",
+      srcname = "EQUAL",
+      type = { vars = {TV.eqA}, args = {TV.eqA, TV.eqA}, result = bool },
+    },
     {
       name = "call2",
       srcname = "call2",
@@ -689,14 +695,17 @@ end;
 
 functor TypeOfPrimitives (type ty
                           type tv
+                          type constraint
                           val tyVarA : tv
                           val tyVarB : tv
                           val tyVarC : tv
                           val tyVarD : tv
+                          val tyVarEqA : tv
                           val tyA : ty
                           val tyB : ty
                           val tyC : ty
                           val tyD : ty
+                          val tyEqA : ty
                           val unit : ty
                           val bool : ty
                           val int : ty
@@ -714,8 +723,9 @@ functor TypeOfPrimitives (type ty
                           val arrayOf : ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
+                          val IsEqType : constraint
                          ) : sig
-                               val typeOf : Primitives.PrimOp -> { vars : (tv * 'a list) list, args : ty vector, result : ty }
+                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint list) list, args : ty vector, result : ty }
                              end = struct
 ]]
 
@@ -728,7 +738,11 @@ for i, p in ipairs(PRIMITIVES) do
   end
   local typeVariables = {}
   for _, t in ipairs(p.type.vars) do
-    table.insert(typeVariables, "(" .. t[2] .. ", [])")
+    local ct = ""
+    if t[3] then
+      ct = t[3]
+    end
+    table.insert(typeVariables, "(" .. t[2] .. ", [" .. ct .. "])")
   end
   local argTypes = {}
   for _, t in ipairs(p.type.args) do

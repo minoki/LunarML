@@ -1,9 +1,11 @@
 infixes.sml
 _prim
 _primOverloads
+ann "allowBindEqual true" in
+equal.sml
+end
 local
 unsafe.sml
-equal.sml
 mlbasis-js.sml
 int-inf-js.sml
 word-js.sml
