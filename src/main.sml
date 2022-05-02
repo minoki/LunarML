@@ -119,7 +119,7 @@ and doCompile opts fileName
           val mlbdecs = [MLBSyntax.PathDec "$(SML_LIB)/basis/basis.mlb"
                         ,MLBSyntax.PathDec fileName
                         ]
-          val (env, { tynameset, toFEnv, fdecs, cache }) = MLBEval.doDecs ctx MLBEval.emptyEnv mlbdecs MLBEval.initialCode
+          val (env, { tynameset, toFEnv, fdecs, cache }) = MLBEval.doDecs ctx LanguageOptions.default MLBEval.emptyEnv mlbdecs MLBEval.initialCode
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
                           Driver.ExecutableMode => fdecs
                         | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, fdecs)

@@ -4,6 +4,7 @@ $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 pluto/pluto.mlb
 src/numeric.sml
 src/text.sml
+src/language-options.sml
 src/target-info.sml
 src/primitives.sml
 src/syntax.grm.sig

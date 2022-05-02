@@ -13,6 +13,7 @@ sources = \
   pluto/char-parser.fun \
   src/numeric.sml \
   src/text.sml \
+  src/language-options.sml \
   src/target-info.sml \
   src/primitives.sml \
   src/syntax.grm.sig \
@@ -45,6 +46,9 @@ lunarml: LunarML.mlb $(sources)
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
+
+src/language-options.sml: src/language-options.lua
+	$(LUA) src/language-options.lua $@
 
 src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null

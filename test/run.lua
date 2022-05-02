@@ -173,6 +173,8 @@ should_not_compile "should_not_compile/" {
   "reserved_exdesc.sml",
   "reserved_exrep.sml",
   "reserved_valdesc.sml",
+  "invalid-bound-name1.sml",
+  "invalid-bound-name2.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

@@ -71,32 +71,33 @@ fun printSpan(name, lines, {start=p1, end_=p2}) =
 
 exception Abort
 
-fun parse({ nextVId }, fixityEnv, name, lines, str) = let fun printError (s,p1 as {file=f1,line=l1,column=c1},p2 as {file=f2,line=l2,column=c2}) =
-                                                              ( if p1 = p2 then
-                                                                    print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
-                                                                else
-                                                                    print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
-                                                              ; printSpan (name, lines, { start = p1, end_ = p2 })
-                                                              )
-                                                          val lexErrors = ref []
-                                                          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
-                                                          val error = case !lexErrors of
-                                                                          [] => false
-                                                                        | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
-                                                                                                                                         ; printPos (name, lines, pos)
-                                                                                                                                         )
-                                                                                               | LunarMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
-                                                                                                                                         ; printPos (name, lines, pos)
-                                                                                                                                         )
-                                                                                               ) errors
-                                                                                    ; List.exists (fn LunarMLLex.TokError _ => true | _ => false) errors
-                                                                                    )
-                                                          val result = Fixity.doProgram ({ nextVId = nextVId }, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
-                                                      in if error then
-                                                             raise Abort
-                                                         else
-                                                             result
-                                                      end
+fun parse({ nextVId, languageOptions }, fixityEnv, name, lines, str)
+    = let fun printError (s, p1 as {file = f1, line = l1, column = c1}, p2 as {file = f2, line = l2, column = c2})
+              = ( if p1 = p2 then
+                      print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
+                  else
+                      print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
+                ; printSpan (name, lines, { start = p1, end_ = p2 })
+                )
+          val lexErrors = ref []
+          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
+          val error = case !lexErrors of
+                          [] => false
+                        | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
+                                                                                         ; printPos (name, lines, pos)
+                                                                                         )
+                                               | LunarMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
+                                                                                         ; printPos (name, lines, pos)
+                                                                                         )
+                                               ) errors
+                                    ; List.exists (fn LunarMLLex.TokError _ => true | _ => false) errors
+                                    )
+          val result = Fixity.doProgram ({ nextVId = nextVId }, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
+      in if error then
+             raise Abort
+         else
+             result
+      end
 
 type Context = { typingContext : Typing.Context
                , toFContext : ToFSyntax.Context
@@ -118,10 +119,10 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , toFEnv = ToFSyntax.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, { fixity, typingEnv, tynameset, toFEnv } : Env, name, source) =
+fun compile({ typingContext, toFContext } : Context, langopt : LanguageOptions.options, { fixity, typingEnv, tynameset, toFEnv } : Env, name, source) =
     let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
-    in let val (fixity', ast1) = parse({ nextVId = #nextVId typingContext }, fixity, name, lines, source)
-           val () = CheckSyntacticRestrictions.checkProgram ast1
+    in let val (fixity', ast1) = parse ({ nextVId = #nextVId typingContext, languageOptions = langopt }, fixity, name, lines, source)
+           val () = CheckSyntacticRestrictions.checkProgram langopt ast1
            val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
            val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
