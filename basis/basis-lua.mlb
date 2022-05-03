@@ -1,10 +1,11 @@
 infixes.sml
 _prim
-ann "allowBindEqual true" in
+_primOverloads
+ann "allowPrim true" "allowBindEqual true" in
 equal.sml
 end
 local
-_primOverloads
+ann "allowPrim true" "allowOverload true" in
 unsafe.sml
 mlbasis.sml
 word.sml
@@ -20,8 +21,8 @@ mono-vector.sml
 mono-array.sml
 os.sml
 commandline.sml
+end
 in
-_primOverloads
 signature INTEGER
 signature WORD
 signature REAL

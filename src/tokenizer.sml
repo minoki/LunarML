@@ -10,13 +10,13 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
         type svalue = Tokens.svalue
         type ('a,'b) token = ('a,'b) Tokens.token
         type result = (svalue,pos) token
-        type arg = string * (TokError list) ref (* (filename, errorsAndWarnings) *)
+        type arg = string * LanguageOptions.options * (TokError list) ref (* (filename, options, errorsAndWarnings) *)
         end
         datatype NumericLitType = NLTUnsigned
                                 | NLTNegative
                                 | NLTWord
         (* read a token *)
-        fun tokenizeAllString(name,s) = let
+        fun tokenizeAllString (opts : LanguageOptions.options, name, s) = let
             fun pos(l,c) = { file = name, line = l, column = c }
             val errorsAndWarnings = ref [] : (TokError list) ref
             fun emitWarning(l,c,message) = let val e = !errorsAndWarnings
@@ -187,10 +187,30 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                             end
             and recognizeKeyword (l, c, name) = let val (tok, ident) = case name of
                                                                            "_" => (Tokens.UNDERSCORE, NONE)
-                                                                         | "_primType" => (Tokens.PRIMTYPE, NONE) (* extension *)
-                                                                         | "_primVal" => (Tokens.PRIMVAL, NONE) (* extension *)
-                                                                         | "_primCall" => (Tokens.PRIMCALL, NONE) (* extension *)
-                                                                         | "_overload" => (Tokens.OVERLOAD, NONE) (* extension *)
+                                                                         | "_primType" => ( if not (#allowPrim opts) then
+                                                                                                emitError (l, c, "_primType is not allowed in user code")
+                                                                                            else
+                                                                                                ()
+                                                                                          ; (Tokens.PRIMTYPE, NONE) (* extension *)
+                                                                                          )
+                                                                         | "_primVal" => ( if not (#allowPrim opts) then
+                                                                                                emitError (l, c, "_primVal is not allowed in user code")
+                                                                                           else
+                                                                                               ()
+                                                                                         ; (Tokens.PRIMVAL, NONE) (* extension *)
+                                                                                         )
+                                                                         | "_primCall" => ( if not (#allowPrim opts) then
+                                                                                                emitError (l, c, "_primCall is not allowed in user code")
+                                                                                            else
+                                                                                                ()
+                                                                                          ; (Tokens.PRIMCALL, NONE) (* extension *)
+                                                                                          )
+                                                                         | "_overload" => ( if not (#allowOverload opts) then
+                                                                                                emitError (l, c, "_overload is not allowed in user code")
+                                                                                            else
+                                                                                                ()
+                                                                                          ; (Tokens.OVERLOAD, NONE) (* extension *)
+                                                                                          )
                                                                          | "abstype" => (Tokens.ABSTYPE, NONE)
                                                                          | "and" => (Tokens.AND, NONE)
                                                                          | "andalso" => (Tokens.ANDALSO, NONE)
@@ -429,11 +449,11 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                       fun parseIntPart (l, c, a : IntInf.int, rest0)
                           = (case skipUnderscoresAndReadHexDigit (c, rest0) of
                                  SOME (c', x1, rest1) => parseIntPart (l, c', a * 16 + hexDigitToLargeInt x1, rest1)
-                               | NONE => let val (c', optFracPart, rest1) = if numericLitType = NLTWord then
+                               | NONE => let val (c', optFracPart, rest1) = if numericLitType = NLTWord orelse not (#allowHexFloatConsts opts) then
                                                                                 (c, NONE, rest0)
                                                                             else
                                                                                 parseFracPart (l, c, rest0)
-                                             val (c'', optExpPart, rest2) = if numericLitType = NLTWord then
+                                             val (c'', optExpPart, rest2) = if numericLitType = NLTWord orelse not (#allowHexFloatConsts opts) then
                                                                                 (c, NONE, rest0)
                                                                             else
                                                                                 parseExpPart (c', rest1)
@@ -531,7 +551,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                            ; readStringLit (l0, c0, l, c, accum, ys)
                                                            )
                                                        else
-                                                           readStringLit (l0, c0, l, c + 1, StringElement.UNICODE_SCALAR scalar :: accum, ys)
+                                                           ( if not (#allowUtfEscapeSequences opts) then
+                                                                 emitError (l, c1, "\\u{} escape sequence is not allowed; enable allowUtfEscapeSequences to use it")
+                                                             else
+                                                                 ()
+                                                           ; readStringLit (l0, c0, l, c + 1, StringElement.UNICODE_SCALAR scalar :: accum, ys)
+                                                           )
                         | go (c, scalar, y :: ys) = if Char.isHexDigit y then
                                                         go (c + 1, scalar * 16 + hexDigitToInt y, ys)
                                                     else
@@ -558,6 +583,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"U" :: (xs' as (x0 :: x1 :: x2 :: x3 :: x4 :: x5 :: x6 :: x7 :: xs)))
                 = if Char.isHexDigit x0 andalso Char.isHexDigit x1 andalso Char.isHexDigit x2 andalso Char.isHexDigit x3 andalso Char.isHexDigit x4 andalso Char.isHexDigit x5 andalso Char.isHexDigit x6 andalso Char.isHexDigit x7 then
                       let val charOrd = ((((((hexDigitToInt x0 * 16 + hexDigitToInt x1) * 16 + hexDigitToInt x2) * 16 + hexDigitToInt x3) * 16 + hexDigitToInt x4) * 16 + hexDigitToInt x5) * 16 + hexDigitToInt x6) * 16 + hexDigitToInt x7;
+                          val () = if not (#allowExtendedTextConsts opts) then
+                                       emitError (l, c, "\\U escape sequence is not allowed; enable allowExtendedTextConsts to use it")
+                                   else
+                                       ()
                       in readStringLit (l0, c0, l, c + 6, StringElement.CODEUNIT charOrd :: accum, xs)
                       end
                   else
@@ -618,7 +647,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                else
                                    x ^ readAll input
                             end
-        fun makeLexer input (name, ewRef) = let val (tokens, ew) = tokenizeAllString (name, readAll input)
+        fun makeLexer input (name, opts, ewRef) = let val (tokens, ew) = tokenizeAllString (opts, name, readAll input)
                                                 val tokensRef = ref tokens
                                             in ewRef := ew
                                               ; fn _ => case !tokensRef of

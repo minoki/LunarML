@@ -1,0 +1,4 @@
+$(SML_LIB)/basis/basis.mlb
+ann "allowOverload true" in
+  overload.sml
+end

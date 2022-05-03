@@ -25,11 +25,11 @@ function compile_and_run(file)
   if not compile_succ then
     return false, output
   end
-  local luafile = file:gsub("%.sml$", ".lua")
+  local luafile = file:gsub("%.sml$", ".lua"):gsub("%.mlb$", ".lua")
   local h = assert(io.popen(string.format("\"%s\" \"%s\"", lua_interpreter, luafile), "r"))
   local actual_output = normalize_line_ending(h:read("a"))
   h:close()
-  local expected_output_file = file:gsub("%.sml$", ".stdout")
+  local expected_output_file = file:gsub("%.sml$", ".stdout"):gsub("%.mlb$", ".stdout")
   local h = assert(io.open(expected_output_file, "r"))
   local expected_output = normalize_line_ending(h:read("a"))
   h:close()
@@ -232,7 +232,7 @@ should_not_compile "successor_ml/should_not_compile/" {
 }
 should_run "extension/should_run/" {
   "vector_exp.sml",
-  "overload.sml",
+  "overload.mlb",
   "helloja.sml",
 }
 should_compile "extension/should_compile/" {

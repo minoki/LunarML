@@ -80,7 +80,7 @@ fun parse({ nextVId, languageOptions }, fixityEnv, name, lines, str)
                 ; printSpan (name, lines, { start = p1, end_ = p2 })
                 )
           val lexErrors = ref []
-          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, lexErrors)
+          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, languageOptions, lexErrors)
           val error = case !lexErrors of
                           [] => false
                         | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")

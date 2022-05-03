@@ -1,10 +1,11 @@
 infixes.sml
 _prim
 _primOverloads
-ann "allowBindEqual true" in
+ann "allowPrim true" "allowBindEqual true" in
 equal.sml
 end
 local
+ann "allowPrim true" "allowOverload true" in
 unsafe.sml
 mlbasis-js.sml
 int-inf-js.sml
@@ -18,6 +19,7 @@ mono-array-js.sml
 text-io-nodejs.sml
 os-nodejs.sml
 command-line-nodejs.sml
+end
 in
 signature INTEGER
 signature WORD

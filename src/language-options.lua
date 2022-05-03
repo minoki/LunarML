@@ -15,7 +15,7 @@ local options = {
   -- {"allowNestedMatches", "bool"},
   {"allowRecordExtension", "bool"},
   {"allowRecordUpdate", "bool"},
-  {"allowUnicodeEncodedStrings", "bool"},
+  {"allowUtfEscapeSequences", "bool"},
   {"allowHexFloatConsts", "bool"},
   {"allowValRecTyVars", "bool"},
   {"allowValTyVarsRec", "bool"},
@@ -23,6 +23,7 @@ local options = {
   {"allowWhereAndType", "bool"},
   {"allowPrim", "bool"},
   {"allowBindEqual", "bool"},
+  {"allowOverload", "bool"},
 }
 local f = assert(io.open(arg[1] or "language-options.sml", "wb"))
 f:write[[
@@ -76,7 +77,7 @@ val default : options = { allowExtendedNumConsts = true
                         , allowVectorPats = true
                         , allowRecordExtension = true
                         , allowRecordUpdate = true
-                        , allowUnicodeEncodedStrings = true
+                        , allowUtfEscapeSequences = true
                         , allowHexFloatConsts = true
                         , allowValRecTyVars = true
                         , allowValTyVarsRec = true
@@ -84,6 +85,7 @@ val default : options = { allowExtendedNumConsts = true
                         , allowWhereAndType = true
                         , allowPrim = false
                         , allowBindEqual = false
+                        , allowOverload = false
                         }
 fun setSuccessorML value = setAllowExtendedNumConsts value
                            o setAllowExtendedTextConsts value
