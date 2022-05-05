@@ -330,12 +330,21 @@ and doStat (S.VarStat variables) = Indent :: Fragment "var " :: commaSepV (Vecto
                                                    | _ => false
                              in Indent :: paren needParen fragments @ [ Fragment ";", LineTerminator ]
                              end
-  | doStat (S.IfStat (cond, thenBlock, elseBlock)) = let val thenPart = Indent :: Fragment "if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock thenBlock @ [ DecreaseIndent, Indent, Fragment "}" ]
-                                                     in if Vector.length elseBlock = 0 then
-                                                            thenPart @ [ LineTerminator ]
-                                                        else
-                                                            thenPart @ Fragment " else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
-                                                     end
+  | doStat (S.IfStat (cond, thenBlock, elseBlock))
+    = let fun processElseIfs (elseIfsRev, elseBlock) = if Vector.length elseBlock = 1 then
+                                                           case Vector.sub (elseBlock, 0) of
+                                                               S.IfStat (cond', thenBlock, elseBlock) => processElseIfs ((cond', thenBlock) :: elseIfsRev, elseBlock)
+                                                             | _ => (elseIfsRev, elseBlock)
+                                                       else
+                                                           (elseIfsRev, elseBlock)
+          val (elseIfsRev, elseBlock) = processElseIfs ([], elseBlock)
+          val elsePart = if Vector.length elseBlock = 0 then
+                             [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
+                         else
+                             DecreaseIndent :: Indent :: Fragment "} else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
+          val elseIfsAndElsePart = List.foldl (fn ((cond, elseIfBlock), acc) => DecreaseIndent :: Indent :: Fragment "} else if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock elseIfBlock @ acc) elsePart elseIfsRev
+      in Indent :: Fragment "if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock thenBlock @ elseIfsAndElsePart
+      end
   | doStat (S.ReturnStat NONE) = [ Indent, Fragment "return;", LineTerminator ]
   | doStat (S.ReturnStat (SOME exp)) = Indent :: Fragment "return " :: doExp (Precedence.Expression, exp) @ [ Fragment ";", LineTerminator ]
   | doStat (S.TryCatchStat (body, exnName, catch)) = Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator :: doBlock body @ DecreaseIndent :: Indent :: Fragment "} catch (" :: Fragment (idToJs (S.UserDefinedId exnName)) :: Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock catch @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
