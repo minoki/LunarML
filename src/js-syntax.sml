@@ -294,7 +294,30 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
                                                             | S.NOT => "!"
                                          in paren (prec < Precedence.UnaryExpression) (Fragment symbol :: Fragment " " :: doExp (Precedence.UnaryExpression, x))
                                          end
-  | doExp (prec, S.IndexExp (objectExp, indexExp)) = paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) @ Fragment "[" :: doExp (Precedence.Expression, indexExp) @ [ Fragment "]" ])
+  | doExp (prec, S.IndexExp (objectExp, indexExp))
+    = let val tryIdentifierName = case indexExp of
+                                      S.ConstExp (S.WideString name) =>
+                                      let val name = Vector.foldr (fn (c, NONE) => NONE
+                                                                  | (c, SOME xs) => if c < 128 then
+                                                                                        SOME (chr c :: xs)
+                                                                                    else
+                                                                                        NONE
+                                                                  ) (SOME []) name
+                                      in case name of
+                                             SOME name => let val name = CharVector.fromList name
+                                                          in if isIdentifierName name (* ES5 or later *) then
+                                                                 SOME name
+                                                             else
+                                                                 NONE
+                                                          end
+                                           | NONE => NONE
+                                      end
+                                    | _ => NONE
+          val indexPart = case tryIdentifierName of
+                              SOME name => [ Fragment ".", Fragment name ]
+                            | _ => Fragment "[" :: doExp (Precedence.Expression, indexExp) @ [ Fragment "]" ]
+      in paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) @ indexPart)
+      end
   | doExp (prec, S.AssignExp (lhsExp, rhsExp)) = paren (prec < Precedence.AssignmentExpression) (doExp (Precedence.CallExpression, lhsExp) @ Fragment " = " :: doExp (Precedence.AssignmentExpression, rhsExp))
 and doCommaSepExp elements = commaSepV (Vector.map (fn value => doExp (Precedence.AssignmentExpression, value)) elements)
 and doStat (S.VarStat variables) = Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => [ Fragment (idToJs (S.UserDefinedId id)) ]
