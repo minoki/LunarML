@@ -76,7 +76,7 @@ fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = split
                                                       SOME ty => List.foldl (fn (label, F.SigType { valMap, strMap, ... }) =>
                                                                                 (case label of
                                                                                      F.ValueLabel vid => (case Syntax.VIdMap.find(valMap, vid) of
-                                                                                                              SOME ty => ty
+                                                                                                              SOME (ty, ids) => ty
                                                                                                             | NONE => raise Fail ("child not found: " ^ Syntax.print_VId vid)
                                                                                                          )
                                                                                    | F.StructLabel strid => (case Syntax.StrIdMap.find(strMap, strid) of
@@ -84,7 +84,7 @@ fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = split
                                                                                                                | NONE => raise Fail ("child not found: " ^ Syntax.print_StrId strid)
                                                                                                             )
                                                                                    | F.ExnTagLabel vid => (case Syntax.VIdMap.find(valMap, vid) of (* ??? *)
-                                                                                                              SOME ty => ty
+                                                                                                              SOME (ty, ids) => ty
                                                                                                             | NONE => raise Fail ("child not found: " ^ Syntax.print_VId vid)
                                                                                                           )
                                                                                 )
@@ -480,7 +480,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doTy env (F.TypeFn (tv, kind, ty)) = let val tv' = refreshTyVar tv
                                                    in F.TypeFn (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
                                                    end
-            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
+            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (fn (ty, ids) => (doTy env ty, ids)) valMap
                                                                            , strMap = Syntax.StrIdMap.map (doTy env) strMap
                                                                            , exnTags = exnTags
                                                                            }
