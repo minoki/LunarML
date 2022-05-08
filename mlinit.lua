@@ -30,9 +30,6 @@ local function _Record_EQUAL(fields)
     return true
   end
 end
-local function _EQUAL(t)
-  return t[1] == t[2]
-end
 
 local function _id(x)
   return x
@@ -225,23 +222,6 @@ local _nil = { tag = "nil" }
 local function _cons(t)
   return { tag = "::", payload = t }
 end
-local function _List_EQUAL(eq)
-  local function go(a, b)
-    local at, bt = a.tag, b.tag
-    if at ~= bt then
-      return false
-    elseif at == "nil" then
-      return true
-    elseif eq({a.payload[1], b.payload[1]}) then
-      return go(a.payload[2], b.payload[2])
-    else
-      return false
-    end
-  end
-  return function(t)
-    return go(t[1], t[2])
-  end
-end
 local function _list(t)
   local xs = _nil
   for i = t.n, 1, -1 do
@@ -291,22 +271,17 @@ local function _VectorOrArray_tabulate(t)
 end
 
 -- Vector
-local function _Vector_EQUAL(eq)
-  local function go(a, b)
-    local n = a.n
-    if n ~= b.n then
+local function _Vector_EQUAL(eq, a, b)
+  local n = a.n
+  if n ~= b.n then
+    return false
+  end
+  for i = 1, n do
+    if not eq({a[i], b[i]}) then
       return false
     end
-    for i = 1, n do
-      if not eq({a[i], b[i]}) then
-        return false
-      end
-    end
-    return true
   end
-  return function(t)
-    return go(t[1], t[2])
-  end
+  return true
 end
 local function _Vector_concat(xs)
   local n = 0

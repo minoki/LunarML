@@ -1,6 +1,7 @@
 structure Bool = struct
 fun not x = _primCall "Bool.not" (x)
 end;
+_equality bool = fn (x, y) => _primCall "Bool.=" (x, y);
 
 type unit = {}
 datatype 'a option = NONE | SOME of 'a;
@@ -19,6 +20,7 @@ fun x > y = _primCall "Int.>" (x, y)
 fun x >= y = _primCall "Int.>=" (x, y)
 fun fromInt (x : int) = x
 end
+_equality int = fn (x, y) => _primCall "Int.=" (x, y);
 _overload "Int" [int] { + = Int.+
                       , - = Int.-
                       , * = Int.*
@@ -49,6 +51,7 @@ end
 local
 fun fromWord (x : word) = x
 in
+_equality word = fn (x, y) => _primCall "Word.=" (x, y);
 _overload "Word" [word] { + = Word.+
                         , - = Word.-
                         , * = Word.*
@@ -95,6 +98,7 @@ fun x <= y = _primCall "Char.<=" (x, y)
 fun x > y = _primCall "Char.>" (x, y)
 fun x >= y = _primCall "Char.>=" (x, y)
 end
+_equality char = fn (x, y) => _primCall "Char.=" (x, y);
 _overload "Char" [char] { < = Char.<
                         , <= = Char.<=
                         , > = Char.>
@@ -108,6 +112,7 @@ fun x <= y = _primCall "WideChar.<=" (x, y)
 fun x > y = _primCall "WideChar.>" (x, y)
 fun x >= y = _primCall "WideChar.>=" (x, y)
 end
+_equality WideChar.char = fn (x, y) => _primCall "WideChar.=" (x, y);
 _overload "Char" [WideChar.char] { < = WideChar.<
                                  , <= = WideChar.<=
                                  , > = WideChar.>
@@ -124,6 +129,7 @@ fun x ^ y = _primCall "String.^" (x, y)
 fun size x = _primCall "String.size" (x)
 fun str x = _primCall "String.str" (x)
 end
+_equality string = fn (x, y) => _primCall "String.=" (x, y);
 _overload "String" [string] { < = String.<
                             , <= = String.<=
                             , > = String.>
@@ -141,6 +147,7 @@ fun x ^ y = _primCall "WideString.^" (x, y)
 fun size x = _primCall "WideString.size" (x)
 fun str (x : char) : string = _primCall "Unsafe.cast" (x)
 end
+_equality WideString.string = fn (x, y) => _primCall "WideString.=" (x, y);
 _overload "String" [WideString.string] { < = WideString.<
                                        , <= = WideString.<=
                                        , > = WideString.>
@@ -155,6 +162,7 @@ fun sub (vec, i) = if i < 0 orelse length vec <= i then
                        Unsafe.Vector.sub (vec, i)
 open Vector (* tabulate, concat *)
 end
+_equality ''a vector = fn (x, y) => _primCall "Vector.=" (op = : ''a * ''a -> bool, x, y);
 
 structure JavaScript : sig
               type value

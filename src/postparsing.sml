@@ -506,6 +506,7 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                      | (name, _) :: _ => emitError(ctx, [span], "missing key: " ^ name)
       in (emptyEnv, [Syntax.OverloadDec(span, class, longtycon, map)])
       end
+    | doDec (ctx, env, UnfixedSyntax.EqualityDec (span, typarams, longtycon, exp)) = (emptyEnv, [Syntax.EqualityDec (span, typarams, longtycon, doExp (ctx, env, exp))])
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
 and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
     = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
@@ -800,6 +801,7 @@ local
       | collectDec(bound, LocalDec(_, decs1, decs2)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) TyVarSet.empty decs1) decs2
       | collectDec(bound, OpenDec _) = TyVarSet.empty
       | collectDec(bound, OverloadDec(_, _, _, map)) = OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, collectExp(bound, exp))) TyVarSet.empty map
+      | collectDec (bound, EqualityDec (_, typarams, longtycon, exp)) = collectExp (TyVarSet.addList (bound, typarams), exp)
     and collectDatBind(bound, DatBind (_, tyvars, _, conbinds)) = let val bound = TyVarSet.addList(bound, tyvars)
                                                                       fun doConBind(ConBind(_, _, NONE)) = TyVarSet.empty
                                                                         | doConBind(ConBind(_, _, SOME ty)) = freeTyVarsInTy(bound, ty)
@@ -833,6 +835,7 @@ local
       | doDec(bound, LocalDec(span, xs, ys)) = LocalDec(span, doDecList(bound, xs), doDecList(bound, ys))
       | doDec(bound, dec as OpenDec _) = dec
       | doDec(bound, dec as OverloadDec _) = dec
+      | doDec (bound, EqualityDec (span, typarams, longtycon, exp)) = EqualityDec (span, typarams, longtycon, doExp (TyVarSet.addList (bound, typarams), exp))
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
     and doExp(bound, exp as SConExp _) = exp
@@ -1083,6 +1086,7 @@ and doDec (opts : LanguageOptions.options, env : S.TyVarSet.set) (S.ValDec (span
                                                           )
   | doDec (opts, env) (S.OpenDec (span, longstrids)) = ()
   | doDec (opts, env) (S.OverloadDec _) = ()
+  | doDec (opts, env) (S.EqualityDec (span, typarams, longtycon, exp)) = doExp (opts, env) exp
 and doValBinds (opts, env) valbinds = List.app (fn (S.PatBind (_, pat, exp)) => ( doPat opts pat ; doExp (opts, env) exp) ) valbinds (* duplicate identifiers are not checked here *)
 
 (* doSpec : LanguageOptions.options -> Syntax.Spec -> unit *)

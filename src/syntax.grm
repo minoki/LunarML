@@ -65,7 +65,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SHARING | SIG | SIGNATURE | STRUCT | STRUCTURE | THEN | TYPE | VAL | WITH
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
-    | PRIMTYPE | PRIMVAL | PRIMCALL | OVERLOAD
+    | PRIMTYPE | PRIMVAL | PRIMCALL | OVERLOAD | EQUALITY
     (* other *)
     | EOF
 %nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
@@ -489,6 +489,9 @@ Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), ni
             | INFIXR VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
             | NONFIX VIds (UnfixedSyntax.FixityDec (span(NONFIXleft, VIdsright), Syntax.Nonfix, VIds)) (* nonfix directive *)
             | OVERLOAD AsciiStringConst LBRACK LongTyCon RBRACK LBRACE OverloadSpecs RBRACE (UnfixedSyntax.OverloadDec (span(OVERLOADleft, RBRACEright), #1 AsciiStringConst, LongTyCon, OverloadSpecs)) (* [extension] _overload "class" [ty] { + = ..., - = ..., ... } *)
+            | EQUALITY LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [], LongTyCon, Exp)) (* [extension] _equality longtycon = exp *)
+            | EQUALITY TyVar LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [TyVar], LongTyCon, Exp)) (* [extension] _equality 'tyvar longtycon = exp *)
+            | EQUALITY LPAREN TyVar TyVarSeqRest RPAREN LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), TyVar :: TyVarSeqRest, LongTyCon, Exp)) (* [extension] _equality ('tyvars...) longtycon = exp *)
 
 OverloadSpec : AlnumIdent EQUALS Exp ((AlnumIdent, Exp))
              | SymbolicIdent EQUALS Exp ((SymbolicIdent, Exp))

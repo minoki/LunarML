@@ -3,13 +3,17 @@ structure Primitives = struct
 datatype PrimOp = PrimOp_EQUAL (* = *)
                 | PrimOp_call2 (* call2 *)
                 | PrimOp_call3 (* call3 *)
+                | PrimOp_Ref_EQUAL (* Ref.= *)
                 | PrimOp_Ref_set (* Ref.:= *)
                 | PrimOp_Ref_read (* Ref.! *)
+                | PrimOp_Bool_EQUAL (* Bool.= *)
                 | PrimOp_Bool_not (* Bool.not *)
+                | PrimOp_Int_EQUAL (* Int.= *)
                 | PrimOp_Int_LT (* Int.< *)
                 | PrimOp_Int_LE (* Int.<= *)
                 | PrimOp_Int_GT (* Int.> *)
                 | PrimOp_Int_GE (* Int.>= *)
+                | PrimOp_Word_EQUAL (* Word.= *)
                 | PrimOp_Word_PLUS (* Word.+ *)
                 | PrimOp_Word_MINUS (* Word.- *)
                 | PrimOp_Word_TIMES (* Word.* *)
@@ -27,14 +31,17 @@ datatype PrimOp = PrimOp_EQUAL (* = *)
                 | PrimOp_Real_LE (* Real.<= *)
                 | PrimOp_Real_GT (* Real.> *)
                 | PrimOp_Real_GE (* Real.>= *)
+                | PrimOp_Char_EQUAL (* Char.= *)
                 | PrimOp_Char_LT (* Char.< *)
                 | PrimOp_Char_LE (* Char.<= *)
                 | PrimOp_Char_GT (* Char.> *)
                 | PrimOp_Char_GE (* Char.>= *)
+                | PrimOp_WideChar_EQUAL (* WideChar.= *)
                 | PrimOp_WideChar_LT (* WideChar.< *)
                 | PrimOp_WideChar_LE (* WideChar.<= *)
                 | PrimOp_WideChar_GT (* WideChar.> *)
                 | PrimOp_WideChar_GE (* WideChar.>= *)
+                | PrimOp_String_EQUAL (* String.= *)
                 | PrimOp_String_LT (* String.< *)
                 | PrimOp_String_LE (* String.<= *)
                 | PrimOp_String_GT (* String.> *)
@@ -42,6 +49,7 @@ datatype PrimOp = PrimOp_EQUAL (* = *)
                 | PrimOp_String_HAT (* String.^ *)
                 | PrimOp_String_size (* String.size *)
                 | PrimOp_String_str (* String.str *)
+                | PrimOp_WideString_EQUAL (* WideString.= *)
                 | PrimOp_WideString_LT (* WideString.< *)
                 | PrimOp_WideString_LE (* WideString.<= *)
                 | PrimOp_WideString_GT (* WideString.> *)
@@ -49,6 +57,7 @@ datatype PrimOp = PrimOp_EQUAL (* = *)
                 | PrimOp_WideString_HAT (* WideString.^ *)
                 | PrimOp_WideString_size (* WideString.size *)
                 | PrimOp_WideString_str (* WideString.str *)
+                | PrimOp_IntInf_EQUAL (* IntInf.= *)
                 | PrimOp_IntInf_PLUS (* IntInf.+ *)
                 | PrimOp_IntInf_MINUS (* IntInf.- *)
                 | PrimOp_IntInf_TIMES (* IntInf.* *)
@@ -63,7 +72,9 @@ datatype PrimOp = PrimOp_EQUAL (* = *)
                 | PrimOp_IntInf_notb (* IntInf.notb *)
                 | PrimOp_IntInf_quot_unchecked (* IntInf.quot.unchecked *)
                 | PrimOp_IntInf_rem_unchecked (* IntInf.rem.unchecked *)
+                | PrimOp_Vector_EQUAL (* Vector.= *)
                 | PrimOp_Vector_length (* Vector.length *)
+                | PrimOp_Array_EQUAL (* Array.= *)
                 | PrimOp_Array_length (* Array.length *)
                 | PrimOp_Unsafe_cast (* Unsafe.cast *)
                 | PrimOp_Unsafe_Vector_sub (* Unsafe.Vector.sub *)
@@ -123,13 +134,17 @@ datatype PrimOp = PrimOp_EQUAL (* = *)
 fun toString PrimOp_EQUAL = "="
   | toString PrimOp_call2 = "call2"
   | toString PrimOp_call3 = "call3"
+  | toString PrimOp_Ref_EQUAL = "Ref.="
   | toString PrimOp_Ref_set = "Ref.:="
   | toString PrimOp_Ref_read = "Ref.!"
+  | toString PrimOp_Bool_EQUAL = "Bool.="
   | toString PrimOp_Bool_not = "Bool.not"
+  | toString PrimOp_Int_EQUAL = "Int.="
   | toString PrimOp_Int_LT = "Int.<"
   | toString PrimOp_Int_LE = "Int.<="
   | toString PrimOp_Int_GT = "Int.>"
   | toString PrimOp_Int_GE = "Int.>="
+  | toString PrimOp_Word_EQUAL = "Word.="
   | toString PrimOp_Word_PLUS = "Word.+"
   | toString PrimOp_Word_MINUS = "Word.-"
   | toString PrimOp_Word_TIMES = "Word.*"
@@ -147,14 +162,17 @@ fun toString PrimOp_EQUAL = "="
   | toString PrimOp_Real_LE = "Real.<="
   | toString PrimOp_Real_GT = "Real.>"
   | toString PrimOp_Real_GE = "Real.>="
+  | toString PrimOp_Char_EQUAL = "Char.="
   | toString PrimOp_Char_LT = "Char.<"
   | toString PrimOp_Char_LE = "Char.<="
   | toString PrimOp_Char_GT = "Char.>"
   | toString PrimOp_Char_GE = "Char.>="
+  | toString PrimOp_WideChar_EQUAL = "WideChar.="
   | toString PrimOp_WideChar_LT = "WideChar.<"
   | toString PrimOp_WideChar_LE = "WideChar.<="
   | toString PrimOp_WideChar_GT = "WideChar.>"
   | toString PrimOp_WideChar_GE = "WideChar.>="
+  | toString PrimOp_String_EQUAL = "String.="
   | toString PrimOp_String_LT = "String.<"
   | toString PrimOp_String_LE = "String.<="
   | toString PrimOp_String_GT = "String.>"
@@ -162,6 +180,7 @@ fun toString PrimOp_EQUAL = "="
   | toString PrimOp_String_HAT = "String.^"
   | toString PrimOp_String_size = "String.size"
   | toString PrimOp_String_str = "String.str"
+  | toString PrimOp_WideString_EQUAL = "WideString.="
   | toString PrimOp_WideString_LT = "WideString.<"
   | toString PrimOp_WideString_LE = "WideString.<="
   | toString PrimOp_WideString_GT = "WideString.>"
@@ -169,6 +188,7 @@ fun toString PrimOp_EQUAL = "="
   | toString PrimOp_WideString_HAT = "WideString.^"
   | toString PrimOp_WideString_size = "WideString.size"
   | toString PrimOp_WideString_str = "WideString.str"
+  | toString PrimOp_IntInf_EQUAL = "IntInf.="
   | toString PrimOp_IntInf_PLUS = "IntInf.+"
   | toString PrimOp_IntInf_MINUS = "IntInf.-"
   | toString PrimOp_IntInf_TIMES = "IntInf.*"
@@ -183,7 +203,9 @@ fun toString PrimOp_EQUAL = "="
   | toString PrimOp_IntInf_notb = "IntInf.notb"
   | toString PrimOp_IntInf_quot_unchecked = "IntInf.quot.unchecked"
   | toString PrimOp_IntInf_rem_unchecked = "IntInf.rem.unchecked"
+  | toString PrimOp_Vector_EQUAL = "Vector.="
   | toString PrimOp_Vector_length = "Vector.length"
+  | toString PrimOp_Array_EQUAL = "Array.="
   | toString PrimOp_Array_length = "Array.length"
   | toString PrimOp_Unsafe_cast = "Unsafe.cast"
   | toString PrimOp_Unsafe_Vector_sub = "Unsafe.Vector.sub"
@@ -243,13 +265,17 @@ fun toString PrimOp_EQUAL = "="
 fun fromString "=" = SOME PrimOp_EQUAL
   | fromString "call2" = SOME PrimOp_call2
   | fromString "call3" = SOME PrimOp_call3
+  | fromString "Ref.=" = SOME PrimOp_Ref_EQUAL
   | fromString "Ref.:=" = SOME PrimOp_Ref_set
   | fromString "Ref.!" = SOME PrimOp_Ref_read
+  | fromString "Bool.=" = SOME PrimOp_Bool_EQUAL
   | fromString "Bool.not" = SOME PrimOp_Bool_not
+  | fromString "Int.=" = SOME PrimOp_Int_EQUAL
   | fromString "Int.<" = SOME PrimOp_Int_LT
   | fromString "Int.<=" = SOME PrimOp_Int_LE
   | fromString "Int.>" = SOME PrimOp_Int_GT
   | fromString "Int.>=" = SOME PrimOp_Int_GE
+  | fromString "Word.=" = SOME PrimOp_Word_EQUAL
   | fromString "Word.+" = SOME PrimOp_Word_PLUS
   | fromString "Word.-" = SOME PrimOp_Word_MINUS
   | fromString "Word.*" = SOME PrimOp_Word_TIMES
@@ -267,14 +293,17 @@ fun fromString "=" = SOME PrimOp_EQUAL
   | fromString "Real.<=" = SOME PrimOp_Real_LE
   | fromString "Real.>" = SOME PrimOp_Real_GT
   | fromString "Real.>=" = SOME PrimOp_Real_GE
+  | fromString "Char.=" = SOME PrimOp_Char_EQUAL
   | fromString "Char.<" = SOME PrimOp_Char_LT
   | fromString "Char.<=" = SOME PrimOp_Char_LE
   | fromString "Char.>" = SOME PrimOp_Char_GT
   | fromString "Char.>=" = SOME PrimOp_Char_GE
+  | fromString "WideChar.=" = SOME PrimOp_WideChar_EQUAL
   | fromString "WideChar.<" = SOME PrimOp_WideChar_LT
   | fromString "WideChar.<=" = SOME PrimOp_WideChar_LE
   | fromString "WideChar.>" = SOME PrimOp_WideChar_GT
   | fromString "WideChar.>=" = SOME PrimOp_WideChar_GE
+  | fromString "String.=" = SOME PrimOp_String_EQUAL
   | fromString "String.<" = SOME PrimOp_String_LT
   | fromString "String.<=" = SOME PrimOp_String_LE
   | fromString "String.>" = SOME PrimOp_String_GT
@@ -282,6 +311,7 @@ fun fromString "=" = SOME PrimOp_EQUAL
   | fromString "String.^" = SOME PrimOp_String_HAT
   | fromString "String.size" = SOME PrimOp_String_size
   | fromString "String.str" = SOME PrimOp_String_str
+  | fromString "WideString.=" = SOME PrimOp_WideString_EQUAL
   | fromString "WideString.<" = SOME PrimOp_WideString_LT
   | fromString "WideString.<=" = SOME PrimOp_WideString_LE
   | fromString "WideString.>" = SOME PrimOp_WideString_GT
@@ -289,6 +319,7 @@ fun fromString "=" = SOME PrimOp_EQUAL
   | fromString "WideString.^" = SOME PrimOp_WideString_HAT
   | fromString "WideString.size" = SOME PrimOp_WideString_size
   | fromString "WideString.str" = SOME PrimOp_WideString_str
+  | fromString "IntInf.=" = SOME PrimOp_IntInf_EQUAL
   | fromString "IntInf.+" = SOME PrimOp_IntInf_PLUS
   | fromString "IntInf.-" = SOME PrimOp_IntInf_MINUS
   | fromString "IntInf.*" = SOME PrimOp_IntInf_TIMES
@@ -303,7 +334,9 @@ fun fromString "=" = SOME PrimOp_EQUAL
   | fromString "IntInf.notb" = SOME PrimOp_IntInf_notb
   | fromString "IntInf.quot.unchecked" = SOME PrimOp_IntInf_quot_unchecked
   | fromString "IntInf.rem.unchecked" = SOME PrimOp_IntInf_rem_unchecked
+  | fromString "Vector.=" = SOME PrimOp_Vector_EQUAL
   | fromString "Vector.length" = SOME PrimOp_Vector_length
+  | fromString "Array.=" = SOME PrimOp_Array_EQUAL
   | fromString "Array.length" = SOME PrimOp_Array_length
   | fromString "Unsafe.cast" = SOME PrimOp_Unsafe_cast
   | fromString "Unsafe.Vector.sub" = SOME PrimOp_Unsafe_Vector_sub
@@ -391,6 +424,8 @@ functor TypeOfPrimitives (type ty
                           val refOf : ty -> ty
                           val vectorOf : ty -> ty
                           val arrayOf : ty -> ty
+                          val pairOf : ty * ty -> ty
+                          val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
                           val IsEqType : constraint
@@ -400,13 +435,17 @@ functor TypeOfPrimitives (type ty
 fun typeOf Primitives.PrimOp_EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [tyEqA, tyEqA], result = bool }
   | typeOf Primitives.PrimOp_call2 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, [])], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], result = tyA }
   | typeOf Primitives.PrimOp_call3 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, []), (tyVarD, [])], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], result = tyA }
+  | typeOf Primitives.PrimOp_Ref_EQUAL = { vars = [(tyVarA, [])], args = vector [refOf (tyA), refOf (tyA)], result = bool }
   | typeOf Primitives.PrimOp_Ref_set = { vars = [(tyVarA, [])], args = vector [refOf (tyA), tyA], result = unit }
   | typeOf Primitives.PrimOp_Ref_read = { vars = [(tyVarA, [])], args = vector [refOf (tyA)], result = tyA }
+  | typeOf Primitives.PrimOp_Bool_EQUAL = { vars = [], args = vector [bool, bool], result = bool }
   | typeOf Primitives.PrimOp_Bool_not = { vars = [], args = vector [bool], result = bool }
+  | typeOf Primitives.PrimOp_Int_EQUAL = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.PrimOp_Int_LT = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.PrimOp_Int_LE = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.PrimOp_Int_GT = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.PrimOp_Int_GE = { vars = [], args = vector [int, int], result = bool }
+  | typeOf Primitives.PrimOp_Word_EQUAL = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.PrimOp_Word_PLUS = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.PrimOp_Word_MINUS = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.PrimOp_Word_TIMES = { vars = [], args = vector [word, word], result = word }
@@ -424,14 +463,17 @@ fun typeOf Primitives.PrimOp_EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = v
   | typeOf Primitives.PrimOp_Real_LE = { vars = [], args = vector [real, real], result = bool }
   | typeOf Primitives.PrimOp_Real_GT = { vars = [], args = vector [real, real], result = bool }
   | typeOf Primitives.PrimOp_Real_GE = { vars = [], args = vector [real, real], result = bool }
+  | typeOf Primitives.PrimOp_Char_EQUAL = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.PrimOp_Char_LT = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.PrimOp_Char_LE = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.PrimOp_Char_GT = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.PrimOp_Char_GE = { vars = [], args = vector [char, char], result = bool }
+  | typeOf Primitives.PrimOp_WideChar_EQUAL = { vars = [], args = vector [wideChar, wideChar], result = bool }
   | typeOf Primitives.PrimOp_WideChar_LT = { vars = [], args = vector [wideChar, wideChar], result = bool }
   | typeOf Primitives.PrimOp_WideChar_LE = { vars = [], args = vector [wideChar, wideChar], result = bool }
   | typeOf Primitives.PrimOp_WideChar_GT = { vars = [], args = vector [wideChar, wideChar], result = bool }
   | typeOf Primitives.PrimOp_WideChar_GE = { vars = [], args = vector [wideChar, wideChar], result = bool }
+  | typeOf Primitives.PrimOp_String_EQUAL = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.PrimOp_String_LT = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.PrimOp_String_LE = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.PrimOp_String_GT = { vars = [], args = vector [string, string], result = bool }
@@ -439,6 +481,7 @@ fun typeOf Primitives.PrimOp_EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = v
   | typeOf Primitives.PrimOp_String_HAT = { vars = [], args = vector [string, string], result = string }
   | typeOf Primitives.PrimOp_String_size = { vars = [], args = vector [string], result = int }
   | typeOf Primitives.PrimOp_String_str = { vars = [], args = vector [char], result = string }
+  | typeOf Primitives.PrimOp_WideString_EQUAL = { vars = [], args = vector [wideString, wideString], result = bool }
   | typeOf Primitives.PrimOp_WideString_LT = { vars = [], args = vector [wideString, wideString], result = bool }
   | typeOf Primitives.PrimOp_WideString_LE = { vars = [], args = vector [wideString, wideString], result = bool }
   | typeOf Primitives.PrimOp_WideString_GT = { vars = [], args = vector [wideString, wideString], result = bool }
@@ -446,6 +489,7 @@ fun typeOf Primitives.PrimOp_EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = v
   | typeOf Primitives.PrimOp_WideString_HAT = { vars = [], args = vector [wideString, wideString], result = wideString }
   | typeOf Primitives.PrimOp_WideString_size = { vars = [], args = vector [wideString], result = int }
   | typeOf Primitives.PrimOp_WideString_str = { vars = [], args = vector [wideChar], result = wideString }
+  | typeOf Primitives.PrimOp_IntInf_EQUAL = { vars = [], args = vector [intInf, intInf], result = bool }
   | typeOf Primitives.PrimOp_IntInf_PLUS = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.PrimOp_IntInf_MINUS = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.PrimOp_IntInf_TIMES = { vars = [], args = vector [intInf, intInf], result = intInf }
@@ -460,7 +504,9 @@ fun typeOf Primitives.PrimOp_EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = v
   | typeOf Primitives.PrimOp_IntInf_notb = { vars = [], args = vector [intInf], result = intInf }
   | typeOf Primitives.PrimOp_IntInf_quot_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.PrimOp_IntInf_rem_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf Primitives.PrimOp_Vector_EQUAL = { vars = [(tyVarA, [])], args = vector [function1Of (bool, pairOf (tyA, tyA)), vectorOf (tyA), vectorOf (tyA)], result = bool }
   | typeOf Primitives.PrimOp_Vector_length = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int }
+  | typeOf Primitives.PrimOp_Array_EQUAL = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
   | typeOf Primitives.PrimOp_Array_length = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int }
   | typeOf Primitives.PrimOp_Unsafe_cast = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [tyA], result = tyB }
   | typeOf Primitives.PrimOp_Unsafe_Vector_sub = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int], result = tyA }

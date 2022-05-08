@@ -191,6 +191,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | ExceptionDec of SourcePos.span * ExBind list
              | GroupDec of SourcePos.span * Dec list
              | OverloadDec of SourcePos.span * Syntax.OverloadClass * TyName * Exp Syntax.OverloadKeyMap.map
+             | EqualityDec of SourcePos.span * TyVar list * TyName * Exp
      and ValBind = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
@@ -317,6 +318,7 @@ and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
   | print_Dec (GroupDec _) = "GroupDec"
   | print_Dec (OverloadDec _) = "OverloadDec"
+  | print_Dec (EqualityDec _) = "EqualityDec"
 and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ Syntax.print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
 and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyName tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
 and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
@@ -434,6 +436,9 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
             | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
             | doDec(GroupDec(span, decs)) = GroupDec(span, List.map doDec decs)
             | doDec(OverloadDec(span, class, tyname, map)) = OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
+            | doDec (EqualityDec (span, typarams, tyname, exp)) = let val (subst, tyvars) = genFreshTyVars (subst, typarams)
+                                                                  in EqualityDec (span, tyvars, tyname, #doExp (mapTy (ctx, subst, avoidCollision)) exp)
+                                                                  end
           and doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
             | doValBind(PolyVarBind(span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
                                                                                                            val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
@@ -549,6 +554,9 @@ and freeTyVarsInDec(bound, dec)
          | ExceptionDec(_, exbinds) => List.foldl (fn (exbind, acc) => TyVarSet.union(acc, freeTyVarsInExBind(bound, exbind))) TyVarSet.empty exbinds
          | GroupDec(_, decs) => freeTyVarsInDecs(bound, decs)
          | OverloadDec(_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) TyVarSet.empty map
+         | EqualityDec (_, typarams, tyname, exp) => let val bound' = TyVarSet.addList (bound, typarams)
+                                                     in freeTyVarsInExp (bound', exp)
+                                                     end
       )
 and freeTyVarsInValBind(bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => TyVarSet.union(acc, freeTyVarsInTy(bound, ty))) (freeTyVarsInExp(bound, exp)) xs
   | freeTyVarsInValBind(bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = let val bound' = TyVarSet.addList(bound, List.map #1 tyvars)

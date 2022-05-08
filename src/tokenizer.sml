@@ -211,6 +211,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                                 ()
                                                                                           ; (Tokens.OVERLOAD, NONE) (* extension *)
                                                                                           )
+                                                                         | "_equality" => ( if not (#allowOverload opts) then
+                                                                                                emitError (l, c, "_equality is not allowed in user code")
+                                                                                            else
+                                                                                                ()
+                                                                                          ; (Tokens.EQUALITY, NONE) (* extension *)
+                                                                                          )
                                                                          | "abstype" => (Tokens.ABSTYPE, NONE)
                                                                          | "and" => (Tokens.AND, NONE)
                                                                          | "andalso" => (Tokens.ANDALSO, NONE)

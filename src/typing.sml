@@ -291,6 +291,8 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = USyntax.Ty
                                                fun refOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_ref)
                                                fun vectorOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_vector)
                                                fun arrayOf ty = USyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
+                                               fun pairOf (ty1, ty2) = USyntax.PairType (SourcePos.nullSpan, ty1, ty2)
+                                               fun function1Of (a, b) = USyntax.FnType (SourcePos.nullSpan, b, a)
                                                fun function2Of (a, b, c) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = USyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
                                                val IsEqType = USyntax.IsEqType SourcePos.nullSpan
@@ -1690,6 +1692,50 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
           val env' = envWithTyConEnv (Syntax.TyConMap.empty, USyntax.TyNameMap.singleton (tyname, attr))
       in (env', [U.OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map #2 map)])
       end
+  | typeCheckDec (ctx, env, S.EqualityDec (span, typarams, longtycon, exp))
+    = let val { typeFunction = U.TypeFunction (tyvars, ty), ... } = lookupTyConInEnv (#context ctx, env, span, longtycon)
+          val tyname = if List.length tyvars = List.length typarams then
+                           case ty of
+                               U.TyCon (_, tyvars', tyname) => if List.length tyvars' = List.length typarams then
+                                                                   tyname
+                                                               else
+                                                                   emitTypeError (ctx, [span], "equality declaration: longtycon must refer to a concrete type")
+                             | _ => emitTypeError (ctx, [span], "equality declaration: longtycon must refer to a concrete type")
+                       else
+                           emitTypeError (ctx, [span], "equality declaration: number of type parameters mismatch")
+          val typarams' = List.map (fn tv => (tv, genTyVar (#context ctx, tv))) typarams
+          val () = if isRefOrArray tyname then
+                       List.app (fn Syntax.MkTyVar tvname => if String.isPrefix "''" tvname then
+                                                                 emitTypeError (ctx, [span], "equality for ref or array cannot depend on the equality of its type parameter")
+                                                             else
+                                                                 ()
+                                ) typarams
+                   else
+                       ()
+          val ty = U.TyCon (span, List.map (fn (_, tv) => U.TyVar (span, tv)) typarams', tyname)
+          val attr = lookupTyNameInEnv (#context ctx, env, span, tyname)
+          val () = if #admitsEquality attr then
+                       emitTypeError (ctx, [span], "equality declaration: the type already admits equality")
+                   else
+                       ()
+          val attr = { arity = #arity attr
+                     , admitsEquality = true
+                     , overloadClass = #overloadClass attr
+                     }
+          val env' = envWithTyConEnv (Syntax.TyConMap.empty, USyntax.TyNameMap.singleton (tyname, attr))
+          val innerEnv = mergeEnv (env, env')
+          val innerEnv = { valMap = #valMap innerEnv
+                         , tyConMap = #tyConMap innerEnv
+                         , tyNameMap = #tyNameMap innerEnv
+                         , strMap = #strMap innerEnv
+                         , sigMap = #sigMap innerEnv
+                         , funMap = #funMap innerEnv
+                         , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars innerEnv) typarams'
+                         }
+          val (eqTy, exp) = typeCheckExp (ctx, innerEnv, exp, SOME (U.FnType (span, U.PairType (span, ty, ty), primTy_bool))) (* allow recursion *)
+          val () = addConstraint (ctx, env, U.EqConstr (span, eqTy, U.FnType (span, U.PairType (span, ty, ty), primTy_bool)))
+      in (env', [U.EqualityDec (span, List.map #2 typarams', tyname, exp)])
+      end
 (* typeCheckDecs : InferenceContext * Env * S.Dec list -> (* created environment *) Env * U.Dec list *)
 and typeCheckDecs(ctx, env, []) : Env * U.Dec list = (emptyEnv, [])
   | typeCheckDecs(ctx, env, dec :: decs) = let val (env', dec) = typeCheckDec(ctx, env, dec)
@@ -1959,6 +2005,12 @@ fun checkTyScope (ctx, tvset : U.TyVarSet.set, tynameset : U.TyNameSet.set)
                                                                      )
                                                                  else
                                                                      emitError (ctx, [span], "type constructor scope violation: " ^ USyntax.PrettyPrint.print_TyName tyname)
+            | goDec (U.EqualityDec (span, typarams, tyname, exp)) = if U.TyNameSet.member (tynameset, tyname) then
+                                                                        ( #goExp (checkTyScope (ctx, U.TyVarSet.addList (tvset, typarams), tynameset)) exp
+                                                                        ; tynameset
+                                                                        )
+                                                                    else
+                                                                        emitError (ctx, [span], "type constructor scope violation: " ^ USyntax.PrettyPrint.print_TyName tyname)
           and goDecs decs = List.foldl (fn (dec, tynameset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                in goDec dec
                                                                end)

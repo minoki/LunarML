@@ -57,18 +57,6 @@ val builtins
                     ,(VId_Fail_tag, "_Fail_tag")
                     ,(USyntax.MkShortVId VId_exnName, "_exnName")
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
-                    ,(VId_EQUAL_bool, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_int, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_word, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_char, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_wideChar, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_string, "_String_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_wideString, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_intInf, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_list, "_List_EQUAL")
-                    ,(VId_EQUAL_ref, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_array, "_EQUAL") (* JS === *)
-                    ,(VId_EQUAL_vector, "_Vector_EQUAL")
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
@@ -107,18 +95,6 @@ val builtins
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
-                    ]
-      end
-val builtinBinaryOps : (JsSyntax.BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
-    = let open InitialEnv
-      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                    [(VId_EQUAL_bool,       (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_int,        (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_word,       (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_char,       (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_wideChar,   (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_wideString, (JsSyntax.EQUAL, true))
-                    ,(VId_EQUAL_intInf,     (JsSyntax.EQUAL, true))
                     ]
       end
 fun VIdToJs (vid as USyntax.MkVId (name, n)) = if n < 0 then
@@ -309,20 +285,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
       in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doBinary = case (extractLongVId exp1, exp2) of
-                             (SOME longvid, F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
-                             let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, env, e1') => doExpCont ctx env e2 (fn (stmts2, env, e2') => f (stmts1 @ stmts2, env, e1', e2'))))
-                             in case USyntax.LongVIdMap.find (builtinBinaryOps, longvid) of
-                                    SOME (binop, pure) => wrap (fn (stmts, env, e1', e2') =>
-                                                                   if pure then
-                                                                       putPureTo ctx env dest (stmts, J.BinExp (binop, e1', e2'))
-                                                                   else
-                                                                       putImpureTo ctx env dest (stmts, J.BinExp (binop, e1', e2'))
-                                                               )
-                                  | NONE => NONE
-                             end
-                           | _ => NONE
-          val doJsCall = case (exp1, exp2) of
+    = let val doJsCall = case (exp1, exp2) of
                               (F.AppExp (vid_jscall, f), F.PrimExp (F.VectorOp, _, xs)) =>
                               if F.isLongVId (vid_jscall, InitialEnv.VId_JavaScript_call) then
                                   SOME (fn () => doExpCont ctx env f
@@ -363,7 +326,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
-      in case List.mapPartial (fn x => x) [doBinary, doJsCall, doJsMethod] of
+      in case List.mapPartial (fn x => x) [doJsCall, doJsMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
@@ -646,6 +609,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                             end
                                         else
                                             raise CodeGenError "primop call3: invalid number of arguments"
+           | Primitives.PrimOp_Ref_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                        (* REPRESENTATION_OF_REF *)
                                                        let val stmts = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b)) ]
@@ -656,13 +620,16 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                        (* REPRESENTATION_OF_REF *)
                                                        putImpureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")))
                                                    )
+           | Primitives.PrimOp_Bool_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
                                                        putPureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
                                                    )
+           | Primitives.PrimOp_Int_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Int_LT => doBinaryOp (J.LT, true)
            | Primitives.PrimOp_Int_GT => doBinaryOp (J.GT, true)
            | Primitives.PrimOp_Int_LE => doBinaryOp (J.LE, true)
            | Primitives.PrimOp_Int_GE => doBinaryOp (J.GE, true)
+           | Primitives.PrimOp_Word_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Word_PLUS => doBinary (fn (stmts, env, (a, b)) =>
                                                          putPureTo ctx env dest (stmts, J.ToUint32Exp (J.BinExp (J.PLUS, a, b)))
                                                      )
@@ -690,14 +657,19 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.PrimOp_Real_GT => doBinaryOp (J.GT, true)
            | Primitives.PrimOp_Real_LE => doBinaryOp (J.LE, true)
            | Primitives.PrimOp_Real_GE => doBinaryOp (J.GE, true)
+           | Primitives.PrimOp_Char_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Char_LT => doBinaryOp (J.LT, true)
            | Primitives.PrimOp_Char_GT => doBinaryOp (J.GT, true)
            | Primitives.PrimOp_Char_LE => doBinaryOp (J.LE, true)
            | Primitives.PrimOp_Char_GE => doBinaryOp (J.GE, true)
+           | Primitives.PrimOp_WideChar_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_WideChar_LT => doBinaryOp (J.LT, true)
            | Primitives.PrimOp_WideChar_GT => doBinaryOp (J.GT, true)
            | Primitives.PrimOp_WideChar_LE => doBinaryOp (J.LE, true)
            | Primitives.PrimOp_WideChar_GE => doBinaryOp (J.GE, true)
+           | Primitives.PrimOp_String_EQUAL => doBinary (fn (stmts, env, (a, b)) =>
+                                                            putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_EQUAL"), vector [a, b]))
+                                                        )
            | Primitives.PrimOp_String_LT => doBinary (fn (stmts, env, (a, b)) =>
                                                          putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]))
                                                      )
@@ -710,6 +682,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.PrimOp_String_str => doUnary (fn (stmts, env, a) =>
                                                          putPureTo ctx env dest (stmts, J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]))
                                                      )
+           | Primitives.PrimOp_WideString_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_WideString_LT => doBinaryOp (J.LT, true)
            | Primitives.PrimOp_WideString_GT => doBinaryOp (J.GT, true)
            | Primitives.PrimOp_WideString_LE => doBinaryOp (J.LE, true)
@@ -722,6 +695,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                      doExpTo ctx env (Vector.sub (args, 0)) dest
                                                  else
                                                      raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.PrimOp_IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_IntInf_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.PrimOp_IntInf_MINUS => doBinaryOp (J.MINUS, true)
            | Primitives.PrimOp_IntInf_TIMES => doBinaryOp (J.TIMES, true)
@@ -740,9 +714,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                       )
            | Primitives.PrimOp_IntInf_quot_unchecked => doBinaryOp (J.DIV, true)
            | Primitives.PrimOp_IntInf_rem_unchecked => doBinaryOp (J.MOD, true)
+           | Primitives.PrimOp_Vector_EQUAL => doTernary (fn (stmts, env, (eq, a, b)) =>
+                                                             putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]))
+                                                         )
            | Primitives.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
                                                             putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                         )
+           | Primitives.PrimOp_Array_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
                                                            putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
                                                        )

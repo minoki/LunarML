@@ -127,20 +127,6 @@ val VId_GT = newVId ">"
 val VId_LE = newVId "<="
 val VId_GE = newVId ">="
 
-(* Equality *)
-val VId_EQUAL_bool = newShortVId "Bool.="
-val VId_EQUAL_int = newShortVId "Int.="
-val VId_EQUAL_word = newShortVId "Word.="
-val VId_EQUAL_string = newShortVId "String.="
-val VId_EQUAL_char = newShortVId "Char.="
-val VId_EQUAL_list = newShortVId "List.="
-val VId_EQUAL_ref = newShortVId "Ref.="
-val VId_EQUAL_array  = newShortVId "Array.="
-val VId_EQUAL_vector = newShortVId "Vector.="
-val VId_EQUAL_wideString = newShortVId "WideString.="
-val VId_EQUAL_wideChar = newShortVId "WideChar.="
-val VId_EQUAL_intInf = newShortVId "IntInf.="
-
 (* Int *)
 local val newVId = newLongVId (StrId_Int, [])
 in
@@ -502,20 +488,20 @@ val initialEnv : Typing.Env
                                  ]
          , tyNameMap = List.foldl USyntax.TyNameMap.insert'
                                   USyntax.TyNameMap.empty
-                                  [(primTyName_bool, { arity = 0, admitsEquality = true, overloadClass = NONE })
-                                  ,(primTyName_int, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
-                                  ,(primTyName_word, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
+                                  [(primTyName_bool, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE })
+                                  ,(primTyName_int, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_word, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
                                   ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = NONE (* SOME Syntax.CLASS_REAL *) })
-                                  ,(primTyName_char, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
-                                  ,(primTyName_wideChar, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
-                                  ,(primTyName_string, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
-                                  ,(primTyName_wideString, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
-                                  ,(primTyName_intInf, { arity = 0, admitsEquality = true, overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
-                                  ,(primTyName_list, { arity = 1, admitsEquality = true, overloadClass = NONE })
+                                  ,(primTyName_char, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
+                                  ,(primTyName_wideChar, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
+                                  ,(primTyName_string, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
+                                  ,(primTyName_wideString, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
+                                  ,(primTyName_intInf, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_list, { arity = 1, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_array, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
-                                  ,(primTyName_vector, { arity = 1, admitsEquality = true, overloadClass = NONE })
+                                  ,(primTyName_vector, { arity = 1, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_Lua_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_JavaScript_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })

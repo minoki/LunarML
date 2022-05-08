@@ -239,6 +239,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * LongStrId list
              | OverloadDec of SourcePos.span * OverloadClass * LongTyCon * Exp OverloadKeyMap.map
+             | EqualityDec of SourcePos.span * TyVar list * LongTyCon * Exp
      and ValBind = PatBind of SourcePos.span * Pat * Exp
 
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
@@ -458,6 +459,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | OpenDec of SourcePos.span * Syntax.LongStrId list
              | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.VId list
              | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
+             | EqualityDec of SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Exp
      and ValBind = PatBind of SourcePos.span * Pat * Exp
      and FValBind = FValBind of SourcePos.span * FMRule list
      and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp

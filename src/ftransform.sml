@@ -250,9 +250,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                        | _ => raise DesugarError ([span], "internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val (env, payload) = genMatcher env (F.DataPayloadExp exp) payloadTy innerPat
                            val equal_string = case #nativeString (#targetInfo ctx) of
-                                                  TargetInfo.NARROW_STRING => InitialEnv.VId_EQUAL_string
-                                                | TargetInfo.WIDE_STRING => InitialEnv.VId_EQUAL_wideString
-                       in (env, F.SimplifyingAndalsoExp (F.AppExp (F.LongVarExp equal_string, F.TupleExp [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload))
+                                                  TargetInfo.NARROW_STRING => Primitives.PrimOp_String_EQUAL
+                                                | TargetInfo.WIDE_STRING => Primitives.PrimOp_WideString_EQUAL
+                       in (env, F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload))
                        end
                 end
             | genMatcher (env as { exnTagMap, ... }) exp ty (F.ConPat (span, path, NONE, tyargs))
@@ -276,9 +276,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                     | F.Child (parent, F.ValueLabel vid) => Syntax.getVIdName vid
                                     | _ => raise Fail ("internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val equal_string = case #nativeString (#targetInfo ctx) of
-                                                  TargetInfo.NARROW_STRING => InitialEnv.VId_EQUAL_string
-                                                | TargetInfo.WIDE_STRING => InitialEnv.VId_EQUAL_wideString
-                    in (env, F.AppExp (F.LongVarExp equal_string, F.TupleExp [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]))
+                                                  TargetInfo.NARROW_STRING => Primitives.PrimOp_String_EQUAL
+                                                | TargetInfo.WIDE_STRING => Primitives.PrimOp_WideString_EQUAL
+                    in (env, F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]))
                     end
             | genMatcher env exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = let val env = addVar(env, vid, ty1)
                                                                                  in genMatcher env exp ty0 innerPat
@@ -290,7 +290,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     val e0 = if ellipsis then
                                  F.PrimExp (F.PrimFnOp Primitives.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
                              else
-                                 F.AppExp(F.LongVarExp(InitialEnv.VId_EQUAL_int), F.TupleExp [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimFnOp Primitives.PrimOp_Int_EQUAL, vector [], vector [vectorLengthExp, expectedLengthExp])
                 in Vector.foldri (fn (i, pat, (env, e)) => let val (env, exp) = genMatcher env (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                            in (env, F.SimplifyingAndalsoExp(e, exp))
                                                            end

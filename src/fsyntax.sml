@@ -519,20 +519,7 @@ type Env = { equalityForTyVarMap : USyntax.VId USyntax.TyVarMap.map
            , overloadMap : (FSyntax.Exp Syntax.OverloadKeyMap.map) USyntax.TyNameMap.map
            }
 val initialEnv : Env = { equalityForTyVarMap = USyntax.TyVarMap.empty
-                       , equalityForTyNameMap = let open Typing InitialEnv
-                                                in List.foldl USyntax.TyNameMap.insert' USyntax.TyNameMap.empty
-                                                              [(primTyName_int, VId_EQUAL_int)
-                                                              ,(primTyName_word, VId_EQUAL_word)
-                                                              ,(primTyName_char, VId_EQUAL_char)
-                                                              ,(primTyName_wideChar, VId_EQUAL_wideChar)
-                                                              ,(primTyName_string, VId_EQUAL_string)
-                                                              ,(primTyName_wideString, VId_EQUAL_wideString)
-                                                              ,(primTyName_bool, VId_EQUAL_bool)
-                                                              ,(primTyName_intInf, VId_EQUAL_intInf)
-                                                              ,(primTyName_list, VId_EQUAL_list)
-                                                              ,(primTyName_vector, VId_EQUAL_vector)
-                                                              ]
-                                                end
+                       , equalityForTyNameMap = USyntax.TyNameMap.empty
                        , exnTagMap = let open InitialEnv
                                      in List.foldl (fn ((con, tag), m) => USyntax.LongVIdMap.insert(m, con, LongVIdToPath tag)) USyntax.LongVIdMap.empty
                                                    [(LongVId_Match, VId_Match_tag)
@@ -945,22 +932,16 @@ and typeSchemeToTy(ctx, env, USyntax.TypeScheme(vars, ty))
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
-and getEquality(ctx, env, U.TyCon(span, [tyarg], tyname))
-    = if U.eqTyName(tyname, Typing.primTyName_ref) then
-          F.TyAppExp(F.LongVarExp(InitialEnv.VId_EQUAL_ref), toFTy(ctx, env, tyarg))
-      else if U.eqTyName(tyname, Typing.primTyName_array) then
-          F.TyAppExp(F.LongVarExp(InitialEnv.VId_EQUAL_array), toFTy(ctx, env, tyarg))
-      else
-          (case USyntax.TyNameMap.find(#equalityForTyNameMap env, tyname) of
-               NONE => raise Fail (USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
-             | SOME longvid => F.AppExp(F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
-          )
-  | getEquality (ctx, env, U.TyCon(span, tyargs, tyname)) = (case USyntax.TyNameMap.find(#equalityForTyNameMap env, tyname) of
-                                                                 NONE => raise Fail (USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
-                                                               | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp(exp, toFTy(ctx, env, tyarg))) (F.LongVarExp(longvid)) tyargs
-                                                                                 in List.foldl (fn (tyarg, exp) => F.AppExp(exp, getEquality(ctx, env, tyarg))) typesApplied tyargs
-                                                                                 end
-                                                            )
+and getEquality (ctx, env, U.TyCon (span, tyargs, tyname))
+    = (case USyntax.TyNameMap.find (#equalityForTyNameMap env, tyname) of
+           NONE => raise Fail (USyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
+         | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp (exp, toFTy (ctx, env, tyarg))) (F.LongVarExp longvid) tyargs
+                           in if Typing.isRefOrArray tyname then
+                                  typesApplied
+                              else
+                                  List.foldl (fn (tyarg, exp) => F.AppExp (exp, getEquality (ctx, env, tyarg))) typesApplied tyargs
+                           end
+      )
   | getEquality (ctx, env, U.TyVar(span, tv)) = (case USyntax.TyVarMap.find(#equalityForTyVarMap env, tv) of
                                                      NONE => raise Fail ("equality for the type variable not found: " ^ USyntax.PrettyPrint.print_TyVar tv)
                                                    | SOME vid => F.VarExp(vid)
@@ -1024,6 +1005,23 @@ and toFDecs(ctx, env, []) = (env, [])
                                                                              val (env, decs) = toFDecs(ctx, env, decs)
                                                                          in (env, decs)
                                                                          end
+  | toFDecs (ctx, env, U.EqualityDec (span, tyvars, tyname, exp) :: decs) = let val vid = freshVId (ctx, "eq")
+                                                                                val tyvarEqualities = if Typing.isRefOrArray tyname then
+                                                                                                          []
+                                                                                                      else
+                                                                                                          List.map (fn tv => (tv, freshVId (ctx, "eq"))) tyvars
+                                                                                val env = updateEqualityForTyNameMap (fn m => USyntax.TyNameMap.insert (m, tyname, USyntax.MkShortVId vid), env)
+                                                                                val innerEnv = updateEqualityForTyVarMap (fn m => List.foldl USyntax.TyVarMap.insert' m tyvarEqualities, env)
+                                                                                val exp = toFExp (ctx, innerEnv, exp)
+                                                                                val exp = List.foldr (fn ((tv, eqParam), exp) => F.FnExp (eqParam, F.EqualityType (F.TyVar tv), exp)) exp tyvarEqualities
+                                                                                val exp = List.foldr (fn (tv, exp) => F.TyAbsExp (tv, F.TypeKind, exp)) exp tyvars
+                                                                                val ty = F.EqualityType (F.TyVar (F.tyNameToTyVar tyname))
+                                                                                val ty = List.foldr (fn ((tv, _), ty) => F.FnType (F.EqualityType (F.TyVar tv), ty)) ty tyvarEqualities
+                                                                                val ty = List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty)) ty tyvars
+                                                                                val dec = F.RecValDec [(vid, ty, exp)]
+                                                                                val (env, decs) = toFDecs (ctx, env, decs)
+                                                                            in (env, dec :: decs)
+                                                                            end
 and doDatBind(ctx, env, U.DatBind(span, tyvars, tycon, conbinds, _)) = F.DatBind(tyvars, F.tyNameToTyVar tycon, List.map (fn conbind => doConBind(ctx, env, conbind)) conbinds)
 and doConBind(ctx, env, U.ConBind(span, vid, NONE)) = F.ConBind(vid, NONE)
   | doConBind(ctx, env, U.ConBind(span, vid, SOME ty)) = F.ConBind(vid, SOME (toFTy(ctx, env, ty)))

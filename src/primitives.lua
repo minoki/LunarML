@@ -23,6 +23,8 @@ do
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
   local vector = function(elemTy) return {string_format("vectorOf (%s)", elemTy[1])} end
   local array = function(elemTy) return {string_format("arrayOf (%s)", elemTy[1])} end
+  local pair = function(ty1, ty2) return {string_format("pairOf (%s, %s)", ty1[1], ty2[1])} end
+  local function1 = function(resultTy, arg1Ty) return {string_format("function1Of (%s, %s)", resultTy[1], arg1Ty[1])} end
   local function2 = function(resultTy, arg1Ty, arg2Ty) return {string_format("function2Of (%s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1])} end
   local function3 = function(resultTy, arg1Ty, arg2Ty, arg3Ty) return {string_format("function3Of (%s, %s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1], arg3Ty[1])} end
   local function Binary(a, b)
@@ -57,6 +59,11 @@ do
       type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function3(TV.a, TV.b, TV.c, TV.d), TV.b, TV.c, TV.d}, result = TV.a },
     },
     {
+      name = "Ref.=",
+      srcname = "Ref_EQUAL",
+      type = { vars = {TV.a}, args = {ref(TV.a), ref(TV.a)}, result = bool },
+    },
+    {
       name = "Ref.:=",
       srcname = "Ref_set",
       type = { vars = {TV.a}, args = {ref(TV.a), TV.a}, result = unit },
@@ -67,9 +74,19 @@ do
       type = { vars = {TV.a}, args = {ref(TV.a)}, result = TV.a },
     },
     {
+      name = "Bool.=",
+      srcname = "Bool_EQUAL",
+      type = Compare(bool),
+    },
+    {
       name = "Bool.not",
       srcname = "Bool_not",
       type = HomoUnary(bool),
+    },
+    {
+      name = "Int.=",
+      srcname = "Int_EQUAL",
+      type = Compare(int),
     },
     {
       name = "Int.<",
@@ -90,6 +107,11 @@ do
       name = "Int.>=",
       srcname = "Int_GE",
       type = Compare(int),
+    },
+    {
+      name = "Word.=",
+      srcname = "Word_EQUAL",
+      type = Compare(word),
     },
     {
       name = "Word.+",
@@ -177,6 +199,11 @@ do
       type = Compare(real),
     },
     {
+      name = "Char.=",
+      srcname = "Char_EQUAL",
+      type = Compare(char),
+    },
+    {
       name = "Char.<",
       srcname = "Char_LT",
       type = Compare(char),
@@ -197,6 +224,11 @@ do
       type = Compare(char),
     },
     {
+      name = "WideChar.=",
+      srcname = "WideChar_EQUAL",
+      type = Compare(wideChar),
+    },
+    {
       name = "WideChar.<",
       srcname = "WideChar_LT",
       type = Compare(wideChar),
@@ -215,6 +247,11 @@ do
       name = "WideChar.>=",
       srcname = "WideChar_GE",
       type = Compare(wideChar),
+    },
+    {
+      name = "String.=",
+      srcname = "String_EQUAL",
+      type = Compare(string),
     },
     {
       name = "String.<",
@@ -252,6 +289,11 @@ do
       type = { vars = {}, args = {char}, result = string },
     },
     {
+      name = "WideString.=",
+      srcname = "WideString_EQUAL",
+      type = Compare(wideString),
+    },
+    {
       name = "WideString.<",
       srcname = "WideString_LT",
       type = Compare(wideString),
@@ -285,6 +327,11 @@ do
       name = "WideString.str",
       srcname = "WideString_str",
       type = { vars = {}, args = {wideChar}, result = wideString },
+    },
+    {
+      name = "IntInf.=",
+      srcname = "IntInf_EQUAL",
+      type = Compare(intInf),
     },
     {
       name = "IntInf.+",
@@ -357,9 +404,19 @@ do
       type = HomoBinary(intInf),
     },
     {
+      name = "Vector.=",
+      srcname = "Vector_EQUAL",
+      type = { vars = {TV.a}, args = {function1(bool, pair(TV.a, TV.a)), vector(TV.a), vector(TV.a)}, result = bool }
+    },
+    {
       name = "Vector.length",
       srcname = "Vector_length",
       type = { vars = {TV.a}, args = {vector(TV.a)}, result = int },
+    },
+    {
+      name = "Array.=",
+      srcname = "Array_EQUAL",
+      type = { vars = {TV.a}, args = {array(TV.a), array(TV.a)}, result = bool },
     },
     {
       name = "Array.length",
@@ -721,6 +778,8 @@ functor TypeOfPrimitives (type ty
                           val refOf : ty -> ty
                           val vectorOf : ty -> ty
                           val arrayOf : ty -> ty
+                          val pairOf : ty * ty -> ty
+                          val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
                           val IsEqType : constraint

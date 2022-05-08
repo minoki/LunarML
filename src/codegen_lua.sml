@@ -55,15 +55,6 @@ val builtins
                     ,(VId_Fail_tag, "_Fail_tag")
                     ,(USyntax.MkShortVId VId_exnName, "_exnName")
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
-                    ,(VId_EQUAL_bool, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_int, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_word, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_string, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_char, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_list, "_List_EQUAL")
-                    ,(VId_EQUAL_ref, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_array, "_EQUAL") (* Lua == *)
-                    ,(VId_EQUAL_vector, "_Vector_EQUAL")
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
@@ -113,16 +104,6 @@ val builtins
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
-                    ]
-      end
-val builtinBinaryOps : (LuaSyntax.BinaryOp * (* pure? *) bool) USyntax.LongVIdMap.map
-    = let open InitialEnv
-      in List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                    [(VId_EQUAL_bool,   (LuaSyntax.EQUAL, true))
-                    ,(VId_EQUAL_int,    (LuaSyntax.EQUAL, true))
-                    ,(VId_EQUAL_word,   (LuaSyntax.EQUAL, true))
-                    ,(VId_EQUAL_string, (LuaSyntax.EQUAL, true))
-                    ,(VId_EQUAL_char,   (LuaSyntax.EQUAL, true))
                     ]
       end
 fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
@@ -304,20 +285,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
       in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doBinary = case (extractLongVId exp1, exp2) of
-                             (SOME longvid, F.RecordExp [(Syntax.NumericLabel 1, e1), (Syntax.NumericLabel 2, e2)]) =>
-                             let fun wrap f = SOME (fn () => doExpCont ctx env e1 (fn (stmts1, env, e1') => doExpCont ctx env e2 (fn (stmts2, env, e2') => f (stmts1 @ stmts2, env, e1', e2'))))
-                             in case USyntax.LongVIdMap.find(builtinBinaryOps, longvid) of
-                                    SOME (binop, pure) => wrap (fn (stmts, env, e1', e2') =>
-                                                                   if pure then
-                                                                       putPureTo ctx env dest (stmts, L.BinExp (binop, e1', e2'))
-                                                                   else
-                                                                       putImpureTo ctx env dest (stmts, L.BinExp (binop, e1', e2'))
-                                                               )
-                                  | NONE => NONE
-                             end
-                           | _ => NONE
-          val doLuaCall = case (exp1, exp2) of
+    = let val doLuaCall = case (exp1, exp2) of
                               (F.AppExp(vid_luacall, f), F.PrimExp(F.VectorOp, _, xs)) =>
                               if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
                                   SOME (fn () => doExpCont ctx env f
@@ -363,7 +331,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
           val isNoop = case exp1 of
                            F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
-      in case List.mapPartial (fn x => x) [doBinary, doLuaCall, doLuaMethod] of
+      in case List.mapPartial (fn x => x) [doLuaCall, doLuaMethod] of
              f :: _ => f ()
            | [] => if isNoop then
                        doExpTo ctx env exp2 dest
@@ -643,6 +611,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                             end
                                         else
                                             raise CodeGenError "primop call3: invalid number of arguments"
+           | Primitives.PrimOp_Ref_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                        (* REPRESENTATION_OF_REF *)
                                                        let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], vector [b]) ]
@@ -653,13 +622,16 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                        (* REPRESENTATION_OF_REF *)
                                                        putImpureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "payload")))
                                                    )
+           | Primitives.PrimOp_Bool_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
                                                        putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
                                                    )
+           | Primitives.PrimOp_Int_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Int_LT => doBinaryOp (L.LT, true)
            | Primitives.PrimOp_Int_GT => doBinaryOp (L.GT, true)
            | Primitives.PrimOp_Int_LE => doBinaryOp (L.LE, true)
            | Primitives.PrimOp_Int_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_Word_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Word_PLUS => doBinaryOp (L.PLUS, true)
            | Primitives.PrimOp_Word_MINUS => doBinaryOp (L.MINUS, true)
            | Primitives.PrimOp_Word_TIMES => doBinaryOp (L.TIMES, true)
@@ -677,10 +649,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Primitives.PrimOp_Real_GT => doBinaryOp (L.GT, true)
            | Primitives.PrimOp_Real_LE => doBinaryOp (L.LE, true)
            | Primitives.PrimOp_Real_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_Char_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Char_LT => doBinaryOp (L.LT, true)
            | Primitives.PrimOp_Char_GT => doBinaryOp (L.GT, true)
            | Primitives.PrimOp_Char_LE => doBinaryOp (L.LE, true)
            | Primitives.PrimOp_Char_GE => doBinaryOp (L.GE, true)
+           | Primitives.PrimOp_String_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_String_LT => doBinaryOp (L.LT, true)
            | Primitives.PrimOp_String_GT => doBinaryOp (L.GT, true)
            | Primitives.PrimOp_String_LE => doBinaryOp (L.LE, true)
@@ -693,9 +667,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                  doExpTo ctx env (Vector.sub (args, 0)) dest
                                              else
                                                  raise CodeGenError "primop String.str: invalid number of arguments"
+           | Primitives.PrimOp_Vector_EQUAL => doTernary (fn (stmts, env, (eq, a, b)) =>
+                                                             putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]))
+                                                         )
            | Primitives.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
                                                             putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                         )
+           | Primitives.PrimOp_Array_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
                                                            putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                        )

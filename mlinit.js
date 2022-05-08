@@ -30,9 +30,7 @@ const _Subscript = new _Subscript_tag();
 function _Fail_tag(payload) { this.payload = payload; }
 _Fail_tag.prototype.name = "Fail";
 function _Fail(payload) { return new _Fail_tag(payload); }
-function _EQUAL(a) { return a[0] === a[1]; }
-function _String_EQUAL(a) {
-    var s = a[0], t = a[1];
+function _String_EQUAL(s, t) {
     if (s === t) { return true; }
     var n = s.length;
     if (n !== t.length) { return false; }
@@ -58,35 +56,16 @@ function _Record_EQUAL(fields) {
         return true;
     };
 }
-function _List_EQUAL(eq) {
-    return function(a) {
-        var x = a[0], y = a[1];
-        while (x.tag === y.tag) {
-            if (x.tag === "nil") {
-                return true;
-            } else if (!eq([x.payload[0], y.payload[0]])) {
-                return false;
-            } else {
-                x = x.payload[1];
-                y = y.payload[1];
-            }
-        }
+function _Vector_EQUAL(eq, x, y) {
+    if (x.length !== y.length) {
         return false;
-    };
-}
-function _Vector_EQUAL(eq) {
-    return function(a) {
-        var x = a[0], y = a[1];
-        if (x.length !== y.length) {
+    }
+    for (var i = 0; i < x.length; ++i) {
+        if (!eq([x[i], y[i]])) {
             return false;
         }
-        for (var i = 0; i < x.length; ++i) {
-            if (!eq([x[i], y[i]])) {
-                return false;
-            }
-        }
-        return true;
-    };
+    }
+    return true;
 }
 const MIN_INT32 = -0x80000000;
 const MAX_INT32 = 0x7fffffff;
