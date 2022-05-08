@@ -267,12 +267,18 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                                  )
   | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "undefined"))
   | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
-  | doExpTo ctx env (F.RecordExp fields) dest (* TODO: Use array for tuple *)
+  | doExpTo ctx env (F.RecordExp fields) dest
     = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
               fields
               (fn ys => let val (stmts, fields') = ListPair.unzip ys
+                            fun isTuple (_, []) = true
+                              | isTuple (i, (Syntax.NumericLabel n, x) :: xs) = i = n andalso isTuple (i + 1, xs)
+                              | isTuple _ = false
                         in putPureTo ctx env dest ( List.concat stmts
-                                                  , J.ObjectExp (vector (List.map (fn (label, exp) => (LabelToObjectKey label, exp)) fields'))
+                                                  , if isTuple (1, fields') then
+                                                        J.ArrayExp (vector (List.map #2 fields'))
+                                                    else
+                                                        J.ObjectExp (vector (List.map (fn (label, exp) => (LabelToObjectKey label, exp)) fields'))
                                                   )
                         end
               )
