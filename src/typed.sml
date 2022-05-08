@@ -2,7 +2,7 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure USyntax = struct
+structure TypedSyntax = struct
 datatype VId = MkVId of string * int
 datatype TyVar = NamedTyVar of string * bool * int
                | AnonymousTyVar of int
@@ -644,4 +644,4 @@ fun renameVarsInPat m =
           | doPat (VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, elemTy)
     in doPat
     end
-end (* structure USyntax *)
+end; (* structure TypedSyntax *)

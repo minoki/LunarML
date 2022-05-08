@@ -52,17 +52,17 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn ((n,
 val vidCounter = ref ~3
 fun newVId name = let val n = !vidCounter
                   in vidCounter := n - 1
-                   ; USyntax.MkVId(name, n)
+                   ; TypedSyntax.MkVId (name, n)
                   end
 fun newShortVId name = let val n = !vidCounter
                        in vidCounter := n - 1
-                        ; USyntax.MkShortVId(USyntax.MkVId(name, n))
+                        ; TypedSyntax.MkShortVId (TypedSyntax.MkVId (name, n))
                        end
 fun newStrId name = let val n = !vidCounter
                     in vidCounter := n - 1
-                     ; USyntax.MkStrId(name, n)
+                     ; TypedSyntax.MkStrId (name, n)
                     end
-fun newLongVId (strid0, strids) name = USyntax.MkLongVId(strid0, List.map Syntax.MkStrId strids, Syntax.MkVId name)
+fun newLongVId (strid0, strids) name = TypedSyntax.MkLongVId (strid0, List.map Syntax.MkStrId strids, Syntax.MkVId name)
 
 val StrId_Int = newStrId "Int"
 val StrId_Real = newStrId "Real"
@@ -75,35 +75,35 @@ val StrId_LunarML = newStrId "LunarML"
 
 (* Ref *)
 val VId_ref = newVId "ref"
-val LongVId_ref = USyntax.MkShortVId VId_ref
+val LongVId_ref = TypedSyntax.MkShortVId VId_ref
 
 (* Bool *)
 val VId_true = newVId "true"
 val VId_false = newVId "false"
-val LongVId_true = USyntax.MkShortVId VId_true
-val LongVId_false = USyntax.MkShortVId VId_false
+val LongVId_true = TypedSyntax.MkShortVId VId_true
+val LongVId_false = TypedSyntax.MkShortVId VId_false
 
 (* List *)
 val VId_nil = newVId "nil"
 val VId_DCOLON = newVId "::"
-val LongVId_nil = USyntax.MkShortVId VId_nil
-val LongVId_DCOLON = USyntax.MkShortVId VId_DCOLON
+val LongVId_nil = TypedSyntax.MkShortVId VId_nil
+val LongVId_DCOLON = TypedSyntax.MkShortVId VId_DCOLON
 
 (* Exception *)
 val VId_Match = newVId "Match"
-val VId_Bind = Typing.VId_Bind (* USyntax.MkVId("Bind", ~1) *)
+val VId_Bind = Typing.VId_Bind (* TypedSyntax.MkVId ("Bind", ~1) *)
 val VId_Div = newVId "Div"
 val VId_Overflow = newVId "Overflow"
 val VId_Size = newVId "Size"
 val VId_Subscript = newVId "Subscript"
 val VId_Fail = newVId "Fail"
-val LongVId_Match = USyntax.MkShortVId VId_Match
+val LongVId_Match = TypedSyntax.MkShortVId VId_Match
 val LongVId_Bind = Typing.LongVId_Bind
-val LongVId_Div = USyntax.MkShortVId VId_Div
-val LongVId_Overflow = USyntax.MkShortVId VId_Overflow
-val LongVId_Size = USyntax.MkShortVId VId_Size
-val LongVId_Subscript = USyntax.MkShortVId VId_Subscript
-val LongVId_Fail = USyntax.MkShortVId VId_Fail
+val LongVId_Div = TypedSyntax.MkShortVId VId_Div
+val LongVId_Overflow = TypedSyntax.MkShortVId VId_Overflow
+val LongVId_Size = TypedSyntax.MkShortVId VId_Size
+val LongVId_Subscript = TypedSyntax.MkShortVId VId_Subscript
+val LongVId_Fail = TypedSyntax.MkShortVId VId_Fail
 val VId_Match_tag = newShortVId "Match"
 val VId_Bind_tag = newShortVId "Bind"
 val VId_Div_tag = newShortVId "Div"
@@ -214,7 +214,7 @@ val VId_assumePure = newVId "assumePure"
 val VId_assumeDiscardable = newVId "assumeDiscardable"
 end
 val VId_Vector_fromList = newVId "Vector.fromList"
-val LongVId_Vector_fromList = USyntax.MkShortVId VId_Vector_fromList
+val LongVId_Vector_fromList = TypedSyntax.MkShortVId VId_Vector_fromList
 val VId_Int_add_bin = newVId "Int.+"
 val VId_Int_sub_bin = newVId "Int.-"
 val VId_Int_mul_bin = newVId "Int.*"
@@ -242,25 +242,25 @@ val initialEnv : Typing.Env
                                        in List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, idstatus))) Syntax.VIdMap.empty cons
                                        end
           val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
-          val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, USyntax.MkSignature str)) Syntax.StrIdMap.empty
-          val tyVarA = USyntax.NamedTyVar ("'a", false, 0)
-          val tyVarB = USyntax.NamedTyVar ("'b", false, 0)
-          val tyVarC = USyntax.NamedTyVar ("'c", false, 0)
-          val tyVarD = USyntax.NamedTyVar ("'d", false, 0)
-          val TypeFunction = USyntax.TypeFunction
-          val TypeScheme = USyntax.TypeScheme
-          val emptyValEnv = USyntax.emptyValEnv
-          fun mkTyVar tv = USyntax.TyVar(SourcePos.nullSpan, tv)
+          val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert (m, Syntax.MkStrId name, TypedSyntax.MkSignature str)) Syntax.StrIdMap.empty
+          val tyVarA = TypedSyntax.NamedTyVar ("'a", false, 0)
+          val tyVarB = TypedSyntax.NamedTyVar ("'b", false, 0)
+          val tyVarC = TypedSyntax.NamedTyVar ("'c", false, 0)
+          val tyVarD = TypedSyntax.NamedTyVar ("'d", false, 0)
+          val TypeFunction = TypedSyntax.TypeFunction
+          val TypeScheme = TypedSyntax.TypeScheme
+          val emptyValEnv = TypedSyntax.emptyValEnv
+          fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
           val tyA = mkTyVar tyVarA
           val tyB = mkTyVar tyVarB
           val tyC = mkTyVar tyVarC
           val tyD = mkTyVar tyVarD
           infixr -->
-          fun mkFnType(a, b) = USyntax.FnType(SourcePos.nullSpan, a, b)
+          fun mkFnType (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
           val op --> = mkFnType
-          fun mkPairType(a, b) = USyntax.PairType(SourcePos.nullSpan, a, b)
-          fun mkTupleType(xs) = USyntax.TupleType(SourcePos.nullSpan, xs)
-          fun mkTyCon(a, b) = USyntax.TyCon(SourcePos.nullSpan, a, b)
+          fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
+          fun mkTupleType xs = TypedSyntax.TupleType (SourcePos.nullSpan, xs)
+          fun mkTyCon (a, b) = TypedSyntax.TyCon (SourcePos.nullSpan, a, b)
           fun refOf(t) = mkTyCon([t], primTyName_ref)
           fun listOf(t) = mkTyCon([t], primTyName_list)
           fun arrayOf(t) = mkTyCon([t], primTyName_array)
@@ -449,22 +449,22 @@ val initialEnv : Typing.Env
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
                                            Syntax.VIdMap.empty
-                                           [("Vector.fromList", USyntax.MkShortVId VId_Vector_fromList, TypeScheme([(tyVarA, [])], listOf tyA --> vectorOf tyA))
-                                           ,("Int.+", USyntax.MkShortVId VId_Int_add_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.-", USyntax.MkShortVId VId_Int_sub_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.*", USyntax.MkShortVId VId_Int_mul_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.div", USyntax.MkShortVId VId_Int_div_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.mod", USyntax.MkShortVId VId_Int_mod_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.quot", USyntax.MkShortVId VId_Int_div_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.rem", USyntax.MkShortVId VId_Int_mod_bin, TypeScheme([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Word.div", USyntax.MkShortVId VId_Word_div_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("Word.mod", USyntax.MkShortVId VId_Word_mod_bin, TypeScheme([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("Word.<", USyntax.MkShortVId VId_Word_LT_bin, TypeScheme([], function2 (primTy_bool, primTy_word, primTy_word)))
-                                           ,("exnName", USyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
-                                           ,("String.concat", USyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
-                                           ,("String.concatWith", USyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
-                                           ,("String.implode", USyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
-                                           ,("String.translate", USyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
+                                           [("Vector.fromList", TypedSyntax.MkShortVId VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
+                                           ,("Int.+", TypedSyntax.MkShortVId VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.-", TypedSyntax.MkShortVId VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.*", TypedSyntax.MkShortVId VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.div", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.mod", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.quot", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Int.rem", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("Word.div", TypedSyntax.MkShortVId VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("Word.mod", TypedSyntax.MkShortVId VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("Word.<", TypedSyntax.MkShortVId VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
+                                           ,("exnName", TypedSyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
+                                           ,("String.concat", TypedSyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
+                                           ,("String.concatWith", TypedSyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
+                                           ,("String.implode", TypedSyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
+                                           ,("String.translate", TypedSyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
@@ -486,8 +486,8 @@ val initialEnv : Typing.Env
                                  ,("Function2.function2", tyStr_function2)
                                  ,("Function3.function3", tyStr_function3)
                                  ]
-         , tyNameMap = List.foldl USyntax.TyNameMap.insert'
-                                  USyntax.TyNameMap.empty
+         , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
+                                  TypedSyntax.TyNameMap.empty
                                   [(primTyName_bool, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_int, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
@@ -507,7 +507,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
                                   ]
-         , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId name, (s, USyntax.MkLongStrId(strid, []))))
+         , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert (m, Syntax.MkStrId name, (s, TypedSyntax.MkLongStrId (strid, []))))
                                Syntax.StrIdMap.empty
                                [("Int", StrId_Int, sig_Int)
                                ,("Real", StrId_Real, sig_Real)
@@ -525,23 +525,23 @@ val initialEnv : Typing.Env
 
 val primOverloadEnv : Typing.Env
     = let open Typing
-          val TypeScheme = USyntax.TypeScheme
-          val IsEqType = USyntax.IsEqType
-          val IsIntegral = USyntax.IsIntegral
-          val IsSignedReal = USyntax.IsSignedReal
-          val IsRing = USyntax.IsRing
-          val IsField = USyntax.IsField
-          val IsSigned = USyntax.IsSigned
-          val IsOrdered = USyntax.IsOrdered
-          fun mkTyVar tv = USyntax.TyVar (SourcePos.nullSpan, tv)
-          val tyVarA = USyntax.NamedTyVar ("'a", false, 0)
-          val tyVarEqA = USyntax.NamedTyVar ("''a", true, 0)
+          val TypeScheme = TypedSyntax.TypeScheme
+          val IsEqType = TypedSyntax.IsEqType
+          val IsIntegral = TypedSyntax.IsIntegral
+          val IsSignedReal = TypedSyntax.IsSignedReal
+          val IsRing = TypedSyntax.IsRing
+          val IsField = TypedSyntax.IsField
+          val IsSigned = TypedSyntax.IsSigned
+          val IsOrdered = TypedSyntax.IsOrdered
+          fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
+          val tyVarA = TypedSyntax.NamedTyVar ("'a", false, 0)
+          val tyVarEqA = TypedSyntax.NamedTyVar ("''a", true, 0)
           val tyA = mkTyVar tyVarA
           val tyEqA = mkTyVar tyVarEqA
           infixr -->
-          fun a --> b = USyntax.FnType (SourcePos.nullSpan, a, b)
-          fun mkPairType (a, b) = USyntax.PairType (SourcePos.nullSpan, a, b)
-      in { valMap = List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, USyntax.MkShortVId vid)))
+          fun a --> b = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
+          fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
+      in { valMap = List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert (m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)))
                                Syntax.VIdMap.empty
                                [("abs", VId_abs,    TypeScheme ([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA))                               (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
                                ,("~",   VId_TILDE,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       tyA --> tyA))                               (* forall 'a:num.     'a -> 'a,        default: int -> int *)
@@ -557,7 +557,7 @@ val primOverloadEnv : Typing.Env
                                ,(">=",  VId_GE,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
                                ]
          , tyConMap = Syntax.TyConMap.empty
-         , tyNameMap = USyntax.TyNameMap.empty
+         , tyNameMap = TypedSyntax.TyNameMap.empty
          , strMap = Syntax.StrIdMap.empty
          , sigMap = Syntax.SigIdMap.empty
          , funMap = Syntax.FunIdMap.empty
@@ -566,7 +566,7 @@ val primOverloadEnv : Typing.Env
       end
 
 val initialTyNameSet = let open Typing
-                       in USyntax.TyNameSet.fromList
+                       in TypedSyntax.TyNameSet.fromList
                               [primTyName_int
                               ,primTyName_word
                               ,primTyName_real

@@ -2,7 +2,7 @@ structure JsSyntax = struct
 datatype ObjectKey = IntKey of int
                    | StringKey of string
 datatype Id = PredefinedId of string
-            | UserDefinedId of USyntax.VId
+            | UserDefinedId of TypedSyntax.VId
 datatype JsConst = Null
                  | False
                  | True
@@ -54,11 +54,11 @@ datatype Exp = ConstExp of JsConst
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
              | CondExp of Exp * Exp * Exp (* exp1 ? exp2 : exp3 *)
-     and Stat = VarStat of (USyntax.VId * Exp option) vector (* must not be empty *)
+     and Stat = VarStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
               | ExpStat of Exp
               | IfStat of Exp * Block * Block
               | ReturnStat of Exp option
-              | TryCatchStat of Block * USyntax.VId * Block
+              | TryCatchStat of Block * TypedSyntax.VId * Block
               | ThrowStat of Exp
 withtype Block = Stat vector
 
@@ -111,7 +111,7 @@ fun isIdentifierName name = case CharVectorSlice.getItem (CharVectorSlice.full n
                                                  (* non-ASCII characters are not handled *)
 fun isIdentifier name = isIdentifierName name andalso not (StringSet.member (JsReservedWords, name))
 fun idToJs (JsSyntax.PredefinedId name) = name
-  | idToJs (JsSyntax.UserDefinedId (USyntax.MkVId (name, n))) = smlNameToJs name ^ "$" ^ Int.toString n (* the number must be non-negative *)
+  | idToJs (JsSyntax.UserDefinedId (TypedSyntax.MkVId (name, n))) = smlNameToJs name ^ "$" ^ Int.toString n (* the number must be non-negative *)
 
 fun toStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                        | #"\b" => "\\b" (* U+0008 *)

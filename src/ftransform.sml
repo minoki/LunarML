@@ -11,23 +11,23 @@ type Context = { nextVId : int ref
                }
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
-                                             ; USyntax.MkVId(name, n)
+                                             ; TypedSyntax.MkVId (name, n)
                                             end
-type Env = { valMap : FSyntax.Ty USyntax.VIdMap.map
-           , exnTagMap : FSyntax.Path USyntax.VIdMap.map (* exception constructor -> exception tag *)
+type Env = { valMap : FSyntax.Ty TypedSyntax.VIdMap.map
+           , exnTagMap : FSyntax.Path TypedSyntax.VIdMap.map (* exception constructor -> exception tag *)
            }
-fun addVar(env : Env, vid, ty) = { valMap = USyntax.VIdMap.insert(#valMap env, vid, ty)
-                                 , exnTagMap = #exnTagMap env
-                                 }
-val emptyEnv : Env = { valMap = USyntax.VIdMap.empty
-                     , exnTagMap = USyntax.VIdMap.empty
+fun addVar (env : Env, vid, ty) = { valMap = TypedSyntax.VIdMap.insert (#valMap env, vid, ty)
+                                  , exnTagMap = #exnTagMap env
+                                  }
+val emptyEnv : Env = { valMap = TypedSyntax.VIdMap.empty
+                     , exnTagMap = TypedSyntax.VIdMap.empty
                      }
 (* true, false, nil, ::, ref *)
 val initialEnv : Env = { valMap = let open InitialEnv
-                                      val tyVarA = USyntax.AnonymousTyVar(0)
+                                      val tyVarA = TypedSyntax.AnonymousTyVar 0
                                       val primTyName_list = Typing.primTyName_list
                                       val primTyName_ref = Typing.primTyName_ref
-                                  in List.foldl USyntax.VIdMap.insert' USyntax.VIdMap.empty
+                                  in List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
                                                 [(VId_true, FSyntax.TyCon([], Typing.primTyName_bool))
                                                 ,(VId_false, FSyntax.TyCon([], Typing.primTyName_bool))
                                                 ,(VId_nil, FSyntax.ForallType(tyVarA, F.TypeKind, FSyntax.TyCon([FSyntax.TyVar(tyVarA)], primTyName_list)))
@@ -43,7 +43,7 @@ val initialEnv : Env = { valMap = let open InitialEnv
                                                 ]
                                   end
                        , exnTagMap = let open InitialEnv
-                                     in List.foldl (fn ((con, tag), m) => USyntax.VIdMap.insert(m, con, ToFSyntax.LongVIdToPath tag)) USyntax.VIdMap.empty
+                                     in List.foldl (fn ((con, tag), m) => TypedSyntax.VIdMap.insert (m, con, ToFSyntax.LongVIdToPath tag)) TypedSyntax.VIdMap.empty
                                                    [(VId_Match, VId_Match_tag)
                                                    ,(VId_Bind, VId_Bind_tag)
                                                    ,(VId_Div, VId_Div_tag)
@@ -72,7 +72,7 @@ fun splitPath (components, F.Child(parent, label)) = splitPath (label :: compone
   | splitPath (components, F.Field(parent, label)) = raise Fail "lookupPath: invalid type"
   | splitPath (components, F.Root vid) = (vid, components)
 fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = splitPath ([], path)
-                                               in case USyntax.VIdMap.find(valMap, vid) of
+                                               in case TypedSyntax.VIdMap.find (valMap, vid) of
                                                       SOME ty => List.foldl (fn (label, F.SigType { valMap, strMap, ... }) =>
                                                                                 (case label of
                                                                                      F.ValueLabel vid => (case Syntax.VIdMap.find(valMap, vid) of
@@ -90,7 +90,7 @@ fun lookupPath ({ valMap, ... } : Env, path) = let val (vid, components) = split
                                                                                 )
                                                                             | (label, _) => raise Fail "lookupPath: invalid type"
                                                                             ) ty components
-                                                    | NONE => raise Fail ("root not found: " ^ USyntax.print_VId vid)
+                                                    | NONE => raise Fail ("root not found: " ^ TypedSyntax.print_VId vid)
                                                end
 fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec : Env -> F.Dec -> Env * F.Dec, doDecs : Env -> F.Dec list -> Env * F.Dec list }
     = let fun doExp (env: Env) exp0
@@ -122,7 +122,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                    | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp env exp, label)
                    | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }
                    | F.CaseExp(span, exp, ty, [(F.VarPat (span2, vid, ty'), exp2 as F.VarExp (vid'))]) =>
-                                              if USyntax.eqVId(vid, vid') then
+                                              if TypedSyntax.eqVId (vid, vid') then
                                                   doExp env exp
                                               else
                                                   F.LetExp (F.ValDec (vid, SOME ty', doExp env exp), exp2)
@@ -168,8 +168,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     val conTy = case payloadTy of
                                     NONE => exnTy
                                   | SOME ty => F.FnType(ty, exnTy)
-                    val env' = { valMap = USyntax.VIdMap.insert (#valMap env, conName, conTy)
-                               , exnTagMap = USyntax.VIdMap.insert (#exnTagMap env, conName, F.Root(tagName))
+                    val env' = { valMap = TypedSyntax.VIdMap.insert (#valMap env, conName, conTy)
+                               , exnTagMap = TypedSyntax.VIdMap.insert (#exnTagMap env, conName, F.Root tagName)
                                }
                 in (env', dec)
                 end
@@ -178,8 +178,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     val conTy = case payloadTy of
                                     NONE => exnTy
                                   | SOME ty => FSyntax.FnType(ty, exnTy)
-                    val env' = { valMap = USyntax.VIdMap.insert (#valMap env, conName, conTy)
-                               , exnTagMap = USyntax.VIdMap.insert (#exnTagMap env, conName, tagPath)
+                    val env' = { valMap = TypedSyntax.VIdMap.insert (#valMap env, conName, conTy)
+                               , exnTagMap = TypedSyntax.VIdMap.insert (#exnTagMap env, conName, tagPath)
                                }
                 in (env', F.ValDec (conName, SOME conTy, F.PathToExp conPath))
                 end
@@ -195,7 +195,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                                            NONE => ty
                                          | SOME payloadTy => F.FnType(payloadTy, ty)
                               val ty = List.foldr (fn (tv, ty) => F.ForallType(tv, F.TypeKind, ty)) ty tyvars
-                          in USyntax.VIdMap.insert(valMap, vid, ty)
+                          in TypedSyntax.VIdMap.insert (valMap, vid, ty)
                           end
                 in { valMap = List.foldl doConBind valMap conbinds
                    , exnTagMap = exnTagMap
@@ -234,7 +234,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     val payloadTy = getPayloadTy(tyargs, conTy)
                 in if isExnType ty then
                        let val tag = case path of
-                                         F.Root vid => (case USyntax.VIdMap.find(exnTagMap, vid) of
+                                         F.Root vid => (case TypedSyntax.VIdMap.find (exnTagMap, vid) of
                                                             SOME path => F.PathToExp path
                                                           | NONE => raise DesugarError ([span], "internal error: exception constructor not found (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                                                        )
@@ -245,7 +245,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                        end
                    else
                        let val tag = case path of
-                                         F.Root (USyntax.MkVId (name, _)) => name
+                                         F.Root (TypedSyntax.MkVId (name, _)) => name
                                        | F.Child (parent, F.ValueLabel vid) => Syntax.getVIdName vid
                                        | _ => raise DesugarError ([span], "internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val (env, payload) = genMatcher env (F.DataPayloadExp exp) payloadTy innerPat
@@ -256,13 +256,13 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                        end
                 end
             | genMatcher (env as { exnTagMap, ... }) exp ty (F.ConPat (span, path, NONE, tyargs))
-              = if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_true) | _ => false) then
+              = if (case path of F.Root vid => TypedSyntax.eqVId (vid, InitialEnv.VId_true) | _ => false) then
                     (env, exp)
-                else if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_false) | _ => false) then
+                else if (case path of F.Root vid => TypedSyntax.eqVId (vid, InitialEnv.VId_false) | _ => false) then
                     (env, F.PrimExp(F.PrimFnOp Primitives.PrimOp_Bool_not, vector [], vector [exp]))
                 else if isExnType ty then
                     let val tag = case path of
-                                      F.Root vid => (case USyntax.VIdMap.find(exnTagMap, vid) of
+                                      F.Root vid => (case TypedSyntax.VIdMap.find (exnTagMap, vid) of
                                                          SOME path => F.PathToExp path
                                                        | NONE => raise Fail ("internal error: exception constructor not found (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                                                     )
@@ -272,7 +272,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
                     end
                 else
                     let val tag = case path of
-                                      F.Root (USyntax.MkVId (name, _)) => name
+                                      F.Root (TypedSyntax.MkVId (name, _)) => name
                                     | F.Child (parent, F.ValueLabel vid) => Syntax.getVIdName vid
                                     | _ => raise Fail ("internal error: invalid value constructor (" ^ FSyntax.PrettyPrint.print_Path path ^ ")")
                            val equal_string = case #nativeString (#targetInfo ctx) of
@@ -309,7 +309,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: Env -> F.Exp -> F.Exp, doDec 
             | genBinders env exp ty (F.ConPat(span, path, SOME innerPat, tyargs))
               = let val conTy = lookupPath(env, path)
                     val payloadTy = getPayloadTy(tyargs, conTy)
-                in if (case path of F.Root vid => USyntax.eqVId(vid, InitialEnv.VId_ref) | _ => false) then
+                in if (case path of F.Root vid => TypedSyntax.eqVId (vid, InitialEnv.VId_ref) | _ => false) then
                        case tyargs of
                            [tyarg] => genBinders env (F.PrimExp(F.PrimFnOp Primitives.PrimOp_Ref_read, vector [tyarg], vector [exp])) payloadTy innerPat
                          | _ => raise Fail "invalid type arguments to 'ref'"
@@ -366,13 +366,13 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
 and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.RecValDec valbinds)
-    = let val bound = List.foldl (fn ((vid, ty, exp), set) => USyntax.VIdSet.add (set, vid)) USyntax.VIdSet.empty valbinds
-          val map : (F.Ty * F.Exp * (* refs *) USyntax.VIdSet.set * (* invref *) USyntax.VId list ref * (* seen1 *) bool ref * (* seen2 *) bool ref) USyntax.VIdMap.map
+    = let val bound = List.foldl (fn ((vid, ty, exp), set) => TypedSyntax.VIdSet.add (set, vid)) TypedSyntax.VIdSet.empty valbinds
+          val map : (F.Ty * F.Exp * (* refs *) TypedSyntax.VIdSet.set * (* invref *) TypedSyntax.VId list ref * (* seen1 *) bool ref * (* seen2 *) bool ref) TypedSyntax.VIdMap.map
               = List.foldl (fn ((vid, ty, exp), map) => let val exp = doExp exp
-                                                        in USyntax.VIdMap.insert (map, vid, (ty, exp, USyntax.VIdSet.intersection (F.freeVarsInExp (USyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
-                                                        end) USyntax.VIdMap.empty valbinds
-          fun dfs1 (from : USyntax.VId option, vid) : USyntax.VId list
-              = let val (ty, exp, refs, invref, seen1, _) = USyntax.VIdMap.lookup (map, vid)
+                                                        in TypedSyntax.VIdMap.insert (map, vid, (ty, exp, TypedSyntax.VIdSet.intersection (F.freeVarsInExp (TypedSyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
+                                                        end) TypedSyntax.VIdMap.empty valbinds
+          fun dfs1 (from : TypedSyntax.VId option, vid) : TypedSyntax.VId list
+              = let val (ty, exp, refs, invref, seen1, _) = TypedSyntax.VIdMap.lookup (map, vid)
                     val () = case from of
                                  SOME vid' => invref := vid' :: !invref
                                | NONE => ()
@@ -380,34 +380,34 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
                        []
                    else
                        ( seen1 := true
-                       ; USyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
+                       ; TypedSyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
                        )
                 end
-          val list : USyntax.VId list = USyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
-          fun dfs2 vid : USyntax.VIdSet.set
-              = let val (ty, exp, refs, ref invrefs, _, seen2) = USyntax.VIdMap.lookup (map, vid)
+          val list : TypedSyntax.VId list = TypedSyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
+          fun dfs2 vid : TypedSyntax.VIdSet.set
+              = let val (ty, exp, refs, ref invrefs, _, seen2) = TypedSyntax.VIdMap.lookup (map, vid)
                 in if !seen2 then
-                       USyntax.VIdSet.empty
+                       TypedSyntax.VIdSet.empty
                    else
                        ( seen2 := true
-                       ; List.foldl (fn (vid', acc) => USyntax.VIdSet.union (acc, dfs2 vid')) (USyntax.VIdSet.singleton vid) invrefs
+                       ; List.foldl (fn (vid', acc) => TypedSyntax.VIdSet.union (acc, dfs2 vid')) (TypedSyntax.VIdSet.singleton vid) invrefs
                        )
                 end
-          val sccs : USyntax.VIdSet.set list = List.foldl (fn (vid, acc) => let val set = dfs2 vid
-                                                                            in if USyntax.VIdSet.isEmpty set then
-                                                                                   acc
-                                                                               else
-                                                                                   set :: acc
-                                                                            end) [] list
-      in List.foldr (fn (scc, decs) => let val dec = case USyntax.VIdSet.listItems scc of
-                                                         [vid] => let val (ty, exp, refs, _, _, _) = USyntax.VIdMap.lookup (map, vid)
-                                                                  in if USyntax.VIdSet.member (refs, vid) then
+          val sccs : TypedSyntax.VIdSet.set list = List.foldl (fn (vid, acc) => let val set = dfs2 vid
+                                                                                in if TypedSyntax.VIdSet.isEmpty set then
+                                                                                       acc
+                                                                                   else
+                                                                                       set :: acc
+                                                                                end) [] list
+      in List.foldr (fn (scc, decs) => let val dec = case TypedSyntax.VIdSet.listItems scc of
+                                                         [vid] => let val (ty, exp, refs, _, _, _) = TypedSyntax.VIdMap.lookup (map, vid)
+                                                                  in if TypedSyntax.VIdSet.member (refs, vid) then
                                                                          F.RecValDec [(vid, ty, exp)]
                                                                      else
                                                                          F.ValDec (vid, SOME ty, exp)
                                                                   end
                                                        | scc => F.RecValDec (List.foldl (fn (vid, xs) =>
-                                                                                            let val (ty, exp, _, _, _, _) = USyntax.VIdMap.lookup (map, vid)
+                                                                                            let val (ty, exp, _, _, _, _) = TypedSyntax.VIdMap.lookup (map, vid)
                                                                                             in (vid, ty, exp) :: xs
                                                                                             end
                                                                                         ) [] scc)
@@ -429,26 +429,26 @@ end
 structure RefreshBoundNames = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref, nextTyVar : int ref }
-type Env = { valMap : USyntax.VId USyntax.VIdMap.map
-           , tyMap : USyntax.TyVar USyntax.TyVarMap.map
+type Env = { valMap : TypedSyntax.VId TypedSyntax.VIdMap.map
+           , tyMap : TypedSyntax.TyVar TypedSyntax.TyVarMap.map
            }
-val emptyEnv : Env = { valMap = USyntax.VIdMap.empty, tyMap = USyntax.TyVarMap.empty }
+val emptyEnv : Env = { valMap = TypedSyntax.VIdMap.empty, tyMap = TypedSyntax.TyVarMap.empty }
 fun mergeEnv ({ valMap = valMap1, tyMap = tyMap1 } : Env, { valMap = valMap2, tyMap = tyMap2 } : Env)
-    = { valMap = USyntax.VIdMap.unionWith #2 (valMap1, valMap2)
-      , tyMap = USyntax.TyVarMap.unionWith #2 (tyMap1, tyMap2)
+    = { valMap = TypedSyntax.VIdMap.unionWith #2 (valMap1, valMap2)
+      , tyMap = TypedSyntax.TyVarMap.unionWith #2 (tyMap1, tyMap2)
       }
 fun insertVId ({ valMap, tyMap } : Env, vid, vid')
-    = { valMap = USyntax.VIdMap.insert (valMap, vid, vid')
+    = { valMap = TypedSyntax.VIdMap.insert (valMap, vid, vid')
       , tyMap = tyMap
       }
 fun insertTyVar ({ valMap, tyMap } : Env, tv, tv')
     = { valMap = valMap
-      , tyMap = USyntax.TyVarMap.insert (tyMap, tv, tv')
+      , tyMap = TypedSyntax.TyVarMap.insert (tyMap, tv, tv')
       }
-fun refreshVId (ctx : Context) (USyntax.MkVId (name, _)) = let val n = !(#nextVId ctx)
-                                                           in #nextVId ctx := n + 1
-                                                            ; USyntax.MkVId(name, n)
-                                                           end
+fun refreshVId (ctx : Context) (TypedSyntax.MkVId (name, _)) = let val n = !(#nextVId ctx)
+                                                               in #nextVId ctx := n + 1
+                                                                ; TypedSyntax.MkVId (name, n)
+                                                               end
 fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                           , doPat : Env -> F.Pat -> (* created environment *) Env * F.Pat
                           , doExp : Env -> F.Exp -> F.Exp
@@ -456,15 +456,15 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
                           }
     = let val refreshVId = refreshVId ctx
-          fun refreshTyVar (USyntax.NamedTyVar (name, eq, _)) = let val n = !(#nextTyVar ctx)
-                                                                in #nextTyVar ctx := n + 1
-                                                                 ; USyntax.NamedTyVar (name, eq, n)
-                                                                end
-            | refreshTyVar (USyntax.AnonymousTyVar _) = let val n = !(#nextTyVar ctx)
-                                                        in #nextTyVar ctx := n + 1
-                                                         ; USyntax.AnonymousTyVar n
-                                                        end
-          fun doTy env (ty as F.TyVar tv) = (case USyntax.TyVarMap.find (#tyMap env, tv) of
+          fun refreshTyVar (TypedSyntax.NamedTyVar (name, eq, _)) = let val n = !(#nextTyVar ctx)
+                                                                    in #nextTyVar ctx := n + 1
+                                                                     ; TypedSyntax.NamedTyVar (name, eq, n)
+                                                                    end
+            | refreshTyVar (TypedSyntax.AnonymousTyVar _) = let val n = !(#nextTyVar ctx)
+                                                            in #nextTyVar ctx := n + 1
+                                                             ; TypedSyntax.AnonymousTyVar n
+                                                            end
+          fun doTy env (ty as F.TyVar tv) = (case TypedSyntax.TyVarMap.find (#tyMap env, tv) of
                                                  SOME tv => F.TyVar tv
                                                | NONE => ty
                                             )
@@ -484,7 +484,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                                            , strMap = Syntax.StrIdMap.map (doTy env) strMap
                                                                            , exnTags = exnTags
                                                                            }
-          fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+          fun doPath (env : Env) (path as F.Root vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                              SOME vid => F.Root vid
                                                            | NONE => path
                                                         )
@@ -523,7 +523,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                 in (env', F.VectorPat (span, Vector.fromList pats, ellipsis, doTy env ty))
                 end
           fun doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, Vector.map (doTy env) tyargs, Vector.map (doExp env) args)
-            | doExp env (exp as F.VarExp vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+            | doExp env (exp as F.VarExp vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                      SOME vid => F.VarExp vid
                                                    | NONE => exp
                                                 )
@@ -630,7 +630,7 @@ end
 structure Inliner = struct
 local structure F = FSyntax in
 type Context = { nextVId : int ref, nextTyVar : int ref }
-datatype InlineExp = VarExp of USyntax.VId
+datatype InlineExp = VarExp of TypedSyntax.VId
                    | RecordExp of F.Path Syntax.LabelMap.map
                    | ProjectionExp of { label : Syntax.Label, record : InlineExp }
                    | StructExp of { valMap : F.Path Syntax.VIdMap.map
@@ -638,7 +638,7 @@ datatype InlineExp = VarExp of USyntax.VId
                                   , exnTagMap : F.Path Syntax.VIdMap.map
                                   }
                    | SProjectionExp of InlineExp * F.SLabel
-                   | FnExp of USyntax.VId * F.Ty * F.Exp
+                   | FnExp of TypedSyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
                    | PrimExp of F.PrimOp * F.Ty vector * InlineExp vector
@@ -646,20 +646,20 @@ fun lookupSLabel ({ valMap, strMap, exnTagMap }, label) = case label of
                                                               F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
                                                             | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
                                                             | F.ExnTagLabel vid => Syntax.VIdMap.find(exnTagMap, vid)
-type Env = { valMap : InlineExp USyntax.VIdMap.map }
-val emptyEnv : Env = { valMap = USyntax.VIdMap.empty }
-fun freeVarsInPat (F.WildcardPat _) = USyntax.VIdSet.empty
-  | freeVarsInPat (F.SConPat _) = USyntax.VIdSet.empty
-  | freeVarsInPat (F.VarPat (_, vid, _)) = USyntax.VIdSet.singleton vid
-  | freeVarsInPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((_, pat), acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) (case ellipsis of NONE => USyntax.VIdSet.empty | SOME basePat => freeVarsInPat basePat) fields
+type Env = { valMap : InlineExp TypedSyntax.VIdMap.map }
+val emptyEnv : Env = { valMap = TypedSyntax.VIdMap.empty }
+fun freeVarsInPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
+  | freeVarsInPat (F.SConPat _) = TypedSyntax.VIdSet.empty
+  | freeVarsInPat (F.VarPat (_, vid, _)) = TypedSyntax.VIdSet.singleton vid
+  | freeVarsInPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((_, pat), acc) => TypedSyntax.VIdSet.union (freeVarsInPat pat, acc)) (case ellipsis of NONE => TypedSyntax.VIdSet.empty | SOME basePat => freeVarsInPat basePat) fields
   | freeVarsInPat (F.ConPat (_, longvid, optPat, tyargs)) = (case optPat of
-                                                                 NONE => USyntax.VIdSet.empty
+                                                                 NONE => TypedSyntax.VIdSet.empty
                                                                | SOME pat => freeVarsInPat pat
                                                             )
-  | freeVarsInPat (F.LayeredPat (_, vid, ty, pat)) = USyntax.VIdSet.add (freeVarsInPat pat, vid)
-  | freeVarsInPat (F.VectorPat (_, pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (freeVarsInPat pat, acc)) USyntax.VIdSet.empty pats
-fun removeFromEnv (vid, env as { valMap } : Env) = if USyntax.VIdMap.inDomain (valMap, vid) then
-                                                       { valMap = #1 (USyntax.VIdMap.remove (valMap, vid)) }
+  | freeVarsInPat (F.LayeredPat (_, vid, ty, pat)) = TypedSyntax.VIdSet.add (freeVarsInPat pat, vid)
+  | freeVarsInPat (F.VectorPat (_, pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => TypedSyntax.VIdSet.union (freeVarsInPat pat, acc)) TypedSyntax.VIdSet.empty pats
+fun removeFromEnv (vid, env as { valMap } : Env) = if TypedSyntax.VIdMap.inDomain (valMap, vid) then
+                                                       { valMap = #1 (TypedSyntax.VIdMap.remove (valMap, vid)) }
                                                    else
                                                        env
 fun costOfExp (F.PrimExp (primOp, tyargs, args)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
@@ -695,23 +695,23 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                      | doInlineExp (iexp as StructExp _) = iexp
                                      | doInlineExp (SProjectionExp (exp, label)) = SProjectionExp (doInlineExp exp, label)
                                      | doInlineExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
-                                     | doInlineExp (TyAbsExp (tv, kind, iexp)) = if USyntax.TyVarMap.inDomain (subst, tv) then
-                                                                                     TyAbsExp (tv, kind, substTyInInlineExp (#1 (USyntax.TyVarMap.remove (subst, tv))) iexp) (* TODO: use fresh tyvar if necessary *)
+                                     | doInlineExp (TyAbsExp (tv, kind, iexp)) = if TypedSyntax.TyVarMap.inDomain (subst, tv) then
+                                                                                     TyAbsExp (tv, kind, substTyInInlineExp (#1 (TypedSyntax.TyVarMap.remove (subst, tv))) iexp) (* TODO: use fresh tyvar if necessary *)
                                                                                  else
                                                                                      TyAbsExp (tv, kind, doInlineExp iexp)
                                      | doInlineExp (TyAppExp (iexp, ty)) = TyAppExp (doInlineExp iexp, doTy ty)
                                      | doInlineExp (PrimExp (primOp, tys, exps)) = PrimExp (primOp, Vector.map doTy tys, Vector.map doInlineExp exps)
                                in doInlineExp
                                end
-fun freeTyVarsInInlineExp (bound, VarExp _) = USyntax.TyVarSet.empty
-  | freeTyVarsInInlineExp (bound, RecordExp map) = USyntax.TyVarSet.empty
+fun freeTyVarsInInlineExp (bound, VarExp _) = TypedSyntax.TyVarSet.empty
+  | freeTyVarsInInlineExp (bound, RecordExp map) = TypedSyntax.TyVarSet.empty
   | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) = freeTyVarsInInlineExp (bound, record)
-  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) = USyntax.TyVarSet.empty
+  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) = TypedSyntax.TyVarSet.empty
   | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) = freeTyVarsInInlineExp (bound, exp)
-  | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = USyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
-  | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (USyntax.TyVarSet.add (bound, tv), exp)
-  | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = USyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
-  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) = Vector.foldl (fn (ty, acc) => USyntax.TyVarSet.union (acc, F.freeTyVarsInTy (bound, ty))) (Vector.foldl (fn (exp, acc) => USyntax.TyVarSet.union (acc, freeTyVarsInInlineExp (bound, exp))) USyntax.TyVarSet.empty exps) tys
+  | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = TypedSyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
+  | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp)
+  | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = TypedSyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
+  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) = Vector.foldl (fn (ty, acc) => TypedSyntax.TyVarSet.union (acc, F.freeTyVarsInTy (bound, ty))) (Vector.foldl (fn (exp, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInInlineExp (bound, exp))) TypedSyntax.TyVarSet.empty exps) tys
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, F.PathToExp path) :: xs) [] map)
   | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
@@ -728,7 +728,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                           , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
                           }
-    = let fun doPath (env : Env) (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+    = let fun doPath (env : Env) (path as F.Root vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                              SOME (VarExp vid) => doPath env (F.Root vid)
                                                            | SOME iexp => (path, SOME iexp)
                                                            | NONE => (path, NONE)
@@ -751,7 +751,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                         | (parent, SOME iexp) => (F.Field (parent, label), SOME (ProjectionExp { label = label, record = iexp }))
                                                         | (parent, NONE) => (F.Field (parent, label), NONE)
                                                      )
-          fun evalPath env (path as F.Root vid) = (case USyntax.VIdMap.find (#valMap env, vid) of
+          fun evalPath env (path as F.Root vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                        SOME iexp => iexp
                                                      | NONE => PathToInlineExp path
                                                   )
@@ -802,7 +802,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                             else
                                                                 (F.PrimExp (primOp, tyargs, Vector.map (doExp env) args), NONE)
                                                          end
-                   | F.VarExp vid => (case USyntax.VIdMap.find (#valMap env, vid) of
+                   | F.VarExp vid => (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                           SOME (VarExp vid) => (F.VarExp vid, SOME (evalPath env (F.Root vid)))
                                         | iexpOpt as SOME _ => (exp0, iexpOpt)
                                         | NONE => (exp0, SOME (VarExp vid))
@@ -848,7 +848,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                )
                    | F.IfThenElseExp (exp1, exp2, exp3) => (F.IfThenElseExp (doExp env exp1, doExp env exp2, doExp env exp3), NONE)
                    | F.CaseExp (span, exp, ty, matches) => let fun doMatch (pat, exp) = let val vars = freeVarsInPat pat
-                                                                                            val env' = { valMap = USyntax.VIdMap.filteri (fn (vid, _) => not (USyntax.VIdSet.member (vars, vid))) (#valMap env) }
+                                                                                            val env' = { valMap = TypedSyntax.VIdMap.filteri (fn (vid, _) => not (TypedSyntax.VIdSet.member (vars, vid))) (#valMap env) }
                                                                                         in (pat, doExp env' exp)
                                                                                         end
                                                            in (F.CaseExp (span, doExp env exp, ty, List.map doMatch matches), NONE)
@@ -870,8 +870,8 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.TyAbsExp (tv, kind, exp) => let val (exp, iexp) = doExp' env exp
                                                        val tryEtaReductionI = case iexp of
                                                                                   SOME (TyAppExp (exp', F.TyVar tv')) => if tv = tv' then
-                                                                                                                             let val fv = freeTyVarsInInlineExp (USyntax.TyVarSet.empty, exp')
-                                                                                                                             in if USyntax.TyVarSet.member (fv, tv) then
+                                                                                                                             let val fv = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.empty, exp')
+                                                                                                                             in if TypedSyntax.TyVarSet.member (fv, tv) then
                                                                                                                                     NONE
                                                                                                                                 else
                                                                                                                                     SOME (uninlineExp exp', SOME exp')
@@ -883,8 +883,8 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                  SOME result => tryEtaReductionI
                                                                                | NONE => case exp of
                                                                                              F.TyAppExp(exp', F.TyVar tv') => if tv = tv' then
-                                                                                                                                  let val fv = F.freeTyVarsInExp (USyntax.TyVarSet.empty, exp')
-                                                                                                                                  in if USyntax.TyVarSet.member (fv, tv) then
+                                                                                                                                  let val fv = F.freeTyVarsInExp (TypedSyntax.TyVarSet.empty, exp')
+                                                                                                                                  in if TypedSyntax.TyVarSet.member (fv, tv) then
                                                                                                                                          NONE
                                                                                                                                      else
                                                                                                                                          SOME (doExp' env exp')
@@ -900,13 +900,13 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                    end
                    | F.TyAppExp (exp, ty) => let val (exp, iexp) = doExp' env exp
                                              in case iexp of
-                                                    SOME (TyAbsExp (tv, kind, exp)) => let val iexp = substTyInInlineExp (USyntax.TyVarMap.singleton (tv, ty)) exp
+                                                    SOME (TyAbsExp (tv, kind, exp)) => let val iexp = substTyInInlineExp (TypedSyntax.TyVarMap.singleton (tv, ty)) exp
                                                                                            val exp = #doExp (RefreshBoundNames.run ctx) RefreshBoundNames.emptyEnv (uninlineExp iexp)
                                                                                        in (exp, SOME iexp)
                                                                                        end
                                                   | SOME iexp => (F.TyAppExp (exp, ty), SOME (TyAppExp (iexp, ty)))
                                                   | NONE => (case exp of
-                                                                 F.TyAbsExp (tv, kind, exp') => let val substExp = #doExp (F.substTy (USyntax.TyVarMap.singleton (tv, ty)))
+                                                                 F.TyAbsExp (tv, kind, exp') => let val substExp = #doExp (F.substTy (TypedSyntax.TyVarMap.singleton (tv, ty)))
                                                                                                 in substExp exp'
                                                                                                 end
                                                                | _ => F.TyAppExp (exp, ty), NONE)
@@ -935,7 +935,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                 )
           and doDec (env : Env) (F.ValDec (vid, optTy, exp)) = let val (exp, iexpOpt) = doExp' env exp
                                                                    val env' = case iexpOpt of
-                                                                                  SOME iexp => { valMap = USyntax.VIdMap.insert (#valMap env, vid, iexp) }
+                                                                                  SOME iexp => { valMap = TypedSyntax.VIdMap.insert (#valMap env, vid, iexp) }
                                                                                 | NONE => removeFromEnv (vid, env)
                                                                in (env', F.ValDec (vid, optTy, exp))
                                                                end
@@ -979,7 +979,7 @@ type Context = { nextVId : int ref
                }
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
-                                             ; USyntax.MkVId(name, n)
+                                             ; TypedSyntax.MkVId (name, n)
                                             end
 fun extractLet ctx (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet ctx exp
                                            in (dec :: decs, exp)
@@ -1084,25 +1084,25 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.StructExp { valMap, strMap, exnTagMap }) = true
   | isDiscardable (F.SProjectionExp (exp, label)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
-(* doPat : F.Pat -> (* constructors used *) USyntax.VIdSet.set *)
-fun doPat (F.WildcardPat _) = USyntax.VIdSet.empty
-  | doPat (F.SConPat _) = USyntax.VIdSet.empty
-  | doPat (F.VarPat _) = USyntax.VIdSet.empty
-  | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((label, pat), acc) => USyntax.VIdSet.union (acc, doPat pat)) (case ellipsis of NONE => USyntax.VIdSet.empty | SOME basePat => doPat basePat) fields
-  | doPat (F.ConPat (_, F.Root vid, NONE, tyargs)) = USyntax.VIdSet.singleton vid
-  | doPat (F.ConPat (_, F.Root vid, SOME innerPat, tyargs)) = USyntax.VIdSet.add (doPat innerPat, vid)
+(* doPat : F.Pat -> (* constructors used *) TypedSyntax.VIdSet.set *)
+fun doPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
+  | doPat (F.SConPat _) = TypedSyntax.VIdSet.empty
+  | doPat (F.VarPat _) = TypedSyntax.VIdSet.empty
+  | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.VIdSet.union (acc, doPat pat)) (case ellipsis of NONE => TypedSyntax.VIdSet.empty | SOME basePat => doPat basePat) fields
+  | doPat (F.ConPat (_, F.Root vid, NONE, tyargs)) = TypedSyntax.VIdSet.singleton vid
+  | doPat (F.ConPat (_, F.Root vid, SOME innerPat, tyargs)) = TypedSyntax.VIdSet.add (doPat innerPat, vid)
   | doPat (F.ConPat (_, F.Child _, _, tyargs)) = raise Fail "not implemented yet"
   | doPat (F.ConPat (_, F.Field _, _, tyargs)) = raise Fail "not implemented yet"
   | doPat (F.LayeredPat (_, vid, ty, innerPat)) = doPat innerPat
-  | doPat (F.VectorPat (_, pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => USyntax.VIdSet.union (acc, doPat pat)) USyntax.VIdSet.empty pats
-(* doExp : F.Exp -> USyntax.VIdSet.set * F.Exp *)
-fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Exp
+  | doPat (F.VectorPat (_, pats, ellipsis, elemTy)) = Vector.foldl (fn (pat, acc) => TypedSyntax.VIdSet.union (acc, doPat pat)) TypedSyntax.VIdSet.empty pats
+(* doExp : F.Exp -> TypedSyntax.VIdSet.set * F.Exp *)
+fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : TypedSyntax.VIdSet.set * F.Exp
     = let val args' = Vector.map doExp args
-      in (Vector.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (Vector.map #1 args'), F.PrimExp (primOp, tyargs, Vector.map #2 args'))
+      in (Vector.foldl TypedSyntax.VIdSet.union TypedSyntax.VIdSet.empty (Vector.map #1 args'), F.PrimExp (primOp, tyargs, Vector.map #2 args'))
       end
-  | doExp (exp as F.VarExp vid) = (USyntax.VIdSet.singleton vid, exp)
+  | doExp (exp as F.VarExp vid) = (TypedSyntax.VIdSet.singleton vid, exp)
   | doExp (F.RecordExp fields) = let val fields = List.map (fn (label, exp) => (label, doExp exp)) fields
-                                 in (List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty (List.map (#1 o #2) fields), F.RecordExp (List.map (fn (label, (_, exp)) => (label, exp)) fields))
+                                 in (List.foldl TypedSyntax.VIdSet.union TypedSyntax.VIdSet.empty (List.map (#1 o #2) fields), F.RecordExp (List.map (fn (label, (_, exp)) => (label, exp)) fields))
                                  end
   | doExp (F.LetExp (dec, exp)) = let val (used, exp) = doExp exp
                                       val (used', decs) = doDec (used, dec)
@@ -1110,20 +1110,20 @@ fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Ex
                                   end
   | doExp (F.AppExp (exp1, exp2)) = let val (used, exp1) = doExp exp1
                                         val (used', exp2) = doExp exp2
-                                    in (USyntax.VIdSet.union (used, used'), F.AppExp (exp1, exp2))
+                                    in (TypedSyntax.VIdSet.union (used, used'), F.AppExp (exp1, exp2))
                                     end
   | doExp (F.HandleExp { body, exnName, handler }) = let val (used, body) = doExp body
                                                          val (used', handler) = doExp handler
-                                                     in (USyntax.VIdSet.union (used, USyntax.VIdSet.subtract (used', exnName)), F.HandleExp { body = body, exnName = exnName, handler = handler })
+                                                     in (TypedSyntax.VIdSet.union (used, TypedSyntax.VIdSet.subtract (used', exnName)), F.HandleExp { body = body, exnName = exnName, handler = handler })
                                                      end
   | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = let val (used1, exp1) = doExp exp1
                                                      val (used2, exp2) = doExp exp2
                                                      val (used3, exp3) = doExp exp3
-                                                 in (USyntax.VIdSet.union (used1, USyntax.VIdSet.union (used2, used3)), F.IfThenElseExp (exp1, exp2, exp3))
+                                                 in (TypedSyntax.VIdSet.union (used1, TypedSyntax.VIdSet.union (used2, used3)), F.IfThenElseExp (exp1, exp2, exp3))
                                                  end
   | doExp (F.CaseExp (span, exp, ty, matches)) = let val (used, exp) = doExp exp
                                                      val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doExp exp
-                                                                                                                           in (USyntax.VIdSet.union (USyntax.VIdSet.union (used, used'), doPat pat), (pat, exp) :: matches)
+                                                                                                                           in (TypedSyntax.VIdSet.union (TypedSyntax.VIdSet.union (used, used'), doPat pat), (pat, exp) :: matches)
                                                                                                                            end)
                                                                                       (used, []) matches
                                                  in (used, F.CaseExp (span, exp, ty, matches))
@@ -1140,9 +1140,9 @@ fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Ex
   | doExp (F.TyAppExp (exp, ty)) = let val (used, exp) = doExp exp
                                    in (used, F.TyAppExp (exp, ty))
                                    end
-  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = let val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) USyntax.VIdSet.empty valMap
-                                                            val used = Syntax.StrIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used strMap
-                                                            val used = Syntax.VIdMap.foldl (fn (path, acc) => USyntax.VIdSet.add (acc, F.rootOfPath path)) used exnTagMap
+  | doExp (F.StructExp { valMap, strMap, exnTagMap }) = let val used = Syntax.VIdMap.foldl (fn (path, acc) => TypedSyntax.VIdSet.add (acc, F.rootOfPath path)) TypedSyntax.VIdSet.empty valMap
+                                                            val used = Syntax.StrIdMap.foldl (fn (path, acc) => TypedSyntax.VIdSet.add (acc, F.rootOfPath path)) used strMap
+                                                            val used = Syntax.VIdMap.foldl (fn (path, acc) => TypedSyntax.VIdSet.add (acc, F.rootOfPath path)) used exnTagMap
                                                         in (used, F.StructExp { valMap = valMap
                                                                               , strMap = strMap
                                                                               , exnTagMap = exnTagMap
@@ -1158,19 +1158,19 @@ fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) : USyntax.VIdSet.set * F.Ex
 and doIgnoredExpAsExp exp = let val (used, exps) = doIgnoredExp exp
                             in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                             end
-(* doIgnoredExp : F.Exp -> USyntax.VIdSet.set * F.Exp list *)
+(* doIgnoredExp : F.Exp -> TypedSyntax.VIdSet.set * F.Exp list *)
 and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args))
     = if isDiscardablePrimOp primOp then
           let val args' = Vector.map doIgnoredExp args
-          in (Vector.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty args', Vector.foldr (fn ((_, e), xs) => e @ xs) [] args')
+          in (Vector.foldl (fn ((used, _), acc) => TypedSyntax.VIdSet.union (used, acc)) TypedSyntax.VIdSet.empty args', Vector.foldr (fn ((_, e), xs) => e @ xs) [] args')
           end
       else
           let val (used, exp) = doExp exp
           in (used, [exp])
           end
-  | doIgnoredExp (F.VarExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.VarExp _) = (TypedSyntax.VIdSet.empty, [])
   | doIgnoredExp (F.RecordExp fields) = let val fields' = List.map (fn (label, exp) => doIgnoredExp exp) fields
-                                        in (List.foldl (fn ((used, _), acc) => USyntax.VIdSet.union (used, acc)) USyntax.VIdSet.empty fields', List.foldr (fn ((_, exp), exps) => exp @ exps) [] fields')
+                                        in (List.foldl (fn ((used, _), acc) => TypedSyntax.VIdSet.union (used, acc)) TypedSyntax.VIdSet.empty fields', List.foldr (fn ((_, exp), exps) => exp @ exps) [] fields')
                                         end
   | doIgnoredExp (F.LetExp (dec, exp)) = let val (used, exp) = doIgnoredExpAsExp exp
                                              val (used, decs) = doDec (used, dec)
@@ -1180,31 +1180,31 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args))
                                          end
   | doIgnoredExp (F.AppExp (exp1, exp2)) = let val (used1, exp1) = doExp exp1
                                                val (used2, exp2) = doExp exp2
-                                           in (USyntax.VIdSet.union (used1, used2), [F.AppExp (exp1, exp2)])
+                                           in (TypedSyntax.VIdSet.union (used1, used2), [F.AppExp (exp1, exp2)])
                                            end
   | doIgnoredExp (F.HandleExp { body, exnName, handler }) = let val (used1, body) = doIgnoredExpAsExp body
                                                                 val (used2, handler) = doIgnoredExpAsExp handler
                                                             in case body of
                                                                    F.RecordExp [] => (used1, [])
-                                                                 | _ => (USyntax.VIdSet.union (used1, USyntax.VIdSet.subtract (used2, exnName)), [F.HandleExp { body = body, exnName = exnName, handler = handler }])
+                                                                 | _ => (TypedSyntax.VIdSet.union (used1, TypedSyntax.VIdSet.subtract (used2, exnName)), [F.HandleExp { body = body, exnName = exnName, handler = handler }])
                                                             end
   | doIgnoredExp (F.IfThenElseExp (exp1, exp2, exp3)) = let val (used2, exp2) = doIgnoredExpAsExp exp2
                                                             val (used3, exp3) = doIgnoredExpAsExp exp3
                                                         in case (exp2, exp3) of
                                                                (F.RecordExp [], F.RecordExp []) => doIgnoredExp exp1
                                                              | (exp2, exp3) => let val (used1, exp1) = doExp exp1
-                                                                               in (USyntax.VIdSet.union (used1, USyntax.VIdSet.union (used2, used3)), [F.IfThenElseExp (exp1, exp2, exp3)])
+                                                                               in (TypedSyntax.VIdSet.union (used1, TypedSyntax.VIdSet.union (used2, used3)), [F.IfThenElseExp (exp1, exp2, exp3)])
                                                                                end
                                                         end
   | doIgnoredExp (F.CaseExp (span, exp, ty, matches)) = let val (used, exp) = doExp exp
                                                             val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doIgnoredExpAsExp exp
                                                                                                                                       val used'' = doPat pat
-                                                                                                                                  in (USyntax.VIdSet.union (used, USyntax.VIdSet.union (used', used'')), (pat, exp) :: matches)
+                                                                                                                                  in (TypedSyntax.VIdSet.union (used, TypedSyntax.VIdSet.union (used', used'')), (pat, exp) :: matches)
                                                                                                                                   end)
                                                                                              (used, []) matches
                                                         in (used, [F.CaseExp (span, exp, ty, matches)])
                                                         end
-  | doIgnoredExp (F.FnExp _) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.FnExp _) = (TypedSyntax.VIdSet.empty, [])
   | doIgnoredExp (F.ProjectionExp { label, record }) = doIgnoredExp record
   | doIgnoredExp (F.TyAbsExp (tyvar, kind, exp)) = let val (used, exp) = doIgnoredExpAsExp exp (* should be pure *)
                                                    in case exp of
@@ -1216,91 +1216,91 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args))
                                                  F.RecordExp [] => (used, [])
                                                | exp => (used, [F.TyAppExp (exp, ty)])
                                           end
-  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) = (USyntax.VIdSet.empty, [])
+  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) = (TypedSyntax.VIdSet.empty, [])
   | doIgnoredExp (F.SProjectionExp (exp, label)) = doIgnoredExp exp
   | doIgnoredExp (F.PackExp { payloadTy, exp, packageTy }) = let val (used, exp) = doIgnoredExpAsExp exp
                                                              in case exp of
                                                                     F.RecordExp [] => (used, [])
                                                                   | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
                                                              end
-(* doDec : USyntax.VIdSet.set * F.Dec -> USyntax.VIdSet.set * F.Dec *)
-and doDec (used : USyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : USyntax.VIdSet.set * F.Dec list
-    = if not (USyntax.VIdSet.member (used, vid)) then
+(* doDec : TypedSyntax.VIdSet.set * F.Dec -> TypedSyntax.VIdSet.set * F.Dec *)
+and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyntax.VIdSet.set * F.Dec list
+    = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
               (used, [])
           else
               let val (used', exps) = doIgnoredExp exp
-              in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+              in (TypedSyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
               end
       else
           let val (used', exp') = doExp exp
-          in (USyntax.VIdSet.union (used, used'), [F.ValDec (vid, optTy, exp')])
+          in (TypedSyntax.VIdSet.union (used, used'), [F.ValDec (vid, optTy, exp')])
           end
   | doDec (used, F.RecValDec valbinds)
-    = let val bound = List.foldl USyntax.VIdSet.union USyntax.VIdSet.empty
-                                 (List.map (fn (vid, _, _) => USyntax.VIdSet.singleton vid) valbinds)
-      in if USyntax.VIdSet.disjoint (used, bound) then
+    = let val bound = List.foldl TypedSyntax.VIdSet.union TypedSyntax.VIdSet.empty
+                                 (List.map (fn (vid, _, _) => TypedSyntax.VIdSet.singleton vid) valbinds)
+      in if TypedSyntax.VIdSet.disjoint (used, bound) then
              (used, []) (* RHS should be fn _ => _, and therefore discardable *)
          else
              let val (used, valbinds) = List.foldr (fn ((vid, ty, exp), (used, valbinds)) => let val (used', exp) = doExp exp
-                                                                                             in (USyntax.VIdSet.union (used, used'), (vid, ty, exp) :: valbinds)
+                                                                                             in (TypedSyntax.VIdSet.union (used, used'), (vid, ty, exp) :: valbinds)
                                                                                              end
                                                    ) (used, []) valbinds
              in (used, [F.RecValDec valbinds])
              end
       end
   | doDec (used, F.UnpackDec (tv, kind, vid, ty, exp))
-    = if not (USyntax.VIdSet.member (used, vid)) then
+    = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
               (used, [])
           else
               let val (used', exps) = doIgnoredExp exp
-              in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+              in (TypedSyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
               end
       else
           let val (used', exp') = doExp exp
-          in (USyntax.VIdSet.union (used, used'), [F.UnpackDec (tv, kind, vid, ty, exp')])
+          in (TypedSyntax.VIdSet.union (used, used'), [F.UnpackDec (tv, kind, vid, ty, exp')])
           end
   | doDec (used, F.IgnoreDec exp) = let val (used', exps) = doIgnoredExp exp
-                                    in (USyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
+                                    in (TypedSyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
                                     end
   | doDec (used, dec as F.DatatypeDec datbinds) = (used, [dec]) (* TODO *)
-  | doDec (used, dec as F.ExceptionDec { conName, tagName, payloadTy }) = if USyntax.VIdSet.member (used, conName) orelse USyntax.VIdSet.member (used, tagName) then
+  | doDec (used, dec as F.ExceptionDec { conName, tagName, payloadTy }) = if TypedSyntax.VIdSet.member (used, conName) orelse TypedSyntax.VIdSet.member (used, tagName) then
                                                                               (used, [dec])
                                                                           else
                                                                               (used, [])
-  | doDec (used, dec as F.ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = if USyntax.VIdSet.member (used, conName) then
+  | doDec (used, dec as F.ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = if TypedSyntax.VIdSet.member (used, conName) then
                                                                                           (used, [dec])
                                                                                       else
                                                                                           (used, [])
   | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp
-                                      in (USyntax.VIdSet.union (used, used'), [F.ExportValue exp])
+                                      in (TypedSyntax.VIdSet.union (used, used'), [F.ExportValue exp])
                                       end
   | doDec (used, F.ExportModule fields) = let val fields' = Vector.map (fn (label, exp) => (label, doExp exp)) fields
-                                          in (Vector.foldl (fn ((_, (used', _)), acc) => USyntax.VIdSet.union (used', acc)) used fields', [F.ExportModule (Vector.map (fn (label, (_, exp)) => (label, exp)) fields')])
+                                          in (Vector.foldl (fn ((_, (used', _)), acc) => TypedSyntax.VIdSet.union (used', acc)) used fields', [F.ExportModule (Vector.map (fn (label, (_, exp)) => (label, exp)) fields')])
                                           end
   | doDec (used, F.GroupDec (_, decs)) = let val (used', decs) = doDecs (used, decs)
                                          in (used', case decs of
                                                         [] => decs
                                                       | [_] => decs
                                                       | _ => let val defined = definedInDecs(decs)
-                                                             in [F.GroupDec (SOME (USyntax.VIdSet.intersection (used, defined)), decs)]
+                                                             in [F.GroupDec (SOME (TypedSyntax.VIdSet.intersection (used, defined)), decs)]
                                                              end
                                             )
                                          end
-(* doDecs : USyntax.VIdSet.set * F.Dec list -> USyntax.VIdSet.set * F.Dec list *)
+(* doDecs : TypedSyntax.VIdSet.set * F.Dec list -> TypedSyntax.VIdSet.set * F.Dec list *)
 and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
                                                                 end) (used, []) decs
-and definedInDecs decs = List.foldl (fn (dec, s) => USyntax.VIdSet.union(definedInDec dec, s)) USyntax.VIdSet.empty decs
-and definedInDec (F.ValDec (vid, _, _)) = USyntax.VIdSet.singleton vid
-  | definedInDec (F.RecValDec valbinds) = List.foldl (fn ((vid, _, _), s) => USyntax.VIdSet.add(s, vid)) USyntax.VIdSet.empty valbinds
-  | definedInDec (F.UnpackDec (tv, kind, vid, ty, exp)) = USyntax.VIdSet.singleton vid
-  | definedInDec (F.IgnoreDec _) = USyntax.VIdSet.empty
-  | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind(vid, _), s) => USyntax.VIdSet.add(s, vid)) s conbinds) USyntax.VIdSet.empty datbinds
-  | definedInDec (F.ExceptionDec { conName, tagName, ... }) = USyntax.VIdSet.add(USyntax.VIdSet.singleton conName, tagName)
-  | definedInDec (F.ExceptionRepDec { conName, ... }) = USyntax.VIdSet.singleton conName
-  | definedInDec (F.ExportValue _) = USyntax.VIdSet.empty (* should not occur *)
-  | definedInDec (F.ExportModule _) = USyntax.VIdSet.empty (* should not occur *)
+and definedInDecs decs = List.foldl (fn (dec, s) => TypedSyntax.VIdSet.union (definedInDec dec, s)) TypedSyntax.VIdSet.empty decs
+and definedInDec (F.ValDec (vid, _, _)) = TypedSyntax.VIdSet.singleton vid
+  | definedInDec (F.RecValDec valbinds) = List.foldl (fn ((vid, _, _), s) => TypedSyntax.VIdSet.add (s, vid)) TypedSyntax.VIdSet.empty valbinds
+  | definedInDec (F.UnpackDec (tv, kind, vid, ty, exp)) = TypedSyntax.VIdSet.singleton vid
+  | definedInDec (F.IgnoreDec _) = TypedSyntax.VIdSet.empty
+  | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind (vid, _), s) => TypedSyntax.VIdSet.add (s, vid)) s conbinds) TypedSyntax.VIdSet.empty datbinds
+  | definedInDec (F.ExceptionDec { conName, tagName, ... }) = TypedSyntax.VIdSet.add (TypedSyntax.VIdSet.singleton conName, tagName)
+  | definedInDec (F.ExceptionRepDec { conName, ... }) = TypedSyntax.VIdSet.singleton conName
+  | definedInDec (F.ExportValue _) = TypedSyntax.VIdSet.empty (* should not occur *)
+  | definedInDec (F.ExportModule _) = TypedSyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.GroupDec(_, decs)) = definedInDecs decs (* should not occur *)
 end (* structure DeadCodeElimination *)

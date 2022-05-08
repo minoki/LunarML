@@ -110,7 +110,7 @@ fun newContext() : Context = let val typingContext = Typing.newContext()
 
 type Env = { fixity : Fixity.Env
            , typingEnv : Typing.Env
-           , tynameset : USyntax.TyNameSet.set
+           , tynameset : TypedSyntax.TyNameSet.set
            , toFEnv : ToFSyntax.Env
            }
 val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
@@ -180,6 +180,6 @@ fun compile({ typingContext, toFContext } : Context, langopt : LanguageOptions.o
                   ; raise Abort
                   )
     end
-fun wholeProgramOptimization decs = case DeadCodeElimination.doDecs (USyntax.VIdSet.empty, decs) of
+fun wholeProgramOptimization decs = case DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, decs) of
                                         (_, decs) => decs
 end (* structure Driver *)

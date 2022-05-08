@@ -22,7 +22,7 @@ fun mergeEnv (e1 : Env, e2 : Env) = { bas = M.BasMap.unionWith #2 (#bas e1, #bas
                                     , fixity = Fixity.mergeEnv (#fixity e1, #fixity e2)
                                     , typing = Typing.mergeEnv (#typing e1, #typing e2)
                                     }
-type Code = { tynameset : USyntax.TyNameSet.set
+type Code = { tynameset : TypedSyntax.TyNameSet.set
             , toFEnv : ToFSyntax.Env
             , fdecs : FSyntax.Dec list
             , cache : Env M.StringMap.map
@@ -60,7 +60,7 @@ fun doDec (ctx : Context) langopt env (M.BasisDec binds) acc = let val (bas, acc
                                                                 val (env'', acc) = doDecs ctx langopt (mergeEnv (env, env')) decs2 acc
                                                                 val typingEnv = { valMap = #valMap (#typing env'')
                                                                                 , tyConMap = #tyConMap (#typing env'')
-                                                                                , tyNameMap = USyntax.TyNameMap.unionWith #2 (#tyNameMap (#typing env'), #tyNameMap (#typing env''))
+                                                                                , tyNameMap = TypedSyntax.TyNameMap.unionWith #2 (#tyNameMap (#typing env'), #tyNameMap (#typing env''))
                                                                                 , strMap = #strMap (#typing env'')
                                                                                 , sigMap = #sigMap (#typing env'')
                                                                                 , funMap = #funMap (#typing env'')

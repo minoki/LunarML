@@ -5,24 +5,24 @@
 structure LuaTransform = struct
 structure L = LuaSyntax
 type Context = { nextId : int ref }
-datatype Variable = Plain of USyntax.VId
-                  | Index of USyntax.VId * int
+datatype Variable = Plain of TypedSyntax.VId
+                  | Index of TypedSyntax.VId * int
 type Env = { currentLocals : int
-           , locals : (USyntax.VId * int ref) option
-           , valMap : Variable USyntax.VIdMap.map
+           , locals : (TypedSyntax.VId * int ref) option
+           , valMap : Variable TypedSyntax.VIdMap.map
            }
 val initialEnv = { currentLocals = 61 (* See mlinit.lua *)
                  , locals = NONE
-                 , valMap = USyntax.VIdMap.empty
+                 , valMap = TypedSyntax.VIdMap.empty
                  }
 fun genSym (ctx : Context) = let val n = !(#nextId ctx)
                                  val _ = #nextId ctx := n + 1
-                             in USyntax.MkVId ("LOCAL", n)
+                             in TypedSyntax.MkVId ("LOCAL", n)
                              end
 val LOCAL_LIMIT = 190
 fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = exp
   | doExp ctx env (exp as L.VarExp (L.PredefinedId _)) = exp
-  | doExp ctx env (exp as L.VarExp (L.UserDefinedId vid)) = (case USyntax.VIdMap.find (#valMap env, vid) of
+  | doExp ctx env (exp as L.VarExp (L.UserDefinedId vid)) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                                  NONE => exp
                                                                | SOME (Plain vid) => L.VarExp (L.UserDefinedId vid)
                                                                | SOME (Index (locals, n)) => L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString n)))
@@ -34,7 +34,7 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = exp
     = let val innerEnv = { currentLocals = Vector.length params
                          , locals = NONE
                          , valMap = Vector.foldl (fn (L.PredefinedId param, valMap) => valMap
-                                                 | (L.UserDefinedId vid, valMap) => USyntax.VIdMap.insert (valMap, vid, Plain vid)
+                                                 | (L.UserDefinedId vid, valMap) => TypedSyntax.VIdMap.insert (valMap, vid, Plain vid)
                                                  ) (#valMap env) params
                          }
       in L.FunctionExp (params, doBlock ctx innerEnv body)
@@ -52,7 +52,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                        end
                  val (vars, valMap) = Vector.foldl (fn (vid, (acc, valMap)) => let val i = !r
                                                                                in r := i + 1
-                                                                                ; (L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString i))) :: acc, USyntax.VIdMap.insert (valMap, vid, Index (locals, i)))
+                                                                                ; (L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString i))) :: acc, TypedSyntax.VIdMap.insert (valMap, vid, Index (locals, i)))
                                                                                end
                                                    ) ([], #valMap env) vars
                  val newEnv = { currentLocals = n
@@ -83,7 +83,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                        end
                  val (name, valMap) = let val i = !r
                                       in r := i + 1
-                                       ; (L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString i))), USyntax.VIdMap.insert (#valMap env, name, Index (locals, i)))
+                                       ; (L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString i))), TypedSyntax.VIdMap.insert (#valMap env, name, Index (locals, i)))
                                       end
                  val newEnv = { currentLocals = n
                               , locals = SOME (locals, r)
@@ -92,7 +92,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                  val innerEnv = { currentLocals = Vector.length params
                                 , locals = NONE
                                 , valMap = Vector.foldl (fn (L.PredefinedId params, valMap) => valMap
-                                                        | (L.UserDefinedId vid, valMap) => USyntax.VIdMap.insert (valMap, vid, Plain vid)
+                                                        | (L.UserDefinedId vid, valMap) => TypedSyntax.VIdMap.insert (valMap, vid, Plain vid)
                                                         ) valMap params
                                 }
              in (newEnv, dec @ [L.AssignStat (vector [name], vector [L.FunctionExp (params, doBlock ctx innerEnv body)])])
@@ -101,7 +101,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
              let val innerEnv = { currentLocals = Vector.length params
                                 , locals = NONE
                                 , valMap = Vector.foldl (fn (L.PredefinedId params, valMap) => valMap
-                                                        | (L.UserDefinedId vid, valMap) => USyntax.VIdMap.insert (valMap, vid, Plain vid)
+                                                        | (L.UserDefinedId vid, valMap) => TypedSyntax.VIdMap.insert (valMap, vid, Plain vid)
                                                         ) (#valMap env) params
                                 }
              in (env, [L.LocalFunctionStat (name, params, doBlock ctx innerEnv body)])

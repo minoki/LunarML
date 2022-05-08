@@ -20,16 +20,16 @@ exception CodeGenError of string
  *)
 val builtins
     = let open InitialEnv
-          val map = List.foldl USyntax.LongVIdMap.insert' USyntax.LongVIdMap.empty
-                               [(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), NONE)
-                               ,(USyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), NONE)
+          val map = List.foldl TypedSyntax.LongVIdMap.insert' TypedSyntax.LongVIdMap.empty
+                               [(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), NONE)
+                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), NONE)
                                ]
-      in List.foldl (fn ((vid, name), map) => USyntax.LongVIdMap.insert (map, vid, SOME name)) map
+      in List.foldl (fn ((vid, name), map) => TypedSyntax.LongVIdMap.insert (map, vid, SOME name)) map
                     [(* ref *)
                      (LongVId_ref, "_ref")
                     (* boolean *)
@@ -53,20 +53,20 @@ val builtins
                     ,(VId_Size_tag, "_Size_tag")
                     ,(VId_Subscript_tag, "_Subscript_tag")
                     ,(VId_Fail_tag, "_Fail_tag")
-                    ,(USyntax.MkShortVId VId_exnName, "_exnName")
+                    ,(TypedSyntax.MkShortVId VId_exnName, "_exnName")
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(USyntax.MkShortVId VId_Int_add_bin, "__Int_add")
-                    ,(USyntax.MkShortVId VId_Int_sub_bin, "__Int_sub")
-                    ,(USyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
-                    ,(USyntax.MkShortVId VId_Int_div_bin, "__Int_div")
-                    ,(USyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
+                    ,(TypedSyntax.MkShortVId VId_Int_add_bin, "__Int_add")
+                    ,(TypedSyntax.MkShortVId VId_Int_sub_bin, "__Int_sub")
+                    ,(TypedSyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
+                    ,(TypedSyntax.MkShortVId VId_Int_div_bin, "__Int_div")
+                    ,(TypedSyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
                     (* word *)
-                    ,(USyntax.MkShortVId VId_Word_div_bin, "__Word_div")
-                    ,(USyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
-                    ,(USyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
+                    ,(TypedSyntax.MkShortVId VId_Word_div_bin, "__Word_div")
+                    ,(TypedSyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
+                    ,(TypedSyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     (* Array and Vector *)
@@ -75,7 +75,7 @@ val builtins
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_concat, "_Vector_concat")
-                    ,(USyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
+                    ,(TypedSyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
@@ -106,13 +106,13 @@ val builtins
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
                     ]
       end
-fun VIdToLua(vid as USyntax.MkVId(name, n)) = if n < 0 then
-                                                  case USyntax.LongVIdMap.find (builtins, USyntax.MkShortVId vid) of
-                                                      NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
-                                                    | SOME (SOME luaName) => LuaSyntax.PredefinedId luaName
-                                                    | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_VId vid ^ " has no runtime counterpart")
-                                              else
-                                                  LuaSyntax.UserDefinedId vid
+fun VIdToLua (vid as TypedSyntax.MkVId (name, n)) = if n < 0 then
+                                                        case TypedSyntax.LongVIdMap.find (builtins, TypedSyntax.MkShortVId vid) of
+                                                            NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
+                                                          | SOME (SOME luaName) => LuaSyntax.PredefinedId luaName
+                                                          | SOME NONE => raise CodeGenError ("the built-in identifier " ^ TypedSyntax.print_VId vid ^ " has no runtime counterpart")
+                                                    else
+                                                        LuaSyntax.UserDefinedId vid
 
 structure StringSet = RedBlackSetFn(struct open String; type ord_key = string end)
 val LuaKeywords = StringSet.fromList
@@ -129,23 +129,23 @@ fun LabelToTableKey (Syntax.NumericLabel n) = LuaSyntax.IntKey n
   | LabelToTableKey (Syntax.IdentifierLabel s) = LuaSyntax.StringKey s
 
 type Context = { nextLuaId : int ref }
-type Env = { hoistedSymbols : USyntax.VIdSet.set
+type Env = { hoistedSymbols : TypedSyntax.VIdSet.set
            , level : int
            }
-val initialEnv : Env = { hoistedSymbols = USyntax.VIdSet.empty
+val initialEnv : Env = { hoistedSymbols = TypedSyntax.VIdSet.empty
                        , level = 0
                        }
 fun addSymbol ({ hoistedSymbols, level } : Env, s)
     = { hoistedSymbols = hoistedSymbols
       , level = level
       }
-fun addHoistedSymbol ({ hoistedSymbols, level } : Env, s : USyntax.VId)
-    = { hoistedSymbols = USyntax.VIdSet.add (hoistedSymbols, s)
+fun addHoistedSymbol ({ hoistedSymbols, level } : Env, s : TypedSyntax.VId)
+    = { hoistedSymbols = TypedSyntax.VIdSet.add (hoistedSymbols, s)
       , level = level
       }
-fun isHoisted ({ hoistedSymbols, ... } : Env, s : USyntax.VId)
-    = USyntax.VIdSet.member (hoistedSymbols, s)
-fun declareIfNotHoisted (env : Env, vars : USyntax.VId list) : Env * LuaSyntax.Stat list
+fun isHoisted ({ hoistedSymbols, ... } : Env, s : TypedSyntax.VId)
+    = TypedSyntax.VIdSet.member (hoistedSymbols, s)
+fun declareIfNotHoisted (env : Env, vars : TypedSyntax.VId list) : Env * LuaSyntax.Stat list
     = let val (env, vars) = List.foldr (fn (v, (env, xs)) => if isHoisted (env, v) then
                                                                  (env, xs)
                                                              else
@@ -159,15 +159,15 @@ fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoisted
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
-                            in USyntax.MkVId ("tmp", n)
+                            in TypedSyntax.MkVId ("tmp", n)
                             end
 
 structure F = FSyntax
 structure L = LuaSyntax
 
 datatype Destination = Return
-                     | AssignTo of USyntax.VId
-                     | DeclareAndAssignTo of { level : int, destination : USyntax.VId }
+                     | AssignTo of TypedSyntax.VId
+                     | DeclareAndAssignTo of { level : int, destination : TypedSyntax.VId }
                      | Discard
                      | Continue of (* statements *) L.Stat list * Env * (* pure expression *) L.Exp -> L.Stat list (* the continuation should be called exactly once, and the expression should be used only once *)
 
@@ -176,15 +176,15 @@ fun mapCont f [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
 
 local
-fun extractStrId(F.VarExp(USyntax.MkVId(name, n))) = SOME (USyntax.MkStrId(name, n), [])
+fun extractStrId (F.VarExp (TypedSyntax.MkVId (name, n))) = SOME (TypedSyntax.MkStrId (name, n), [])
   | extractStrId(F.SProjectionExp(exp, F.StructLabel strid)) = (case extractStrId exp of
                                                               SOME (strid0, revStrids) => SOME (strid0, strid :: revStrids)
                                                             | NONE => NONE
                                                          )
   | extractStrId _ = NONE
 in
-fun extractLongVId(F.VarExp(vid)) = SOME (USyntax.MkShortVId vid)
-  | extractLongVId(F.SProjectionExp(exp, F.ValueLabel vid)) = Option.map (fn (strid0, revStrids) => USyntax.MkLongVId(strid0, List.rev revStrids, vid)) (extractStrId exp)
+fun extractLongVId (F.VarExp vid) = SOME (TypedSyntax.MkShortVId vid)
+  | extractLongVId (F.SProjectionExp (exp, F.ValueLabel vid)) = Option.map (fn (strid0, revStrids) => TypedSyntax.MkLongVId (strid0, List.rev revStrids, vid)) (extractStrId exp)
   | extractLongVId _ = NONE
 end
 
@@ -532,12 +532,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
       end
   | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest
     = let val builtin = case extractLongVId exp of
-                            SOME longvid => (case USyntax.LongVIdMap.find (builtins, longvid) of
+                            SOME longvid => (case TypedSyntax.LongVIdMap.find (builtins, longvid) of
                                                  SOME (SOME "nil") => SOME (L.ConstExp L.Nil)
                                                | SOME (SOME "true") => SOME (L.ConstExp L.True)
                                                | SOME (SOME "false") => SOME (L.ConstExp L.False)
                                                | SOME (SOME luaName) => SOME (L.VarExp (L.PredefinedId luaName))
-                                               | SOME NONE => raise CodeGenError ("the built-in identifier " ^ USyntax.print_LongVId longvid ^ " has no runtime counterpart")
+                                               | SOME NONE => raise CodeGenError ("the built-in identifier " ^ TypedSyntax.print_LongVId longvid ^ " has no runtime counterpart")
                                                | NONE => NONE
                                             )
                           | NONE => NONE
@@ -768,7 +768,7 @@ and doDec ctx env (F.ValDec (vid, _, exp))
           doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
   | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
-  | doDec ctx env (F.ExceptionDec { conName as USyntax.MkVId(name, _), tagName, payloadTy })
+  | doDec ctx env (F.ExceptionDec { conName as TypedSyntax.MkVId (name, _), tagName, payloadTy })
     = [ if isHoisted (env, tagName) then
             L.AssignStat (vector [L.VarExp (L.UserDefinedId tagName)], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
         else
@@ -788,22 +788,22 @@ and doDec ctx env (F.ValDec (vid, _, exp))
   | doDec ctx env (F.ExceptionRepDec _) = raise Fail "internal error: ExceptionRepDec should have been desugared earlier"
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
-  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, USyntax.VIdSet.toList hoist)
+  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, TypedSyntax.VIdSet.toList hoist)
                                                     in dec
                                                        @ [ L.DoStat (vector (doDecs ctx (increaseLevel env) decs)) ]
                                                     end
   | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
 and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.map (doConBind ctx env) conbinds (* TODO: equality *)
-and doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), NONE)) = if isHoisted (env, vid) then
-                                                                               L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
-                                                                           else
-                                                                               L.LocalStat (vector [vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
-  | doConBind ctx env (F.ConBind (vid as USyntax.MkVId (name, _), SOME ty)) = let val body = vector [L.ReturnStat (vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))])])]
-                                                                              in if isHoisted (env, vid) then
-                                                                                     L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
-                                                                                 else
-                                                                                     L.LocalFunctionStat (vid, vector [L.PredefinedId "payload"], body)
-                                                                              end
+and doConBind ctx env (F.ConBind (vid as TypedSyntax.MkVId (name, _), NONE)) = if isHoisted (env, vid) then
+                                                                                   L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
+                                                                               else
+                                                                                   L.LocalStat (vector [vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
+  | doConBind ctx env (F.ConBind (vid as TypedSyntax.MkVId (name, _), SOME ty)) = let val body = vector [L.ReturnStat (vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))])])]
+                                                                                  in if isHoisted (env, vid) then
+                                                                                         L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
+                                                                                     else
+                                                                                         L.LocalFunctionStat (vid, vector [L.PredefinedId "payload"], body)
+                                                                                  end
 
 and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
   | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))

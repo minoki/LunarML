@@ -6,7 +6,7 @@ structure LuaSyntax = struct
 datatype TableKey = IntKey of int
                   | StringKey of string
 datatype Id = PredefinedId of string
-            | UserDefinedId of USyntax.VId
+            | UserDefinedId of TypedSyntax.VId
 datatype LuaConst = Nil
                   | False
                   | True
@@ -46,12 +46,12 @@ datatype Exp = ConstExp of LuaConst
              | BinExp of BinaryOp * Exp * Exp
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
-     and Stat = LocalStat of USyntax.VId vector * Exp vector (* vars must not be empty *)
+     and Stat = LocalStat of TypedSyntax.VId vector * Exp vector (* vars must not be empty *)
               | AssignStat of Exp vector * Exp vector (* LHS must be non-empty prefixexps and RHS must not be empty*)
               | CallStat of Exp * Exp vector
               | MethodStat of Exp * string * Exp vector (* name must be a valid Lua identifier *)
               | IfStat of Exp * Block * Block (* 'elseif' will be synthesized by writer *)
-              | LocalFunctionStat of USyntax.VId * Id vector * Block
+              | LocalFunctionStat of TypedSyntax.VId * Id vector * Block
               | ReturnStat of Exp vector (* must be the last statement in a block *)
               | DoStat of Block
 withtype Block = Stat vector
@@ -95,7 +95,7 @@ fun isLuaIdentifier name = case CharVectorSlice.getItem (CharVectorSlice.full na
                                                 andalso (not (StringSet.member (LuaKeywords, name)))
 
 fun IdToLua (LuaSyntax.PredefinedId name) = name
-  | IdToLua (LuaSyntax.UserDefinedId (USyntax.MkVId (name, n))) = smlNameToLua name ^ "_" ^ Int.toString n
+  | IdToLua (LuaSyntax.UserDefinedId (TypedSyntax.MkVId (name, n))) = smlNameToLua name ^ "_" ^ Int.toString n
 
 fun toLuaStringLit (s : string) = "\"" ^ String.translate (fn #"\\" => "\\\\"
                                                           | #"\a" => "\\a"
