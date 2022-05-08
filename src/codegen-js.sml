@@ -414,34 +414,73 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
                 (fn (stmts1, env, exp1') =>
-                    case dest of
-                        Continue cont => let val result = genSym ctx
-                                             val env' = addSymbol (env, result)
-                                         in cont ( stmts1
-                                                   @ [ J.VarStat (vector [(result, NONE)])
-                                                     , J.IfStat ( exp1'
-                                                                , vector (doExpTo ctx (increaseLevel env') exp2 (AssignTo result))
-                                                                , vector (doExpTo ctx (increaseLevel env') exp3 (AssignTo result))
+                    let fun makeCondExp (exp1', J.ConstExp J.True, J.ConstExp J.False) = exp1'
+                          | makeCondExp (exp1', J.ConstExp J.False, J.ConstExp J.True) = J.UnaryExp (J.NOT, exp1')
+                          | makeCondExp (exp1', J.ConstExp J.True, exp3'') = J.BinExp (J.OR, exp1', exp3'')
+                          | makeCondExp (exp1', J.ConstExp J.False, exp3'') = J.BinExp (J.AND, J.UnaryExp (J.NOT, exp1'), exp3'')
+                          | makeCondExp (exp1', exp2'', J.ConstExp J.True) = J.BinExp (J.OR, J.UnaryExp (J.NOT, exp1'), exp2'')
+                          | makeCondExp (exp1', exp2'', J.ConstExp J.False) = J.BinExp (J.AND, exp1', exp2'')
+                          | makeCondExp (exp1', exp2'', exp3'') = J.CondExp (exp1', exp2'', exp3'')
+                        fun tryAssignToCondExp (destination, exp2', exp3') = case (exp2', exp3') of
+                                                                                 ([J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId id2), exp2''))], [J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId id3), exp3''))]) =>
+                                                                                 if id2 = destination andalso id3 = destination then
+                                                                                     SOME (makeCondExp (exp1', exp2'', exp3''))
+                                                                                 else
+                                                                                     NONE
+                                                                               | _ => NONE
+                        fun tryReturnToCondExp (exp2', exp3') = case (exp2', exp3') of
+                                                                    ([J.ReturnStat (SOME exp2'')], [J.ReturnStat (SOME exp3'')]) =>
+                                                                    SOME (makeCondExp (exp1', exp2'', exp3''))
+                                                                  | _ => NONE
+                    in case dest of
+                           Continue cont => let val result = genSym ctx
+                                                val env' = addSymbol (env, result)
+                                                val exp2' = doExpTo ctx (increaseLevel env') exp2 (AssignTo result)
+                                                val exp3' = doExpTo ctx (increaseLevel env') exp3 (AssignTo result)
+                                            in cont ( stmts1
+                                                      @ (case tryAssignToCondExp (result, exp2', exp3') of
+                                                             SOME condExp => [ J.VarStat (vector [(result, SOME condExp)]) ]
+                                                           | NONE => [ J.VarStat (vector [(result, NONE)])
+                                                                     , J.IfStat (exp1', vector exp2', vector exp3')
+                                                                     ]
+                                                        )
+                                                    , env'
+                                                    , J.VarExp (J.UserDefinedId result)
+                                                    )
+                                            end
+                         | DeclareAndAssignTo { level, destination } => let val exp2' = doExpTo ctx (increaseLevel env) exp2 (AssignTo destination)
+                                                                            val exp3' = doExpTo ctx (increaseLevel env) exp3 (AssignTo destination)
+                                                                        in stmts1
+                                                                           @ (case tryAssignToCondExp (destination, exp2', exp3') of
+                                                                                  SOME condExp => [ J.VarStat (vector [(destination, SOME condExp)]) ]
+                                                                                | NONE => [ J.VarStat (vector [(destination, NONE)])
+                                                                                          , J.IfStat (exp1', vector exp2', vector exp3')
+                                                                                          ]
+                                                                             )
+                                                                        end
+                         | dest as AssignTo destination => let val exp2' = doExpTo ctx (increaseLevel env) exp2 dest
+                                                               val exp3' = doExpTo ctx (increaseLevel env) exp3 dest
+                                                           in stmts1
+                                                              @ (case tryAssignToCondExp (destination, exp2', exp3') of
+                                                                     SOME condExp => [ J.AssignStat (J.VarExp (J.UserDefinedId destination), condExp) ]
+                                                                   | NONE => [ J.IfStat (exp1', vector exp2', vector exp3') ]
                                                                 )
-                                                     ]
-                                                 , env'
-                                                 , J.VarExp (J.UserDefinedId result)
-                                                 )
-                                         end
-                      | DeclareAndAssignTo { level, destination } => stmts1
-                                                                     @ [ J.VarStat (vector [(destination, NONE)])
-                                                                       , J.IfStat ( exp1'
-                                                                                  , vector (doExpTo ctx (increaseLevel env) exp2 (AssignTo destination))
-                                                                                  , vector (doExpTo ctx (increaseLevel env) exp3 (AssignTo destination))
-                                                                                  )
-                                                                       ]
-                      (* Return, AssignTo, Discard *)
-                      | _ => stmts1
-                             @ [ J.IfStat ( exp1'
-                                          , vector (doExpTo ctx (increaseLevel env) exp2 dest)
-                                          , vector (doExpTo ctx (increaseLevel env) exp3 dest)
+                                                           end
+                         | Return => let val exp2' = doExpTo ctx (increaseLevel env) exp2 dest
+                                         val exp3' = doExpTo ctx (increaseLevel env) exp3 dest
+                                     in stmts1
+                                        @ (case tryReturnToCondExp (exp2', exp3') of
+                                               SOME condExp => [ J.ReturnStat (SOME condExp) ]
+                                             | NONE => [ J.IfStat (exp1', vector exp2', vector exp3') ]
                                           )
-                               ]
+                                     end
+                         | Discard => stmts1
+                                      @ [ J.IfStat ( exp1'
+                                                   , vector (doExpTo ctx (increaseLevel env) exp2 dest)
+                                                   , vector (doExpTo ctx (increaseLevel env) exp3 dest)
+                                                   )
+                                        ]
+                    end
                 )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (vector [VIdToJs vid], vector (doExpTo ctx (increaseLevel (addSymbol (env, vid))) exp Return))]))
@@ -718,7 +757,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                                 putImpureTo ctx env dest (stmts, J.IndexExp (arr, i))
                                                             )
            | Primitives.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                                    let val stmts = stmts @ [ J.ExpStat (J.AssignExp (J.IndexExp (arr, i), v)) ]
+                                                                    let val stmts = stmts @ [ J.AssignStat (J.IndexExp (arr, i), v) ]
                                                                     in putPureTo ctx env dest (stmts, J.UndefinedExp)
                                                                     end
                                                                 )

@@ -53,7 +53,7 @@ datatype Exp = ConstExp of JsConst
              | BinExp of BinaryOp * Exp * Exp
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
-             | AssignExp of Exp * Exp
+             | CondExp of Exp * Exp * Exp (* exp1 ? exp2 : exp3 *)
      and Stat = VarStat of (USyntax.VId * Exp option) vector (* must not be empty *)
               | ExpStat of Exp
               | IfStat of Exp * Block * Block
@@ -184,6 +184,8 @@ end
 structure Precedence = struct
 val Expression = 18
 val AssignmentExpression = 17
+val ConditionalExpression = 16
+val LogicalORExpression = 15
 val UnaryExpression = 4
 val CallExpression = 2
 val MemberExpression = 1
@@ -318,7 +320,7 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
                             | _ => Fragment "[" :: doExp (Precedence.Expression, indexExp) @ [ Fragment "]" ]
       in paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) @ indexPart)
       end
-  | doExp (prec, S.AssignExp (lhsExp, rhsExp)) = paren (prec < Precedence.AssignmentExpression) (doExp (Precedence.CallExpression, lhsExp) @ Fragment " = " :: doExp (Precedence.AssignmentExpression, rhsExp))
+  | doExp (prec, S.CondExp (exp1, exp2, exp3)) = paren (prec < Precedence.ConditionalExpression) (doExp (Precedence.LogicalORExpression, exp1) @ Fragment " ? " :: doExp (Precedence.AssignmentExpression, exp2) @ Fragment " : " :: doExp (Precedence.AssignmentExpression, exp3))
 and doCommaSepExp elements = commaSepV (Vector.map (fn value => doExp (Precedence.AssignmentExpression, value)) elements)
 and doStat (S.VarStat variables) = Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => [ Fragment (idToJs (S.UserDefinedId id)) ]
                                                                                       | (id, SOME init) => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init)
