@@ -1069,10 +1069,10 @@ and genEqualitiesForDatatypes(ctx, env, datbinds) : Env * (USyntax.VId * F.Ty * 
                                                       )
                                           )
                                end
-                    val body = List.foldr (fn ((tv, eqParam), ty) => F.FnExp ( eqParam
-                                                                             , F.EqualityType (F.TyVar tv)
-                                                                             , body
-                                                                             )
+                    val body = List.foldr (fn ((tv, eqParam), body) => F.FnExp ( eqParam
+                                                                               , F.EqualityType (F.TyVar tv)
+                                                                               , body
+                                                                               )
                                           ) body tyvars'
                     val body = List.foldr (fn (tv, body) => F.TyAbsExp(tv, F.TypeKind, body)) body tyvars
                 in (vid, ty, body) :: valbinds
