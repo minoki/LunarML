@@ -97,30 +97,27 @@ structure LongVIdSet = RedBlackSetFn(LongVIdKey)
 structure LongVIdMap = RedBlackMapFn(LongVIdKey)
 
 datatype UnaryConstraint
-  = HasField of { sourceSpan : SourcePos.span
-                , label : Syntax.Label
+  = HasField of { label : Syntax.Label
                 , fieldTy : Ty
                 }
-  | RecordExt of { sourceSpan : SourcePos.span
-                 , fields : (Syntax.Label * Ty) list
+  | RecordExt of { fields : (Syntax.Label * Ty) list
                  , baseTy : Ty
                  }
-  | SubrecordOf of { sourceSpan : SourcePos.span
-                   , extraFields : (Syntax.Label * Ty) list
+  | SubrecordOf of { extraFields : (Syntax.Label * Ty) list
                    , extendedTy : Ty
                    }
-  | IsEqType of SourcePos.span
-  | IsIntegral of SourcePos.span (* Int, Word; div, mod; defaults to int *)
-  | IsSignedReal of SourcePos.span (* Int, Real; abs; defaults to int *)
-  | IsRing of SourcePos.span (* Int, Word, Real; *, +, -, ~; defaults to int *)
-  | IsField of SourcePos.span (* Real; /; defaults to real *)
-  | IsSigned of SourcePos.span (* Int, Real; defaults to int *)
-  | IsOrdered of SourcePos.span (* NumTxt; <, >, <=, >=; defaults to int *)
-  | IsInt of SourcePos.span (* Int; defaults to int *)
-  | IsWord of SourcePos.span (* Word; defaults to word *)
-  | IsReal of SourcePos.span (* Real; defaults to real *)
-  | IsChar of SourcePos.span (* Char; defaults to char *)
-  | IsString of SourcePos.span (* String; defaults to string *)
+  | IsEqType
+  | IsIntegral (* Int, Word; div, mod; defaults to int *)
+  | IsSignedReal (* Int, Real; abs; defaults to int *)
+  | IsRing (* Int, Word, Real; *, +, -, ~; defaults to int *)
+  | IsField (* Real; /; defaults to real *)
+  | IsSigned (* Int, Real; defaults to int *)
+  | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
+  | IsInt (* Int; defaults to int *)
+  | IsWord (* Word; defaults to word *)
+  | IsReal (* Real; defaults to real *)
+  | IsChar (* Char; defaults to char *)
+  | IsString (* String; defaults to string *)
 
 datatype Constraint
   = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
@@ -329,21 +326,21 @@ and print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (S
   | print_ValBind (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
 and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
-and print_UnaryConstraint (HasField { sourceSpan, label, fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
-  | print_UnaryConstraint (RecordExt { sourceSpan, fields, baseTy }) = "RecordExt{fields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) fields ^ ",baseTy=" ^ print_Ty baseTy ^ "}"
-  | print_UnaryConstraint (SubrecordOf { sourceSpan, extraFields, extendedTy }) = "SubrecordOf{extraFields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) extraFields ^ ",extendedTy=" ^ print_Ty extendedTy ^ "}"
-  | print_UnaryConstraint (IsEqType _) = "IsEqType"
-  | print_UnaryConstraint (IsIntegral _) = "IsIntegral"
-  | print_UnaryConstraint (IsSignedReal _) = "IsSignedReal"
-  | print_UnaryConstraint (IsRing _) = "IsRing"
-  | print_UnaryConstraint (IsField _) = "IsField"
-  | print_UnaryConstraint (IsSigned _) = "IsSigned"
-  | print_UnaryConstraint (IsOrdered _) = "IsOrdered"
-  | print_UnaryConstraint (IsInt _) = "IsInt"
-  | print_UnaryConstraint (IsWord _) = "IsWord"
-  | print_UnaryConstraint (IsReal _) = "IsReal"
-  | print_UnaryConstraint (IsChar _) = "IsChar"
-  | print_UnaryConstraint (IsString _) = "IsString"
+and print_UnaryConstraint (HasField { label, fieldTy }) = "HasField{label=" ^ Syntax.print_Label label ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
+  | print_UnaryConstraint (RecordExt { fields, baseTy }) = "RecordExt{fields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) fields ^ ",baseTy=" ^ print_Ty baseTy ^ "}"
+  | print_UnaryConstraint (SubrecordOf { extraFields, extendedTy }) = "SubrecordOf{extraFields=" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Ty)) extraFields ^ ",extendedTy=" ^ print_Ty extendedTy ^ "}"
+  | print_UnaryConstraint IsEqType = "IsEqType"
+  | print_UnaryConstraint IsIntegral = "IsIntegral"
+  | print_UnaryConstraint IsSignedReal = "IsSignedReal"
+  | print_UnaryConstraint IsRing = "IsRing"
+  | print_UnaryConstraint IsField = "IsField"
+  | print_UnaryConstraint IsSigned = "IsSigned"
+  | print_UnaryConstraint IsOrdered = "IsOrdered"
+  | print_UnaryConstraint IsInt = "IsInt"
+  | print_UnaryConstraint IsWord = "IsWord"
+  | print_UnaryConstraint IsReal = "IsReal"
+  | print_UnaryConstraint IsChar = "IsChar"
+  | print_UnaryConstraint IsString = "IsString"
 and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env
 fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x)
@@ -408,7 +405,9 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
                                                                                       else
                                                                                           (subst, tv :: tyvars))
                                                          (subst, []) tyvars
-          fun doUnaryConstraint(HasField{sourceSpan, label, fieldTy}) = HasField{sourceSpan=sourceSpan, label=label, fieldTy=doTy fieldTy}
+          fun doUnaryConstraint (HasField { label, fieldTy }) = HasField { label = label, fieldTy = doTy fieldTy }
+            | doUnaryConstraint (RecordExt { fields, baseTy }) = RecordExt { fields = List.map (fn (label, ty) => (label, doTy ty)) fields, baseTy = doTy baseTy }
+            | doUnaryConstraint (SubrecordOf { extraFields, extendedTy }) = SubrecordOf { extraFields = List.map (fn (label, ty) => (label, doTy ty)) extraFields, extendedTy = doTy extendedTy }
             | doUnaryConstraint ct = ct
           fun doTypeScheme(TypeScheme (tyvarsWithConstraints, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
                                                                          val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
@@ -576,21 +575,21 @@ and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInExBind(bound, ExReplication(_, _, _, SOME ty)) = freeTyVarsInTy(bound, ty)
 and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
     = (case unaryConstraint of
-           HasField { fieldTy, ... } => freeTyVarsInTy (bound, fieldTy)
-         | RecordExt { fields, baseTy, ... } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, baseTy)) fields
-         | SubrecordOf { extraFields, extendedTy, ... } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, extendedTy)) extraFields
-         | IsEqType _     => TyVarSet.empty
-         | IsIntegral _   => TyVarSet.empty
-         | IsSignedReal _ => TyVarSet.empty
-         | IsRing _       => TyVarSet.empty
-         | IsField _      => TyVarSet.empty
-         | IsSigned _     => TyVarSet.empty
-         | IsOrdered _    => TyVarSet.empty
-         | IsInt _        => TyVarSet.empty
-         | IsWord _       => TyVarSet.empty
-         | IsReal _       => TyVarSet.empty
-         | IsChar _       => TyVarSet.empty
-         | IsString _     => TyVarSet.empty
+           HasField { label = _, fieldTy } => freeTyVarsInTy (bound, fieldTy)
+         | RecordExt { fields, baseTy } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, baseTy)) fields
+         | SubrecordOf { extraFields, extendedTy } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, extendedTy)) extraFields
+         | IsEqType     => TyVarSet.empty
+         | IsIntegral   => TyVarSet.empty
+         | IsSignedReal => TyVarSet.empty
+         | IsRing       => TyVarSet.empty
+         | IsField      => TyVarSet.empty
+         | IsSigned     => TyVarSet.empty
+         | IsOrdered    => TyVarSet.empty
+         | IsInt        => TyVarSet.empty
+         | IsWord       => TyVarSet.empty
+         | IsReal       => TyVarSet.empty
+         | IsChar       => TyVarSet.empty
+         | IsString     => TyVarSet.empty
       )
 
 fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)

@@ -120,7 +120,7 @@ type Context = { nextTyVar : int ref
                }
 
 type InferenceContext = { context : Context
-                        , tyVarConstraints : ((TypedSyntax.UnaryConstraint list) TypedSyntax.TyVarMap.map) ref
+                        , tyVarConstraints : (((SourcePos.span * TypedSyntax.UnaryConstraint) list) TypedSyntax.TyVarMap.map) ref
                         , tyVarSubst : (TypedSyntax.Ty TypedSyntax.TyVarMap.map) ref
                         }
 
@@ -295,7 +295,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                fun function1Of (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, b, a)
                                                fun function2Of (a, b, c) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
-                                               val IsEqType = TypedSyntax.IsEqType SourcePos.nullSpan
+                                               val IsEqType = TypedSyntax.IsEqType
                                               ) : sig
                                  val typeOf : Primitives.PrimOp -> { vars : (TypedSyntax.TyVar * TypedSyntax.UnaryConstraint list) list, args : TypedSyntax.Ty vector, result : TypedSyntax.Ty }
                                  end
@@ -305,10 +305,10 @@ fun newContext() : Context
       , nextVId = ref 100
       }
 
-fun addTyVarConstraint (ctx : InferenceContext, tv : TypedSyntax.TyVar, ct : TypedSyntax.UnaryConstraint)
+fun addTyVarConstraint (ctx : InferenceContext, tv : TypedSyntax.TyVar, span : SourcePos.span, ct : TypedSyntax.UnaryConstraint)
     = let val cts = !(#tyVarConstraints ctx)
           val xs = Option.getOpt (TypedSyntax.TyVarMap.find (cts, tv), [])
-      in #tyVarConstraints ctx := TypedSyntax.TyVarMap.insert (cts, tv, ct :: xs)
+      in #tyVarConstraints ctx := TypedSyntax.TyVarMap.insert (cts, tv, (span, ct) :: xs)
       end
 
 fun renewVId (ctx : Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId
@@ -380,21 +380,21 @@ fun substituteTy (tv, replacement) =
 fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
     in fn T.EqConstr (span, ty1, ty2) => T.EqConstr (span, substTy ty1, substTy ty2)
-     | T.UnaryConstraint (span1, recordTy, T.HasField { sourceSpan, label, fieldTy }) => T.UnaryConstraint (span1, substTy recordTy, T.HasField { sourceSpan = sourceSpan, label = label, fieldTy = substTy fieldTy })
-     | T.UnaryConstraint (span1, recordTy, T.RecordExt { sourceSpan, fields, baseTy }) => T.UnaryConstraint (span1, substTy recordTy, T.RecordExt { sourceSpan = sourceSpan, fields = List.map (fn (label, ty) => (label, substTy ty)) fields, baseTy = substTy baseTy })
-     | T.UnaryConstraint (span1, recordTy, T.SubrecordOf { sourceSpan, extraFields, extendedTy }) => T.UnaryConstraint (span1, substTy recordTy, T.SubrecordOf { sourceSpan = sourceSpan, extraFields = List.map (fn (label, ty) => (label, substTy ty)) extraFields, extendedTy = substTy extendedTy })
-     | T.UnaryConstraint (span1, ty, c as T.IsEqType _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsIntegral _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsSignedReal _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsRing _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsField _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsSigned _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsOrdered _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsInt _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsWord _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsReal _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsChar _) => T.UnaryConstraint (span1, substTy ty, c)
-     | T.UnaryConstraint (span1, ty, c as T.IsString _) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, recordTy, T.HasField { label, fieldTy }) => T.UnaryConstraint (span1, substTy recordTy, T.HasField { label = label, fieldTy = substTy fieldTy })
+     | T.UnaryConstraint (span1, recordTy, T.RecordExt { fields, baseTy }) => T.UnaryConstraint (span1, substTy recordTy, T.RecordExt { fields = List.map (fn (label, ty) => (label, substTy ty)) fields, baseTy = substTy baseTy })
+     | T.UnaryConstraint (span1, recordTy, T.SubrecordOf { extraFields, extendedTy }) => T.UnaryConstraint (span1, substTy recordTy, T.SubrecordOf { extraFields = List.map (fn (label, ty) => (label, substTy ty)) extraFields, extendedTy = substTy extendedTy })
+     | T.UnaryConstraint (span1, ty, c as T.IsEqType) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsIntegral) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsSignedReal) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsRing) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsField) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsSigned) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsOrdered) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsInt) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsWord) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsReal) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsChar) => T.UnaryConstraint (span1, substTy ty, c)
+     | T.UnaryConstraint (span1, ty, c as T.IsString) => T.UnaryConstraint (span1, substTy ty, c)
     end
 
 val applySubstTy = T.applySubstTy
@@ -426,7 +426,7 @@ fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
     = let val (subst, tyargs) = List.foldl (fn ((v, preds), (set, rest)) =>
                                                let val tv = freshTyVar (#context ctx)
                                                    val tyarg = T.TyVar (span, tv)
-                                               in List.app (fn pred => addTyVarConstraint (ctx, tv, pred)) preds
+                                               in List.app (fn pred => addTyVarConstraint (ctx, tv, span, pred)) preds
                                                 ; (T.TyVarMap.insert (set, v, tyarg), (tyarg, preds) :: rest)
                                                end
                                            ) (T.TyVarMap.empty, []) vars
@@ -465,24 +465,24 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            else
                emitTypeError (ctx, [span1, span2, span3], "unification failed: type constructor mismatch (" ^ TypedSyntax.PrettyPrint.print_Ty t1 ^ " vs " ^ TypedSyntax.PrettyPrint.print_Ty t2 ^ ")") (* ??? *)
          | T.EqConstr (span, ty1, ty2) => emitTypeError (ctx, [span], "unification failed: not match (" ^ TypedSyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ TypedSyntax.PrettyPrint.print_Ty ty2 ^ ")")
-         | T.UnaryConstraint (span1, recordTy, T.HasField { sourceSpan = span3, label = label, fieldTy = fieldTy }) =>
+         | T.UnaryConstraint (span1, recordTy, T.HasField { label = label, fieldTy = fieldTy }) =>
            (case recordTy of
                 T.RecordType (span2, fields) =>
                 (case Syntax.LabelMap.find (fields, label) of
-                     NONE => emitTypeError (ctx, [span1, span2, span3], "unification failed: no field")
+                     NONE => emitTypeError (ctx, [span1, span2], "unification failed: no field")
                    | SOME ty' => unify (ctx, env, T.EqConstr (span1, fieldTy, ty') :: ctrs)
                 )
-              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record field for a non-record type")
-              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record field for a function type")
+              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
+              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a function type")
               | T.TyVar (span2, tv) =>
                 (case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
-                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, T.HasField { sourceSpan = span3, label = label, fieldTy = fieldTy }) :: ctrs)
-                   | NONE => ( addTyVarConstraint (ctx, tv, T.HasField { sourceSpan = span3, label = label, fieldTy = fieldTy })
+                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, T.HasField { label = label, fieldTy = fieldTy }) :: ctrs)
+                   | NONE => ( addTyVarConstraint (ctx, tv, span1, T.HasField { label = label, fieldTy = fieldTy })
                              ; unify(ctx, env, ctrs)
                              )
                 )
            )
-         | T.UnaryConstraint (span1, recordTy, c as T.RecordExt { sourceSpan = span3, fields, baseTy }) =>
+         | T.UnaryConstraint (span1, recordTy, c as T.RecordExt { fields, baseTy }) =>
            (case recordTy of
                 T.RecordType (span2, fields') =>
                 let val (fields', ctrs) = List.foldl (fn ((label, ty), (fields', ctrs)) =>
@@ -491,73 +491,73 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                                                              in (fields', T.EqConstr (span1, ty, ty') :: ctrs)
                                                              end
                                                          else
-                                                             emitTypeError (ctx, [span1, span2, span3], "record field mismatch: " ^ Syntax.print_Label label)
+                                                             emitTypeError (ctx, [span1, span2], "record field mismatch: " ^ Syntax.print_Label label)
                                                      ) (fields', ctrs) fields
                 in unify (ctx, env, T.EqConstr (span1, baseTy, T.RecordType (span1, fields')) :: ctrs)
                 end
-              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record field for a non-record type")
-              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record field for a function type")
+              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
+              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a function type")
               | T.TyVar (span2, tv) =>
                 case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, c) :: ctrs)
-                  | NONE => ( addTyVarConstraint (ctx, tv, c)
+                  | NONE => ( addTyVarConstraint (ctx, tv, span1, c)
                             ; unify (ctx, env, ctrs)
                             )
            )
-         | T.UnaryConstraint (span1, recordTy, c as T.SubrecordOf { sourceSpan = span3, extraFields, extendedTy }) =>
+         | T.UnaryConstraint (span1, recordTy, c as T.SubrecordOf { extraFields, extendedTy }) =>
            (case recordTy of
                 T.RecordType (span2, fields') =>
                 let val fields' = List.foldl (fn ((label, ty), fields') =>
                                                  if Syntax.LabelMap.inDomain (fields', label) then
-                                                     emitTypeError (ctx, [span1, span2, span3], "duplicate record field: " ^ Syntax.print_Label label)
+                                                     emitTypeError (ctx, [span1, span2], "duplicate record field: " ^ Syntax.print_Label label)
                                                  else
                                                      Syntax.LabelMap.insert (fields', label, ty)
                                              ) fields' extraFields
                 in unify (ctx, env, T.EqConstr (span1, extendedTy, T.RecordType (span1, fields')) :: ctrs)
                 end
-              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record extension for a non-record type")
-              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2, span3], "record extension for a function type")
+              | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record extension for a non-record type")
+              | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record extension for a function type")
               | T.TyVar (span2, tv) =>
                 case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, c) :: ctrs)
-                  | NONE => ( addTyVarConstraint (ctx, tv, c)
+                  | NONE => ( addTyVarConstraint (ctx, tv, span1, c)
                             ; unify (ctx, env, ctrs)
                             )
            )
-         | T.UnaryConstraint (span1, T.RecordType (span2, fields), T.IsEqType span3) => unify (ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType span3) :: acc) ctrs fields)
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsIntegral span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSignedReal span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsRing span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsField span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSigned span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on record type")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsOrdered span3) => emitTypeError (ctx, [span1, span2, span3], "cannot compare records")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsInt span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a record with an int")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsWord span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a record with a word")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsReal span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a record with a real")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsChar span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a record with a char")
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsString span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a record with a string")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsEqType span3) => emitTypeError (ctx, [span1, span2, span3], "function type does not admit equality")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsIntegral span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSignedReal span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsRing span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsField span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSigned span3) => emitTypeError (ctx, [span1, span2, span3], "cannot apply arithmetic operator on function type")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsOrdered span3) => emitTypeError (ctx, [span1, span2, span3], "cannot compare functions")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsInt span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a function with an int")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsWord span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a function with a word")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsReal span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a function with a real")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsChar span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a function with a char")
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsString span3) => emitTypeError (ctx, [span1, span2, span3], "cannot unify a function with a string")
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsEqType span3) =>
+         | T.UnaryConstraint (span1, T.RecordType (span2, fields), T.IsEqType) => unify (ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType) :: acc) ctrs fields)
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsIntegral) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSignedReal) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsRing) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsField) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSigned) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsOrdered) => emitTypeError (ctx, [span1, span2], "cannot compare records")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsInt) => emitTypeError (ctx, [span1, span2], "cannot unify a record with an int")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsWord) => emitTypeError (ctx, [span1, span2], "cannot unify a record with a word")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsReal) => emitTypeError (ctx, [span1, span2], "cannot unify a record with a real")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsChar) => emitTypeError (ctx, [span1, span2], "cannot unify a record with a char")
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsString) => emitTypeError (ctx, [span1, span2], "cannot unify a record with a string")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsEqType) => emitTypeError (ctx, [span1, span2], "function type does not admit equality")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsIntegral) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSignedReal) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsRing) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsField) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSigned) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsOrdered) => emitTypeError (ctx, [span1, span2], "cannot compare functions")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsInt) => emitTypeError (ctx, [span1, span2], "cannot unify a function with an int")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsWord) => emitTypeError (ctx, [span1, span2], "cannot unify a function with a word")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsReal) => emitTypeError (ctx, [span1, span2], "cannot unify a function with a real")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsChar) => emitTypeError (ctx, [span1, span2], "cannot unify a function with a char")
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsString) => emitTypeError (ctx, [span1, span2], "cannot unify a function with a string")
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsEqType) =>
            let val { admitsEquality, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
            in if isRefOrArray tyname then
                   unify(ctx, env, ctrs)
               else if admitsEquality then
-                  unify (ctx, env, List.map (fn tyarg => T.UnaryConstraint (span1, tyarg, T.IsEqType span3)) tyargs @ ctrs)
+                  unify (ctx, env, List.map (fn tyarg => T.UnaryConstraint (span1, tyarg, T.IsEqType)) tyargs @ ctrs)
               else
-                  emitTypeError (ctx, [span1, span2, span3], TypedSyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
+                  emitTypeError (ctx, [span1, span2], TypedSyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsIntegral span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsIntegral) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isIntegral = case overloadClass of
                                     SOME Syntax.CLASS_INT => true
@@ -566,9 +566,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isIntegral then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSignedReal span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSignedReal) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isSignedReal = case overloadClass of
                                       SOME Syntax.CLASS_INT => true
@@ -577,9 +577,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isSignedReal then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsRing span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsRing) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isRing = case overloadClass of
                                 SOME Syntax.CLASS_INT => true
@@ -589,9 +589,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isRing then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsField span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsField) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isField = case overloadClass of
                                  SOME Syntax.CLASS_REAL => true
@@ -599,9 +599,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isField then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSigned span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSigned) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isSigned = case overloadClass of
                                   SOME Syntax.CLASS_INT => true
@@ -610,9 +610,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isSigned then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "arithmetic operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsOrdered span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsOrdered) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
                val isOrdered = case overloadClass of
                                    SOME Syntax.CLASS_INT => true
@@ -624,9 +624,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            in if isOrdered then
                   unify(ctx, env, ctrs) (* do nothing *)
               else
-                  emitTypeError (ctx, [span1, span2, span3], "comparison operator on unsupported type")
+                  emitTypeError (ctx, [span1, span2], "comparison operator on unsupported type")
            end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsInt span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsInt) =>
            if TypedSyntax.eqTyName (tyname, primTyName_int) then
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_intInf) then
@@ -636,9 +636,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                in if overloadClass = SOME Syntax.CLASS_INT then
                       unify(ctx, env, ctrs) (* do nothing *)
                   else
-                      emitTypeError (ctx, [span1, span2, span3], "invalid integer constant: " ^ TypedSyntax.print_TyName tyname)
+                      emitTypeError (ctx, [span1, span2], "invalid integer constant: " ^ TypedSyntax.print_TyName tyname)
                end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsWord span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsWord) =>
            if TypedSyntax.eqTyName (tyname, primTyName_word) then
                unify(ctx, env, ctrs) (* do nothing *)
            else
@@ -646,9 +646,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                in if overloadClass = SOME Syntax.CLASS_WORD then
                       unify(ctx, env, ctrs) (* do nothing *)
                   else
-                      emitTypeError (ctx, [span1, span2, span3], "invalid word constant")
+                      emitTypeError (ctx, [span1, span2], "invalid word constant")
                end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsReal span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsReal) =>
            if TypedSyntax.eqTyName (tyname, primTyName_real) then
                unify(ctx, env, ctrs) (* do nothing *)
            else
@@ -656,9 +656,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                in if overloadClass = SOME Syntax.CLASS_REAL then
                       unify(ctx, env, ctrs) (* do nothing *)
                   else
-                      emitTypeError (ctx, [span1, span2, span3], "invalid real constant")
+                      emitTypeError (ctx, [span1, span2], "invalid real constant")
                end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsChar span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsChar) =>
            if TypedSyntax.eqTyName (tyname, primTyName_char) then
                unify(ctx, env, ctrs) (* do nothing *)
            else
@@ -666,9 +666,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                in if overloadClass = SOME Syntax.CLASS_CHAR then
                       unify(ctx, env, ctrs) (* do nothing *)
                   else
-                      emitTypeError (ctx, [span1, span2, span3], "invalid character constant")
+                      emitTypeError (ctx, [span1, span2], "invalid character constant")
                end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsString span3) =>
+         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsString) =>
            if TypedSyntax.eqTyName (tyname, primTyName_string) then
                unify(ctx, env, ctrs) (* do nothing *)
            else
@@ -676,19 +676,19 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                in if overloadClass = SOME Syntax.CLASS_STRING then
                       unify(ctx, env, ctrs) (* do nothing *)
                   else
-                      emitTypeError (ctx, [span1, span2, span3], "invalid string constant")
+                      emitTypeError (ctx, [span1, span2], "invalid string constant")
                end
          | T.UnaryConstraint (span1, T.TyVar (span2, tv), pred) =>
            (case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
                 SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, pred) :: ctrs)
               | NONE => case (tv, pred) of
-                            (T.NamedTyVar (name, _), T.IsEqType span3) =>
+                            (T.NamedTyVar (name, _), T.IsEqType) =>
                             if T.tyVarAdmitsEquality name then
                                 unify(ctx, env, ctrs)
                             else
-                                emitTypeError (ctx, [span1, span2, span3], "the type variable " ^ name ^ " does not admit equality")
+                                emitTypeError (ctx, [span1, span2], "the type variable " ^ name ^ " does not admit equality")
                           | (T.NamedTyVar (name, _), _) => emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
-                          | _ => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, env, ctrs))
+                          | _ => (addTyVarConstraint (ctx, tv, span1, pred) ; unify (ctx, env, ctrs))
            )
       )
 and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, tv : T.TyVar, ty : T.Ty, ctrs : T.Constraint list) : unit
@@ -708,7 +708,7 @@ and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, t
                                                 ; xs
                                                 )
                                    | NONE => []
-                        fun toConstraint predicate = T.UnaryConstraint (span, ty, predicate)
+                        fun toConstraint (span, predicate) = T.UnaryConstraint (span, ty, predicate)
                         val subst' = TypedSyntax.TyVarMap.map (substituteTy (tv, ty)) subst
                     in #tyVarSubst ctx := TypedSyntax.TyVarMap.insert (subst', tv, ty)
                      ; unify(ctx, env, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
@@ -755,22 +755,22 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
            Syntax.IntegerConstant _   => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
                                                           val ty = T.TyVar (span, tv)
-                                                      in addTyVarConstraint (ctx, tv, T.IsInt span)
-                                                       ; addTyVarConstraint (ctx, tv, T.IsEqType span)
+                                                      in addTyVarConstraint (ctx, tv, span, T.IsInt)
+                                                       ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
                                                       end
-                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsInt span), T.UnaryConstraint (span, expectedTy, T.IsEqType span)])
+                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsInt), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                                                  ; (expectedTy, S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                                                  )
                                          )
          | Syntax.WordConstant _      => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
                                                           val ty = T.TyVar (span, tv)
-                                                      in addTyVarConstraint (ctx, tv, T.IsWord span)
-                                                       ; addTyVarConstraint (ctx, tv, T.IsEqType span)
+                                                      in addTyVarConstraint (ctx, tv, span, T.IsWord)
+                                                       ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
                                                       end
-                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsWord span), T.UnaryConstraint (span, expectedTy, T.IsEqType span)])
+                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsWord), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                                                  ; (expectedTy, S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                                                  )
                                          )
@@ -778,22 +778,22 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
          | Syntax.CharacterConstant _ => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
                                                           val ty = T.TyVar (span, tv)
-                                                      in addTyVarConstraint (ctx, tv, T.IsChar span)
-                                                       ; addTyVarConstraint (ctx, tv, T.IsEqType span)
+                                                      in addTyVarConstraint (ctx, tv, span, T.IsChar)
+                                                       ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
                                                       end
-                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsChar span), T.UnaryConstraint (span, expectedTy, T.IsEqType span)])
+                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsChar), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                                                  ; (expectedTy, S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                                                  )
                                          )
          | Syntax.StringConstant _    => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
                                                           val ty = T.TyVar (span, tv)
-                                                      in addTyVarConstraint (ctx, tv, T.IsString span)
-                                                       ; addTyVarConstraint (ctx, tv, T.IsEqType span)
+                                                      in addTyVarConstraint (ctx, tv, span, T.IsString)
+                                                       ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
                                                       end
-                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsString span), T.UnaryConstraint (span, expectedTy, T.IsEqType span)])
+                                            | SOME expectedTy => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsString), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                                                  ; (expectedTy, S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                                                  )
                                          )
@@ -826,7 +826,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
              let val recordTy = case typeHint of
                                     NONE => T.TyVar (sourceSpan, freshTyVar (#context ctx))
                                   | SOME expectedTy => expectedTy
-                 fun oneField (label, ty) = addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.HasField { sourceSpan = sourceSpan, label = label, fieldTy = ty }))
+                 fun oneField (label, ty) = addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.HasField { label = label, fieldTy = ty }))
              in List.app oneField fieldTypes
               ; (recordTy, vars, T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME (T.WildcardPat wspan) })
              end
@@ -835,8 +835,8 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                                     NONE => T.TyVar (sourceSpan, freshTyVar (#context ctx))
                                   | SOME expectedTy => expectedTy
                  val (baseTy, vars', basePat) = typeCheckPat (ctx, env, basePat, NONE)
-             in addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.RecordExt { sourceSpan = sourceSpan, fields = fieldTypes, baseTy = baseTy }))
-              ; addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, baseTy, T.SubrecordOf { sourceSpan = sourceSpan, extraFields = fieldTypes, extendedTy = recordTy }))
+             in addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.RecordExt { fields = fieldTypes, baseTy = baseTy }))
+              ; addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, baseTy, T.SubrecordOf { extraFields = fieldTypes, extendedTy = recordTy }))
               ; (recordTy, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [sourceSpan], "duplicate identifier in a pattern")) (vars, vars'), T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME basePat })
              end
            | NONE => (T.RecordType (sourceSpan, Syntax.LabelMapFromList fieldTypes), vars, T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = NONE })
@@ -1034,20 +1034,20 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                        Syntax.IntegerConstant x   => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
                                                                       val ty = T.TyVar (span, tv)
-                                                                  in addTyVarConstraint (ctx, tv, T.IsInt span)
+                                                                  in addTyVarConstraint (ctx, tv, span, T.IsInt)
                                                                    ; ty
                                                                   end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt span))
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt))
                                                                              ; expectedTy
                                                                              )
                                                      )
                      | Syntax.WordConstant x      => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
                                                                       val ty = T.TyVar (span, tv)
-                                                                  in addTyVarConstraint (ctx, tv, T.IsWord span)
+                                                                  in addTyVarConstraint (ctx, tv, span, T.IsWord)
                                                                    ; ty
                                                                   end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord span))
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord))
                                                                              ; expectedTy
                                                                              )
                                                      )
@@ -1055,20 +1055,20 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                      | Syntax.CharacterConstant x => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
                                                                       val ty = T.TyVar (span, tv)
-                                                                  in addTyVarConstraint (ctx, tv, T.IsChar span)
+                                                                  in addTyVarConstraint (ctx, tv, span, T.IsChar)
                                                                    ; ty
                                                                   end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar span))
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar))
                                                                              ; expectedTy
                                                                              )
                                                      )
                      | Syntax.StringConstant x    => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
                                                                       val ty = T.TyVar (span, tv)
-                                                                  in addTyVarConstraint (ctx, tv, T.IsString span)
+                                                                  in addTyVarConstraint (ctx, tv, span, T.IsString)
                                                                    ; ty
                                                                   end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString span))
+                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString))
                                                                              ; expectedTy
                                                                              )
                                                      )
@@ -1102,8 +1102,8 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                       in ((label, ty), (label, exp))
                                       end
           val (fieldTypes, fields) = ListPair.unzip (List.map oneField fields)
-      in addConstraint (ctx, env, T.UnaryConstraint (span, recordTy, T.RecordExt { sourceSpan = span, fields = fieldTypes, baseTy = baseTy }))
-       ; addConstraint (ctx, env, T.UnaryConstraint (span, baseTy, T.SubrecordOf { sourceSpan = span, extraFields = fieldTypes, extendedTy = recordTy }))
+      in addConstraint (ctx, env, T.UnaryConstraint (span, recordTy, T.RecordExt { fields = fieldTypes, baseTy = baseTy }))
+       ; addConstraint (ctx, env, T.UnaryConstraint (span, baseTy, T.SubrecordOf { extraFields = fieldTypes, extendedTy = recordTy }))
        ; (recordTy, T.RecordExtExp { sourceSpan = span, fields = fields, baseExp = baseExp, baseTy = baseTy })
       end
   | typeCheckExp (ctx, env, S.LetInExp (span, decs, innerExp), typeHint)
@@ -1180,7 +1180,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
     = let val (recordTy, fieldTy) = case typeHint of
                                         SOME (T.FnType (_, argTy, retTy)) => (argTy, retTy)
                                       | _ => (TypedSyntax.TyVar (span, freshTyVar (#context ctx)), TypedSyntax.TyVar (span, freshTyVar (#context ctx)))
-      in addConstraint (ctx, env, T.UnaryConstraint (span, recordTy, T.HasField { sourceSpan = span, label = label, fieldTy = fieldTy }))
+      in addConstraint (ctx, env, T.UnaryConstraint (span, recordTy, T.HasField { label = label, fieldTy = fieldTy }))
        ; (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
   | typeCheckExp (ctx, env, S.ListExp (span, xs), typeHint)
@@ -1216,7 +1216,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
           val (subst, tyargs) = List.foldr (fn ((v, preds), (m, rest)) =>
                                                let val tv = freshTyVar (#context ctx)
                                                    val tyarg = T.TyVar (span, tv)
-                                               in List.app (fn pred => addTyVarConstraint (ctx, tv, pred)) preds
+                                               in List.app (fn pred => addTyVarConstraint (ctx, tv, span, pred)) preds
                                                 ; (T.TyVarMap.insert (m, v, tyarg), tyarg :: rest)
                                                end
                                            ) (T.TyVarMap.empty, []) typeVariables
@@ -1301,19 +1301,19 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
               = let fun doVal (vid,ty)
                         = let val ty' = applySubstTy subst ty
                               val tyVars_ty = T.freeTyVarsInTy (T.TyVarSet.empty, ty')
-                              fun isEqualityType (TypedSyntax.IsEqType _) = true
+                              fun isEqualityType (_, TypedSyntax.IsEqType) = true
                                 | isEqualityType _ = false
                               fun isGeneralizable (tv : T.TyVar) = case TypedSyntax.TyVarMap.find (tvc, tv) of
                                                                        NONE => true
                                                                      | SOME tvs => List.all isEqualityType tvs
                               val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
                               fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
-                                                   (tv, [T.IsEqType span])
+                                                   (tv, [T.IsEqType])
                                                else
                                                    case TypedSyntax.TyVarMap.find (tvc, tv) of
                                                        NONE => (tv, [])
                                                      | SOME tvs => if List.exists isEqualityType tvs then
-                                                                       (tv, [T.IsEqType span])
+                                                                       (tv, [T.IsEqType])
                                                                    else (* should not reach here *)
                                                                        (tv, [])
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
@@ -1388,19 +1388,19 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
               = let fun doVal (vid, ty)
                         = let val ty' = applySubstTy subst ty
                               val tyVars_ty = T.freeTyVarsInTy (T.TyVarSet.empty, ty')
-                              fun isEqualityType (TypedSyntax.IsEqType _) = true
+                              fun isEqualityType (_, TypedSyntax.IsEqType) = true
                                 | isEqualityType _ = false
                               fun isGeneralizable (tv : T.TyVar) = case TypedSyntax.TyVarMap.find (tvc, tv) of
                                                                        NONE => true
                                                                      | SOME tvs => List.all isEqualityType tvs
                               val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
                               fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
-                                                   (tv, [T.IsEqType span])
+                                                   (tv, [T.IsEqType])
                                                else
                                                    case T.TyVarMap.find (tvc, tv) of
                                                        NONE => (tv, [])
                                                      | SOME tvs => if List.exists isEqualityType tvs then
-                                                                       (tv, [T.IsEqType span])
+                                                                       (tv, [T.IsEqType])
                                                                    else (* should not reach here *)
                                                                        (tv, [])
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
@@ -1770,136 +1770,150 @@ fun print_Env ({ tyConMap, valMap, strMap, boundTyVars, ... } : Env) = "Env{tyMa
 end (* structure PrettyPrint *)
 open PrettyPrint
           *)
-(* applyDefaultTypes : Context * (T.UnaryConstraint list) TypedSyntax.TyVarMap.map * TypedSyntax.TopDec list -> T.Ty T.TyVarMap.map *)
+(* applyDefaultTypes : Context * (SourcePos.span * T.UnaryConstraint list) TypedSyntax.TyVarMap.map * TypedSyntax.TopDec list -> T.Ty T.TyVarMap.map *)
 fun applyDefaultTypes (ctx, tvc, decs : T.Dec list) : T.Ty T.TyVarMap.map =
     let fun findClass [] = NONE
-          | findClass (TypedSyntax.IsInt _ :: _) = SOME Syntax.CLASS_INT
-          | findClass (TypedSyntax.IsWord _ :: _) = SOME Syntax.CLASS_WORD
-          | findClass (TypedSyntax.IsReal _ :: _) = SOME Syntax.CLASS_REAL
-          | findClass (TypedSyntax.IsChar _ :: _) = SOME Syntax.CLASS_CHAR
-          | findClass (TypedSyntax.IsString _ :: _) = SOME Syntax.CLASS_STRING
+          | findClass ((span, TypedSyntax.IsInt) :: _) = SOME (span, Syntax.CLASS_INT)
+          | findClass ((span, TypedSyntax.IsWord) :: _) = SOME (span, Syntax.CLASS_WORD)
+          | findClass ((span, TypedSyntax.IsReal) :: _) = SOME (span, Syntax.CLASS_REAL)
+          | findClass ((span, TypedSyntax.IsChar) :: _) = SOME (span, Syntax.CLASS_CHAR)
+          | findClass ((span, TypedSyntax.IsString) :: _) = SOME (span, Syntax.CLASS_STRING)
           | findClass (_ :: xs) = findClass xs
-        fun doInt [] = primTy_int
-          | doInt (TypedSyntax.HasField {...} :: xs) = emitError (ctx, [], "invalid record syntax for int")
-          | doInt (TypedSyntax.RecordExt {...} :: xs) = emitError (ctx, [], "invalid record syntax for int")
-          | doInt (TypedSyntax.SubrecordOf {...} :: xs) = emitError (ctx, [], "invalid record syntax for int")
-          | doInt (TypedSyntax.IsEqType _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsIntegral _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsSignedReal _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsRing _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsField _ :: xs) = emitError (ctx, [], "cannot apply / operator on ints")
-          | doInt (TypedSyntax.IsSigned _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsOrdered _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsInt _ :: xs) = doInt xs
-          | doInt (TypedSyntax.IsWord _ :: xs) = emitError (ctx, [], "type mismatch: int vs word")
-          | doInt (TypedSyntax.IsReal _ :: xs) = emitError (ctx, [], "type mismatch: int vs real")
-          | doInt (TypedSyntax.IsChar _ :: xs) = emitError (ctx, [], "type mismatch: int vs char")
-          | doInt (TypedSyntax.IsString _ :: xs) = emitError (ctx, [], "type mismatch: int vs string")
-        fun doWord [] = primTy_word
-          | doWord (TypedSyntax.HasField {...} :: xs) = emitError (ctx, [], "invalid record syntax for word")
-          | doWord (TypedSyntax.RecordExt {...} :: xs) = emitError (ctx, [], "invalid record syntax for word")
-          | doWord (TypedSyntax.SubrecordOf {...} :: xs) = emitError (ctx, [], "invalid record syntax for word")
-          | doWord (TypedSyntax.IsEqType _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsIntegral _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsSignedReal _ :: xs) = emitError (ctx, [], "abs is invalid for word")
-          | doWord (TypedSyntax.IsRing _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsField _ :: xs) = emitError (ctx, [], "cannot apply / operator on words")
-          | doWord (TypedSyntax.IsSigned _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsOrdered _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsInt _ :: xs) = emitError (ctx, [], "type mismatch: word vs int")
-          | doWord (TypedSyntax.IsWord _ :: xs) = doWord xs
-          | doWord (TypedSyntax.IsReal _ :: xs) = emitError (ctx, [], "type mismatch: word vs real")
-          | doWord (TypedSyntax.IsChar _ :: xs) = emitError (ctx, [], "type mismatch: word vs char")
-          | doWord (TypedSyntax.IsString _ :: xs) = emitError (ctx, [], "type mismatch: word vs string")
-        fun doReal [] = primTy_real
-          | doReal (TypedSyntax.HasField {...} :: xs) = emitError (ctx, [], "invalid record syntax for real")
-          | doReal (TypedSyntax.RecordExt {...} :: xs) = emitError (ctx, [], "invalid record syntax for real")
-          | doReal (TypedSyntax.SubrecordOf {...} :: xs) = emitError (ctx, [], "invalid record syntax for real")
-          | doReal (TypedSyntax.IsEqType _ :: xs) = emitError (ctx, [], "real does not admit equality")
-          | doReal (TypedSyntax.IsIntegral _ :: xs) = emitError (ctx, [], "div, mod are invalid for real")
-          | doReal (TypedSyntax.IsSignedReal _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsRing _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsField _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsSigned _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsOrdered _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsInt _ :: xs) = emitError (ctx, [], "type mismatch: real vs int")
-          | doReal (TypedSyntax.IsWord _ :: xs) = emitError (ctx, [], "type mismatch: real vs word")
-          | doReal (TypedSyntax.IsReal _ :: xs) = doReal xs
-          | doReal (TypedSyntax.IsChar _ :: xs) = emitError (ctx, [], "type mismatch: real vs char")
-          | doReal (TypedSyntax.IsString _ :: xs) = emitError (ctx, [], "type mismatch: real vs string")
-        fun doChar [] = primTy_char
-          | doChar (TypedSyntax.HasField {...} :: xs) = emitError (ctx, [], "invalid record syntax for char")
-          | doChar (TypedSyntax.RecordExt {...} :: xs) = emitError (ctx, [], "invalid record syntax for char")
-          | doChar (TypedSyntax.SubrecordOf {...} :: xs) = emitError (ctx, [], "invalid record syntax for char")
-          | doChar (TypedSyntax.IsEqType _ :: xs) = doChar xs
-          | doChar (TypedSyntax.IsIntegral _ :: xs) = emitError (ctx, [], "invalid operation on char")
-          | doChar (TypedSyntax.IsSignedReal _ :: xs) = emitError (ctx, [], "invalid operation on char")
-          | doChar (TypedSyntax.IsRing _ :: xs) = emitError (ctx, [], "invalid operation on char")
-          | doChar (TypedSyntax.IsField _ :: xs) = emitError (ctx, [], "invalid operation on char")
-          | doChar (TypedSyntax.IsSigned _ :: xs) = emitError (ctx, [], "invalid operation on char")
-          | doChar (TypedSyntax.IsOrdered _ :: xs) = doChar xs
-          | doChar (TypedSyntax.IsInt _ :: xs) = emitError (ctx, [], "type mismatch: char vs int")
-          | doChar (TypedSyntax.IsWord _ :: xs) = emitError (ctx, [], "type mismatch: char vs word")
-          | doChar (TypedSyntax.IsReal _ :: xs) = emitError (ctx, [], "type mismatch: char vs real")
-          | doChar (TypedSyntax.IsChar _ :: xs) = doChar xs
-          | doChar (TypedSyntax.IsString _ :: xs) = emitError (ctx, [], "type mismatch: char vs string")
-        fun doString [] = primTy_string
-          | doString (TypedSyntax.HasField {...} :: xs) = emitError (ctx, [], "invalid record syntax for string")
-          | doString (TypedSyntax.RecordExt {...} :: xs) = emitError (ctx, [], "invalid record syntax for string")
-          | doString (TypedSyntax.SubrecordOf {...} :: xs) = emitError (ctx, [], "invalid record syntax for string")
-          | doString (TypedSyntax.IsEqType _ :: xs) = doString xs
-          | doString (TypedSyntax.IsIntegral _ :: xs) = emitError (ctx, [], "invalid operation on string")
-          | doString (TypedSyntax.IsSignedReal _ :: xs) = emitError (ctx, [], "invalid operation on string")
-          | doString (TypedSyntax.IsRing _ :: xs) = emitError (ctx, [], "invalid operation on string")
-          | doString (TypedSyntax.IsField _ :: xs) = emitError (ctx, [], "invalid operation on string")
-          | doString (TypedSyntax.IsSigned _ :: xs) = emitError (ctx, [], "invalid operation on string")
-          | doString (TypedSyntax.IsOrdered _ :: xs) = doString xs
-          | doString (TypedSyntax.IsInt _ :: xs) = emitError (ctx, [], "type mismatch: string vs int")
-          | doString (TypedSyntax.IsWord _ :: xs) = emitError (ctx, [], "type mismatch: string vs word")
-          | doString (TypedSyntax.IsReal _ :: xs) = emitError (ctx, [], "type mismatch: string vs real")
-          | doString (TypedSyntax.IsChar _ :: xs) = emitError (ctx, [], "type mismatch: string vs char")
-          | doString (TypedSyntax.IsString _ :: xs) = doString xs
-        fun doIntOrReal [] = primTy_int
-          | doIntOrReal (TypedSyntax.HasField {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | doIntOrReal (TypedSyntax.RecordExt {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | doIntOrReal (TypedSyntax.SubrecordOf {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | doIntOrReal (TypedSyntax.IsEqType _ :: xs) = doInt xs
-          | doIntOrReal (TypedSyntax.IsIntegral _ :: xs) = doInt xs
-          | doIntOrReal (TypedSyntax.IsSignedReal _ :: xs) = doIntOrReal xs
-          | doIntOrReal (TypedSyntax.IsRing _ :: xs) = doIntOrReal xs
-          | doIntOrReal (TypedSyntax.IsField _ :: xs) = doReal xs
-          | doIntOrReal (TypedSyntax.IsSigned _ :: xs) = doIntOrReal xs
-          | doIntOrReal (TypedSyntax.IsOrdered _ :: xs) = doIntOrReal xs
-          | doIntOrReal (TypedSyntax.IsInt _ :: xs) = doInt xs (* cannot occur *)
-          | doIntOrReal (TypedSyntax.IsWord _ :: xs) = doIntOrReal xs (* cannot occur *)
-          | doIntOrReal (TypedSyntax.IsReal _ :: xs) = doReal xs (* cannot occur *)
-          | doIntOrReal (TypedSyntax.IsChar _ :: xs) = doIntOrReal xs (* cannot occur *)
-          | doIntOrReal (TypedSyntax.IsString _ :: xs) = doIntOrReal xs (* cannot occur *)
-        fun defaultTyForConstraints (eq, []) = primTy_unit
-          | defaultTyForConstraints (eq, TypedSyntax.HasField {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | defaultTyForConstraints (eq, TypedSyntax.RecordExt {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | defaultTyForConstraints (eq, TypedSyntax.SubrecordOf {...} :: _) = emitError (ctx, [], "unresolved flex record")
-          | defaultTyForConstraints (eq, TypedSyntax.IsEqType _ :: xs) = defaultTyForConstraints (true, xs)
-          | defaultTyForConstraints (eq, TypedSyntax.IsIntegral _ :: xs) = doInt xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsSignedReal _ :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsRing _ :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsField _ :: xs) = if eq then emitError (ctx, [], "real does not admit equality") else doReal xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsSigned _ :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsOrdered _ :: xs) = if eq then doInt xs else doIntOrReal xs
-          | defaultTyForConstraints (eq, TypedSyntax.IsInt _ :: xs) = doInt xs (* cannot occur *)
-          | defaultTyForConstraints (eq, TypedSyntax.IsWord _ :: xs) = doWord xs (* cannot occur *)
-          | defaultTyForConstraints (eq, TypedSyntax.IsReal _ :: xs) = if eq then emitError (ctx, [], "real does not admit equality") else doReal xs (* cannot occur *)
-          | defaultTyForConstraints (eq, TypedSyntax.IsChar _ :: xs) = doChar xs (* cannot occur *)
-          | defaultTyForConstraints (eq, TypedSyntax.IsString _ :: xs) = doString xs (* cannot occur *)
+        fun doInt (span1, []) = primTy_int
+          | doInt (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "invalid record syntax for int")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "invalid record syntax for int")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "invalid record syntax for int")
+                | TypedSyntax.IsEqType => doInt (span1, xs)
+                | TypedSyntax.IsIntegral => doInt (span1, xs)
+                | TypedSyntax.IsSignedReal => doInt (span1, xs)
+                | TypedSyntax.IsRing => doInt (span1, xs)
+                | TypedSyntax.IsField => emitError (ctx, [span1, span2], "cannot apply / operator on ints")
+                | TypedSyntax.IsSigned => doInt (span1, xs)
+                | TypedSyntax.IsOrdered => doInt (span1, xs)
+                | TypedSyntax.IsInt => doInt (span1, xs)
+                | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: int vs word")
+                | TypedSyntax.IsReal => emitError (ctx, [span1, span2], "type mismatch: int vs real")
+                | TypedSyntax.IsChar => emitError (ctx, [span1, span2], "type mismatch: int vs char")
+                | TypedSyntax.IsString => emitError (ctx, [span1, span2], "type mismatch: int vs string")
+        fun doWord (span1, []) = primTy_word
+          | doWord (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "invalid record syntax for word")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "invalid record syntax for word")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "invalid record syntax for word")
+                | TypedSyntax.IsEqType => doWord (span1, xs)
+                | TypedSyntax.IsIntegral => doWord (span1, xs)
+                | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "abs is invalid for word")
+                | TypedSyntax.IsRing => doWord (span1, xs)
+                | TypedSyntax.IsField => emitError (ctx, [span1, span2], "cannot apply / operator on words")
+                | TypedSyntax.IsSigned => doWord (span1, xs)
+                | TypedSyntax.IsOrdered => doWord (span1, xs)
+                | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: word vs int")
+                | TypedSyntax.IsWord => doWord (span1, xs)
+                | TypedSyntax.IsReal => emitError (ctx, [span1, span2], "type mismatch: word vs real")
+                | TypedSyntax.IsChar => emitError (ctx, [span1, span2], "type mismatch: word vs char")
+                | TypedSyntax.IsString => emitError (ctx, [span1, span2], "type mismatch: word vs string")
+        fun doReal (span1, []) = primTy_real
+          | doReal (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "invalid record syntax for real")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "invalid record syntax for real")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "invalid record syntax for real")
+                | TypedSyntax.IsEqType => emitError (ctx, [span1, span2], "real does not admit equality")
+                | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "div, mod are invalid for real")
+                | TypedSyntax.IsSignedReal => doReal (span1, xs)
+                | TypedSyntax.IsRing => doReal (span1, xs)
+                | TypedSyntax.IsField => doReal (span1, xs)
+                | TypedSyntax.IsSigned => doReal (span1, xs)
+                | TypedSyntax.IsOrdered => doReal (span1, xs)
+                | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: real vs int")
+                | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: real vs word")
+                | TypedSyntax.IsReal => doReal (span1, xs)
+                | TypedSyntax.IsChar => emitError (ctx, [span1, span2], "type mismatch: real vs char")
+                | TypedSyntax.IsString => emitError (ctx, [span1, span2], "type mismatch: real vs string")
+        fun doChar (span1, []) = primTy_char
+          | doChar (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "invalid record syntax for char")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "invalid record syntax for char")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "invalid record syntax for char")
+                | TypedSyntax.IsEqType => doChar (span1, xs)
+                | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on char")
+                | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on char")
+                | TypedSyntax.IsRing => emitError (ctx, [span1, span2], "invalid operation on char")
+                | TypedSyntax.IsField => emitError (ctx, [span1, span2], "invalid operation on char")
+                | TypedSyntax.IsSigned => emitError (ctx, [span1, span2], "invalid operation on char")
+                | TypedSyntax.IsOrdered => doChar (span1, xs)
+                | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: char vs int")
+                | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: char vs word")
+                | TypedSyntax.IsReal => emitError (ctx, [span1, span2], "type mismatch: char vs real")
+                | TypedSyntax.IsChar => doChar (span1, xs)
+                | TypedSyntax.IsString => emitError (ctx, [span1, span2], "type mismatch: char vs string")
+        fun doString (span1, []) = primTy_string
+          | doString (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "invalid record syntax for string")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "invalid record syntax for string")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "invalid record syntax for string")
+                | TypedSyntax.IsEqType => doString (span1, xs)
+                | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on string")
+                | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on string")
+                | TypedSyntax.IsRing => emitError (ctx, [span1, span2], "invalid operation on string")
+                | TypedSyntax.IsField => emitError (ctx, [span1, span2], "invalid operation on string")
+                | TypedSyntax.IsSigned => emitError (ctx, [span1, span2], "invalid operation on string")
+                | TypedSyntax.IsOrdered => doString (span1, xs)
+                | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: string vs int")
+                | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: string vs word")
+                | TypedSyntax.IsReal => emitError (ctx, [span1, span2], "type mismatch: string vs real")
+                | TypedSyntax.IsChar => emitError (ctx, [span1, span2], "type mismatch: string vs char")
+                | TypedSyntax.IsString => doString (span1, xs)
+        fun doIntOrReal (span1, []) = primTy_int
+          | doIntOrReal (span1, (span2, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1, span2], "unresolved flex record")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1, span2], "unresolved flex record")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1, span2], "unresolved flex record")
+                | TypedSyntax.IsEqType => doInt (span1, xs)
+                | TypedSyntax.IsIntegral => doInt (span1, xs)
+                | TypedSyntax.IsSignedReal => doIntOrReal (span1, xs)
+                | TypedSyntax.IsRing => doIntOrReal (span1, xs)
+                | TypedSyntax.IsField => doReal (span1, xs)
+                | TypedSyntax.IsSigned => doIntOrReal (span1, xs)
+                | TypedSyntax.IsOrdered => doIntOrReal (span1, xs)
+                | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsWord => doIntOrReal (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsReal => doReal (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsChar => doIntOrReal (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsString => doIntOrReal (span1, xs) (* cannot occur *)
+        fun defaultTyForConstraints (eq, spans, []) = primTy_unit
+          | defaultTyForConstraints (eq, spans, (span1, c) :: xs)
+            = case c of
+                  TypedSyntax.HasField _ => emitError (ctx, [span1], "unresolved flex record")
+                | TypedSyntax.RecordExt _ => emitError (ctx, [span1], "unresolved flex record")
+                | TypedSyntax.SubrecordOf _ => emitError (ctx, [span1], "unresolved flex record")
+                | TypedSyntax.IsEqType => defaultTyForConstraints (true, if List.null spans then [span1] else spans, xs)
+                | TypedSyntax.IsIntegral => doInt (span1, xs)
+                | TypedSyntax.IsSignedReal => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
+                | TypedSyntax.IsRing => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
+                | TypedSyntax.IsField => if eq then emitError (ctx, span1 :: spans, "real does not admit equality") else doReal (span1, xs)
+                | TypedSyntax.IsSigned => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
+                | TypedSyntax.IsOrdered => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
+                | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsWord => doWord (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsReal => if eq then emitError (ctx, span1 :: spans, "real does not admit equality") else doReal (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsChar => doChar (span1, xs) (* cannot occur *)
+                | TypedSyntax.IsString => doString (span1, xs) (* cannot occur *)
         fun doTyVar tv = case T.TyVarMap.find (tvc, tv) of
                              NONE => primTy_unit
                            | SOME constraints => case findClass constraints of
-                                                     SOME Syntax.CLASS_INT => doInt constraints
-                                                   | SOME Syntax.CLASS_WORD => doWord constraints
-                                                   | SOME Syntax.CLASS_REAL => doReal constraints
-                                                   | SOME Syntax.CLASS_CHAR => doChar constraints
-                                                   | SOME Syntax.CLASS_STRING => doString constraints
-                                                   | NONE => defaultTyForConstraints(false, constraints)
+                                                     SOME (span, Syntax.CLASS_INT) => doInt (span, constraints)
+                                                   | SOME (span, Syntax.CLASS_WORD) => doWord (span, constraints)
+                                                   | SOME (span, Syntax.CLASS_REAL) => doReal (span, constraints)
+                                                   | SOME (span, Syntax.CLASS_CHAR) => doChar (span, constraints)
+                                                   | SOME (span, Syntax.CLASS_STRING) => doString (span, constraints)
+                                                   | NONE => defaultTyForConstraints (false, [], constraints)
         val freeTyVars = TypedSyntax.freeTyVarsInDecs (TypedSyntax.TyVarSet.empty, decs)
     in TypedSyntax.TyVarSet.foldl (fn (tv, map) => TypedSyntax.TyVarMap.insert (map, tv, doTyVar tv)) TypedSyntax.TyVarMap.empty freeTyVars
     end
@@ -1933,7 +1947,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                 else
                     emitError (ctx, [span], "type constructor scope violation: " ^ TypedSyntax.PrettyPrint.print_TyName tyname)
             | goTy (T.FnType (span, ty1, ty2)) = ( goTy ty1; goTy ty2 )
-          fun goUnaryConstraint (T.HasField { sourceSpan, label, fieldTy }) = goTy fieldTy
+          fun goUnaryConstraint (T.HasField { label, fieldTy }) = goTy fieldTy
             | goUnaryConstraint _ = ()
           fun goTypeScheme (T.TypeScheme (typarams, ty)) = ( List.app (fn (tv, cts) => List.app goUnaryConstraint cts) typarams
                                                            ; #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 typarams), tynameset)) ty
@@ -2695,7 +2709,7 @@ and matchValDesc (ctx, env, span, expected : T.TypeScheme, longvid : T.LongVId, 
                            )
           val tyargsA = List.map (fn (ty, c) => (doTy ty, c)) tyargsA
           val trivial = ListPair.allEq (fn ((tvE, []), (T.TyVar (span2, tvA), [])) => T.eqUTyVar (tvE, tvA)
-                                       | ((tvE, [T.IsEqType _]), (T.TyVar (span2, tvA), [T.IsEqType _])) => T.eqUTyVar (tvE, tvA)
+                                       | ((tvE, [T.IsEqType]), (T.TyVar (span2, tvA), [T.IsEqType])) => T.eqUTyVar (tvE, tvA)
                                        | _ => false
                                        ) (tyvarsE, tyargsA)
       in if trivial then

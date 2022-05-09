@@ -526,13 +526,6 @@ val initialEnv : Typing.Env
 val primOverloadEnv : Typing.Env
     = let open Typing
           val TypeScheme = TypedSyntax.TypeScheme
-          val IsEqType = TypedSyntax.IsEqType
-          val IsIntegral = TypedSyntax.IsIntegral
-          val IsSignedReal = TypedSyntax.IsSignedReal
-          val IsRing = TypedSyntax.IsRing
-          val IsField = TypedSyntax.IsField
-          val IsSigned = TypedSyntax.IsSigned
-          val IsOrdered = TypedSyntax.IsOrdered
           fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
           val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
           val tyVarEqA = TypedSyntax.NamedTyVar ("''a", 0)
@@ -543,18 +536,18 @@ val primOverloadEnv : Typing.Env
           fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
       in { valMap = List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert (m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)))
                                Syntax.VIdMap.empty
-                               [("abs", VId_abs,    TypeScheme ([(tyVarA, [IsSignedReal SourcePos.nullSpan])], tyA --> tyA))                               (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
-                               ,("~",   VId_TILDE,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       tyA --> tyA))                               (* forall 'a:num.     'a -> 'a,        default: int -> int *)
-                               ,("div", VId_div,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("mod", VId_mod,    TypeScheme ([(tyVarA, [IsIntegral SourcePos.nullSpan])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("*",   VId_TIMES,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("/",   VId_DIVIDE, TypeScheme ([(tyVarA, [IsField SourcePos.nullSpan])],      mkPairType (tyA, tyA) --> tyA))             (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
-                               ,("+",   VId_PLUS,   TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("-",   VId_MINUS,  TypeScheme ([(tyVarA, [IsRing SourcePos.nullSpan])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("<",   VId_LT,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
-                               ,(">",   VId_GT,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
-                               ,("<=",  VId_LE,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
-                               ,(">=",  VId_GE,     TypeScheme ([(tyVarA, [IsOrdered SourcePos.nullSpan])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               [("abs", VId_abs,    TypeScheme ([(tyVarA, [TypedSyntax.IsSignedReal])], tyA --> tyA))                               (* forall 'a:realint. 'a -> 'a,        default: int -> int *)
+                               ,("~",   VId_TILDE,  TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       tyA --> tyA))                               (* forall 'a:num.     'a -> 'a,        default: int -> int *)
+                               ,("div", VId_div,    TypeScheme ([(tyVarA, [TypedSyntax.IsIntegral])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("mod", VId_mod,    TypeScheme ([(tyVarA, [TypedSyntax.IsIntegral])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("*",   VId_TIMES,  TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("/",   VId_DIVIDE, TypeScheme ([(tyVarA, [TypedSyntax.IsField])],      mkPairType (tyA, tyA) --> tyA))             (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
+                               ,("+",   VId_PLUS,   TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("-",   VId_MINUS,  TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
+                               ,("<",   VId_LT,     TypeScheme ([(tyVarA, [TypedSyntax.IsOrdered])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,(">",   VId_GT,     TypeScheme ([(tyVarA, [TypedSyntax.IsOrdered])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,("<=",  VId_LE,     TypeScheme ([(tyVarA, [TypedSyntax.IsOrdered])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
+                               ,(">=",  VId_GE,     TypeScheme ([(tyVarA, [TypedSyntax.IsOrdered])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)
                                ]
          , tyConMap = Syntax.TyConMap.empty
          , tyNameMap = TypedSyntax.TyNameMap.empty

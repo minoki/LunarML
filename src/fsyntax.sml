@@ -776,14 +776,14 @@ and toFExp (ctx, env, T.SConExp (span, Syntax.IntegerConstant value, ty)) = cook
                                                       )
                           | _ => raise Fail ("invalid use of " ^ TypedSyntax.print_VId vid)
                        )
-         | NONE => if List.exists (fn TypedSyntax.IsEqType _ => true | _ => false) cts then
+         | NONE => if List.exists (fn TypedSyntax.IsEqType => true | _ => false) cts then
                        F.AppExp(F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg)), getEquality(ctx, env, tyarg))
                    else
                        F.TyAppExp(F.LongVarExp(longvid), toFTy(ctx, env, tyarg))
       )
   | toFExp (ctx, env, T.VarExp (span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
-                     if List.exists (fn TypedSyntax.IsEqType _ => true | _ => false) cts then
+                     if List.exists (fn TypedSyntax.IsEqType => true | _ => false) cts then
                          F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
                      else
                          F.TyAppExp(e, toFTy(ctx, env, ty))
@@ -883,7 +883,7 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
                                        [] => F.ForallType (tv, F.TypeKind, ty1)
-                                     | [T.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
+                                     | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
@@ -891,10 +891,10 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
             | doExp (env', (tv,cts) :: rest)
               = (case cts of
                      [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
-                   | [T.IsEqType _] => let val vid = freshVId (ctx, "eq")
-                                           val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
-                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, F.EqualityType(F.TyVar tv), doExp(env'', rest)))
-                                       end
+                   | [T.IsEqType] => let val vid = freshVId (ctx, "eq")
+                                         val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
+                                     in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, F.EqualityType (F.TyVar tv), doExp (env'', rest)))
+                                     end
                    | _ => raise Fail "invalid type constraint"
                 )
       in [F.ValDec (vid, SOME ty', doExp (env, tvs))]
@@ -905,7 +905,7 @@ and doRecValBind ctx env (T.TupleBind (span, vars, exp)) = raise Fail "unexpecte
           val ty' = List.foldr (fn ((tv,cts),ty1) =>
                                    case cts of
                                        [] => F.ForallType (tv, F.TypeKind, ty1)
-                                     | [T.IsEqType _] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
+                                     | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
                                      | _ => raise Fail "invalid type constraint"
                                ) ty0 tvs
           fun doExp (env', [])
@@ -913,10 +913,10 @@ and doRecValBind ctx env (T.TupleBind (span, vars, exp)) = raise Fail "unexpecte
             | doExp (env', (tv,cts) :: rest)
               = (case cts of
                      [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
-                   | [T.IsEqType _] => let val vid = freshVId (ctx, "eq")
-                                           val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
-                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp(vid, F.EqualityType(F.TyVar tv), doExp(env'', rest)))
-                                       end
+                   | [T.IsEqType] => let val vid = freshVId (ctx, "eq")
+                                         val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
+                                     in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, F.EqualityType (F.TyVar tv), doExp (env'', rest)))
+                                     end
                    | _ => raise Fail "invalid type constraint"
                 )
       in (vid, ty', doExp(env, tvs))
@@ -926,9 +926,9 @@ and typeSchemeToTy (ctx, env, TypedSyntax.TypeScheme (vars, ty))
             | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
                                         in F.ForallType(tv, F.TypeKind, go env' xs)
                                         end
-            | go env ((tv, [T.IsEqType _]) :: xs) = let val env' = env (* TODO *)
-                                                    in F.ForallType(tv, F.TypeKind, F.FnType(F.EqualityType(F.TyVar tv), go env' xs))
-                                                    end
+            | go env ((tv, [T.IsEqType]) :: xs) = let val env' = env (* TODO *)
+                                                  in F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go env' xs))
+                                                  end
             | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
       in go env vars
       end
