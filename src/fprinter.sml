@@ -29,8 +29,10 @@ fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
   | doPat prec (F.SConPat { scon, ... }) = [P.Fragment (Syntax.print_SCon scon)]
   | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
   | doPat prec (F.RecordPat { sourceSpan, fields, ellipsis }) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (case ellipsis of SOME basePat => [P.Fragment "...=" :: doPat 0 basePat] | NONE => []) fields) @ [P.Fragment "}"]
-  | doPat prec (F.ConPat (_, path, NONE, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ [P.Fragment "]"])
-  | doPat prec (F.ConPat (_, path, SOME innerPat, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ P.Fragment "] " :: doPat 1 innerPat)
+  | doPat prec (F.ValConPat (_, path, NONE, tyargs, info)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ [P.Fragment "]"])
+  | doPat prec (F.ValConPat (_, path, SOME innerPat, tyargs, info)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ P.Fragment "] " :: doPat 1 innerPat)
+  | doPat prec (F.ExnConPat (_, path, NONE, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ [P.Fragment "]"])
+  | doPat prec (F.ExnConPat (_, path, SOME innerPat, tyargs)) = showParen (prec >= 1) (doPath path @ P.Fragment "[" :: P.commaSep (List.map (doTy 0) tyargs) @ P.Fragment "] " :: doPat 1 innerPat)
   | doPat prec (F.LayeredPat (_, vid, ty, pat)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 1 ty @ P.Fragment " as " :: doPat 1 pat)
   | doPat prec (F.VectorPat (_, pats, wildcard, elemTy)) = P.Fragment "#[" :: P.commaSep (Vector.foldr (fn (pat, xs) => doPat 0 pat :: xs) (if wildcard then [[P.Fragment "..."]] else []) pats) @ [P.Fragment "]"] (* elemTy? *)
 fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]

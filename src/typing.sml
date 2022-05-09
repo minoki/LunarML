@@ -220,8 +220,9 @@ fun isExhaustive (ctx, env : Env, TypedSyntax.WildcardPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.SConPat _) = false
   | isExhaustive (ctx, env, TypedSyntax.VarPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.RecordPat { fields, ... }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
-  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = NONE, tyargs, isSoleConstructor }) = isSoleConstructor
-  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor }) = isSoleConstructor andalso isExhaustive (ctx, env, innerPat)
+  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1
+  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1 andalso isExhaustive (ctx, env, innerPat)
+  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo = NONE }) = false
   | isExhaustive (ctx, env, TypedSyntax.TypedPat (_, innerPat, _)) = isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.LayeredPat (_, _, _, innerPat)) = isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.VectorPat (_, pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
@@ -846,17 +847,17 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
            Found (longvid, tysc, idstatus) =>
            (if (case idstatus of Syntax.ValueConstructor _ => true | Syntax.ExceptionConstructor => true | _ => false) then
                 let val (ty, tyargs) = instantiate(ctx, span, tysc)
-                    val isSoleConstructor = case idstatus of
-                                                Syntax.ValueConstructor { allConstructors, ... } => Syntax.VIdSet.numItems allConstructors = 1
-                                              | _ => false
+                    val valueConstructorInfo = case idstatus of
+                                                   Syntax.ValueConstructor info => SOME info
+                                                 | _ => NONE
                 in case optInnerPat of
-                       NONE => (ty, Syntax.VIdMap.empty, T.ConPat { sourceSpan = span, longvid = longvid, payload = NONE, tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
+                       NONE => (ty, Syntax.VIdMap.empty, T.ConPat { sourceSpan = span, longvid = longvid, payload = NONE, tyargs = List.map #1 tyargs, valueConstructorInfo = valueConstructorInfo })
                      | SOME innerPat =>
                        (case ty of
                             T.FnType (span', argTy, resultTy) =>
                             let val (argTy', innerVars, innerPat') = typeCheckPat (ctx, env, innerPat, SOME argTy)
                             in addConstraint (ctx, env, T.EqConstr (span, argTy, argTy'))
-                             ; (resultTy, innerVars, T.ConPat { sourceSpan = span, longvid = longvid, payload = SOME innerPat', tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
+                             ; (resultTy, innerVars, T.ConPat { sourceSpan = span, longvid = longvid, payload = SOME innerPat', tyargs = List.map #1 tyargs, valueConstructorInfo = valueConstructorInfo })
                             end
                           | _ => emitTypeError (ctx, [span], "invalid pattern")
                        )
@@ -1469,11 +1470,12 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                               val (valEnv, conbinds) = List.foldr (fn (S.ConBind(span, vid, optTy), (valEnv, conbinds)) =>
                                                                       let val vid' = newVId (#context ctx, vid)
                                                                           val optTy = Option.map (fn ty => evalTy (#context ctx, env, ty)) optTy
-                                                                          val idstatus = Syntax.ValueConstructor { tag = Syntax.getVIdName vid
-                                                                                                                 , allConstructors = allConstructors
-                                                                                                                 , representation = Syntax.REP_BOXED
-                                                                                                                 }
-                                                                          val conbind = T.ConBind (span, vid', optTy)
+                                                                          val info = { tag = Syntax.getVIdName vid
+                                                                                     , allConstructors = allConstructors
+                                                                                     , representation = Syntax.REP_BOXED
+                                                                                     }
+                                                                          val idstatus = Syntax.ValueConstructor info
+                                                                          val conbind = T.ConBind (span, vid', optTy, info)
                                                                           val tysc = T.TypeScheme (List.map (fn tv => (tv, [])) tyvars, case optTy of
                                                                                                                                             NONE => T.TyCon (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tyname)
                                                                                                                                           | SOME payloadTy => T.FnType (span, payloadTy, T.TyCon (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tyname))
@@ -1959,9 +1961,9 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
             | goPat (T.RecordPat { sourceSpan, fields, ellipsis }) = ( List.app (fn (label, pat) => goPat pat) fields
                                                                      ; Option.app goPat ellipsis
                                                                      )
-            | goPat (T.ConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ( List.app goTy tyargs
-                                                                                             ; Option.app goPat payload
-                                                                                             )
+            | goPat (T.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ( List.app goTy tyargs
+                                                                                                ; Option.app goPat payload
+                                                                                                )
             | goPat (T.TypedPat (span, pat, ty)) = ( goTy ty; goPat pat )
             | goPat (T.LayeredPat (span, vid, ty, pat)) = ( goTy ty; goPat pat )
             | goPat (T.VectorPat (span, pats, ellipsis, elemTy)) = ( goTy elemTy; Vector.app goPat pats )
@@ -2003,7 +2005,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
             | goDec (T.DatatypeDec (span, datbinds)) = let val tynameset = List.foldl (fn (T.DatBind (span, _, tyname, _, _), tynameset) => T.TyNameSet.add (tynameset, tyname)) tynameset datbinds
                                                            fun goDatBind (T.DatBind (span, tyvars, tyname, conbinds, _))
                                                                = let val { goTy, ... } = checkTyScope (ctx, T.TyVarSet.addList (tvset, tyvars), tynameset)
-                                                                     fun goConBind (T.ConBind (span, vid, optTy)) = Option.app goTy optTy
+                                                                     fun goConBind (T.ConBind (span, vid, optTy, info)) = Option.app goTy optTy
                                                                  in List.app goConBind conbinds
                                                                  end
                                                        in List.app goDatBind datbinds

@@ -152,13 +152,18 @@ datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarPat of SourcePos.span * VId * Ty (* variable *)
              | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
-             | ConPat of { sourceSpan : SourcePos.span, longvid : LongVId, payload : Pat option, tyargs : Ty list, isSoleConstructor : bool }
+             | ConPat of { sourceSpan : SourcePos.span
+                         , longvid : LongVId
+                         , payload : Pat option
+                         , tyargs : Ty list
+                         , valueConstructorInfo : Syntax.ValueConstructorInfo option
+                         }
              | TypedPat of SourcePos.span * Pat * Ty (* typed *)
              | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
              | VectorPat of SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
 
 datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
-datatype ConBind = ConBind of SourcePos.span * VId * Ty option
+datatype ConBind = ConBind of SourcePos.span * VId * Ty option * Syntax.ValueConstructorInfo
 datatype DatBind = DatBind of SourcePos.span * TyVar list * TyName * ConBind list * (* admits equality? *) bool
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
@@ -320,8 +325,8 @@ and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind
   | print_Dec (EqualityDec _) = "EqualityDec"
 and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ Syntax.print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
 and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyName tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
-and print_ConBind (ConBind(_, vid, NONE)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
-  | print_ConBind (ConBind(_, vid, SOME ty)) = "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
+and print_ConBind (ConBind(_, vid, NONE, _)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
+  | print_ConBind (ConBind(_, vid, SOME ty, _)) = "ConBind(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ ")"
 and print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (Syntax.print_pair (print_VId, print_Ty)) xs ^ "," ^ print_Exp exp ^ ")"
   | print_ValBind (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
@@ -450,7 +455,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
             | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
             | doPat(VarPat(span, vid, ty)) = VarPat(span, vid, doTy ty)
             | doPat(RecordPat{sourceSpan, fields, ellipsis}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, ellipsis=Option.map doPat ellipsis}
-            | doPat(ConPat{sourceSpan, longvid, payload, tyargs, isSoleConstructor}) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, isSoleConstructor = isSoleConstructor }
+            | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
             | doPat(VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, doTy elemTy)
@@ -458,7 +463,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
                                                             in TypBind(span, tyvars, tycon, applySubstTy subst ty)
                                                             end
           and doDatBind(DatBind(span, tyvars, tycon, conbinds, eq)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                                          fun doConBind(ConBind(span, vid, optTy)) = ConBind(span, vid, Option.map (applySubstTy subst) optTy)
+                                                                          fun doConBind (ConBind (span, vid, optTy, info)) = ConBind (span, vid, Option.map (applySubstTy subst) optTy, info)
                                                                       in DatBind(span, tyvars, tycon, List.map doConBind conbinds, eq)
                                                                       end
           and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
@@ -567,8 +572,8 @@ and freeTyVarsInTypBind(bound, TypBind(_, tyvars, tycon, ty)) = freeTyVarsInTy(T
 and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds, _)) = let val bound' = TyVarSet.addList(bound, tyvars)
                                                                          in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound', conbind))) TyVarSet.empty conbinds
                                                                          end
-and freeTyVarsInConBind(bound, ConBind(_, vid, NONE)) = TyVarSet.empty
-  | freeTyVarsInConBind(bound, ConBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
+and freeTyVarsInConBind (bound, ConBind (_, vid, NONE, info)) = TyVarSet.empty
+  | freeTyVarsInConBind (bound, ConBind (_, vid, SOME ty, info)) = freeTyVarsInTy (bound, ty)
 and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
   | freeTyVarsInExBind(bound, ExBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
   | freeTyVarsInExBind(bound, ExReplication(_, _, _, NONE)) = TyVarSet.empty
@@ -617,7 +622,7 @@ fun filterVarsInPat pred =
                           | VarPat(span, vid, ty) => if pred vid then pat else WildcardPat span
                           | RecordPat { sourceSpan, fields, ellipsis } => RecordPat{ sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis }
                           | ConPat { payload = NONE, ... } => pat
-                          | ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, isSoleConstructor } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (doPat innerPat), tyargs = tyargs, isSoleConstructor = isSoleConstructor }
+                          | ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, valueConstructorInfo } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (doPat innerPat), tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
                           | TypedPat(span, innerPat, ty) => TypedPat(span, doPat innerPat, ty)
                           | LayeredPat(span, vid, ty, innerPat) => if pred vid then LayeredPat(span, vid, ty, doPat innerPat) else TypedPat(span, doPat innerPat, ty)
                           | VectorPat(span, pats, ellipsis, elemTy) => VectorPat(span, Vector.map doPat pats, ellipsis, elemTy)
@@ -636,7 +641,7 @@ fun renameVarsInPat m =
                                                                            , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
                                                                            , ellipsis = Option.map doPat ellipsis
                                                                            }
-          | doPat (ConPat { sourceSpan, longvid, payload, tyargs, isSoleConstructor }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = tyargs, isSoleConstructor = isSoleConstructor }
+          | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
           | doPat (TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, ty)
           | doPat (LayeredPat(span, vid, ty, pat)) = LayeredPat(span, case VIdMap.find(m, vid) of
                                                                           NONE => vid
