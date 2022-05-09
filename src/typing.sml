@@ -320,10 +320,7 @@ fun renewVId (ctx : Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId
 fun genTyVarId(ctx : Context)
     = let val id = !(#nextTyVar ctx)
       in #nextTyVar ctx := id + 1 ; id end
-fun genTyVar(ctx, Syntax.MkTyVar tvname) = if String.isPrefix "''" tvname then
-                                               TypedSyntax.NamedTyVar (tvname, true, genTyVarId ctx)
-                                           else
-                                               TypedSyntax.NamedTyVar (tvname, false, genTyVarId ctx)
+fun genTyVar (ctx, Syntax.MkTyVar tvname) = TypedSyntax.NamedTyVar (tvname, genTyVarId ctx)
 fun freshTyVar (ctx : Context) = TypedSyntax.AnonymousTyVar (genTyVarId ctx)
 
 fun newVId(ctx : Context, Syntax.MkVId name) = let val n = !(#nextVId ctx)
@@ -443,13 +440,13 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
     = (case ct of
            T.EqConstr (span1, T.TyVar (span2, tv as T.AnonymousTyVar _), ty) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
          | T.EqConstr (span1, ty, T.TyVar (span2, tv as T.AnonymousTyVar _)) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
-         | T.EqConstr (span1, T.TyVar (span2, tv as T.NamedTyVar (name, eq, x)), T.TyVar (span3, tv' as T.NamedTyVar (name', eq', x'))) =>
+         | T.EqConstr (span1, T.TyVar (span2, tv as T.NamedTyVar (name, x)), T.TyVar (span3, tv' as T.NamedTyVar (name', x'))) =>
            if T.eqUTyVar (tv, tv') then
                unify(ctx, env, ctrs) (* do nothing *)
            else
                emitTypeError (ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
-         | T.EqConstr (span1, T.TyVar (span2, T.NamedTyVar (name, eq, _)), ty) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
-         | T.EqConstr (span1, ty, T.TyVar (span2, T.NamedTyVar (name, eq, _))) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | T.EqConstr (span1, T.TyVar (span2, T.NamedTyVar (name, _)), ty) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | T.EqConstr (span1, ty, T.TyVar (span2, T.NamedTyVar (name, _))) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
          | T.EqConstr (span, T.FnType (_, s0, s1), T.FnType (_, t0, t1)) => unify (ctx, env, T.EqConstr (span, s0, t0) :: T.EqConstr (span, s1, t1) :: ctrs)
          | T.EqConstr (span1, T.RecordType (span2, fields), T.RecordType (span3, fields')) =>
            if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields then
@@ -685,12 +682,12 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            (case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
                 SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, pred) :: ctrs)
               | NONE => case (tv, pred) of
-                            (T.NamedTyVar (name, eq, _), T.IsEqType span3) =>
-                            if eq then
+                            (T.NamedTyVar (name, _), T.IsEqType span3) =>
+                            if T.tyVarAdmitsEquality name then
                                 unify(ctx, env, ctrs)
                             else
                                 emitTypeError (ctx, [span1, span2, span3], "the type variable " ^ name ^ " does not admit equality")
-                          | (T.NamedTyVar (name, _, _), _) => emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
+                          | (T.NamedTyVar (name, _), _) => emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
                           | _ => (addTyVarConstraint(ctx, tv, pred) ; unify(ctx, env, ctrs))
            )
       )
@@ -973,10 +970,10 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
                                              fun doUTy (T.TyVar (span, tv)) = (case T.TyVarMap.find (tyVarMap, tv) of
                                                                                    SOME ty => doTy ty
                                                                                  | NONE => case tv of
-                                                                                               T.NamedTyVar (_, eq, _) => if eq then
-                                                                                                                              SOME []
-                                                                                                                          else
-                                                                                                                              NONE
+                                                                                               T.NamedTyVar (name, _) => if T.tyVarAdmitsEquality name then
+                                                                                                                             SOME []
+                                                                                                                         else
+                                                                                                                             NONE
                                                                                              | _ => NONE (* error *)
                                                                               )
                                                | doUTy (T.RecordType (span, fields)) = doUTypes (Syntax.LabelMap.foldl (op ::) [] fields)
@@ -1310,13 +1307,15 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                                        NONE => true
                                                                      | SOME tvs => List.all isEqualityType tvs
                               val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
-                              fun doTyVar (tv as TypedSyntax.NamedTyVar (_, true, _)) = (tv, [T.IsEqType span])
-                                | doTyVar tv = case TypedSyntax.TyVarMap.find (tvc, tv) of
-                                                   NONE => (tv, [])
-                                                 | SOME tvs => if List.exists isEqualityType tvs then
-                                                                   (tv, [T.IsEqType span])
-                                                               else (* should not reach here *)
-                                                                   (tv, [])
+                              fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
+                                                   (tv, [T.IsEqType span])
+                                               else
+                                                   case TypedSyntax.TyVarMap.find (tvc, tv) of
+                                                       NONE => (tv, [])
+                                                     | SOME tvs => if List.exists isEqualityType tvs then
+                                                                       (tv, [T.IsEqType span])
+                                                                   else (* should not reach here *)
+                                                                       (tv, [])
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
                           in (vid, tysc)
                           end
@@ -1395,13 +1394,15 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                                        NONE => true
                                                                      | SOME tvs => List.all isEqualityType tvs
                               val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
-                              fun doTyVar (tv as T.NamedTyVar (_, true, _)) = (tv, [T.IsEqType span])
-                                | doTyVar tv = case T.TyVarMap.find (tvc, tv) of
-                                                   NONE => (tv, [])
-                                                 | SOME tvs => if List.exists isEqualityType tvs then
-                                                                   (tv, [T.IsEqType span])
-                                                               else (* should not reach here *)
-                                                                   (tv, [])
+                              fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
+                                                   (tv, [T.IsEqType span])
+                                               else
+                                                   case T.TyVarMap.find (tvc, tv) of
+                                                       NONE => (tv, [])
+                                                     | SOME tvs => if List.exists isEqualityType tvs then
+                                                                       (tv, [T.IsEqType span])
+                                                                   else (* should not reach here *)
+                                                                       (tv, [])
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
                           in (vid, tysc)
                           end
@@ -2183,7 +2184,7 @@ fun checkEquality (ctx : Context, env : ('val,'str) Env', tyvars : T.TyVarSet.se
                                               true
                                           else
                                               (case tv of
-                                                   T.NamedTyVar (_, eq, _) => eq
+                                                   T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name
                                                  | _ => false (* error *)
                                               )
             | goTy (T.RecordType (span, fields)) = Syntax.LabelMap.all goTy fields

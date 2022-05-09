@@ -243,10 +243,10 @@ val initialEnv : Typing.Env
                                        end
           val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
           val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert (m, Syntax.MkStrId name, TypedSyntax.MkSignature str)) Syntax.StrIdMap.empty
-          val tyVarA = TypedSyntax.NamedTyVar ("'a", false, 0)
-          val tyVarB = TypedSyntax.NamedTyVar ("'b", false, 0)
-          val tyVarC = TypedSyntax.NamedTyVar ("'c", false, 0)
-          val tyVarD = TypedSyntax.NamedTyVar ("'d", false, 0)
+          val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
+          val tyVarB = TypedSyntax.NamedTyVar ("'b", 0)
+          val tyVarC = TypedSyntax.NamedTyVar ("'c", 0)
+          val tyVarD = TypedSyntax.NamedTyVar ("'d", 0)
           val TypeFunction = TypedSyntax.TypeFunction
           val TypeScheme = TypedSyntax.TypeScheme
           val emptyValEnv = TypedSyntax.emptyValEnv
@@ -534,8 +534,8 @@ val primOverloadEnv : Typing.Env
           val IsSigned = TypedSyntax.IsSigned
           val IsOrdered = TypedSyntax.IsOrdered
           fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
-          val tyVarA = TypedSyntax.NamedTyVar ("'a", false, 0)
-          val tyVarEqA = TypedSyntax.NamedTyVar ("''a", true, 0)
+          val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
+          val tyVarEqA = TypedSyntax.NamedTyVar ("''a", 0)
           val tyA = mkTyVar tyVarA
           val tyEqA = mkTyVar tyVarEqA
           infixr -->

@@ -104,7 +104,7 @@ fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
                   end
-fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.NamedTyVar (name, false, n)
+fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.NamedTyVar (name, n)
 fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
 fun AsciiStringAsNativeString (targetInfo : TargetInfo.target_info, s : string) = let val ty = case #nativeString targetInfo of
                                                                                                    TargetInfo.NARROW_STRING => TyCon ([], Typing.primTyName_string)
@@ -1178,7 +1178,7 @@ and strDecToFDecs (ctx, env : Env, T.CoreDec (span, dec)) = toFDecs (ctx, env, [
                                                             :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, (* TODO *) F.RecordType Syntax.LabelMap.empty, exp)
                                                             :: decs
                                                           , F.VarExp strVId
-                                                          , updateEqualityForTyNameMap (fn m => T.TyNameMap.insert (m, tyname (* case tyname of T.NamedTyVar (name, _, n) => T.MkTyName (name, n) | T.AnonymousTyVar n => T.MkTyName ("", n) *), T.MkShortVId equalityVId), env)
+                                                          , updateEqualityForTyNameMap (fn m => T.TyNameMap.insert (m, tyname (* case tyname of T.NamedTyVar (name, n) => T.MkTyName (name, n) | T.AnonymousTyVar n => T.MkTyName ("", n) *), T.MkShortVId equalityVId), env)
                                                           )
                                                        end
                                                    else

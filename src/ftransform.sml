@@ -456,10 +456,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
                           }
     = let val refreshVId = refreshVId ctx
-          fun refreshTyVar (TypedSyntax.NamedTyVar (name, eq, _)) = let val n = !(#nextTyVar ctx)
-                                                                    in #nextTyVar ctx := n + 1
-                                                                     ; TypedSyntax.NamedTyVar (name, eq, n)
-                                                                    end
+          fun refreshTyVar (TypedSyntax.NamedTyVar (name, _)) = let val n = !(#nextTyVar ctx)
+                                                                in #nextTyVar ctx := n + 1
+                                                                 ; TypedSyntax.NamedTyVar (name, n)
+                                                                end
             | refreshTyVar (TypedSyntax.AnonymousTyVar _) = let val n = !(#nextTyVar ctx)
                                                             in #nextTyVar ctx := n + 1
                                                              ; TypedSyntax.AnonymousTyVar n

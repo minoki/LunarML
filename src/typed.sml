@@ -4,7 +4,7 @@
  *)
 structure TypedSyntax = struct
 datatype VId = MkVId of string * int
-datatype TyVar = NamedTyVar of string * bool * int
+datatype TyVar = NamedTyVar of string * int
                | AnonymousTyVar of int
 datatype TyName = MkTyName of string * int
 datatype StrId = MkStrId of string * int
@@ -12,7 +12,7 @@ datatype FunId = MkFunId of string * int
 datatype LongVId = MkShortVId of VId
                  | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
 datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
-fun eqUTyVar(NamedTyVar(name,eq,a),NamedTyVar(name',eq',b)) = name = name' andalso eq = eq' andalso a = b
+fun eqUTyVar (NamedTyVar (name, a), NamedTyVar (name', b)) = name = name' andalso a = b
   | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
   | eqUTyVar(_, _) = false
 fun eqTyName(MkTyName(_,a),MkTyName(_,b)) = a = b
@@ -21,12 +21,14 @@ fun eqULongVId(MkShortVId a, MkShortVId b) = eqVId(a, b)
   | eqULongVId(MkLongVId(s, t, u), MkLongVId(s', t', u')) = s = s' andalso t = t' andalso u = u'
   | eqULongVId(_, _) = false
 
+fun tyVarAdmitsEquality name = String.isPrefix "''" name
+
 structure TyVarKey = struct
 type ord_key = TyVar
-fun compare(NamedTyVar(x,_,a), NamedTyVar(y,_,b)) = (case String.compare (x,y) of
-                                                         EQUAL => Int.compare(a,b)
-                                                       | ord => ord
-                                                    )
+fun compare (NamedTyVar (x, a), NamedTyVar (y, b)) = (case String.compare (x, y) of
+                                                          EQUAL => Int.compare (a, b)
+                                                        | ord => ord
+                                                     )
   | compare(AnonymousTyVar(a), AnonymousTyVar(b)) = Int.compare(a,b)
   | compare(NamedTyVar _, AnonymousTyVar _) = LESS
   | compare(AnonymousTyVar _, NamedTyVar _) = GREATER
@@ -252,7 +254,7 @@ fun print_FunId(MkFunId(name,n)) = name ^ "@" ^ Int.toString n
 fun print_LongVId(MkShortVId(vid)) = print_VId vid
   | print_LongVId(MkLongVId(strid, strids, vid)) = "MkLongVId(" ^ print_StrId strid ^ "," ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ Syntax.print_VId vid ^ ")"
 fun print_LongStrId(MkLongStrId(strid, strids)) = String.concatWith "." (print_StrId strid :: List.map (fn Syntax.MkStrId name => name) strids)
-fun print_TyVar(NamedTyVar(tvname, eq, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Bool.toString eq ^ "," ^ Int.toString n ^ ")"
+fun print_TyVar (NamedTyVar (tvname, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
   | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
   | print_TyName (MkTyName ("word", 1)) = "primTyName_word"
@@ -399,7 +401,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
                                                                                               val x = !nextTyVar
                                                                                               val () = nextTyVar := x + 1
                                                                                               val tv' = case tv of
-                                                                                                            NamedTyVar(name, eq, _) => NamedTyVar(name, eq, x)
+                                                                                                            NamedTyVar (name, _) => NamedTyVar (name, x)
                                                                                                           | AnonymousTyVar _ => AnonymousTyVar x
                                                                                           in (TyVarMap.insert (subst, tv, TyVar(SourcePos.nullSpan, tv')), tv' :: tyvars)
                                                                                         end
