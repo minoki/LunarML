@@ -19,7 +19,7 @@ datatype Ty = TyVar of TyVar
             | ForallType of TyVar * Kind * Ty
             | ExistsType of TyVar * Kind * Ty
             | TypeFn of TyVar * Kind * Ty (* type-level function *)
-            | SigType of { valMap : (Ty * Syntax.IdStatus) Syntax.VIdMap.map
+            | SigType of { valMap : (Ty * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
                          }
@@ -1079,10 +1079,8 @@ and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.
       in (env', List.foldr doDatBind [] datbinds)
       end
 fun signatureToTy (ctx, env, { valMap, tyConMap, strMap } : T.Signature)
-    = let val exnTags = Syntax.VIdMap.foldli (fn (vid, (tysc, ids), set) => if ids = Syntax.ExceptionConstructor then
-                                                                                Syntax.VIdSet.add(set, vid)
-                                                                            else
-                                                                                set
+    = let val exnTags = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), set) => Syntax.VIdSet.add(set, vid)
+                                             | (vid, (tysc, _), set) => set
                                              ) Syntax.VIdSet.empty valMap
       in F.SigType { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (typeSchemeToTy (ctx, env, tysc), ids)) valMap
                    , strMap = Syntax.StrIdMap.map (fn T.MkSignature s => signatureToTy (ctx, env, s)) strMap
@@ -1100,12 +1098,11 @@ fun getEqualityForTypeFunction (ctx, env, T.TypeFunction (tyvars, ty))
 fun strExpToFExp (ctx, env : Env, T.StructExp { sourceSpan, valMap, tyConMap, strMap }) : Env * F.Dec list * F.Exp
     = let val exp = F.StructExp { valMap = Syntax.VIdMap.map (fn (longvid, ids) => LongVIdToPath(longvid)) valMap
                                 , strMap = Syntax.StrIdMap.map LongStrIdToPath strMap
-                                , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, ids) => if ids = Syntax.ExceptionConstructor then
-                                                                                                 case TypedSyntax.LongVIdMap.find (#exnTagMap env, longvid) of
-                                                                                                     SOME path => SOME path
-                                                                                                   | NONE => raise Fail ("exception tag not found for " ^ TypedSyntax.print_LongVId longvid)
-                                                                                             else
-                                                                                                 NONE
+                                , exnTagMap = Syntax.VIdMap.mapPartial (fn (longvid, Syntax.ExceptionConstructor) => (case TypedSyntax.LongVIdMap.find (#exnTagMap env, longvid) of
+                                                                                                                          SOME path => SOME path
+                                                                                                                        | NONE => raise Fail ("exception tag not found for " ^ TypedSyntax.print_LongVId longvid)
+                                                                                                                     )
+                                                                       | (longvid, _) => NONE
                                                                        ) valMap
                                 }
       in (env, [], exp)

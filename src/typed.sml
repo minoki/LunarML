@@ -125,7 +125,7 @@ datatype Constraint
 
 datatype TypeFunction = TypeFunction of TyVar list * Ty
 datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
-type ValEnv = (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
+type ValEnv = (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
 val emptyValEnv : ValEnv = Syntax.VIdMap.empty
 
 type TypeStructure = { typeFunction : TypeFunction
@@ -133,7 +133,7 @@ type TypeStructure = { typeFunction : TypeFunction
                      }
 
 datatype Signature' = MkSignature of Signature
-withtype Signature = { valMap : (TypeScheme * Syntax.IdStatus) Syntax.VIdMap.map
+withtype Signature = { valMap : (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
                      , tyConMap : TypeStructure Syntax.TyConMap.map
                      , strMap : Signature' Syntax.StrIdMap.map
                      }
@@ -164,7 +164,7 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
-             | VarExp of SourcePos.span * LongVId * Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
+             | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
              | RecordExtExp of { sourceSpan : SourcePos.span
                                , fields : (Syntax.Label * Exp) list
@@ -195,7 +195,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
 datatype StrExp = StructExp of { sourceSpan : SourcePos.span
-                               , valMap : (LongVId * Syntax.IdStatus) Syntax.VIdMap.map
+                               , valMap : (LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
                                , tyConMap : TypeStructure Syntax.TyConMap.map
                                , strMap : LongStrId Syntax.StrIdMap.map
                                }

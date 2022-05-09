@@ -9,7 +9,7 @@ type TyNameAttr = { arity : int
                   , overloadClass : Syntax.OverloadClass option
                   }
 
-type ('val,'str) Env' = { valMap : (TypedSyntax.TypeScheme * Syntax.IdStatus * 'val) Syntax.VIdMap.map
+type ('val,'str) Env' = { valMap : (TypedSyntax.TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus * 'val) Syntax.VIdMap.map
                         , tyConMap : TypedSyntax.TypeStructure Syntax.TyConMap.map
                         , tyNameMap : TyNameAttr TypedSyntax.TyNameMap.map
                         , strMap : (TypedSyntax.Signature * 'str) Syntax.StrIdMap.map
@@ -847,7 +847,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
            (if (case idstatus of Syntax.ValueConstructor _ => true | Syntax.ExceptionConstructor => true | _ => false) then
                 let val (ty, tyargs) = instantiate(ctx, span, tysc)
                     val isSoleConstructor = case idstatus of
-                                                Syntax.ValueConstructor sole => sole
+                                                Syntax.ValueConstructor { allConstructors, ... } => Syntax.VIdSet.numItems allConstructors = 1
                                               | _ => false
                 in case optInnerPat of
                        NONE => (ty, Syntax.VIdMap.empty, T.ConPat { sourceSpan = span, longvid = longvid, payload = NONE, tyargs = List.map #1 tyargs, isSoleConstructor = isSoleConstructor })
@@ -1465,13 +1465,14 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                       }
                                                 )
                               val tyvars = List.map #2 tyvars
-                              val isSoleConstructor = case conbinds of
-                                                          [_] => true
-                                                        | _ => false
-                              val idstatus = Syntax.ValueConstructor isSoleConstructor
+                              val allConstructors = List.foldl (fn (Syntax.ConBind (span, vid, _), set) => Syntax.VIdSet.add (set, vid)) Syntax.VIdSet.empty conbinds
                               val (valEnv, conbinds) = List.foldr (fn (S.ConBind(span, vid, optTy), (valEnv, conbinds)) =>
                                                                       let val vid' = newVId (#context ctx, vid)
                                                                           val optTy = Option.map (fn ty => evalTy (#context ctx, env, ty)) optTy
+                                                                          val idstatus = Syntax.ValueConstructor { tag = Syntax.getVIdName vid
+                                                                                                                 , allConstructors = allConstructors
+                                                                                                                 , representation = Syntax.REP_BOXED
+                                                                                                                 }
                                                                           val conbind = T.ConBind (span, vid', optTy)
                                                                           val tysc = T.TypeScheme (List.map (fn tv => (tv, [])) tyvars, case optTy of
                                                                                                                                             NONE => T.TyCon (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tyname)
@@ -2393,15 +2394,16 @@ and addSpec (ctx : Context, env : SigEnv, S.ValDesc (span, descs)) : T.QSignatur
                                         , funMap = #funMap env'
                                         , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars env') tyvarPairs
                                         }
-                            val idstatus = Syntax.ValueConstructor (case condescs of
-                                                                        [_] => true
-                                                                      | _ => false
-                                                                   )
+                            val allConstructors = List.foldl (fn (Syntax.ConBind (span, vid, _), set) => Syntax.VIdSet.add (set, vid)) Syntax.VIdSet.empty condescs
                             val valEnv = List.foldl (fn (S.ConBind(span, vid, optTy), valEnv) =>
                                                         let val tysc = T.TypeScheme (List.map (fn tv => (tv, [])) tyvars, case optTy of
                                                                                                                               NONE => ty
                                                                                                                             | SOME payloadTy => T.FnType (span, evalTy (ctx, env'', payloadTy), ty)
                                                                                     )
+                                                            val idstatus = Syntax.ValueConstructor { tag = Syntax.getVIdName vid
+                                                                                                   , allConstructors = allConstructors
+                                                                                                   , representation = Syntax.REP_BOXED
+                                                                                                   }
                                                         in Syntax.VIdMap.insert(valEnv, vid, (tysc, idstatus))
                                                         end
                                                     ) Syntax.VIdMap.empty condescs
@@ -2628,13 +2630,13 @@ and matchSignature (ctx, env, span, expected : T.Signature, longstrid : T.LongSt
                                              SOME actualTyStr => matchTyDesc(ctx, env, span, expectedTyStr, actualTyStr)
                                            | NONE => emitError(ctx, [span], "signature matching: " ^ (case tycon of Syntax.MkTyCon name => name) ^ " not found")
                                      ) (#tyConMap expected)
-          val valMap : (T.TypeScheme * T.Dec list * T.LongVId * Syntax.IdStatus) S.VIdMap.map
+          val valMap : (T.TypeScheme * T.Dec list * T.LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus) S.VIdMap.map
               = Syntax.VIdMap.mapi (fn (vid, (tyscE, idsE)) =>
                                        case Syntax.VIdMap.find (#valMap actual, vid) of
                                            SOME (tyscA, idsA) => let val longvid = case longstrid of
                                                                                        T.MkLongStrId (strid0, strids0) => T.MkLongVId (strid0, strids0, vid)
                                                                      val (tysc, decs, longvid') = matchValDesc(ctx, env, span, tyscE, longvid, tyscA, idsA)
-                                                                     val () = if idsE = Syntax.ExceptionConstructor andalso idsA <> Syntax.ExceptionConstructor then
+                                                                     val () = if (case idsE of Syntax.ExceptionConstructor => true | _ => false) andalso (case idsA of Syntax.ExceptionConstructor => false | _ => true) then
                                                                                   emitError(ctx, [span], "signature matching: id status mismatch: " ^ Syntax.getVIdName vid)
                                                                               else if Syntax.isValueConstructor idsE andalso not (Syntax.isValueConstructor idsA) then
                                                                                   emitError(ctx, [span], "signature matching: id status mismatch: " ^ Syntax.getVIdName vid)
@@ -2693,7 +2695,7 @@ and matchTyDesc (ctx, env, span, expected : T.TypeStructure, actual : T.TypeStru
          else
              emitError(ctx, [span], "signature matching: arity mismatch")
       end
-and matchValDesc (ctx, env, span, expected : T.TypeScheme, longvid : T.LongVId, actual : T.TypeScheme, ids : Syntax.IdStatus) : T.TypeScheme * T.Dec list * T.LongVId
+and matchValDesc (ctx, env, span, expected : T.TypeScheme, longvid : T.LongVId, actual : T.TypeScheme, ids : Syntax.ValueConstructorInfo Syntax.IdStatus) : T.TypeScheme * T.Dec list * T.LongVId
     = let val T.TypeScheme (tyvarsE, tyE) = expected
           val ictx = { context = ctx
                      , tyVarConstraints = ref TypedSyntax.TyVarMap.empty

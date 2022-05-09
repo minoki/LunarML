@@ -33,13 +33,6 @@ datatype InfixAssociativity = LeftAssoc of int
 datatype FixityStatus = Nonfix
                       | Infix of InfixAssociativity
 
-datatype IdStatus = ValueVariable
-                  | ValueConstructor of bool (* is it the sole constructor? *)
-                  | ExceptionConstructor
-fun isValueConstructor ValueVariable = false
-  | isValueConstructor (ValueConstructor _) = true
-  | isValueConstructor ExceptionConstructor = false
-
 (* RedBlackMapFn, RedBlackSetFn: from smlnj-lib *)
 structure VIdKey = struct
 type ord_key = VId
@@ -123,6 +116,24 @@ fun min (x, y) = case compare (x, y) of
                    | GREATER => y
 end
 structure LongTyConSet = RedBlackSetFn(LongTyCon)
+
+datatype ValueConstructorRep = REP_BOXED
+                             | REP_REF
+                             | REP_LIST (* nil, :: *)
+                             | REP_BOOL (* true, false *)
+                             (* REP_ENUM, REP_ALIAS, REP_UNIT *)
+
+type ValueConstructorInfo = { tag : string
+                            , allConstructors : VIdSet.set
+                            , representation : ValueConstructorRep
+                            }
+
+datatype 'vconinfo IdStatus = ValueVariable
+                            | ValueConstructor of 'vconinfo
+                            | ExceptionConstructor
+fun isValueConstructor ValueVariable = false
+  | isValueConstructor (ValueConstructor _) = true
+  | isValueConstructor ExceptionConstructor = false
 
 datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
             | RecordType of SourcePos.span * (Label * Ty) list * Ty option (* record type expression *)
@@ -355,7 +366,7 @@ fun print_LongVId (MkQualified(x,y)) = String.concatWith "." (List.map print_Str
 fun print_LongTyCon (MkQualified(x,y)) = "MkLongTyCon(" ^ print_list print_StrId x ^ "," ^ print_TyCon y ^ ")"
 fun print_LongStrId (MkQualified(x,y)) = String.concatWith "." (List.map print_StrId (x @ [y]))
 fun print_IdStatus ValueVariable = "ValueVariable"
-  | print_IdStatus (ValueConstructor sole) = "ValueConstructor " ^ Bool.toString sole
+  | print_IdStatus (ValueConstructor _) = "ValueConstructor"
   | print_IdStatus ExceptionConstructor = "ExceptionConstructor"
 
 (* pretty printing *)
