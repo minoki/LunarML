@@ -80,7 +80,6 @@ datatype Pat = WildcardPat of SourcePos.span
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list
              | ExceptionDec of { conName : TypedSyntax.VId, tagName : TypedSyntax.VId, payloadTy : Ty option }
-             | ExceptionRepDec of { conName : TypedSyntax.VId, conPath : Path, tagPath : Path, payloadTy : Ty option }
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of TypedSyntax.VIdSet.set option * Dec list
@@ -269,7 +268,6 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
-          | doDec (ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = ExceptionRepDec { conName = conName, conPath = conPath, tagPath = tagPath, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
@@ -352,10 +350,6 @@ and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) = (bound, (case optTy of
                                                                                         NONE => TypedSyntax.TyVarSet.empty
                                                                                       | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
                                                                             )
-  | freeTyVarsInDec (bound, ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = (bound, case payloadTy of
-                                                                                                    NONE => TypedSyntax.TyVarSet.empty
-                                                                                                  | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
-                                                                                        )
   | freeTyVarsInDec (bound, ExportValue exp) = (bound, freeTyVarsInExp (bound, exp))
   | freeTyVarsInDec (bound, ExportModule exports) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) TypedSyntax.TyVarSet.empty exports)
   | freeTyVarsInDec (bound, GroupDec (v, decs)) = freeTyVarsInDecs (bound, decs)
@@ -410,7 +404,6 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) = (TypedSyntax.VIdSet.add (boun
   | freeVarsInDec (bound, IgnoreDec exp) = (bound, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, DatatypeDec datbinds) = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, TypedSyntax.VIdSet.empty)
   | freeVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (TypedSyntax.VIdSet.add (TypedSyntax.VIdSet.add (bound, conName), tagName), TypedSyntax.VIdSet.empty)
-  | freeVarsInDec (bound, ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = (TypedSyntax.VIdSet.add (bound, conName), TypedSyntax.VIdSet.empty)
   | freeVarsInDec (bound, ExportValue exp) = (bound, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, ExportModule exps) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty exps)
   | freeVarsInDec (bound, GroupDec (_, decs)) = List.foldl (fn (dec, (bound, acc)) => let val (bound, set) = freeVarsInDec (bound, dec)
@@ -499,7 +492,6 @@ and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
-  | print_Dec (ExceptionRepDec _) = "ExceptionRepDec"
   | print_Dec (ExportValue _) = "ExportValue"
   | print_Dec (ExportModule _) = "ExportModule"
   | print_Dec (GroupDec (vids, decs)) = "GroupDec(" ^ Syntax.print_list print_Dec decs ^ ")"
@@ -999,13 +991,13 @@ and toFDecs (ctx, env, []) = (env, [])
                                                     end
                                                 | (T.ExReplication (span, vid, longvid, optTy), (exnTagMap, xs)) =>
                                                   (case LongVIdToExnTagPath (env, longvid) of
-                                                       SOME tagPath => ( TypedSyntax.VIdMap.insert (exnTagMap, vid, tagPath)
-                                                                       , F.ExceptionRepDec { conName = vid
-                                                                                           , conPath = LongVIdToPath longvid
-                                                                                           , tagPath = tagPath
-                                                                                           , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
-                                                                                           } :: xs
-                                                                       )
+                                                       SOME tagPath => let val exnTy = FSyntax.TyCon ([], Typing.primTyName_exn)
+                                                                           val conTy = case optTy of
+                                                                                           SOME payloadTy => F.FnType (toFTy (ctx, env, payloadTy), exnTy)
+                                                                                         | NONE => exnTy
+                                                                           val dec = F.ValDec (vid, SOME conTy, F.LongVarExp longvid)
+                                                                       in (TypedSyntax.VIdMap.insert (exnTagMap, vid, tagPath), dec :: xs)
+                                                                       end
                                                      | NONE => emitError (ctx, [span], "exception not found: " ^ TypedSyntax.print_LongVId longvid)
                                                   )
                                                 ) (exnTagMap, []) exbinds

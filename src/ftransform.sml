@@ -75,13 +75,6 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
             | doDec (dec as F.DatatypeDec datbinds) = dec
             | doDec (dec as F.ExceptionDec { conName, tagName, payloadTy }) = dec
-            | doDec (dec as F.ExceptionRepDec { conName, conPath, tagPath, payloadTy })
-              = let val exnTy = FSyntax.TyCon([], Typing.primTyName_exn)
-                    val conTy = case payloadTy of
-                                    NONE => exnTy
-                                  | SOME ty => FSyntax.FnType(ty, exnTy)
-                in F.ValDec (conName, SOME conTy, F.PathToExp conPath)
-                end
             | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
             | doDec (F.ExportModule fields) = F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
             | doDec (F.GroupDec (v, decs)) = F.GroupDec (v, doDecs decs)
@@ -276,7 +269,6 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.IgnoreDec exp) = [F.IgnoreDec (doExp exp)]
   | doDec (F.DatatypeDec datbinds) = [F.DatatypeDec datbinds]
   | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
-  | doDec (F.ExceptionRepDec names) = [F.ExceptionRepDec names]
   | doDec (F.ExportValue exp) = [F.ExportValue (doExp exp)]
   | doDec (F.ExportModule fields) = [F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)]
   | doDec (F.GroupDec (set, decs)) = [F.GroupDec (set, doDecs decs)]
@@ -462,11 +454,6 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                     val payloadTy = Option.map (doTy env) payloadTy
                 in (insertVId (insertVId (env, conName, conName'), tagName, tagName'), F.ExceptionDec { conName = conName', tagName = tagName', payloadTy = payloadTy })
                 end
-            | doDec env (F.ExceptionRepDec { conName, conPath, tagPath, payloadTy })
-              = let val conName' = refreshVId conName
-                    val payloadTy = Option.map (doTy env) payloadTy
-                in (insertVId (env, conName, conName'), F.ExceptionRepDec { conName = conName', conPath = doPath env conPath, tagPath = doPath env tagPath, payloadTy = payloadTy })
-                end
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule xs) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) xs))
             | doDec env (F.GroupDec (set, decs)) = let val (env, decs) = doDecs env decs
@@ -548,7 +535,6 @@ and costOfDec (F.ValDec (vid, optTy, exp)) = costOfExp exp
   | costOfDec (F.IgnoreDec exp) = costOfExp exp
   | costOfDec (F.DatatypeDec datbinds) = List.length datbinds
   | costOfDec (F.ExceptionDec { conName, tagName, payloadTy }) = 1
-  | costOfDec (F.ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = 0
   | costOfDec (F.ExportValue exp) = costOfExp exp
   | costOfDec (F.ExportModule entities) = Vector.foldl (fn ((name, exp), acc) => acc + costOfExp exp) 0 entities
   | costOfDec (F.GroupDec (_, decs)) = List.foldl (fn (dec, acc) => acc + costOfDec dec) 0 decs
@@ -815,7 +801,6 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
             | doDec env (F.IgnoreDec exp) = (env, F.IgnoreDec (doExp env exp))
             | doDec env (dec as F.DatatypeDec datbinds) = (env, dec) (* TODO *)
             | doDec env (dec as F.ExceptionDec _) = (env, dec) (* TODO *)
-            | doDec env (dec as F.ExceptionRepDec _) = (env, dec) (* TODO *)
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule fields) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) fields))
             | doDec env (F.GroupDec (v, decs)) = let val (env, decs) = doDecs env decs
@@ -891,7 +876,6 @@ and doDec ctx (F.ValDec (vid, optTy, exp1)) = let val (decs, exp1) = extractLet 
   | doDec ctx (F.IgnoreDec exp) = F.IgnoreDec (doExp ctx exp)
   | doDec ctx (dec as F.DatatypeDec _) = dec
   | doDec ctx (dec as F.ExceptionDec _) = dec
-  | doDec ctx (dec as F.ExceptionRepDec _) = dec
   | doDec ctx (F.ExportValue exp) = F.ExportValue (doExp ctx exp)
   | doDec ctx (F.ExportModule xs) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp ctx exp)) xs)
   | doDec ctx (F.GroupDec (e, decs)) = F.GroupDec (e, doDecs ctx decs)
@@ -1136,10 +1120,6 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
                                                                               (used, [dec])
                                                                           else
                                                                               (used, [])
-  | doDec (used, dec as F.ExceptionRepDec { conName, conPath, tagPath, payloadTy }) = if TypedSyntax.VIdSet.member (used, conName) then
-                                                                                          (used, [dec])
-                                                                                      else
-                                                                                          (used, [])
   | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp
                                       in (TypedSyntax.VIdSet.union (used, used'), [F.ExportValue exp])
                                       end
@@ -1166,7 +1146,6 @@ and definedInDec (F.ValDec (vid, _, _)) = TypedSyntax.VIdSet.singleton vid
   | definedInDec (F.IgnoreDec _) = TypedSyntax.VIdSet.empty
   | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind (vid, _), s) => TypedSyntax.VIdSet.add (s, vid)) s conbinds) TypedSyntax.VIdSet.empty datbinds
   | definedInDec (F.ExceptionDec { conName, tagName, ... }) = TypedSyntax.VIdSet.add (TypedSyntax.VIdSet.singleton conName, tagName)
-  | definedInDec (F.ExceptionRepDec { conName, ... }) = TypedSyntax.VIdSet.singleton conName
   | definedInDec (F.ExportValue _) = TypedSyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.ExportModule _) = TypedSyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.GroupDec(_, decs)) = definedInDecs decs (* should not occur *)

@@ -844,7 +844,6 @@ and doDec ctx env (F.ValDec (vid, _, exp))
                              J.VarStat (vector [(conName, SOME value)])
                       end
       ]
-  | doDec ctx env (F.ExceptionRepDec _) = raise CodeGenError "internal error: ExceptionRepDec should have been desugared earlier"
   | doDec ctx env (F.ExportValue _) = raise CodeGenError "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise CodeGenError "internal error: ExportModule must be the last statement"
   | doDec ctx env (F.GroupDec (_, decs)) = doDecs ctx env decs

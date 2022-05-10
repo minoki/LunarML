@@ -785,7 +785,6 @@ and doDec ctx env (F.ValDec (vid, _, exp))
                              L.LocalFunctionStat (conName, vector [L.PredefinedId "payload"], body)
                       end
       ]
-  | doDec ctx env (F.ExceptionRepDec _) = raise Fail "internal error: ExceptionRepDec should have been desugared earlier"
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
   | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, TypedSyntax.VIdSet.toList hoist)
