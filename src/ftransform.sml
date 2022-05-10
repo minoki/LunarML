@@ -19,7 +19,7 @@ fun isWildcardPat (F.WildcardPat _) = true
   | isWildcardPat (F.VarPat _) = false
   | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (label, pat) => isWildcardPat pat) fields
   | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isWildcardPat basePat andalso List.all (fn (label, pat) => isWildcardPat pat) fields
-  | isWildcardPat (F.ValConPat (_, longvid, payload, tyargs, info)) = false (* TODO *)
+  | isWildcardPat (F.ValConPat _) = false (* TODO *)
   | isWildcardPat (F.ExnConPat _) = false
   | isWildcardPat (F.LayeredPat _) = false
   | isWildcardPat (F.VectorPat (_, pats, ellipsis, _)) = ellipsis andalso Vector.length pats = 0
@@ -106,7 +106,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                               fields
                 end
             | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
-            | genMatcher exp ty (F.ValConPat (span, path, SOME (payloadTy, payloadPat), tyargs, info))
+            | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = let val tag = #tag info
                     val payload = genMatcher (F.DataPayloadExp exp) payloadTy payloadPat
                     val equal_string = case #nativeString (#targetInfo ctx) of
@@ -114,7 +114,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                          | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
                 in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload)
                 end
-            | genMatcher exp ty (F.ValConPat (span, path, NONE, tyargs, info))
+            | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
                    | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, vector [], vector [exp])
@@ -158,16 +158,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                 in genBinders restExp (F.RecordType restTypes) basePat @ List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
                 end
             | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
-            | genBinders exp ty (F.ValConPat (span, path, SOME (payloadTy, payloadPat), tyargs, info))
+            | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
-                     { representation = Syntax.REP_REF, tag = "ref", ... } =>
-                     (case tyargs of
-                          [tyarg] => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, vector [tyarg], vector [exp])) payloadTy payloadPat
-                        | _ => raise Fail "invalid type arguments to 'ref'"
-                     )
+                     { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, vector [payloadTy], vector [exp])) payloadTy payloadPat
                    | _ => genBinders (F.DataPayloadExp exp) payloadTy payloadPat
                 )
-            | genBinders exp ty (F.ValConPat (span, path, NONE, tyargs, info)) = []
+            | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = NONE }) = []
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = genBinders (F.DataPayloadExp exp) payloadTy payloadPat
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
@@ -179,7 +175,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | isExhaustive (F.VarPat _) = true
             | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (_, e) => isExhaustive e) fields
             | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isExhaustive basePat andalso List.all (fn (_, e) => isExhaustive e) fields
-            | isExhaustive (F.ValConPat (_, longvid, payload, _, info)) = false (* TODO *)
+            | isExhaustive (F.ValConPat _) = false (* TODO *)
             | isExhaustive (F.ExnConPat _) = false
             | isExhaustive (F.LayeredPat (_, _, _, innerPat)) = isExhaustive innerPat
             | isExhaustive (F.VectorPat (_, pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
@@ -356,10 +352,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                     ) (env', []) fields
                 in (env', F.RecordPat { sourceSpan = sourceSpan, fields = fields, ellipsis = ellipsis })
                 end
-            | doPat env (F.ValConPat (span, path, NONE, tyargs, info)) = (emptyEnv, F.ValConPat (span, doPath env path, NONE, List.map (doTy env) tyargs, info))
-            | doPat env (F.ValConPat (span, path, SOME (payloadTy, payloadPat), tyargs, info)) = let val (env', payloadPat) = doPat env payloadPat
-                                                                                                 in (env', F.ValConPat (span, doPath env path, SOME (doTy env payloadTy, payloadPat), List.map (doTy env) tyargs, info))
-                                                                                                 end
+            | doPat env (F.ValConPat { sourceSpan, info, payload = NONE }) = (emptyEnv, F.ValConPat { sourceSpan = sourceSpan, info = info, payload = NONE })
+            | doPat env (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) }) = let val (env', payloadPat) = doPat env payloadPat
+                                                                                                     in (env', F.ValConPat { sourceSpan = sourceSpan, info = info, payload = SOME (doTy env payloadTy, payloadPat) })
+                                                                                                     end
             | doPat env (F.ExnConPat { sourceSpan, tagPath, payload = NONE }) = (emptyEnv, F.ExnConPat { sourceSpan = sourceSpan, tagPath = doPath env tagPath, payload = NONE })
             | doPat env (F.ExnConPat { sourceSpan, tagPath, payload = SOME (payloadTy, payloadPat) }) = let val (env', payloadPat) = doPat env payloadPat
                                                                                                         in (env', F.ExnConPat { sourceSpan = sourceSpan, tagPath = doPath env tagPath, payload = SOME (doTy env payloadTy, payloadPat) })
@@ -500,10 +496,10 @@ fun freeVarsInPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
   | freeVarsInPat (F.SConPat _) = TypedSyntax.VIdSet.empty
   | freeVarsInPat (F.VarPat (_, vid, _)) = TypedSyntax.VIdSet.singleton vid
   | freeVarsInPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((_, pat), acc) => TypedSyntax.VIdSet.union (freeVarsInPat pat, acc)) (case ellipsis of NONE => TypedSyntax.VIdSet.empty | SOME basePat => freeVarsInPat basePat) fields
-  | freeVarsInPat (F.ValConPat (_, longvid, payload, tyargs, info)) = (case payload of
-                                                                           NONE => TypedSyntax.VIdSet.empty
-                                                                         | SOME (payloadTy, payloadPat) => freeVarsInPat payloadPat
-                                                                      )
+  | freeVarsInPat (F.ValConPat { sourceSpan = _, info, payload }) = (case payload of
+                                                                         NONE => TypedSyntax.VIdSet.empty
+                                                                       | SOME (payloadTy, payloadPat) => freeVarsInPat payloadPat
+                                                                    )
   | freeVarsInPat (F.ExnConPat { sourceSpan = _, tagPath, payload }) = (case payload of
                                                                             NONE => TypedSyntax.VIdSet.empty
                                                                           | SOME (payloadTy, payloadPat) => freeVarsInPat payloadPat
@@ -936,10 +932,8 @@ fun doPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
   | doPat (F.SConPat _) = TypedSyntax.VIdSet.empty
   | doPat (F.VarPat _) = TypedSyntax.VIdSet.empty
   | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.VIdSet.union (acc, doPat pat)) (case ellipsis of NONE => TypedSyntax.VIdSet.empty | SOME basePat => doPat basePat) fields
-  | doPat (F.ValConPat (_, F.Root vid, NONE, tyargs, info)) = TypedSyntax.VIdSet.singleton vid
-  | doPat (F.ValConPat (_, F.Root vid, SOME (payloadTy, payloadPat), tyargs, info)) = TypedSyntax.VIdSet.add (doPat payloadPat, vid)
-  | doPat (F.ValConPat (_, F.Child _, _, tyargs, info)) = raise Fail "not implemented yet"
-  | doPat (F.ValConPat (_, F.Field _, _, tyargs, info)) = raise Fail "not implemented yet"
+  | doPat (F.ValConPat { sourceSpan = _, info, payload = NONE }) = TypedSyntax.VIdSet.empty
+  | doPat (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) = doPat payloadPat
   | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Root vid, payload = NONE }) = TypedSyntax.VIdSet.singleton vid
   | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Root vid, payload = SOME (payloadTy, payloadPat) }) = TypedSyntax.VIdSet.add (doPat payloadPat, vid)
   | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Child _, payload = _ }) = raise Fail "not implemented yet"
