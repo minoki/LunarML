@@ -221,7 +221,7 @@ fun isExhaustive (ctx, env : Env, TypedSyntax.WildcardPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.VarPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.RecordPat { fields, ... }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1
-  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1 andalso isExhaustive (ctx, env, innerPat)
+  | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME (innerTy, innerPat), tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1 andalso isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo = NONE }) = false
   | isExhaustive (ctx, env, TypedSyntax.TypedPat (_, innerPat, _)) = isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.LayeredPat (_, _, _, innerPat)) = isExhaustive (ctx, env, innerPat)
@@ -857,7 +857,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                             T.FnType (span', argTy, resultTy) =>
                             let val (argTy', innerVars, innerPat') = typeCheckPat (ctx, env, innerPat, SOME argTy)
                             in addConstraint (ctx, env, T.EqConstr (span, argTy, argTy'))
-                             ; (resultTy, innerVars, T.ConPat { sourceSpan = span, longvid = longvid, payload = SOME innerPat', tyargs = List.map #1 tyargs, valueConstructorInfo = valueConstructorInfo })
+                             ; (resultTy, innerVars, T.ConPat { sourceSpan = span, longvid = longvid, payload = SOME (argTy, innerPat'), tyargs = List.map #1 tyargs, valueConstructorInfo = valueConstructorInfo })
                             end
                           | _ => emitTypeError (ctx, [span], "invalid pattern")
                        )
@@ -1962,7 +1962,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                      ; Option.app goPat ellipsis
                                                                      )
             | goPat (T.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ( List.app goTy tyargs
-                                                                                                ; Option.app goPat payload
+                                                                                                ; Option.app (fn (ty, pat) => (goTy ty; goPat pat)) payload
                                                                                                 )
             | goPat (T.TypedPat (span, pat, ty)) = ( goTy ty; goPat pat )
             | goPat (T.LayeredPat (span, vid, ty, pat)) = ( goTy ty; goPat pat )

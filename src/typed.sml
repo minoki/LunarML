@@ -154,7 +154,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
              | ConPat of { sourceSpan : SourcePos.span
                          , longvid : LongVId
-                         , payload : Pat option
+                         , payload : (Ty * Pat) option
                          , tyargs : Ty list
                          , valueConstructorInfo : Syntax.ValueConstructorInfo option
                          }
@@ -288,7 +288,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (TypedPat (_, pat, ty)) = "TypedPat(" ^ print_Pat pat ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
-  | print_Pat (ConPat { longvid, payload, tyargs, ...}) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option print_Pat payload ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
+  | print_Pat (ConPat { longvid, payload, tyargs, ...}) = "ConPat(" ^ print_LongVId longvid ^ "," ^ Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload ^ "," ^ Syntax.print_list print_Ty tyargs ^ ")"
   | print_Pat (RecordPat{fields = x, ellipsis = NONE, ...}) = (case Syntax.extractTuple (1, x) of
                                                                NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) x ^ ",NONE)"
                                                              | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
@@ -455,7 +455,7 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
             | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
             | doPat(VarPat(span, vid, ty)) = VarPat(span, vid, doTy ty)
             | doPat(RecordPat{sourceSpan, fields, ellipsis}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, ellipsis=Option.map doPat ellipsis}
-            | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
+            | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
             | doPat(VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, doTy elemTy)
@@ -520,7 +520,7 @@ fun freeTyVarsInPat(bound, pat)
          | VarPat(_, _, ty) => freeTyVarsInTy(bound, ty)
          | RecordPat{ fields = xs, ... } => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
          | ConPat { payload = NONE, tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
-         | ConPat { payload = SOME pat, tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) (freeTyVarsInPat(bound, pat)) tyargs
+         | ConPat { payload = SOME (ty, pat), tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union (freeTyVarsInTy (bound, ty), set)) (TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInPat (bound, pat))) tyargs
          | TypedPat(_, pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
          | LayeredPat(_, _, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
          | VectorPat(_, pats, _, elemTy) => Vector.foldl (fn (pat, set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) (freeTyVarsInTy(bound, elemTy)) pats
@@ -622,7 +622,7 @@ fun filterVarsInPat pred =
                           | VarPat(span, vid, ty) => if pred vid then pat else WildcardPat span
                           | RecordPat { sourceSpan, fields, ellipsis } => RecordPat{ sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis }
                           | ConPat { payload = NONE, ... } => pat
-                          | ConPat { sourceSpan, longvid, payload = SOME innerPat, tyargs, valueConstructorInfo } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (doPat innerPat), tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
+                          | ConPat { sourceSpan, longvid, payload = SOME (innerTy, innerPat), tyargs, valueConstructorInfo } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (innerTy, doPat innerPat), tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
                           | TypedPat(span, innerPat, ty) => TypedPat(span, doPat innerPat, ty)
                           | LayeredPat(span, vid, ty, innerPat) => if pred vid then LayeredPat(span, vid, ty, doPat innerPat) else TypedPat(span, doPat innerPat, ty)
                           | VectorPat(span, pats, ellipsis, elemTy) => VectorPat(span, Vector.map doPat pats, ellipsis, elemTy)
@@ -641,7 +641,7 @@ fun renameVarsInPat m =
                                                                            , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
                                                                            , ellipsis = Option.map doPat ellipsis
                                                                            }
-          | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map doPat payload, tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
+          | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (ty, doPat pat)) payload, tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
           | doPat (TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, ty)
           | doPat (LayeredPat(span, vid, ty, pat)) = LayeredPat(span, case VIdMap.find(m, vid) of
                                                                           NONE => vid
