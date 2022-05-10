@@ -77,7 +77,7 @@ val builtins
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(TypedSyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
-                    ,(VId_Lua_LuaError, "_LuaError")
+                    ,(LongVId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_global, "_Lua_global")
                     ,(VId_Lua_call, "_Lua_call")

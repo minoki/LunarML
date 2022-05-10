@@ -29,7 +29,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                                                            ,("Char", mkSubstrMap [])
                                                                            ,("Array", mkSubstrMap [])
                                                                            ,("Vector", mkSubstrMap [])
-                                                                           ,("Lua", { valMap = mkExConMap ["LuaError"]
+                                                                           ,("Lua", { valMap = mkExConMap []
                                                                                     , tyConMap = Syntax.TyConMap.empty
                                                                                     , strMap = mkStrMap
                                                                                                    [("Lib", mkSubstrMap
@@ -159,8 +159,6 @@ end
 (* Lua interface *)
 local val newVId = newLongVId (StrId_Lua, [])
 in
-val VId_Lua_LuaError = newVId "LuaError"
-val VId_Lua_LuaError_tag = newVId "LuaError"
 val VId_Lua_global = newVId "global"
 val VId_Lua_call = newVId "call"
 val VId_Lua_method = newVId "method"
@@ -196,6 +194,9 @@ val VId_Lua_Lib_table_unpack = newVId "unpack"
 end
 end
 end
+val VId_Lua_LuaError = newVId "Lua.LuaError"
+val LongVId_Lua_LuaError = TypedSyntax.MkShortVId VId_Lua_LuaError
+val VId_Lua_LuaError_tag = newShortVId "Lua.LuaError.tag"
 
 (* JavaScript interface *)
 local val newVId = newLongVId (StrId_JavaScript, [])
@@ -402,18 +403,14 @@ val initialEnv : Typing.Env
                                            ]
                             }
           val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
-                        , valMap = Syntax.VIdMap.insert
-                                       ( mkValMap
-                                             [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
-                                             ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                             ,("method", TypeScheme ([], mkPairType(primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                             ,("NIL", TypeScheme ([], primTy_Lua_value))
-                                             ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
-                                             ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
-                                             ]
-                                       , Syntax.MkVId "LuaError"
-                                       , (TypeScheme ([], primTy_Lua_value --> primTy_exn), Syntax.ExceptionConstructor)
-                                       )
+                        , valMap = mkValMap
+                                       [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
+                                       ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                       ,("method", TypeScheme ([], mkPairType (primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                       ,("NIL", TypeScheme ([], primTy_Lua_value))
+                                       ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
+                                       ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
+                                       ]
                         , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
                         }
           val sig_JavaScript = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_JavaScript_value)]
@@ -453,6 +450,7 @@ val initialEnv : Typing.Env
                                            ,("Size", LongVId_Size, TypeScheme ([], primTy_exn))
                                            ,("Subscript", LongVId_Subscript, TypeScheme ([], primTy_exn))
                                            ,("Fail", LongVId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
+                                           ,("Lua.LuaError", LongVId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
                                            Syntax.VIdMap.empty

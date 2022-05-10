@@ -227,7 +227,8 @@ structure Lua : sig
                             val lfs : value option (* LuaFileSystem *)
                         end
           end = struct
-open Lua (* type value, LuaError, global, call, method, NIL, newTable, function *)
+open Lua (* type value, global, call, method, NIL, newTable, function *)
+exception LuaError = _primVal "Lua.LuaError"
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
