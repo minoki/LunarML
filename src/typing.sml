@@ -206,8 +206,7 @@ fun isNonexpansive (env : Env, TypedSyntax.SConExp _) = true
   | isNonexpansive (env, TypedSyntax.ProjectionExp _) = true
   | isNonexpansive (env, TypedSyntax.ListExp (_, xs, _)) = Vector.all (fn x => isNonexpansive (env, x)) xs
   | isNonexpansive (env, TypedSyntax.VectorExp (_, xs, _)) = Vector.all (fn x => isNonexpansive (env, x)) xs
-  | isNonexpansive (env, TypedSyntax.PrimExp (_, Primitives.PrimOp_call2, _, args)) = false
-  | isNonexpansive(env, _) = false
+  | isNonexpansive (env, _) = false
 and isConexp (env : Env, TypedSyntax.TypedExp (_, e, _)) = isConexp (env, e)
   | isConexp (env, TypedSyntax.VarExp (_, _, Syntax.ValueVariable, _)) = false
   | isConexp (env, TypedSyntax.VarExp (_, TypedSyntax.MkShortVId (TypedSyntax.MkVId (name, _)), Syntax.ValueConstructor _, _)) = name <> "ref"

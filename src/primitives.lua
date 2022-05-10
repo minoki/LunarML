@@ -723,7 +723,7 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "                | "
   end
-  f:write(string.format("%sPrimOp_%s (* %s *)\n", head, p.srcname, p.name))
+  f:write(string.format("%s%s (* %s *)\n", head, p.srcname, p.name))
 end
 
 for i, p in ipairs(PRIMITIVES) do
@@ -733,7 +733,7 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "  | toString "
   end
-  f:write(string.format("%sPrimOp_%s = %q\n", head, p.srcname, p.name))
+  f:write(string.format("%s%s = %q\n", head, p.srcname, p.name))
 end
 
 for i, p in ipairs(PRIMITIVES) do
@@ -743,7 +743,7 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "  | fromString "
   end
-  f:write(string.format("%s%q = SOME PrimOp_%s\n", head, p.name, p.srcname))
+  f:write(string.format("%s%q = SOME %s\n", head, p.name, p.srcname))
 end
 f:write("  | fromString _ = NONE\n")
 
@@ -808,7 +808,7 @@ for i, p in ipairs(PRIMITIVES) do
     table.insert(argTypes, t[1])
   end
   local resultType = p.type.result[1]
-  f:write(string.format("%sPrimitives.PrimOp_%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+  f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
 end
 
 f:write[[

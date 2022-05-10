@@ -871,14 +871,14 @@ and toFExp (ctx, env, T.SConExp (span, Syntax.IntegerConstant value, ty)) = cook
   | toFExp (ctx, env, T.RaiseExp (span, ty, exp)) = F.RaiseExp (span, toFTy (ctx, env, ty), toFExp (ctx, env, exp))
   | toFExp (ctx, env, T.ListExp (span, xs, ty)) = F.ListExp (Vector.map (fn x => toFExp (ctx, env, x)) xs, toFTy (ctx, env, ty))
   | toFExp (ctx, env, T.VectorExp (span, xs, ty)) = F.VectorExp (Vector.map (fn x => toFExp (ctx, env, x)) xs, toFTy (ctx, env, ty))
-  | toFExp (ctx, env, T.PrimExp (span, Primitives.PrimOp_EQUAL, tyargs, args)) = if Vector.length tyargs = 1 andalso Vector.length args = 2 then
-                                                                                     let val tyarg = Vector.sub (tyargs, 0)
-                                                                                         val x = toFExp (ctx, env, Vector.sub (args, 0))
-                                                                                         val y = toFExp (ctx, env, Vector.sub (args, 1))
-                                                                                     in F.AppExp (getEquality (ctx, env, tyarg), F.TupleExp [x, y])
-                                                                                     end
-                                                                                 else
-                                                                                     raise Fail ("invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
+  | toFExp (ctx, env, T.PrimExp (span, Primitives.EQUAL, tyargs, args)) = if Vector.length tyargs = 1 andalso Vector.length args = 2 then
+                                                                              let val tyarg = Vector.sub (tyargs, 0)
+                                                                                  val x = toFExp (ctx, env, Vector.sub (args, 0))
+                                                                                  val y = toFExp (ctx, env, Vector.sub (args, 1))
+                                                                              in F.AppExp (getEquality (ctx, env, tyarg), F.TupleExp [x, y])
+                                                                              end
+                                                                          else
+                                                                              raise Fail ("invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
   | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimFnOp primOp, Vector.map (fn ty => toFTy (ctx, env, ty)) tyargs, Vector.map (fn x => toFExp (ctx, env, x)) args)
 and doValBind ctx env (T.TupleBind (span, vars, exp))
     = let val tupleVId = freshVId (ctx, "tmp")

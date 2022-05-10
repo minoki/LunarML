@@ -595,197 +595,197 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                               else
                                   raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
       in case primOp of
-             Primitives.PrimOp_call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
-                                                      putImpureTo ctx env dest (stmts, J.CallExp (f, vector [a0, a1]))
+             Primitives.call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
+                                               putImpureTo ctx env dest (stmts, J.CallExp (f, vector [a0, a1]))
+                                           )
+           | Primitives.call3 => if Vector.length args = 4 then
+                                     let val f = Vector.sub (args, 0)
+                                         val a0 = Vector.sub (args, 1)
+                                         val a1 = Vector.sub (args, 2)
+                                         val a2 = Vector.sub (args, 3)
+                                     in doExpCont ctx env f (fn (stmts0, env, f) =>
+                                                                doExpCont ctx env a0 (fn (stmts1, env, a0) =>
+                                                                                         doExpCont ctx env a1 (fn (stmts2, env, a1) =>
+                                                                                                                  doExpCont ctx env a2 (fn (stmts3, env, a2) =>
+                                                                                                                                           putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, J.CallExp (f, vector [a0, a1, a2]))
+                                                                                                                                       )
+                                                                                                              )
+                                                                                     )
+                                                            )
+                                     end
+                                 else
+                                     raise CodeGenError "primop call3: invalid number of arguments"
+           | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
+                                                (* REPRESENTATION_OF_REF *)
+                                                let val stmts = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b)) ]
+                                                in putPureTo ctx env dest (stmts, J.UndefinedExp)
+                                                end
+                                            )
+           | Primitives.Ref_read => doUnary (fn (stmts, env, a) =>
+                                                (* REPRESENTATION_OF_REF *)
+                                                putImpureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")))
+                                            )
+           | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Bool_not => doUnary (fn (stmts, env, a) =>
+                                                putPureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
+                                            )
+           | Primitives.Int_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Int_LT => doBinaryOp (J.LT, true)
+           | Primitives.Int_GT => doBinaryOp (J.GT, true)
+           | Primitives.Int_LE => doBinaryOp (J.LE, true)
+           | Primitives.Int_GE => doBinaryOp (J.GE, true)
+           | Primitives.Word_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Word_PLUS => doBinary (fn (stmts, env, (a, b)) =>
+                                                  putPureTo ctx env dest (stmts, J.ToUint32Exp (J.BinExp (J.PLUS, a, b)))
+                                              )
+           | Primitives.Word_MINUS => doBinary (fn (stmts, env, (a, b)) =>
+                                                   putPureTo ctx env dest (stmts, J.ToUint32Exp (J.BinExp (J.MINUS, a, b)))
+                                               )
+           | Primitives.Word_TIMES => doBinary (fn (stmts, env, (a, b)) =>
+                                                   putPureTo ctx env dest (stmts, J.ToUint32Exp (J.CallExp (J.VarExp (J.PredefinedId "Math_imul"), vector [a, b])))
+                                               )
+           | Primitives.Word_TILDE => doUnary (fn (stmts, env, a) =>
+                                                  putPureTo ctx env dest (stmts, J.ToUint32Exp (J.UnaryExp (J.NEGATE, a)))
+                                              )
+           | Primitives.Word_LT => doBinaryOp (J.LT, true)
+           | Primitives.Word_GT => doBinaryOp (J.GT, true)
+           | Primitives.Word_LE => doBinaryOp (J.LE, true)
+           | Primitives.Word_GE => doBinaryOp (J.GE, true)
+           | Primitives.Real_PLUS => doBinaryOp (J.PLUS, true)
+           | Primitives.Real_MINUS => doBinaryOp (J.MINUS, true)
+           | Primitives.Real_TIMES => doBinaryOp (J.TIMES, true)
+           | Primitives.Real_DIVIDE => doBinaryOp (J.DIV, true)
+           | Primitives.Real_TILDE => doUnary (fn (stmts, env, a) =>
+                                                  putPureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
+                                              )
+           | Primitives.Real_LT => doBinaryOp (J.LT, true)
+           | Primitives.Real_GT => doBinaryOp (J.GT, true)
+           | Primitives.Real_LE => doBinaryOp (J.LE, true)
+           | Primitives.Real_GE => doBinaryOp (J.GE, true)
+           | Primitives.Char_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Char_LT => doBinaryOp (J.LT, true)
+           | Primitives.Char_GT => doBinaryOp (J.GT, true)
+           | Primitives.Char_LE => doBinaryOp (J.LE, true)
+           | Primitives.Char_GE => doBinaryOp (J.GE, true)
+           | Primitives.WideChar_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.WideChar_LT => doBinaryOp (J.LT, true)
+           | Primitives.WideChar_GT => doBinaryOp (J.GT, true)
+           | Primitives.WideChar_LE => doBinaryOp (J.LE, true)
+           | Primitives.WideChar_GE => doBinaryOp (J.GE, true)
+           | Primitives.String_EQUAL => doBinary (fn (stmts, env, (a, b)) =>
+                                                     putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_EQUAL"), vector [a, b]))
+                                                 )
+           | Primitives.String_LT => doBinary (fn (stmts, env, (a, b)) =>
+                                                  putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]))
+                                              )
+           | Primitives.String_HAT => doBinary (fn (stmts, env, (a, b)) =>
+                                                   putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_append"), vector [a, b]))
+                                               )
+           | Primitives.String_size => doUnary (fn (stmts, env, a) =>
+                                                   putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
+                                               )
+           | Primitives.String_str => doUnary (fn (stmts, env, a) =>
+                                                  putPureTo ctx env dest (stmts, J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]))
+                                              )
+           | Primitives.WideString_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.WideString_LT => doBinaryOp (J.LT, true)
+           | Primitives.WideString_GT => doBinaryOp (J.GT, true)
+           | Primitives.WideString_LE => doBinaryOp (J.LE, true)
+           | Primitives.WideString_GE => doBinaryOp (J.GE, true)
+           | Primitives.WideString_HAT => doBinaryOp (J.PLUS, true)
+           | Primitives.WideString_size => doUnary (fn (stmts, env, a) =>
+                                                       putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
+                                                   )
+           | Primitives.WideString_str => if Vector.length args = 1 then
+                                              doExpTo ctx env (Vector.sub (args, 0)) dest
+                                          else
+                                              raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.IntInf_PLUS => doBinaryOp (J.PLUS, true)
+           | Primitives.IntInf_MINUS => doBinaryOp (J.MINUS, true)
+           | Primitives.IntInf_TIMES => doBinaryOp (J.TIMES, true)
+           | Primitives.IntInf_TILDE => doUnary (fn (stmts, env, a) =>
+                                                    putPureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
+                                                )
+           | Primitives.IntInf_LT => doBinaryOp (J.LT, true)
+           | Primitives.IntInf_LE => doBinaryOp (J.LE, true)
+           | Primitives.IntInf_GT => doBinaryOp (J.GT, true)
+           | Primitives.IntInf_GE => doBinaryOp (J.GE, true)
+           | Primitives.IntInf_andb => doBinaryOp (J.BITAND, true)
+           | Primitives.IntInf_orb => doBinaryOp (J.BITOR, true)
+           | Primitives.IntInf_xorb => doBinaryOp (J.BITXOR, true)
+           | Primitives.IntInf_notb => doUnary (fn (stmts, env, a) =>
+                                                   putPureTo ctx env dest (stmts, J.UnaryExp (J.BITNOT, a))
+                                               )
+           | Primitives.IntInf_quot_unchecked => doBinaryOp (J.DIV, true)
+           | Primitives.IntInf_rem_unchecked => doBinaryOp (J.MOD, true)
+           | Primitives.Vector_EQUAL => doTernary (fn (stmts, env, (eq, a, b)) =>
+                                                      putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]))
                                                   )
-           | Primitives.PrimOp_call3 => if Vector.length args = 4 then
-                                            let val f = Vector.sub (args, 0)
-                                                val a0 = Vector.sub (args, 1)
-                                                val a1 = Vector.sub (args, 2)
-                                                val a2 = Vector.sub (args, 3)
-                                            in doExpCont ctx env f (fn (stmts0, env, f) =>
-                                                                       doExpCont ctx env a0 (fn (stmts1, env, a0) =>
-                                                                                                doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                                                         doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                                                  putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, J.CallExp (f, vector [a0, a1, a2]))
-                                                                                                                                              )
-                                                                                                                     )
-                                                                                            )
-                                                                   )
-                                            end
-                                        else
-                                            raise CodeGenError "primop call3: invalid number of arguments"
-           | Primitives.PrimOp_Ref_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Ref_set => doBinary (fn (stmts, env, (a, b)) =>
-                                                       (* REPRESENTATION_OF_REF *)
-                                                       let val stmts = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b)) ]
-                                                       in putPureTo ctx env dest (stmts, J.UndefinedExp)
-                                                       end
-                                                   )
-           | Primitives.PrimOp_Ref_read => doUnary (fn (stmts, env, a) =>
-                                                       (* REPRESENTATION_OF_REF *)
-                                                       putImpureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")))
-                                                   )
-           | Primitives.PrimOp_Bool_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Bool_not => doUnary (fn (stmts, env, a) =>
-                                                       putPureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
-                                                   )
-           | Primitives.PrimOp_Int_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Int_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_Int_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_Int_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_Int_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_Word_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Word_PLUS => doBinary (fn (stmts, env, (a, b)) =>
-                                                         putPureTo ctx env dest (stmts, J.ToUint32Exp (J.BinExp (J.PLUS, a, b)))
-                                                     )
-           | Primitives.PrimOp_Word_MINUS => doBinary (fn (stmts, env, (a, b)) =>
-                                                          putPureTo ctx env dest (stmts, J.ToUint32Exp (J.BinExp (J.MINUS, a, b)))
+           | Primitives.Vector_length => doUnary (fn (stmts, env, a) =>
+                                                     putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
+                                                 )
+           | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Array_length => doUnary (fn (stmts, env, a) =>
+                                                    putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
+                                                )
+           | Primitives.Unsafe_cast => if Vector.length args = 1 then
+                                           doExpTo ctx env (Vector.sub (args, 0)) dest
+                                       else
+                                           raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
+                                                          putPureTo ctx env dest (stmts, J.IndexExp (vec, i))
                                                       )
-           | Primitives.PrimOp_Word_TIMES => doBinary (fn (stmts, env, (a, b)) =>
-                                                          putPureTo ctx env dest (stmts, J.ToUint32Exp (J.CallExp (J.VarExp (J.PredefinedId "Math_imul"), vector [a, b])))
-                                                      )
-           | Primitives.PrimOp_Word_TILDE => doUnary (fn (stmts, env, a) =>
-                                                         putPureTo ctx env dest (stmts, J.ToUint32Exp (J.UnaryExp (J.NEGATE, a)))
+           | Primitives.Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
+                                                         putImpureTo ctx env dest (stmts, J.IndexExp (arr, i))
                                                      )
-           | Primitives.PrimOp_Word_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_Word_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_Word_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_Word_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_Real_PLUS => doBinaryOp (J.PLUS, true)
-           | Primitives.PrimOp_Real_MINUS => doBinaryOp (J.MINUS, true)
-           | Primitives.PrimOp_Real_TIMES => doBinaryOp (J.TIMES, true)
-           | Primitives.PrimOp_Real_DIVIDE => doBinaryOp (J.DIV, true)
-           | Primitives.PrimOp_Real_TILDE => doUnary (fn (stmts, env, a) =>
-                                                         putPureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
-                                                     )
-           | Primitives.PrimOp_Real_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_Real_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_Real_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_Real_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_Char_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Char_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_Char_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_Char_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_Char_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_WideChar_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_WideChar_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_WideChar_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_WideChar_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_WideChar_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_String_EQUAL => doBinary (fn (stmts, env, (a, b)) =>
-                                                            putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_EQUAL"), vector [a, b]))
-                                                        )
-           | Primitives.PrimOp_String_LT => doBinary (fn (stmts, env, (a, b)) =>
-                                                         putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]))
-                                                     )
-           | Primitives.PrimOp_String_HAT => doBinary (fn (stmts, env, (a, b)) =>
-                                                          putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_String_append"), vector [a, b]))
-                                                      )
-           | Primitives.PrimOp_String_size => doUnary (fn (stmts, env, a) =>
-                                                          putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
-                                                      )
-           | Primitives.PrimOp_String_str => doUnary (fn (stmts, env, a) =>
-                                                         putPureTo ctx env dest (stmts, J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]))
-                                                     )
-           | Primitives.PrimOp_WideString_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_WideString_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_WideString_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_WideString_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_WideString_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_WideString_HAT => doBinaryOp (J.PLUS, true)
-           | Primitives.PrimOp_WideString_size => doUnary (fn (stmts, env, a) =>
-                                                              putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
-                                                          )
-           | Primitives.PrimOp_WideString_str => if Vector.length args = 1 then
-                                                     doExpTo ctx env (Vector.sub (args, 0)) dest
-                                                 else
-                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-           | Primitives.PrimOp_IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_IntInf_PLUS => doBinaryOp (J.PLUS, true)
-           | Primitives.PrimOp_IntInf_MINUS => doBinaryOp (J.MINUS, true)
-           | Primitives.PrimOp_IntInf_TIMES => doBinaryOp (J.TIMES, true)
-           | Primitives.PrimOp_IntInf_TILDE => doUnary (fn (stmts, env, a) =>
-                                                           putPureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
-                                                       )
-           | Primitives.PrimOp_IntInf_LT => doBinaryOp (J.LT, true)
-           | Primitives.PrimOp_IntInf_LE => doBinaryOp (J.LE, true)
-           | Primitives.PrimOp_IntInf_GT => doBinaryOp (J.GT, true)
-           | Primitives.PrimOp_IntInf_GE => doBinaryOp (J.GE, true)
-           | Primitives.PrimOp_IntInf_andb => doBinaryOp (J.BITAND, true)
-           | Primitives.PrimOp_IntInf_orb => doBinaryOp (J.BITOR, true)
-           | Primitives.PrimOp_IntInf_xorb => doBinaryOp (J.BITXOR, true)
-           | Primitives.PrimOp_IntInf_notb => doUnary (fn (stmts, env, a) =>
-                                                          putPureTo ctx env dest (stmts, J.UnaryExp (J.BITNOT, a))
-                                                      )
-           | Primitives.PrimOp_IntInf_quot_unchecked => doBinaryOp (J.DIV, true)
-           | Primitives.PrimOp_IntInf_rem_unchecked => doBinaryOp (J.MOD, true)
-           | Primitives.PrimOp_Vector_EQUAL => doTernary (fn (stmts, env, (eq, a, b)) =>
-                                                             putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]))
+           | Primitives.Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
+                                                             let val stmts = stmts @ [ J.AssignStat (J.IndexExp (arr, i), v) ]
+                                                             in putPureTo ctx env dest (stmts, J.UndefinedExp)
+                                                             end
                                                          )
-           | Primitives.PrimOp_Vector_length => doUnary (fn (stmts, env, a) =>
-                                                            putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
-                                                        )
-           | Primitives.PrimOp_Array_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_Array_length => doUnary (fn (stmts, env, a) =>
-                                                           putPureTo ctx env dest (stmts, J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")))
-                                                       )
-           | Primitives.PrimOp_Unsafe_cast => if Vector.length args = 1 then
-                                                  doExpTo ctx env (Vector.sub (args, 0)) dest
-                                              else
-                                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-           | Primitives.PrimOp_Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
-                                                                 putPureTo ctx env dest (stmts, J.IndexExp (vec, i))
-                                                             )
-           | Primitives.PrimOp_Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
-                                                                putImpureTo ctx env dest (stmts, J.IndexExp (arr, i))
-                                                            )
-           | Primitives.PrimOp_Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                                    let val stmts = stmts @ [ J.AssignStat (J.IndexExp (arr, i), v) ]
-                                                                    in putPureTo ctx env dest (stmts, J.UndefinedExp)
-                                                                    end
-                                                                )
-           | Primitives.PrimOp_JavaScript_sub => doBinary (fn (stmts, env, (a, b)) =>
-                                                              putImpureTo ctx env dest (stmts, J.IndexExp (a, b))
-                                                          )
-           | Primitives.PrimOp_JavaScript_set => doTernary (fn (stmts, env, (a, b, c)) =>
-                                                               let val stmts = stmts @ [ J.AssignStat (J.IndexExp (a, b), c) ]
-                                                               in putPureTo ctx env dest (stmts, J.UndefinedExp)
-                                                               end
-                                                           )
-           | Primitives.PrimOp_JavaScript_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.PrimOp_JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, true)
-           | Primitives.PrimOp_JavaScript_LT => doBinaryOp (J.LT, false)
-           | Primitives.PrimOp_JavaScript_GT => doBinaryOp (J.GT, false)
-           | Primitives.PrimOp_JavaScript_LE => doBinaryOp (J.LE, false)
-           | Primitives.PrimOp_JavaScript_GE => doBinaryOp (J.GE, false)
-           | Primitives.PrimOp_JavaScript_PLUS => doBinaryOp (J.PLUS, false)
-           | Primitives.PrimOp_JavaScript_MINUS => doBinaryOp (J.MINUS, false)
-           | Primitives.PrimOp_JavaScript_TIMES => doBinaryOp (J.TIMES, false)
-           | Primitives.PrimOp_JavaScript_DIVIDE => doBinaryOp (J.DIV, false)
-           | Primitives.PrimOp_JavaScript_MOD => doBinaryOp (J.MOD, false)
-           | Primitives.PrimOp_JavaScript_negate => doUnary (fn (stmts, env, a) =>
-                                                                putImpureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
-                                                            )
-           | Primitives.PrimOp_JavaScript_andb => doBinaryOp (J.BITAND, false)
-           | Primitives.PrimOp_JavaScript_orb => doBinaryOp (J.BITOR, false)
-           | Primitives.PrimOp_JavaScript_xorb => doBinaryOp (J.BITXOR, false)
-           | Primitives.PrimOp_JavaScript_notb => doUnary (fn (stmts, env, a) =>
-                                                              putImpureTo ctx env dest (stmts, J.UnaryExp (J.BITNOT, a))
-                                                          )
-           | Primitives.PrimOp_JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, false)
-           | Primitives.PrimOp_JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, false)
-           | Primitives.PrimOp_JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, false)
-           | Primitives.PrimOp_JavaScript_EXP => doBinaryOp (J.EXP, true)
-           | Primitives.PrimOp_JavaScript_isFalsy => doUnary (fn (stmts, env, a) =>
-                                                                 putImpureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
-                                                             )
-           | Primitives.PrimOp_JavaScript_typeof => doUnary (fn (stmts, env, a) =>
-                                                                putPureTo ctx env dest (stmts, J.UnaryExp (J.TYPEOF, a))
-                                                            )
-           | Primitives.PrimOp_JavaScript_global => doUnary (fn (stmts, env, a) =>
-                                                                putImpureTo ctx env dest (stmts, J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a))
-                                                            )
+           | Primitives.JavaScript_sub => doBinary (fn (stmts, env, (a, b)) =>
+                                                       putImpureTo ctx env dest (stmts, J.IndexExp (a, b))
+                                                   )
+           | Primitives.JavaScript_set => doTernary (fn (stmts, env, (a, b, c)) =>
+                                                        let val stmts = stmts @ [ J.AssignStat (J.IndexExp (a, b), c) ]
+                                                        in putPureTo ctx env dest (stmts, J.UndefinedExp)
+                                                        end
+                                                    )
+           | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, true)
+           | Primitives.JavaScript_LT => doBinaryOp (J.LT, false)
+           | Primitives.JavaScript_GT => doBinaryOp (J.GT, false)
+           | Primitives.JavaScript_LE => doBinaryOp (J.LE, false)
+           | Primitives.JavaScript_GE => doBinaryOp (J.GE, false)
+           | Primitives.JavaScript_PLUS => doBinaryOp (J.PLUS, false)
+           | Primitives.JavaScript_MINUS => doBinaryOp (J.MINUS, false)
+           | Primitives.JavaScript_TIMES => doBinaryOp (J.TIMES, false)
+           | Primitives.JavaScript_DIVIDE => doBinaryOp (J.DIV, false)
+           | Primitives.JavaScript_MOD => doBinaryOp (J.MOD, false)
+           | Primitives.JavaScript_negate => doUnary (fn (stmts, env, a) =>
+                                                         putImpureTo ctx env dest (stmts, J.UnaryExp (J.NEGATE, a))
+                                                     )
+           | Primitives.JavaScript_andb => doBinaryOp (J.BITAND, false)
+           | Primitives.JavaScript_orb => doBinaryOp (J.BITOR, false)
+           | Primitives.JavaScript_xorb => doBinaryOp (J.BITXOR, false)
+           | Primitives.JavaScript_notb => doUnary (fn (stmts, env, a) =>
+                                                       putImpureTo ctx env dest (stmts, J.UnaryExp (J.BITNOT, a))
+                                                   )
+           | Primitives.JavaScript_LSHIFT => doBinaryOp (J.LSHIFT, false)
+           | Primitives.JavaScript_RSHIFT => doBinaryOp (J.RSHIFT, false)
+           | Primitives.JavaScript_URSHIFT => doBinaryOp (J.URSHIFT, false)
+           | Primitives.JavaScript_EXP => doBinaryOp (J.EXP, true)
+           | Primitives.JavaScript_isFalsy => doUnary (fn (stmts, env, a) =>
+                                                          putImpureTo ctx env dest (stmts, J.UnaryExp (J.NOT, a))
+                                                      )
+           | Primitives.JavaScript_typeof => doUnary (fn (stmts, env, a) =>
+                                                         putPureTo ctx env dest (stmts, J.UnaryExp (J.TYPEOF, a))
+                                                     )
+           | Primitives.JavaScript_global => doUnary (fn (stmts, env, a) =>
+                                                         putImpureTo ctx env dest (stmts, J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a))
+                                                     )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest

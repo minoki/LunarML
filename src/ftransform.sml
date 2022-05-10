@@ -110,18 +110,18 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
               = let val tag = #tag info
                     val payload = genMatcher (F.DataPayloadExp exp) payloadTy payloadPat
                     val equal_string = case #nativeString (#targetInfo ctx) of
-                                           TargetInfo.NARROW_STRING => Primitives.PrimOp_String_EQUAL
-                                         | TargetInfo.WIDE_STRING => Primitives.PrimOp_WideString_EQUAL
+                                           TargetInfo.NARROW_STRING => Primitives.String_EQUAL
+                                         | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
                 in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat (span, path, NONE, tyargs, info))
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
-                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.PrimOp_Bool_not, vector [], vector [exp])
+                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, vector [], vector [exp])
                    | { representation = _, tag, ... } =>
                      let val equal_string = case #nativeString (#targetInfo ctx) of
-                                                TargetInfo.NARROW_STRING => Primitives.PrimOp_String_EQUAL
-                                              | TargetInfo.WIDE_STRING => Primitives.PrimOp_WideString_EQUAL
+                                                TargetInfo.NARROW_STRING => Primitives.String_EQUAL
+                                              | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
                      in F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)])
                      end
                 )
@@ -136,14 +136,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                 end
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
-              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.PrimOp_Vector_length, vector [elemTy], vector [exp])
+              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.Vector_length, vector [elemTy], vector [exp])
                     val intTy = F.TyCon ([], Typing.primTyName_int)
                     val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
-                                 F.PrimExp (F.PrimFnOp Primitives.PrimOp_Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimFnOp Primitives.Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
                              else
-                                 F.PrimExp (F.PrimFnOp Primitives.PrimOp_Int_EQUAL, vector [], vector [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
+                                 F.PrimExp (F.PrimFnOp Primitives.Int_EQUAL, vector [], vector [vectorLengthExp, expectedLengthExp])
+                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                     in F.SimplifyingAndalsoExp (e, exp)
                                                     end
                                  ) e0 pats
@@ -162,7 +162,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
               = (case info of
                      { representation = Syntax.REP_REF, tag = "ref", ... } =>
                      (case tyargs of
-                          [tyarg] => genBinders (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Ref_read, vector [tyarg], vector [exp])) payloadTy payloadPat
+                          [tyarg] => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, vector [tyarg], vector [exp])) payloadTy payloadPat
                         | _ => raise Fail "invalid type arguments to 'ref'"
                      )
                    | _ => genBinders (F.DataPayloadExp exp) payloadTy payloadPat
@@ -172,7 +172,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
             | genBinders exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
-                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp Primitives.PrimOp_Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
                                                                                end
           and isExhaustive (F.WildcardPat _) = true
             | isExhaustive (F.SConPat _) = false
@@ -636,7 +636,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
           and doExp' (env : Env) exp0 : F.Exp * InlineExp option
               = (case exp0 of
                      F.PrimExp (primOp, tyargs, args) => let val shouldInline = case primOp of
-                                                                                    F.PrimFnOp Primitives.PrimOp_Unsafe_cast => true
+                                                                                    F.PrimFnOp Primitives.Unsafe_cast => true
                                                                                   | _ => false
                                                          in if shouldInline then
                                                                 let val (exps, iexps) = Vector.foldr (fn (exp, (exps, SOME iexps)) => (case doExp' env exp of
