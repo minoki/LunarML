@@ -128,11 +128,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) })
               = let val tag = F.PathToExp tagPath
                     val payload = genMatcher (F.DataPayloadExp exp) payloadTy payloadPat
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.ExnInstanceofOp, vector [], vector [exp, tag]), payload)
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag]), payload)
                 end
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE })
               = let val tag = F.PathToExp tagPath
-                in F.PrimExp (F.ExnInstanceofOp, vector [], vector [exp, tag])
+                in F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag])
                 end
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
@@ -913,7 +913,7 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
-  | isDiscardablePrimOp F.ExnInstanceofOp = true
+  | isDiscardablePrimOp (F.PrimFnOp Primitives.Exception_instanceof) = true
   | isDiscardablePrimOp (F.PrimFnOp _) = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
   | isDiscardable (F.VarExp _) = true

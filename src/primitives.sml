@@ -80,6 +80,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Unsafe_Vector_sub (* Unsafe.Vector.sub *)
                 | Unsafe_Array_sub (* Unsafe.Array.sub *)
                 | Unsafe_Array_update (* Unsafe.Array.update *)
+                | Exception_instanceof (* Exception.instanceof *)
                 | Lua_sub (* Lua.sub *)
                 | Lua_set (* Lua.set *)
                 | Lua_isNil (* Lua.isNil *)
@@ -211,6 +212,7 @@ fun toString EQUAL = "="
   | toString Unsafe_Vector_sub = "Unsafe.Vector.sub"
   | toString Unsafe_Array_sub = "Unsafe.Array.sub"
   | toString Unsafe_Array_update = "Unsafe.Array.update"
+  | toString Exception_instanceof = "Exception.instanceof"
   | toString Lua_sub = "Lua.sub"
   | toString Lua_set = "Lua.set"
   | toString Lua_isNil = "Lua.isNil"
@@ -342,6 +344,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Unsafe.Vector.sub" = SOME Unsafe_Vector_sub
   | fromString "Unsafe.Array.sub" = SOME Unsafe_Array_sub
   | fromString "Unsafe.Array.update" = SOME Unsafe_Array_update
+  | fromString "Exception.instanceof" = SOME Exception_instanceof
   | fromString "Lua.sub" = SOME Lua_sub
   | fromString "Lua.set" = SOME Lua_set
   | fromString "Lua.isNil" = SOME Lua_isNil
@@ -419,6 +422,8 @@ functor TypeOfPrimitives (type ty
                           val string : ty
                           val wideString : ty
                           val intInf : ty
+                          val exn : ty
+                          val exntag : ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
                           val refOf : ty -> ty
@@ -512,6 +517,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Unsafe_Vector_sub = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int], result = tyA }
   | typeOf Primitives.Unsafe_Array_sub = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int], result = tyA }
   | typeOf Primitives.Unsafe_Array_update = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int, tyA], result = unit }
+  | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }

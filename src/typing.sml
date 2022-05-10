@@ -252,6 +252,7 @@ val primTy_real = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_real)
 val primTy_string = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_string)
 val primTy_char = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_char)
 val primTy_exn = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_exn)
+val primTy_exntag = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_exntag)
 val primTy_bool = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_bool)
 val primTy_wideChar = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideChar)
 val primTy_wideString = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_wideString)
@@ -286,6 +287,8 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                val string = primTy_string
                                                val wideString = primTy_wideString
                                                val intInf = primTy_intInf
+                                               val exn = primTy_exn
+                                               val exntag = primTy_exntag
                                                val LuaValue = primTy_Lua_value
                                                val JavaScriptValue = primTy_JavaScript_value
                                                fun refOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_ref)

@@ -46,7 +46,6 @@ fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp F.RecordEqualityOp = [P.Fragment "record-equality"]
   | doPrimOp F.DataTagOp = [P.Fragment "data-tag"]
   | doPrimOp F.DataPayloadOp = [P.Fragment "data-payload"]
-  | doPrimOp F.ExnInstanceofOp = [P.Fragment "exn-instanceof"]
   | doPrimOp (F.PrimFnOp primOp) = [P.Fragment (Primitives.toString primOp)]
 (* precedence
  * atomexp ::= PrimExp | VarExp | RecordExp | ProjectionExp | StructExp | '(' exp ')' (* prec: 2 *)

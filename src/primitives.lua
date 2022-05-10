@@ -18,6 +18,8 @@ do
   local string = {"string"}
   local wideString = {"wideString"}
   local intInf = {"intInf"}
+  local exn = {"exn"}
+  local exntag = {"exntag"}
   local LuaValue = {"LuaValue"}
   local JSValue = {"JavaScriptValue"}
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
@@ -443,6 +445,11 @@ do
       srcname = "Unsafe_Array_update",
       type = { vars = {TV.a}, args = {array(TV.a), int, TV.a}, result = unit },
     },
+    {
+      name = "Exception.instanceof",
+      srcname = "Exception_instanceof",
+      type = { vars = {}, args = {exn, exntag}, result = bool },
+    },
 
     --
     -- Lua backend
@@ -773,6 +780,8 @@ functor TypeOfPrimitives (type ty
                           val string : ty
                           val wideString : ty
                           val intInf : ty
+                          val exn : ty
+                          val exntag : ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
                           val refOf : ty -> ty

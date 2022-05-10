@@ -745,6 +745,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                              in putPureTo ctx env dest (stmts, J.UndefinedExp)
                                                              end
                                                          )
+           | Primitives.Exception_instanceof => doBinary (fn (stmts, env, (e, tag)) =>
+                                                             putPureTo ctx env dest (stmts, J.BinExp (J.INSTANCEOF, e, tag))
+                                                         )
            | Primitives.JavaScript_sub => doBinary (fn (stmts, env, (a, b)) =>
                                                        putImpureTo ctx env dest (stmts, J.IndexExp (a, b))
                                                    )
@@ -788,18 +791,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                      )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end
-  | doExpTo ctx env (F.PrimExp (F.ExnInstanceofOp, _, args)) dest
-    = if Vector.length args = 2 then
-          let val a0 = Vector.sub (args, 0)
-              val a1 = Vector.sub (args, 1)
-          in doExpCont ctx env a0 (fn (stmts0, env, a0') =>
-                                      doExpCont ctx env a1 (fn (stmts1, env, a1') =>
-                                                               putPureTo ctx env dest (stmts0 @ stmts1, J.BinExp (J.INSTANCEOF, a0', a1'))
-                                                           )
-                                  )
-          end
-      else
-          raise CodeGenError "PrimExp.ExnInstanceofOp: invalid number of arguments"
 (* doDec : Context -> Env -> F.Dec -> string *)
 and doDec ctx env (F.ValDec (vid, _, exp))
     = if isHoisted (env, vid) then
