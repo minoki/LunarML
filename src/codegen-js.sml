@@ -491,20 +491,27 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
           end
       else
           raise CodeGenError "PrimExp.RecordEqualityOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataTagOp, _, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "tag"))))
           end
       else
           raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp, _, xs)) dest
+  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)
           in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
           end
       else
           raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, xs)) dest
+    = if Vector.length xs = 1 then
+          let val exp = Vector.sub (xs, 0)
+          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
+          end
+      else
+          raise CodeGenError "PrimExp.ExnPayloadOp: invalid number of arguments"
   | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
     = let val valMap' = Syntax.VIdMap.listItemsi valMap
           val strMap' = Syntax.StrIdMap.listItemsi strMap

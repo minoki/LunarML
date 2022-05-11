@@ -108,11 +108,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = let val tag = #tag info
-                    val payload = genMatcher (F.DataPayloadExp exp) payloadTy payloadPat
+                    val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
                     val equal_string = case #nativeString (#targetInfo ctx) of
                                            TargetInfo.NARROW_STRING => Primitives.String_EQUAL
                                          | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload)
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
@@ -122,12 +122,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      let val equal_string = case #nativeString (#targetInfo ctx) of
                                                 TargetInfo.NARROW_STRING => Primitives.String_EQUAL
                                               | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
-                     in F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.DataTagExp exp, F.AsciiStringAsNativeString (#targetInfo ctx, tag)])
+                     in F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsNativeString (#targetInfo ctx, tag)])
                      end
                 )
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) })
               = let val tag = F.PathToExp tagPath
-                    val payload = genMatcher (F.DataPayloadExp exp) payloadTy payloadPat
+                    val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
                 in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag]), payload)
                 end
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE })
@@ -161,10 +161,10 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
                      { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, vector [payloadTy], vector [exp])) payloadTy payloadPat
-                   | _ => genBinders (F.DataPayloadExp exp) payloadTy payloadPat
+                   | _ => genBinders (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
                 )
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = NONE }) = []
-            | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = genBinders (F.DataPayloadExp exp) payloadTy payloadPat
+            | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = genBinders (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
             | genBinders exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
@@ -912,8 +912,9 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.ListOp = true
   | isDiscardablePrimOp F.VectorOp = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
-  | isDiscardablePrimOp F.DataTagOp = true
-  | isDiscardablePrimOp F.DataPayloadOp = true
+  | isDiscardablePrimOp (F.DataTagOp _) = true
+  | isDiscardablePrimOp (F.DataPayloadOp _) = true
+  | isDiscardablePrimOp F.ExnPayloadOp = true
   | isDiscardablePrimOp (F.ConstructValOp _) = true
   | isDiscardablePrimOp (F.ConstructValWithPayloadOp _) = true
   | isDiscardablePrimOp F.ConstructExnOp = true

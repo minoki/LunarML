@@ -34,8 +34,9 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | ListOp (* type argument: element type, value arguments: the elements *)
                 | VectorOp (* type argument: element type, value arguments: the elements *)
                 | RecordEqualityOp (* value argument: the record of equalities *)
-                | DataTagOp (* value argument: the data *)
-                | DataPayloadOp (* value argument: the data *)
+                | DataTagOp of Syntax.ValueConstructorInfo (* value argument: the data *)
+                | DataPayloadOp of Syntax.ValueConstructorInfo (* type argument: payload, value argument: the data *)
+                | ExnPayloadOp (* type argument: payload, value argument: the data *)
                 | ConstructValOp of Syntax.ValueConstructorInfo (* type argument: data type *)
                 | ConstructValWithPayloadOp of Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: payload *)
                 | ConstructExnOp (* value argument: exception tag *)
@@ -92,8 +93,6 @@ fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp span, vector [ty], vector [exp])
 fun ListExp (exps, elemTy) = PrimExp (ListOp, vector [elemTy], exps)
 fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
 fun RecordEqualityExp fields = PrimExp (RecordEqualityOp, vector [], vector [RecordExp fields])
-fun DataTagExp exp = PrimExp (DataTagOp, vector [], vector [exp])
-fun DataPayloadExp exp = PrimExp (DataPayloadOp, vector [], vector [exp])
 fun TupleType xs = let fun doFields i [] acc = acc
                          | doFields i (x :: xs) acc = doFields (i + 1) xs (Syntax.LabelMap.insert (acc, Syntax.NumericLabel i, x))
                    in RecordType (doFields 1 xs Syntax.LabelMap.empty)
@@ -464,8 +463,9 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp ListOp = "ListOp"
   | print_PrimOp VectorOp = "VectorOp"
   | print_PrimOp RecordEqualityOp = "RecordEqualityOp"
-  | print_PrimOp DataTagOp = "DataTagOp"
-  | print_PrimOp DataPayloadOp = "DataPayloadOp"
+  | print_PrimOp (DataTagOp _) = "DataTagOp"
+  | print_PrimOp (DataPayloadOp _) = "DataPayloadOp"
+  | print_PrimOp ExnPayloadOp = "ExnPayloadOp"
   | print_PrimOp (ConstructValOp _) = "ConstructValOp"
   | print_PrimOp (ConstructValWithPayloadOp _) = "ConstructValWithPayloadOp"
   | print_PrimOp ConstructExnOp = "ConstructExnOp"
