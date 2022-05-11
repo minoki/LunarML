@@ -46,6 +46,10 @@ fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp F.RecordEqualityOp = [P.Fragment "record-equality"]
   | doPrimOp F.DataTagOp = [P.Fragment "data-tag"]
   | doPrimOp F.DataPayloadOp = [P.Fragment "data-payload"]
+  | doPrimOp (F.ConstructValOp _) = [P.Fragment "ConstructVal"]
+  | doPrimOp (F.ConstructValWithPayloadOp _) = [P.Fragment "ConstructValWithPayload"]
+  | doPrimOp F.ConstructExnOp = [P.Fragment "ConstructExn"]
+  | doPrimOp F.ConstructExnWithPayloadOp = [P.Fragment "ConstructExnWithPayload"]
   | doPrimOp (F.PrimFnOp primOp) = [P.Fragment (Primitives.toString primOp)]
 (* precedence
  * atomexp ::= PrimExp | VarExp | RecordExp | ProjectionExp | StructExp | '(' exp ')' (* prec: 2 *)
@@ -84,8 +88,8 @@ and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (Type
   | doDec (F.DatatypeDec datbinds) = P.Fragment "datatype " :: P.IncreaseIndent 5 :: P.sepBy [P.LineTerminator, P.Indent, P.Fragment "and "] (List.map (fn F.DatBind (tyvars, datty, conbinds) => doTyVar datty @ P.Fragment " " :: P.spaceSep (List.map doTyVar tyvars) @ P.Fragment " = " :: P.sepBy [P.Fragment " | "] (List.map (fn F.ConBind (vid, NONE) => [P.Fragment (TypedSyntax.print_VId vid)]
                                                                                                                                                                                                                                                                                                                             | F.ConBind (vid, SOME ty) => P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " of " :: doTy 0 ty
                                                                                                                                                                                                                                                                                                                             ) conbinds)) datbinds) @ [P.DecreaseIndent 5]
-  | doDec (F.ExceptionDec { conName, tagName, payloadTy = NONE }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId conName) :: P.Fragment ", tag=" :: P.Fragment (TypedSyntax.print_VId tagName) :: []
-  | doDec (F.ExceptionDec { conName, tagName, payloadTy = SOME payloadTy }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId conName) :: P.Fragment " of " :: doTy 0 payloadTy @ P.Fragment ", tag=" :: P.Fragment (TypedSyntax.print_VId tagName) :: []
+  | doDec (F.ExceptionDec { name, tagName, payloadTy = NONE }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: []
+  | doDec (F.ExceptionDec { name, tagName, payloadTy = SOME payloadTy }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: P.Fragment " of " :: doTy 0 payloadTy
   | doDec (F.ExportValue exp) = P.Fragment "_export " :: doExp 0 exp
   | doDec (F.ExportModule fields) = P.Fragment "_export {" :: P.commaSepV (Vector.map (fn (name, exp) => P.Fragment name :: P.Fragment " = " :: doExp 0 exp) fields) @ [P.Fragment "}"]
   | doDec (F.GroupDec (NONE,decs)) = P.Fragment "_group" :: P.LineTerminator :: P.IncreaseIndent 2 :: List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs) @ [P.DecreaseIndent 2, P.Indent, P.Fragment "end"]

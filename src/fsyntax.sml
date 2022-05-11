@@ -36,6 +36,10 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | RecordEqualityOp (* value argument: the record of equalities *)
                 | DataTagOp (* value argument: the data *)
                 | DataPayloadOp (* value argument: the data *)
+                | ConstructValOp of Syntax.ValueConstructorInfo (* type argument: data type *)
+                | ConstructValWithPayloadOp of Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: payload *)
+                | ConstructExnOp (* value argument: exception tag *)
+                | ConstructExnWithPayloadOp (* type argument: payload, value argument: exception tag, value argument: payload *)
                 | PrimFnOp of Primitives.PrimOp
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of { sourceSpan : SourcePos.span
@@ -77,8 +81,8 @@ datatype Pat = WildcardPat of SourcePos.span
              | RecValDec of (TypedSyntax.VId * Ty * Exp) list
              | UnpackDec of TyVar * Kind * TypedSyntax.VId * (* the type of the new identifier *) Ty * Exp
              | IgnoreDec of Exp (* val _ = ... *)
-             | DatatypeDec of DatBind list
-             | ExceptionDec of { conName : TypedSyntax.VId, tagName : TypedSyntax.VId, payloadTy : Ty option }
+             | DatatypeDec of DatBind list (* does not define value-level constructors *)
+             | ExceptionDec of { name : string, tagName : TypedSyntax.VId, payloadTy : Ty option } (* does not defined value-level constructors *)
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
              | GroupDec of TypedSyntax.VIdSet.set option * Dec list
@@ -266,7 +270,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
                                                                                        doTy ty, doExp exp)
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
-          | doDec (ExceptionDec { conName, tagName, payloadTy }) = ExceptionDec { conName = conName, tagName = tagName, payloadTy = Option.map doTy payloadTy }
+          | doDec (ExceptionDec { name, tagName, payloadTy }) = ExceptionDec { name = name, tagName = tagName, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
@@ -345,10 +349,10 @@ and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) = (bound, (case optTy of
                                                                               end
                                                                           ) TypedSyntax.TyVarSet.empty datbinds)
                                                     end
-  | freeTyVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (bound, case payloadTy of
-                                                                                        NONE => TypedSyntax.TyVarSet.empty
-                                                                                      | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
-                                                                            )
+  | freeTyVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) = (bound, case payloadTy of
+                                                                                     NONE => TypedSyntax.TyVarSet.empty
+                                                                                   | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
+                                                                         )
   | freeTyVarsInDec (bound, ExportValue exp) = (bound, freeTyVarsInExp (bound, exp))
   | freeTyVarsInDec (bound, ExportModule exports) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) TypedSyntax.TyVarSet.empty exports)
   | freeTyVarsInDec (bound, GroupDec (v, decs)) = freeTyVarsInDecs (bound, decs)
@@ -402,7 +406,7 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) = (TypedSyntax.VIdSet.add (boun
   | freeVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, IgnoreDec exp) = (bound, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, DatatypeDec datbinds) = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, TypedSyntax.VIdSet.empty)
-  | freeVarsInDec (bound, ExceptionDec { conName, tagName, payloadTy }) = (TypedSyntax.VIdSet.add (TypedSyntax.VIdSet.add (bound, conName), tagName), TypedSyntax.VIdSet.empty)
+  | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) = (TypedSyntax.VIdSet.add (bound, tagName), TypedSyntax.VIdSet.empty)
   | freeVarsInDec (bound, ExportValue exp) = (bound, freeVarsInExp (bound, exp))
   | freeVarsInDec (bound, ExportModule exps) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty exps)
   | freeVarsInDec (bound, GroupDec (_, decs)) = List.foldl (fn (dec, (bound, acc)) => let val (bound, set) = freeVarsInDec (bound, dec)
@@ -462,6 +466,10 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp RecordEqualityOp = "RecordEqualityOp"
   | print_PrimOp DataTagOp = "DataTagOp"
   | print_PrimOp DataPayloadOp = "DataPayloadOp"
+  | print_PrimOp (ConstructValOp _) = "ConstructValOp"
+  | print_PrimOp (ConstructValWithPayloadOp _) = "ConstructValWithPayloadOp"
+  | print_PrimOp ConstructExnOp = "ConstructExnOp"
+  | print_PrimOp ConstructExnWithPayloadOp = "ConstructExnWithPayloadOp"
   | print_PrimOp (PrimFnOp x) = Primitives.toString x
 fun print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Ty x :: xs) [] tyargs) ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
@@ -972,25 +980,56 @@ and toFDecs (ctx, env, []) = (env, [])
       end
   | toFDecs (ctx, env, T.TypeDec (span, typbinds) :: decs) = toFDecs (ctx, env, decs)
   | toFDecs (ctx, env, T.DatatypeDec (span, datbinds) :: decs)
-    = let val dec = F.DatatypeDec (List.map (fn datbind => doDatBind(ctx, env, datbind)) datbinds)
+    = let val dec = F.DatatypeDec (List.map (fn T.DatBind (span, tyvars, tycon, conbinds, _) =>
+                                                let val conbinds = List.map (fn T.ConBind (span, vid, NONE, info) => F.ConBind (vid, NONE)
+                                                                            | T.ConBind (span, vid, SOME ty, info) => F.ConBind (vid, SOME (toFTy (ctx, env, ty)))
+                                                                            ) conbinds
+                                                in F.DatBind (tyvars, F.tyNameToTyVar tycon, conbinds)
+                                                end
+                                            ) datbinds)
+          val constructors = List.foldr (fn (T.DatBind (span, tyvars, tycon, conbinds, _), acc) =>
+                                            let val baseTy = F.TyCon (List.map F.TyVar tyvars, tycon)
+                                            in List.foldr (fn (T.ConBind (span, vid, optPayload, info), acc) =>
+                                                              let val (ty, exp) = case optPayload of
+                                                                                      NONE => (baseTy, F.PrimExp (F.ConstructValOp info, vector [baseTy], vector []))
+                                                                                    | SOME payloadTy => let val payloadId = freshVId (ctx, "payload")
+                                                                                                            val payloadTy = toFTy (ctx, env, payloadTy)
+                                                                                                            val ty = F.FnType (payloadTy, baseTy)
+                                                                                                        in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructValWithPayloadOp info, vector [baseTy, payloadTy], vector [F.VarExp payloadId])))
+                                                                                                        end
+                                                                  val ty = List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty)) ty tyvars
+                                                                  val exp = List.foldr (fn (tv, exp) => F.TyAbsExp (tv, F.TypeKind, exp)) exp tyvars
+                                                              in F.ValDec (vid, SOME ty, exp) :: acc
+                                                              end
+                                                          ) acc conbinds
+                                            end
+                                        ) [] datbinds
           val (env, valbinds) = genEqualitiesForDatatypes(ctx, env, datbinds)
           val (env, decs) = toFDecs(ctx, env, decs)
-      in (env, dec :: (if List.null valbinds then decs else F.RecValDec valbinds :: decs))
+      in (env, dec :: constructors @ (if List.null valbinds then decs else F.RecValDec valbinds :: decs))
       end
   | toFDecs (ctx, env as { exnTagMap, ... }, T.ExceptionDec (span, exbinds) :: decs)
-    = let val (exnTagMap, exbinds) = List.foldr (fn (T.ExBind (span, vid as TypedSyntax.MkVId (name, _), optTy), (exnTagMap, xs)) =>
-                                                    let val tag = freshVId(ctx, name ^ "_tag")
+    = let val exnTy = FSyntax.TyCon ([], Typing.primTyName_exn)
+          val (exnTagMap, exbinds) = List.foldr (fn (T.ExBind (span, vid as TypedSyntax.MkVId (name, _), optPayloadTy), (exnTagMap, xs)) =>
+                                                    let val tag = freshVId (ctx, name ^ "_tag")
+                                                        val optPayloadTy = Option.map (fn ty => toFTy (ctx, env, ty)) optPayloadTy
+                                                        val (ty, exp) = case optPayloadTy of
+                                                                            NONE => (exnTy, F.PrimExp (F.ConstructExnOp, vector [], vector [F.VarExp tag]))
+                                                                          | SOME payloadTy => let val payloadId = freshVId (ctx, "payload")
+                                                                                                  val ty = F.FnType (payloadTy, exnTy)
+                                                                                              in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructExnWithPayloadOp, vector [payloadTy], vector [F.VarExp tag, F.VarExp payloadId])))
+                                                                                              end
+                                                        val conDec = F.ValDec (vid, SOME ty, exp)
                                                     in ( TypedSyntax.VIdMap.insert (exnTagMap, vid, F.Root tag)
-                                                       , F.ExceptionDec { conName = vid
+                                                       , F.ExceptionDec { name = name
                                                                         , tagName = tag
-                                                                        , payloadTy = Option.map (fn ty => toFTy(ctx, env, ty)) optTy
-                                                                        } :: xs
+                                                                        , payloadTy = optPayloadTy
+                                                                        } :: conDec :: xs
                                                        )
                                                     end
                                                 | (T.ExReplication (span, vid, longvid, optTy), (exnTagMap, xs)) =>
                                                   (case LongVIdToExnTagPath (env, longvid) of
-                                                       SOME tagPath => let val exnTy = FSyntax.TyCon ([], Typing.primTyName_exn)
-                                                                           val conTy = case optTy of
+                                                       SOME tagPath => let val conTy = case optTy of
                                                                                            SOME payloadTy => F.FnType (toFTy (ctx, env, payloadTy), exnTy)
                                                                                          | NONE => exnTy
                                                                            val dec = F.ValDec (vid, SOME conTy, F.LongVarExp longvid)
@@ -1033,9 +1072,6 @@ and toFDecs (ctx, env, []) = (env, [])
                                                                                 val (env, decs) = toFDecs (ctx, env, decs)
                                                                             in (env, dec :: decs)
                                                                             end
-and doDatBind (ctx, env, T.DatBind (span, tyvars, tycon, conbinds, _)) = F.DatBind (tyvars, F.tyNameToTyVar tycon, List.map (fn conbind => doConBind (ctx, env, conbind)) conbinds)
-and doConBind (ctx, env, T.ConBind (span, vid, NONE, info)) = F.ConBind (vid, NONE)
-  | doConBind (ctx, env, T.ConBind (span, vid, SOME ty, info)) = F.ConBind (vid, SOME (toFTy (ctx, env, ty)))
 and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.Ty * F.Exp) list
     = let val nameMap = List.foldl (fn (T.DatBind (span, tyvars, tycon as TypedSyntax.MkTyName (name, _), conbinds, true), map) => TypedSyntax.TyNameMap.insert (map, tycon, freshVId (ctx, "EQUAL" ^ name))
                                    | (_, map) => map) TypedSyntax.TyNameMap.empty datbinds

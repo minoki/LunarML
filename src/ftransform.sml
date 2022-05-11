@@ -74,7 +74,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | doDec (F.UnpackDec (tv, kind, vid, ty, exp)) = F.UnpackDec (tv, kind, vid, ty, doExp exp)
             | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
             | doDec (dec as F.DatatypeDec datbinds) = dec
-            | doDec (dec as F.ExceptionDec { conName, tagName, payloadTy }) = dec
+            | doDec (dec as F.ExceptionDec { name, tagName, payloadTy }) = dec
             | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
             | doDec (F.ExportModule fields) = F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
             | doDec (F.GroupDec (v, decs)) = F.GroupDec (v, doDecs decs)
@@ -444,11 +444,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                      end
                                                  ) datbinds))
                 end
-            | doDec env (F.ExceptionDec { conName, tagName, payloadTy })
-              = let val conName' = refreshVId conName
-                    val tagName' = refreshVId tagName
+            | doDec env (F.ExceptionDec { name, tagName, payloadTy })
+              = let val tagName' = refreshVId tagName
                     val payloadTy = Option.map (doTy env) payloadTy
-                in (insertVId (insertVId (env, conName, conName'), tagName, tagName'), F.ExceptionDec { conName = conName', tagName = tagName', payloadTy = payloadTy })
+                in (insertVId (env, tagName, tagName'), F.ExceptionDec { name = name, tagName = tagName', payloadTy = payloadTy })
                 end
             | doDec env (F.ExportValue exp) = (env, F.ExportValue (doExp env exp))
             | doDec env (F.ExportModule xs) = (env, F.ExportModule (Vector.map (fn (label, exp) => (label, doExp env exp)) xs))
@@ -510,7 +509,13 @@ fun removeFromEnv (vid, env as { valMap } : Env) = if TypedSyntax.VIdMap.inDomai
                                                        { valMap = #1 (TypedSyntax.VIdMap.remove (valMap, vid)) }
                                                    else
                                                        env
-fun costOfExp (F.PrimExp (primOp, tyargs, args)) = Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
+fun costOfExp (F.PrimExp (primOp, tyargs, args)) = (case primOp of
+                                                        F.ConstructValOp _ => 100 (* don't inline constructors *)
+                                                      | F.ConstructValWithPayloadOp _ => 100 (* don't inline constructors *)
+                                                      | F.ConstructExnOp => 100 (* don't inline constructors *)
+                                                      | F.ConstructExnWithPayloadOp => 100 (* don't inline constructors *)
+                                                      | _ => Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
+                                                   )
   | costOfExp (F.VarExp _) = 0
   | costOfExp (F.RecordExp fields) = List.foldl (fn ((label, exp), acc) => acc + costOfExp exp) 1 fields
   | costOfExp (F.LetExp (dec, exp)) = costOfDec dec + costOfExp exp
@@ -529,8 +534,8 @@ and costOfDec (F.ValDec (vid, optTy, exp)) = costOfExp exp
   | costOfDec (F.RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => acc + costOfExp exp) 0 valbinds
   | costOfDec (F.UnpackDec (tv, kind, vid, ty, exp)) = costOfExp exp
   | costOfDec (F.IgnoreDec exp) = costOfExp exp
-  | costOfDec (F.DatatypeDec datbinds) = List.length datbinds
-  | costOfDec (F.ExceptionDec { conName, tagName, payloadTy }) = 1
+  | costOfDec (F.DatatypeDec datbinds) = 0
+  | costOfDec (F.ExceptionDec { name, tagName, payloadTy }) = 1
   | costOfDec (F.ExportValue exp) = costOfExp exp
   | costOfDec (F.ExportModule entities) = Vector.foldl (fn ((name, exp), acc) => acc + costOfExp exp) 0 entities
   | costOfDec (F.GroupDec (_, decs)) = List.foldl (fn (dec, acc) => acc + costOfDec dec) 0 decs
@@ -909,6 +914,10 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp F.DataTagOp = true
   | isDiscardablePrimOp F.DataPayloadOp = true
+  | isDiscardablePrimOp (F.ConstructValOp _) = true
+  | isDiscardablePrimOp (F.ConstructValWithPayloadOp _) = true
+  | isDiscardablePrimOp F.ConstructExnOp = true
+  | isDiscardablePrimOp F.ConstructExnWithPayloadOp = true
   | isDiscardablePrimOp (F.PrimFnOp Primitives.Exception_instanceof) = true
   | isDiscardablePrimOp (F.PrimFnOp _) = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
@@ -1110,10 +1119,10 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
                                     in (TypedSyntax.VIdSet.union (used, used'), List.map F.IgnoreDec exps)
                                     end
   | doDec (used, dec as F.DatatypeDec datbinds) = (used, [dec]) (* TODO *)
-  | doDec (used, dec as F.ExceptionDec { conName, tagName, payloadTy }) = if TypedSyntax.VIdSet.member (used, conName) orelse TypedSyntax.VIdSet.member (used, tagName) then
-                                                                              (used, [dec])
-                                                                          else
-                                                                              (used, [])
+  | doDec (used, dec as F.ExceptionDec { name, tagName, payloadTy }) = if TypedSyntax.VIdSet.member (used, tagName) then
+                                                                           (used, [dec])
+                                                                       else
+                                                                           (used, [])
   | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp
                                       in (TypedSyntax.VIdSet.union (used, used'), [F.ExportValue exp])
                                       end
@@ -1139,7 +1148,7 @@ and definedInDec (F.ValDec (vid, _, _)) = TypedSyntax.VIdSet.singleton vid
   | definedInDec (F.UnpackDec (tv, kind, vid, ty, exp)) = TypedSyntax.VIdSet.singleton vid
   | definedInDec (F.IgnoreDec _) = TypedSyntax.VIdSet.empty
   | definedInDec (F.DatatypeDec datbinds) = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind (vid, _), s) => TypedSyntax.VIdSet.add (s, vid)) s conbinds) TypedSyntax.VIdSet.empty datbinds
-  | definedInDec (F.ExceptionDec { conName, tagName, ... }) = TypedSyntax.VIdSet.add (TypedSyntax.VIdSet.singleton conName, tagName)
+  | definedInDec (F.ExceptionDec { name = _, tagName, payloadTy = _ }) = TypedSyntax.VIdSet.singleton tagName
   | definedInDec (F.ExportValue _) = TypedSyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.ExportModule _) = TypedSyntax.VIdSet.empty (* should not occur *)
   | definedInDec (F.GroupDec(_, decs)) = definedInDecs decs (* should not occur *)

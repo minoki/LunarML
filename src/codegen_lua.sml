@@ -739,8 +739,43 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
-(* doDec : Context -> Env -> F.Dec -> string *)
-and doDec ctx env (F.ValDec (vid, _, exp))
+  | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
+    = let val tag = #tag info
+      in putPureTo ctx env dest ([], L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))]))
+      end
+  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, args)) dest
+    = if Vector.length args = 1 then
+          let val tag = #tag info
+              val payload = Vector.sub (args, 0)
+          in doExpCont ctx env payload (fn (stmts, env, payload) =>
+                                           putPureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag)), (L.StringKey "payload", payload)]))
+                                       )
+          end
+      else
+          raise CodeGenError "ConstructValWithPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, args)) dest
+    = if Vector.length args = 1 then
+          let val tag = Vector.sub (args, 0)
+          in doExpCont ctx env tag (fn (stmts, env, tag) =>
+                                       putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", tag)]), L.VarExp (L.PredefinedId "_exn_meta")]))
+                                   )
+          end
+      else
+          raise CodeGenError "ConstructExnOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, args)) dest
+    = if Vector.length args = 2 then
+          let val tag = Vector.sub (args, 0)
+              val payload = Vector.sub (args, 1)
+          in doExpCont ctx env tag (fn (stmts0, env, tag) =>
+                                       doExpCont ctx env payload (fn (stmts1, env, payload) =>
+                                                                     putPureTo ctx env dest (stmts0 @ stmts1, L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", tag), (L.StringKey "payload", payload)]), L.VarExp (L.PredefinedId "_exn_meta")]))
+                                                                 )
+                                   )
+          end
+      else
+          raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
+(* doDec : Context -> Env -> F.Dec -> L.Stat list *)
+and doDec ctx env (F.ValDec (vid, _, exp)) : L.Stat list
     = if isHoisted (env, vid) then
           doExpTo ctx env exp (AssignTo vid)
       else
@@ -758,23 +793,12 @@ and doDec ctx env (F.ValDec (vid, _, exp))
       else
           doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
   | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
-  | doDec ctx env (F.DatatypeDec datbinds) = List.concat (List.map (doDatBind ctx env) datbinds)
-  | doDec ctx env (F.ExceptionDec { conName as TypedSyntax.MkVId (name, _), tagName, payloadTy })
+  | doDec ctx env (F.DatatypeDec datbinds) = [] (* no runtime counterpart *)
+  | doDec ctx env (F.ExceptionDec { name, tagName, payloadTy })
     = [ if isHoisted (env, tagName) then
             L.AssignStat (vector [L.VarExp (L.UserDefinedId tagName)], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
         else
             L.LocalStat (vector [tagName], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
-      , case payloadTy of
-            NONE => if isHoisted (env, conName) then
-                        L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
-                    else
-                        L.LocalStat (vector [conName], vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName))]), L.VarExp (L.PredefinedId "_exn_meta")])])
-          | SOME _ => let val body = vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", L.VarExp (L.UserDefinedId tagName)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))]), L.VarExp (L.PredefinedId "_exn_meta")])])]
-                      in if isHoisted (env, conName) then
-                             L.AssignStat (vector [L.VarExp (L.UserDefinedId conName)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
-                         else
-                             L.LocalFunctionStat (conName, vector [L.PredefinedId "payload"], body)
-                      end
       ]
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
@@ -783,18 +807,6 @@ and doDec ctx env (F.ValDec (vid, _, exp))
                                                        @ [ L.DoStat (vector (doDecs ctx (increaseLevel env) decs)) ]
                                                     end
   | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
-and doDatBind ctx env (F.DatBind (tyvars, tycon, conbinds)) = List.map (doConBind ctx env) conbinds (* TODO: equality *)
-and doConBind ctx env (F.ConBind (vid as TypedSyntax.MkVId (name, _), NONE)) = if isHoisted (env, vid) then
-                                                                                   L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
-                                                                               else
-                                                                                   L.LocalStat (vector [vid], vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name))])])
-  | doConBind ctx env (F.ConBind (vid as TypedSyntax.MkVId (name, _), SOME ty)) = let val body = vector [L.ReturnStat (vector [L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString name)), (L.StringKey "payload", L.VarExp (L.PredefinedId "payload"))])])]
-                                                                                  in if isHoisted (env, vid) then
-                                                                                         L.AssignStat (vector [L.VarExp (L.UserDefinedId vid)], vector [L.FunctionExp (vector [L.PredefinedId "payload"], body)])
-                                                                                     else
-                                                                                         L.LocalFunctionStat (vid, vector [L.PredefinedId "payload"], body)
-                                                                                  end
-
 and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
   | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                                      (Vector.foldr (op ::) [] fields)
