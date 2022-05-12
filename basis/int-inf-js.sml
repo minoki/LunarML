@@ -48,7 +48,7 @@ signature INT_INF = sig
 end
 
 structure IntInf : INT_INF = struct
-type int = _primType "IntInf.int"
+type int = _Prim.IntInf.int
 _equality int = fn (x, y) => _primCall "IntInf.=" (x, y);
 val maxSmallInt : int = 0x7fffffff
 val minSmallInt : int = ~0x80000000

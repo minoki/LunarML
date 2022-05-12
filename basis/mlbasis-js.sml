@@ -9,11 +9,11 @@ datatype 'a option = NONE | SOME of 'a;
 structure Int = struct
 open Int (* ~, abs *)
 type int = int
-fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
-fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
-fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
-fun x div y = _primCall "call2" (_primVal "Int.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Int.mod", x, y)
+fun x + y = _primCall "call2" (_Prim.Int.+, x, y)
+fun x - y = _primCall "call2" (_Prim.Int.-, x, y)
+fun x * y = _primCall "call2" (_Prim.Int.*, x, y)
+fun x div y = _primCall "call2" (_Prim.Int.div, x, y)
+fun x mod y = _primCall "call2" (_Prim.Int.mod, x, y)
 fun x < y = _primCall "Int.<" (x, y)
 fun x <= y = _primCall "Int.<=" (x, y)
 fun x > y = _primCall "Int.>" (x, y)
@@ -41,8 +41,8 @@ fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
 fun x * y = _primCall "Word.*" (x, y)
-fun x div y = _primCall "call2" (_primVal "Word.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Word.mod", x, y)
+fun x div y = _primCall "call2" (_Prim.Word.div, x, y)
+fun x mod y = _primCall "call2" (_Prim.Word.mod, x, y)
 fun x < y = _primCall "Word.<" (x, y)
 fun x <= y = _primCall "Word.<=" (x, y)
 fun x > y = _primCall "Word.>" (x, y)
@@ -106,7 +106,7 @@ _overload "Char" [char] { < = Char.<
                         };
 
 structure WideChar = struct
-type char = _primType "WideChar.char"
+type char = _Prim.WideChar.char
 fun x < y = _primCall "WideChar.<" (x, y)
 fun x <= y = _primCall "WideChar.<=" (x, y)
 fun x > y = _primCall "WideChar.>" (x, y)
@@ -137,7 +137,7 @@ _overload "String" [string] { < = String.<
                             };
 
 structure WideString = struct
-type string = _primType "WideString.string"
+type string = _Prim.WideString.string
 type char = WideChar.char
 fun x < y = _primCall "WideString.<" (x, y)
 fun x <= y = _primCall "WideString.<=" (x, y)
@@ -390,7 +390,7 @@ structure Vector : sig
           end = struct
 datatype vector = datatype vector
 open Vector (* tabulate, concat, length, sub *)
-val fromList = _primVal "Vector.fromList"
+val fromList = _Prim.Vector.fromList
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
                                                        else
@@ -754,8 +754,8 @@ val toInt : int -> int = fn x => x
 val precision : int option = SOME 32
 val minInt : int option = SOME ~0x80000000
 val maxInt : int option = SOME 0x7fffffff
-fun quot (x, y) = _primCall "call2" (_primVal "Int.quot", x, y)
-fun rem (x, y) = _primCall "call2" (_primVal "Int.rem", x, y)
+fun quot (x, y) = _primCall "call2" (_Prim.Int.quot, x, y)
+fun rem (x, y) = _primCall "call2" (_Prim.Int.rem, x, y)
 val compare : int * int -> order = fn (x, y) => if x = y then
                                                     EQUAL
                                                 else if x < y then
@@ -1202,14 +1202,14 @@ fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse 
                                                                 else
                                                                     JavaScript.unsafeFromValue (JavaScript.method (JavaScript.unsafeToValue s, "subarray") #[JavaScript.fromInt i, JavaScript.fromInt (size s)])
   | extract (s, i, SOME j) = substring (s, i, j)
-val concat : string list -> string = _primVal "String.concat"
-fun concatWith (s : string) (l : string list) : string = _primCall "call2" (_primVal "String.concatWith", s, l)
-val implode : char list -> string = _primVal "String.implode"
+val concat : string list -> string = _Prim.String.concat
+fun concatWith (s : string) (l : string list) : string = _primCall "call2" (_Prim.String.concatWith, s, l)
+val implode : char list -> string = _Prim.String.implode
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
 fun map (f : char -> char) (s : string) : string = let val s = JavaScript.unsafeToValue s
                                                    in JavaScript.unsafeFromValue (JavaScript.method (s, "map") #[JavaScript.unsafeToValue f])
                                                    end
-fun translate (f : char -> string) (s : string) : string = _primCall "call2" (_primVal "String.translate", f, s)
+fun translate (f : char -> string) (s : string) : string = _primCall "call2" (_Prim.String.translate, f, s)
 fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implode (List.rev acc) :: revTokens)
                        | go (revTokens, acc, x :: xs) = if f x then
                                                             go (if List.null acc then revTokens else implode (List.rev acc) :: revTokens, [], xs)

@@ -9,11 +9,11 @@ datatype 'a option = NONE | SOME of 'a;
 structure Int = struct
 open Int (* ~, abs *)
 type int = int
-fun x + y = _primCall "call2" (_primVal "Int.+", x, y)
-fun x - y = _primCall "call2" (_primVal "Int.-", x, y)
-fun x * y = _primCall "call2" (_primVal "Int.*", x, y)
-fun x div y = _primCall "call2" (_primVal "Int.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Int.mod", x, y)
+fun x + y = _primCall "call2" (_Prim.Int.+, x, y)
+fun x - y = _primCall "call2" (_Prim.Int.-, x, y)
+fun x * y = _primCall "call2" (_Prim.Int.*, x, y)
+fun x div y = _primCall "call2" (_Prim.Int.div, x, y)
+fun x mod y = _primCall "call2" (_Prim.Int.mod, x, y)
 fun x < y = _primCall "Int.<" (x, y)
 fun x <= y = _primCall "Int.<=" (x, y)
 fun x > y = _primCall "Int.>" (x, y)
@@ -41,9 +41,9 @@ fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
 fun x * y = _primCall "Word.*" (x, y)
-fun x div y = _primCall "call2" (_primVal "Word.div", x, y)
-fun x mod y = _primCall "call2" (_primVal "Word.mod", x, y)
-fun x < y = _primCall "call2" (_primVal "Word.<", x, y)
+fun x div y = _primCall "call2" (_Prim.Word.div, x, y)
+fun x mod y = _primCall "call2" (_Prim.Word.mod, x, y)
+fun x < y = _primCall "call2" (_Prim.Word.<, x, y)
 fun x > y = y < x
 fun x <= y = Bool.not (y < x)
 fun x >= y = Bool.not (x < y)
@@ -228,7 +228,7 @@ structure Lua : sig
                         end
           end = struct
 open Lua (* type value, global, call, method, NIL, newTable, function *)
-exception LuaError = _primVal "Lua.LuaError"
+exception LuaError = _Prim.Lua.LuaError
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
@@ -370,7 +370,7 @@ structure Vector : sig
           end = struct
 datatype vector = datatype vector
 open Vector (* tabulate, concat, length, sub *)
-val fromList = _primVal "Vector.fromList"
+val fromList = _Prim.Vector.fromList
 fun update (vec, n, x) = tabulate (length vec, fn i => if i = n then
                                                            x
                                                        else

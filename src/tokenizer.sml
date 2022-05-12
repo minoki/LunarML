@@ -138,67 +138,83 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | skipComment (l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
                                                      ; NONE
                                                      )
-            and readIdentifierOrKeyword (l, c0, c1, rstrids, accum, nil) = let val (tok, ident) = recognizeKeyword (l, c1, String.implode (rev accum))
-                                                                           in if List.null rstrids then
-                                                                                  SOME (tok, l, c1 + length accum, nil)
+            and readIdentifierOrKeyword (l, c0, c1, rstrids, accum, nil) = let val name = String.implode (List.rev accum)
+                                                                               val (tok, ident) = recognizeKeyword (l, c1, name)
+                                                                           in if name = "_Prim" then
+                                                                                  emitError (l, c1, "_Prim not allowed here")
+                                                                              else
+                                                                                  ()
+                                                                            ; if List.null rstrids then
+                                                                                  SOME (tok, l, c1 + String.size name, nil)
                                                                               else
                                                                                   case ident of
-                                                                                      SOME (name, p2) => SOME (Tokens.QualifiedAlnumIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, nil)
+                                                                                      SOME (name, p2) => (case List.rev rstrids of
+                                                                                                              strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, nil)
+                                                                                                            | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, nil)
+                                                                                                         )
                                                                                     | NONE => ( emitError (l, c1, "invalid qualified name")
-                                                                                              ; SOME (tok, l, c1 + length accum, nil)
+                                                                                              ; SOME (tok, l, c1 + String.size name, nil)
                                                                                               )
                                                                            end
               | readIdentifierOrKeyword (l, c0, c1, rstrids, accum, input as x :: xs) = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
                                                                                             readIdentifierOrKeyword (l, c0, c1, rstrids, x :: accum, xs)
                                                                                         else
-                                                                                            let val (tok, ident) = recognizeKeyword (l, c1, String.implode (rev accum))
+                                                                                            let val name = String.implode (List.rev accum)
+                                                                                                val (tok, ident) = recognizeKeyword (l, c1, name)
                                                                                             in if List.null rstrids then
                                                                                                    case ident of
                                                                                                        SOME (name, p2) =>
                                                                                                        if x = #"." then
                                                                                                            case xs of
                                                                                                                x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
+                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
                                                                                                                             else if isSymbolChar x' then
-                                                                                                                                readSymbolicIdentifier (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
+                                                                                                                                readSymbolicIdentifier (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
                                                                                                                             else
-                                                                                                                                SOME (tok, l, c1 + length accum, input)
-                                                                                                             | [] => SOME (tok, l, c1 + length accum, input)
+                                                                                                                                SOME (tok, l, c1 + String.size name, input)
+                                                                                                             | [] => SOME (tok, l, c1 + String.size name, input)
                                                                                                        else
-                                                                                                           SOME (tok, l, c1 + length accum, input)
-                                                                                                     | NONE => SOME (tok, l, c1 + length accum, input)
+                                                                                                           ( if name = "_Prim" then
+                                                                                                                 emitError (l, c1, "_Prim not allowed here")
+                                                                                                             else
+                                                                                                                 ()
+                                                                                                           ; SOME (tok, l, c1 + String.size name, input)
+                                                                                                           )
+                                                                                                     | NONE => SOME (tok, l, c1 + String.size name, input)
                                                                                                else
-                                                                                                   case ident of
-                                                                                                       SOME (name, p2) =>
-                                                                                                       if x = #"." then
-                                                                                                           case xs of
-                                                                                                               x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
-                                                                                                                            else if isSymbolChar x' then
-                                                                                                                                readSymbolicIdentifier (l, c0, c1 + length accum + 1, name :: rstrids, [x'], xs')
-                                                                                                                            else
-                                                                                                                                SOME (tok, l, c1 + length accum, input)
-                                                                                                             | [] => SOME (tok, l, c1 + length accum, input)
-                                                                                                       else
-                                                                                                           SOME (Tokens.QualifiedAlnumIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, input)
-                                                                                                     | NONE => ( emitError (l, c1, "invalid qualified name")
-                                                                                                               ; SOME (tok, l, c1 + length accum, input)
-                                                                                                               )
-                                                                                            end
+                                                                                                   ( if name = "_Prim" then
+                                                                                                         emitError (l, c1, "_Prim not allowed here")
+                                                                                                     else
+                                                                                                         ()
+                                                                                                   ; case ident of
+                                                                                                         SOME (name, p2) =>
+                                                                                                         if x = #"." then
+                                                                                                             case xs of
+                                                                                                                 x' :: xs' => if Char.isAlpha x' then
+                                                                                                                                  readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
+                                                                                                                              else if isSymbolChar x' then
+                                                                                                                                  readSymbolicIdentifier (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
+                                                                                                                              else
+                                                                                                                                  SOME (tok, l, c1 + String.size name, input)
+                                                                                                               | [] => SOME (tok, l, c1 + String.size name, input)
+                                                                                                         else
+                                                                                                             (case List.rev rstrids of
+                                                                                                                  strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, input)
+                                                                                                                | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, input)
+                                                                                                             )
+                                                                                                       | NONE => ( emitError (l, c1, "invalid qualified name")
+                                                                                                                 ; SOME (tok, l, c1 + String.size name, input)
+                                                                                                                 )
+                                                                                                   )
+                                                                                                end
             and recognizeKeyword (l, c, name) = let val (tok, ident) = case name of
                                                                            "_" => (Tokens.UNDERSCORE, NONE)
-                                                                         | "_primType" => ( if not (#allowPrim opts) then
-                                                                                                emitError (l, c, "_primType is not allowed in user code")
-                                                                                            else
-                                                                                                ()
-                                                                                          ; (Tokens.PRIMTYPE, NONE) (* extension *)
-                                                                                          )
-                                                                         | "_primVal" => ( if not (#allowPrim opts) then
-                                                                                                emitError (l, c, "_primVal is not allowed in user code")
-                                                                                           else
-                                                                                               ()
-                                                                                         ; (Tokens.PRIMVAL, NONE) (* extension *)
-                                                                                         )
+                                                                         | "_Prim" => ( if not (#allowPrim opts) then
+                                                                                            emitError (l, c, "_Prim is not allowed in user code")
+                                                                                        else
+                                                                                            ()
+                                                                                      ; (Tokens.PRIMNS, SOME "_Prim") (* extension *)
+                                                                                      )
                                                                          | "_primCall" => ( if not (#allowPrim opts) then
                                                                                                 emitError (l, c, "_primCall is not allowed in user code")
                                                                                             else
@@ -276,7 +292,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                                                   SOME (tok, l, c1 + length accum, input)
                                                                                               else
                                                                                                   case ident of
-                                                                                                      SOME (name, p2) => SOME (Tokens.QualifiedSymbolicIdent ((List.rev rstrids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                                                                      SOME (name, p2) => (case List.rev rstrids of
+                                                                                                                              strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + length accum, input)
+                                                                                                                            | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                                                                                         )
                                                                                                     | NONE => ( emitError (l, c1, "invalid qualified name")
                                                                                                               ; SOME (tok, l, c1 + length accum, input)
                                                                                                               )

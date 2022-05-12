@@ -194,9 +194,9 @@ val VId_Lua_Lib_table_unpack = newVId "unpack"
 end
 end
 end
-val VId_Lua_LuaError = newVId "Lua.LuaError"
+val VId_Lua_LuaError = newVId "_Prim.Lua.LuaError"
 val LongVId_Lua_LuaError = TypedSyntax.MkShortVId VId_Lua_LuaError
-val VId_Lua_LuaError_tag = newShortVId "Lua.LuaError.tag"
+val VId_Lua_LuaError_tag = newShortVId "_Prim.Lua.LuaError.tag"
 
 (* JavaScript interface *)
 local val newVId = newLongVId (StrId_JavaScript, [])
@@ -215,23 +215,23 @@ in
 val VId_assumePure = newVId "assumePure"
 val VId_assumeDiscardable = newVId "assumeDiscardable"
 end
-val VId_Vector_fromList = newVId "Vector.fromList"
+val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
 val LongVId_Vector_fromList = TypedSyntax.MkShortVId VId_Vector_fromList
-val VId_Int_add_bin = newVId "Int.+"
-val VId_Int_sub_bin = newVId "Int.-"
-val VId_Int_mul_bin = newVId "Int.*"
-val VId_Int_div_bin = newVId "Int.div"
-val VId_Int_mod_bin = newVId "Int.mod"
-val VId_Int_quot_bin = newVId "Int.quot"
-val VId_Int_rem_bin = newVId "Int.rem"
-val VId_Word_div_bin = newVId "Word.div"
-val VId_Word_mod_bin = newVId "Word.mod"
-val VId_Word_LT_bin = newVId "Word.<"
+val VId_Int_add_bin = newVId "_Prim.Int.+"
+val VId_Int_sub_bin = newVId "_Prim.Int.-"
+val VId_Int_mul_bin = newVId "_Prim.Int.*"
+val VId_Int_div_bin = newVId "_Prim.Int.div"
+val VId_Int_mod_bin = newVId "_Prim.Int.mod"
+val VId_Int_quot_bin = newVId "_Prim.Int.quot"
+val VId_Int_rem_bin = newVId "_Prim.Int.rem"
+val VId_Word_div_bin = newVId "_Prim.Word.div"
+val VId_Word_mod_bin = newVId "_Prim.Word.mod"
+val VId_Word_LT_bin = newVId "_Prim.Word.<"
 
-val VId_String_concat = newVId "String.concat"
-val VId_String_concatWith = newVId "String.concatWith"
-val VId_String_implode = newVId "String.implode"
-val VId_String_translate = newVId "String.translate"
+val VId_String_concat = newVId "_Prim.String.concat"
+val VId_String_concatWith = newVId "_Prim.String.concatWith"
+val VId_String_implode = newVId "_Prim.String.implode"
+val VId_String_translate = newVId "_Prim.String.translate"
 
 val initialEnv : Typing.Env
     = let open Typing
@@ -450,26 +450,26 @@ val initialEnv : Typing.Env
                                            ,("Size", LongVId_Size, TypeScheme ([], primTy_exn))
                                            ,("Subscript", LongVId_Subscript, TypeScheme ([], primTy_exn))
                                            ,("Fail", LongVId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
-                                           ,("Lua.LuaError", LongVId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
+                                           ,("_Prim.Lua.LuaError", LongVId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
                                            Syntax.VIdMap.empty
-                                           [("Vector.fromList", TypedSyntax.MkShortVId VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
-                                           ,("Int.+", TypedSyntax.MkShortVId VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.-", TypedSyntax.MkShortVId VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.*", TypedSyntax.MkShortVId VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.div", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.mod", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.quot", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Int.rem", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("Word.div", TypedSyntax.MkShortVId VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("Word.mod", TypedSyntax.MkShortVId VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("Word.<", TypedSyntax.MkShortVId VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
+                                           [("_Prim.Vector.fromList", TypedSyntax.MkShortVId VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
+                                           ,("_Prim.Int.+", TypedSyntax.MkShortVId VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.-", TypedSyntax.MkShortVId VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.*", TypedSyntax.MkShortVId VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.div", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.mod", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.quot", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.rem", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Word.div", TypedSyntax.MkShortVId VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("_Prim.Word.mod", TypedSyntax.MkShortVId VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("_Prim.Word.<", TypedSyntax.MkShortVId VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
                                            ,("exnName", TypedSyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
-                                           ,("String.concat", TypedSyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
-                                           ,("String.concatWith", TypedSyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
-                                           ,("String.implode", TypedSyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
-                                           ,("String.translate", TypedSyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
+                                           ,("_Prim.String.concat", TypedSyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
+                                           ,("_Prim.String.concatWith", TypedSyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
+                                           ,("_Prim.String.implode", TypedSyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
+                                           ,("_Prim.String.translate", TypedSyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
@@ -485,11 +485,11 @@ val initialEnv : Typing.Env
                                  ,("exn", tyStr_exn)
                                  ,("array", tyStr_array)
                                  ,("vector", tyStr_vector)
-                                 ,("WideChar.char", tyStr_wideChar)
-                                 ,("WideString.string", tyStr_wideString)
-                                 ,("IntInf.int", tyStr_intInf)
-                                 ,("Function2.function2", tyStr_function2)
-                                 ,("Function3.function3", tyStr_function3)
+                                 ,("_Prim.WideChar.char", tyStr_wideChar)
+                                 ,("_Prim.WideString.string", tyStr_wideString)
+                                 ,("_Prim.IntInf.int", tyStr_intInf)
+                                 ,("_Prim.Function2.function2", tyStr_function2)
+                                 ,("_Prim.Function3.function3", tyStr_function3)
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
                                   TypedSyntax.TyNameMap.empty

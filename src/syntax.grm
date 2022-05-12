@@ -39,6 +39,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
     | SymbolicIdent of string
     | QualifiedSymbolicIdent of string list * string
+    | PrimIdent of string (* identifiers prefixed by "_Prim." (extension) *)
     | PosInt of IntInf.int (* positive integer literal, not starting with 0, and not containing any underscore *)
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
     | WordConst of IntInf.int (* non-negative *)
@@ -65,7 +66,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SHARING | SIG | SIGNATURE | STRUCT | STRUCTURE | THEN | TYPE | VAL | WITH
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
-    | PRIMTYPE | PRIMVAL | PRIMCALL | OVERLOAD | EQUALITY
+    | PRIMNS | PRIMCALL | OVERLOAD | EQUALITY
     (* other *)
     | EOF
 %nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
@@ -96,7 +97,6 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | PatSeqRest of UnfixedSyntax.Pat list
        | PatSeqRestEllipsis of UnfixedSyntax.Pat list * bool
        | AtTy of Syntax.Ty
-       | LongTyConOrPrimTyCon of Syntax.LongTyCon
        | ConTy of Syntax.Ty
        | TupTy of Syntax.Ty list
        | Ty_NoARROW of Syntax.Ty
@@ -239,16 +239,19 @@ TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
 LongVId : VId (Syntax.MkLongVId (nil, VId))
         | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkVId (#2 QualifiedAlnumIdent)))
         | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkVId (#2 QualifiedSymbolicIdent)))
+        | PrimIdent (Syntax.MkQualified ([], Syntax.MkVId PrimIdent))
 
 (* long value identifiers, excluding unqualified '=' *)
 LongBoundVId : BoundVId (Syntax.MkLongVId (nil, BoundVId))
              | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkVId (#2 QualifiedAlnumIdent)))
              | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkVId (#2 QualifiedSymbolicIdent)))
+             | PrimIdent (Syntax.MkQualified ([], Syntax.MkVId PrimIdent))
 
 (* long type constructors *)
 LongTyCon : TyCon (Syntax.MkLongTyCon (nil, TyCon))
           | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkTyCon (#2 QualifiedAlnumIdent)))
           | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkTyCon (#2 QualifiedSymbolicIdent)))
+          | PrimIdent (Syntax.MkQualified ([], Syntax.MkTyCon PrimIdent))
 
 (* long structure identifiers *)
 LongStrId : StrId (Syntax.MkLongStrId (nil, StrId))
@@ -323,13 +326,10 @@ AtTy : TyVar (Syntax.TyVar(span(TyVarleft,TyVarright), TyVar))
      | LBRACE TyRow RBRACE (Syntax.RecordType(span(LBRACEleft, RBRACEright), #1 TyRow, #2 TyRow)) (* record type expression *)
      | LPAREN Ty RPAREN (Ty)
 
-LongTyConOrPrimTyCon : LongTyCon (LongTyCon)
-                     | PRIMTYPE AsciiStringConst (Syntax.MkQualified([], Syntax.MkTyCon (#1 AsciiStringConst)))
-
 ConTy : AtTy (AtTy)
-      | ConTy LongTyConOrPrimTyCon (Syntax.TyCon (span(ConTyleft, LongTyConOrPrimTyConright), [ConTy], LongTyConOrPrimTyCon)) (* type construction *)
-      | LongTyConOrPrimTyCon (Syntax.TyCon (span(LongTyConOrPrimTyConleft, LongTyConOrPrimTyConright), nil, LongTyConOrPrimTyCon)) (* type construction *)
-      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyConOrPrimTyCon (Syntax.TyCon (span(LPARENleft, LongTyConOrPrimTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyConOrPrimTyCon)) (* type construction *)
+      | ConTy LongTyCon (Syntax.TyCon (span (ConTyleft, LongTyConright), [ConTy], LongTyCon)) (* type construction *)
+      | LongTyCon (Syntax.TyCon (span (LongTyConleft, LongTyConright), nil, LongTyCon)) (* type construction *)
+      | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (span (LPARENleft, LongTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
 
 TupTy : ConTy ([ConTy])
       | ConTy ASTERISK TupTy (ConTy :: TupTy)
@@ -383,7 +383,6 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
       | HASHLBRACK RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), [])) (* [extension] vector expression *)
       | HASHLBRACK Exp ExpCSeqRest RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [extension] vector expression *)
       | HASH Lab (UnfixedSyntax.ProjectionExp(span(HASHleft,Labright), Lab)) (* [derived] projection: fn {Lab=VId,...} => VId *)
-      | PRIMVAL AsciiStringConst (UnfixedSyntax.PrimValExp(span(PRIMVALleft, AsciiStringConstright), #1 AsciiStringConst)) (* [extension] _primVal "name" *)
       | PRIMCALL AsciiStringConst LBRACK Ty TySeqRest RBRACK LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector (Ty :: TySeqRest), vector [])) (* [extension] _primCall "name" [tyargs] () *)
       | PRIMCALL AsciiStringConst LBRACK Ty TySeqRest RBRACK LPAREN Exp ExpCSeqRest RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector (Ty :: TySeqRest), vector (Exp :: ExpCSeqRest))) (* [extension] _primCall "name" [tyargs] (args) *)
       | PRIMCALL AsciiStringConst LPAREN RPAREN (UnfixedSyntax.PrimExp(span(PRIMCALLleft, RPARENright), #1 AsciiStringConst, vector [], vector [])) (* [extension] _primCall "name" () *)
@@ -567,7 +566,6 @@ ConBindRest : BAR ConBind (ConBind)
 ExBind : Opt_OP BoundVId OF Ty ExBindRest (Syntax.ExBind (span(Opt_OPleft, Tyright), BoundVId, SOME Ty) :: ExBindRest)
        | Opt_OP BoundVId ExBindRest (Syntax.ExBind (span(Opt_OPleft, BoundVIdright), BoundVId, NONE) :: ExBindRest)
        | Opt_OP BoundVId EQUALS Opt_OP LongVId ExBindRest (Syntax.ExReplication (span(Opt_OPleft, LongVIdright), BoundVId, LongVId) :: ExBindRest)
-       | Opt_OP BoundVId EQUALS PRIMVAL AsciiStringConst ExBindRest (Syntax.ExReplication (span(Opt_OPleft, AsciiStringConstright), BoundVId, Syntax.MkQualified ([], Syntax.MkVId (#1 AsciiStringConst))) :: ExBindRest)
 
 ExBindRest : AND ExBind (ExBind)
            | (nil)
