@@ -7,8 +7,9 @@ type unit = {}
 datatype 'a option = NONE | SOME of 'a;
 
 structure Int = struct
-open Int (* ~, abs *)
 type int = int
+val ~ = _Prim.Int.~
+val abs = _Prim.Int.abs
 fun x + y = _primCall "call2" (_Prim.Int.+, x, y)
 fun x - y = _primCall "call2" (_Prim.Int.-, x, y)
 fun x * y = _primCall "call2" (_Prim.Int.*, x, y)
@@ -68,8 +69,8 @@ end
 
 structure Real = struct
 type real = real
-open Real (* abs *)
 fun ~ x = _primCall "Real.~" (x)
+val abs = _Prim.Real.abs
 fun x + y = _primCall "Real.+" (x, y)
 fun x - y = _primCall "Real.-" (x, y)
 fun x * y = _primCall "Real.*" (x, y)
@@ -128,9 +129,18 @@ fun sub (vec, i) = if i < 0 orelse length vec <= i then
                        raise Subscript
                    else
                        Unsafe.Vector.sub (vec, i)
-open Vector (* tabulate, concat *)
+val tabulate = _Prim.Vector.tabulate
+val concat = _Prim.Vector.concat
 end
 _equality ''a vector = fn (x, y) => _primCall "Vector.=" (op = : ''a * ''a -> bool, x, y);
+
+structure LunarML : sig
+              val assumePure : 'a -> 'a
+              val assumeDiscardable : 'a -> 'a
+          end = struct
+val assumePure = _Prim.assumePure
+val assumeDiscardable = _Prim.assumeDiscardable
+end
 
 structure Lua : sig
               type value
@@ -227,8 +237,14 @@ structure Lua : sig
                             val lfs : value option (* LuaFileSystem *)
                         end
           end = struct
-open Lua (* type value, global, call, method, NIL, newTable, function *)
+type value = _Prim.Lua.value
 exception LuaError = _Prim.Lua.LuaError
+val global = _Prim.Lua.global
+val call = _Prim.Lua.call
+val method = _Prim.Lua.method
+val NIL = _Prim.Lua.NIL
+val newTable = _Prim.Lua.newTable
+val function = _Prim.Lua.function
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
@@ -265,13 +281,24 @@ fun x >= y = _primCall "Lua.>=" (x, y)
 fun concat (x, y) = _primCall "Lua.concat" (x, y)
 fun length x = _primCall "Lua.length" (x)
 structure Lib = struct
-open Lib
+val assert = _Prim.Lua.Lib.assert
+val error = _Prim.Lua.Lib.error
+val getmetatable = _Prim.Lua.Lib.getmetatable
+val pairs = _Prim.Lua.Lib.pairs
+val pcall = _Prim.Lua.Lib.pcall
+val setmetatable = _Prim.Lua.Lib.setmetatable
+val math = _Prim.Lua.Lib.math
+val string = _Prim.Lua.Lib.string
+val table = _Prim.Lua.Lib.table
 val require = LunarML.assumeDiscardable (global "require")
 val tonumber = LunarML.assumeDiscardable (global "tonumber")
 val tostring = LunarML.assumeDiscardable (global "tostring")
 val type' = LunarML.assumeDiscardable (global "type")
 structure math = struct
-open math
+val abs = _Prim.Lua.Lib.math.abs
+val type' = _Prim.Lua.Lib.math.type'
+val maxinteger = _Prim.Lua.Lib.math.maxinteger
+val mininteger = _Prim.Lua.Lib.math.mininteger
 val atan = LunarML.assumeDiscardable (field (math, "atan"))
 val ceil = LunarML.assumeDiscardable (field (math, "ceil"))
 val floor = LunarML.assumeDiscardable (field (math, "floor"))
@@ -280,7 +307,7 @@ val log = LunarML.assumeDiscardable (field (math, "log"))
 val modf = LunarML.assumeDiscardable (field (math, "modf"))
 end
 structure string = struct
-open string
+val format = _Prim.Lua.Lib.string.format
 val byte = LunarML.assumeDiscardable (field (string, "byte"))
 val char = LunarML.assumeDiscardable (field (string, "char"))
 val find = LunarML.assumeDiscardable (field (string, "find"))
@@ -289,10 +316,11 @@ val match = LunarML.assumeDiscardable (field (string, "match"))
 val sub = LunarML.assumeDiscardable (field (string, "sub"))
 end
 structure table = struct
-open table
+val pack = _Prim.Lua.Lib.table.pack
+val unpack = _Prim.Lua.Lib.table.unpack
 val concat = LunarML.assumeDiscardable (field (table, "concat"))
 end
-val lfs = LunarML.assumeDiscardable (let val results = Lua.call pcall #[require, fromString "lfs"]
+val lfs = LunarML.assumeDiscardable (let val results = call pcall #[require, fromString "lfs"]
                                          val ok = unsafeFromValue (Vector.sub (results, 0)) : bool
                                      in if ok then
                                             SOME (Vector.sub (results, 1))
@@ -301,7 +329,7 @@ val lfs = LunarML.assumeDiscardable (let val results = Lua.call pcall #[require,
                                      end
                                     )
 end
-fun typeof x : string = let val results = Lua.call Lib.type' #[x]
+fun typeof x : string = let val results = call Lib.type' #[x]
                         in unsafeFromValue (Vector.sub (results, 0))
                         end
 exception TypeError of string
@@ -317,19 +345,19 @@ fun checkBoolean x : bool = let val t = typeof x
                                else
                                    raise TypeError (String.^ ("expected a boolean, but got ", t))
                             end
-fun checkInt x : int = let val results = Lua.call Lib.math.type' #[x]
+fun checkInt x : int = let val results = call Lib.math.type' #[x]
                        in if == (Vector.sub (results, 0), fromString "integer") then
                               unsafeFromValue x
                           else
                               raise TypeError (String.^ ("expected an integer, but got ", typeof x))
                        end
-fun checkWord x : word = let val results = Lua.call Lib.math.type' #[x]
+fun checkWord x : word = let val results = call Lib.math.type' #[x]
                          in if == (Vector.sub (results, 0), fromString "integer") then
                                 unsafeFromValue x
                             else
                                 raise TypeError (String.^ ("expected an integer, but got ", typeof x))
                          end
-fun checkReal x : real = let val results = Lua.call Lib.math.type' #[x]
+fun checkReal x : real = let val results = call Lib.math.type' #[x]
                          in if == (Vector.sub (results, 0), fromString "float") then
                                 unsafeFromValue x
                             else
@@ -1741,5 +1769,7 @@ fun app f arr = let val n = length arr
                                      )
                 in loop 0
                 end
-open Array (* array, fromList, tabulate *)
+val array = _Prim.Array.array
+val fromList = _Prim.Array.fromList
+val tabulate = _Prim.Array.tabulate
 end; (* structure Array *)

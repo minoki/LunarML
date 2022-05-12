@@ -7,8 +7,9 @@ type unit = {}
 datatype 'a option = NONE | SOME of 'a;
 
 structure Int = struct
-open Int (* ~, abs *)
 type int = int
+val ~ = _Prim.Int.~
+val abs = _Prim.Int.abs
 fun x + y = _primCall "call2" (_Prim.Int.+, x, y)
 fun x - y = _primCall "call2" (_Prim.Int.-, x, y)
 fun x * y = _primCall "call2" (_Prim.Int.*, x, y)
@@ -68,8 +69,8 @@ end
 
 structure Real = struct
 type real = real
-open Real (* abs *)
 fun ~ x = _primCall "Real.~" (x)
+val abs = _Prim.Real.abs
 fun x + y = _primCall "Real.+" (x, y)
 fun x - y = _primCall "Real.-" (x, y)
 fun x * y = _primCall "Real.*" (x, y)
@@ -160,9 +161,18 @@ fun sub (vec, i) = if i < 0 orelse length vec <= i then
                        raise Subscript
                    else
                        Unsafe.Vector.sub (vec, i)
-open Vector (* tabulate, concat *)
+val tabulate = _Prim.Vector.tabulate
+val concat = _Prim.Vector.concat
 end
 _equality ''a vector = fn (x, y) => _primCall "Vector.=" (op = : ''a * ''a -> bool, x, y);
+
+structure LunarML : sig
+              val assumePure : 'a -> 'a
+              val assumeDiscardable : 'a -> 'a
+          end = struct
+val assumePure = _Prim.assumePure
+val assumeDiscardable = _Prim.assumeDiscardable
+end
 
 structure JavaScript : sig
               type value
@@ -267,7 +277,13 @@ structure JavaScript : sig
                             val Uint8Array : value
                         end
           end = struct
-open JavaScript (* type value, call, method, encodeUtf8, decodeUtf8, require *)
+type value = _Prim.JavaScript.value
+val call = _Prim.JavaScript.call
+val new = _Prim.JavaScript.new
+val method = _Prim.JavaScript.method
+val encodeUtf8 = _Prim.JavaScript.encodeUtf8
+val decodeUtf8 = _Prim.JavaScript.decodeUtf8
+val require = _Prim.JavaScript.require
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue
@@ -1561,5 +1577,7 @@ fun app f arr = let val n = length arr
                                      )
                 in loop 0
                 end
-open Array (* array, fromList, tabulate *)
+val array = _Prim.Array.array
+val fromList = _Prim.Array.fromList
+val tabulate = _Prim.Array.tabulate
 end; (* structure Array *)

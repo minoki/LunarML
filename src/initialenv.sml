@@ -6,44 +6,16 @@ structure InitialEnv = struct
 val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert (m, Syntax.MkVId n, Syntax.ValueConstructor ())) Syntax.VIdMap.empty xs
                                         fun mkExConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty xs
                                         fun mkTyConMap xs = List.foldl (fn ((n, y), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon n, y)) Syntax.TyConMap.empty xs
-                                        fun mkStrMap xs = List.foldl (fn ((n, y), m) => Syntax.StrIdMap.insert(m, Syntax.MkStrId n, Fixity.MkIdStatusMap y)) Syntax.StrIdMap.empty xs
-                                        fun mkSubstrMap xs = { valMap = Syntax.VIdMap.empty
-                                                             , tyConMap = Syntax.TyConMap.empty
-                                                             , strMap = mkStrMap xs
-                                                             }
                                         val boolConMap = mkValConMap ["true", "false"]
                                         val refConMap = mkValConMap ["ref"]
                                         val listConMap = mkValConMap ["nil", "::"]
                                     in { fixityMap = Syntax.VIdMap.empty
-                                       , idStatusMap = { valMap = List.foldl (Syntax.VIdMap.unionWith #2) (mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail"]) [boolConMap, refConMap, listConMap]
+                                       , idStatusMap = { valMap = List.foldl (Syntax.VIdMap.unionWith #2) (mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail", "_Prim.Lua.LuaError"]) [boolConMap, refConMap, listConMap]
                                                        , tyConMap = mkTyConMap [("bool", boolConMap)
                                                                                ,("ref", refConMap)
                                                                                ,("list", listConMap)
                                                                                ]
-                                                       , strMap = mkStrMap [("General", mkSubstrMap [])
-                                                                           ,("Bool", mkSubstrMap [])
-                                                                           ,("Int", mkSubstrMap [])
-                                                                           ,("Word", mkSubstrMap [])
-                                                                           ,("Real", mkSubstrMap [])
-                                                                           ,("String", mkSubstrMap [])
-                                                                           ,("Char", mkSubstrMap [])
-                                                                           ,("Array", mkSubstrMap [])
-                                                                           ,("Vector", mkSubstrMap [])
-                                                                           ,("Lua", { valMap = mkExConMap []
-                                                                                    , tyConMap = Syntax.TyConMap.empty
-                                                                                    , strMap = mkStrMap
-                                                                                                   [("Lib", mkSubstrMap
-                                                                                                                [("math", mkSubstrMap [])
-                                                                                                                ,("table", mkSubstrMap [])
-                                                                                                                ,("string", mkSubstrMap [])
-                                                                                                                ]
-                                                                                                    )
-                                                                                                   ]
-                                                                                    }
-                                                                            )
-                                                                           ,("JavaScript", mkSubstrMap [])
-                                                                           ,("LunarML", mkSubstrMap [])
-                                                                           ]
+                                                       , strMap = Syntax.StrIdMap.empty
                                                        }
                                        , sigMap = Syntax.SigIdMap.empty
                                        , funMap = Syntax.FunIdMap.empty
@@ -55,40 +27,17 @@ fun newVId name = let val n = !vidCounter
                   in vidCounter := n - 1
                    ; TypedSyntax.MkVId (name, n)
                   end
-fun newShortVId name = let val n = !vidCounter
-                       in vidCounter := n - 1
-                        ; TypedSyntax.MkShortVId (TypedSyntax.MkVId (name, n))
-                       end
-fun newStrId name = let val n = !vidCounter
-                    in vidCounter := n - 1
-                     ; TypedSyntax.MkStrId (name, n)
-                    end
-fun newLongVId (strid0, strids) name = TypedSyntax.MkLongVId (strid0, List.map Syntax.MkStrId strids, Syntax.MkVId name)
-
-val StrId_Int = newStrId "Int"
-val StrId_Real = newStrId "Real"
-val StrId_String = newStrId "String"
-val StrId_Vector = newStrId "Vector"
-val StrId_Array = newStrId "Array"
-val StrId_Lua = newStrId "Lua"
-val StrId_JavaScript = newStrId "JavaScript"
-val StrId_LunarML = newStrId "LunarML"
 
 (* Ref *)
 val VId_ref = newVId "ref"
-val LongVId_ref = TypedSyntax.MkShortVId VId_ref
 
 (* Bool *)
 val VId_true = newVId "true"
 val VId_false = newVId "false"
-val LongVId_true = TypedSyntax.MkShortVId VId_true
-val LongVId_false = TypedSyntax.MkShortVId VId_false
 
 (* List *)
 val VId_nil = newVId "nil"
 val VId_DCOLON = newVId "::"
-val LongVId_nil = TypedSyntax.MkShortVId VId_nil
-val LongVId_DCOLON = TypedSyntax.MkShortVId VId_DCOLON
 
 (* Exception *)
 val VId_Match = newVId "Match"
@@ -98,20 +47,13 @@ val VId_Overflow = newVId "Overflow"
 val VId_Size = newVId "Size"
 val VId_Subscript = newVId "Subscript"
 val VId_Fail = newVId "Fail"
-val LongVId_Match = TypedSyntax.MkShortVId VId_Match
-val LongVId_Bind = Typing.LongVId_Bind
-val LongVId_Div = TypedSyntax.MkShortVId VId_Div
-val LongVId_Overflow = TypedSyntax.MkShortVId VId_Overflow
-val LongVId_Size = TypedSyntax.MkShortVId VId_Size
-val LongVId_Subscript = TypedSyntax.MkShortVId VId_Subscript
-val LongVId_Fail = TypedSyntax.MkShortVId VId_Fail
-val VId_Match_tag = newShortVId "Match"
-val VId_Bind_tag = newShortVId "Bind"
-val VId_Div_tag = newShortVId "Div"
-val VId_Overflow_tag = newShortVId "Overflow"
-val VId_Size_tag = newShortVId "Size"
-val VId_Subscript_tag = newShortVId "Subscript"
-val VId_Fail_tag = newShortVId "Fail"
+val VId_Match_tag = newVId "Match"
+val VId_Bind_tag = newVId "Bind"
+val VId_Div_tag = newVId "Div"
+val VId_Overflow_tag = newVId "Overflow"
+val VId_Size_tag = newVId "Size"
+val VId_Subscript_tag = newVId "Subscript"
+val VId_Fail_tag = newVId "Fail"
 val VId_exnName = newVId "exnName"
 
 (* Overloaded *)
@@ -129,94 +71,59 @@ val VId_LE = newVId "<="
 val VId_GE = newVId ">="
 
 (* Int *)
-local val newVId = newLongVId (StrId_Int, [])
-in
-val VId_Int_TILDE = newVId "~"
-val VId_Int_abs = newVId "abs"
-end
+val VId_Int_TILDE = newVId "_Prim.Int.~"
+val VId_Int_abs = newVId "_Prim.Int.abs"
 
 (* Real *)
-local val newVId = newLongVId (StrId_Real, [])
-in
-val VId_Real_abs = newVId "abs"
-end
+val VId_Real_abs = newVId "_Prim.Real.abs"
 
 (* Vector *)
-local val newVId = newLongVId (StrId_Vector, [])
-in
-val VId_Vector_tabulate = newVId "tabulate"
-val VId_Vector_concat = newVId "concat"
-end
+val VId_Vector_tabulate = newVId "_Prim.Vector.tabulate"
+val VId_Vector_concat = newVId "_Prim.Vector.concat"
 
 (* Array *)
-local val newVId = newLongVId (StrId_Array, [])
-in
-val VId_Array_array = newVId "array"
-val VId_Array_fromList = newVId "fromList"
-val VId_Array_tabulate = newVId "tabulate"
-end
+val VId_Array_array = newVId "_Prim.Array.array"
+val VId_Array_fromList = newVId "_Prim.Array.fromList"
+val VId_Array_tabulate = newVId "_Prim.Array.tabulate"
 
 (* Lua interface *)
-local val newVId = newLongVId (StrId_Lua, [])
-in
-val VId_Lua_global = newVId "global"
-val VId_Lua_call = newVId "call"
-val VId_Lua_method = newVId "method"
-val VId_Lua_NIL = newVId "NIL"
-val VId_Lua_newTable = newVId "newTable"
-val VId_Lua_function = newVId "function"
-local val newVId = newLongVId (StrId_Lua, ["Lib"])
-in
-val VId_Lua_Lib_assert = newVId "assert"
-val VId_Lua_Lib_error = newVId "error"
-val VId_Lua_Lib_getmetatable = newVId "getmetatable"
-val VId_Lua_Lib_pairs = newVId "pairs"
-val VId_Lua_Lib_pcall = newVId "pcall"
-val VId_Lua_Lib_setmetatable = newVId "setmetatable"
-val VId_Lua_Lib_math = newVId "math"
-local val newVId = newLongVId (StrId_Lua, ["Lib", "math"])
-in
-val VId_Lua_Lib_math_abs = newVId "abs"
-val VId_Lua_Lib_math_type = newVId "type'"
-val VId_Lua_Lib_math_maxinteger = newVId "maxinteger"
-val VId_Lua_Lib_math_mininteger = newVId "mininteger"
-end
-val VId_Lua_Lib_string = newVId "string"
-local val newVId = newLongVId (StrId_Lua, ["Lib", "string"])
-in
-val VId_Lua_Lib_string_format = newVId "format"
-end
-val VId_Lua_Lib_table = newVId "table"
-local val newVId = newLongVId (StrId_Lua, ["Lib", "table"])
-in
-val VId_Lua_Lib_table_pack = newVId "pack"
-val VId_Lua_Lib_table_unpack = newVId "unpack"
-end
-end
-end
+val VId_Lua_global = newVId "_Prim.Lua.global"
+val VId_Lua_call = newVId "_Prim.Lua.call"
+val VId_Lua_method = newVId "_Prim.Lua.method"
+val VId_Lua_NIL = newVId "_Prim.Lua.NIL"
+val VId_Lua_newTable = newVId "_Prim.Lua.newTable"
+val VId_Lua_function = newVId "_Prim.Lua.function"
+val VId_Lua_Lib_assert = newVId "_Prim.Lua.Lib.assert"
+val VId_Lua_Lib_error = newVId "_Prim.Lua.Lib.error"
+val VId_Lua_Lib_getmetatable = newVId "_Prim.Lua.Lib.getmetatable"
+val VId_Lua_Lib_pairs = newVId "_Prim.Lua.Lib.pairs"
+val VId_Lua_Lib_pcall = newVId "_Prim.Lua.Lib.pcall"
+val VId_Lua_Lib_setmetatable = newVId "_Prim.Lua.Lib.setmetatable"
+val VId_Lua_Lib_math = newVId "_Prim.Lua.Lib.math"
+val VId_Lua_Lib_math_abs = newVId "_Prim.Lua.Lib.math.abs"
+val VId_Lua_Lib_math_type = newVId "_Prim.Lua.Lib.math.type'"
+val VId_Lua_Lib_math_maxinteger = newVId "_Prim.Lua.Lib.math.maxinteger"
+val VId_Lua_Lib_math_mininteger = newVId "_Prim.Lua.Lib.math.mininteger"
+val VId_Lua_Lib_string = newVId "_Prim.Lua.Lib.string"
+val VId_Lua_Lib_string_format = newVId "_Prim.Lua.Lib.string.format"
+val VId_Lua_Lib_table = newVId "_Prim.Lua.Lib.table"
+val VId_Lua_Lib_table_pack = newVId "_Prim.Lua.Lib.table.pack"
+val VId_Lua_Lib_table_unpack = newVId "_Prim.Lua.Lib.table.unpack"
 val VId_Lua_LuaError = newVId "_Prim.Lua.LuaError"
-val LongVId_Lua_LuaError = TypedSyntax.MkShortVId VId_Lua_LuaError
-val VId_Lua_LuaError_tag = newShortVId "_Prim.Lua.LuaError.tag"
+val VId_Lua_LuaError_tag = newVId "_Prim.Lua.LuaError.tag"
 
 (* JavaScript interface *)
-local val newVId = newLongVId (StrId_JavaScript, [])
-in
-val VId_JavaScript_call = newVId "call"
-val VId_JavaScript_new = newVId "new"
-val VId_JavaScript_method = newVId "method"
-val VId_JavaScript_encodeUtf8 = newVId "encodeUtf8"
-val VId_JavaScript_decodeUtf8 = newVId "decodeUtf8"
-val VId_JavaScript_require = newVId "require" (* Node.js *)
-end
+val VId_JavaScript_call = newVId "_Prim.JavaScript.call"
+val VId_JavaScript_new = newVId "_Prim.JavaScript.new"
+val VId_JavaScript_method = newVId "_Prim.JavaScript.method"
+val VId_JavaScript_encodeUtf8 = newVId "_Prim.JavaScript.encodeUtf8"
+val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
+val VId_JavaScript_require = newVId "_Prim.JavaScript.require" (* Node.js *)
 
 (* Other primitives *)
-local val newVId = newLongVId (StrId_LunarML, [])
-in
-val VId_assumePure = newVId "assumePure"
-val VId_assumeDiscardable = newVId "assumeDiscardable"
-end
+val VId_assumePure = newVId "_Prim.assumePure"
+val VId_assumeDiscardable = newVId "_Prim.assumeDiscardable"
 val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
-val LongVId_Vector_fromList = TypedSyntax.MkShortVId VId_Vector_fromList
 val VId_Int_add_bin = newVId "_Prim.Int.+"
 val VId_Int_sub_bin = newVId "_Prim.Int.-"
 val VId_Int_mul_bin = newVId "_Prim.Int.*"
@@ -244,13 +151,11 @@ val initialEnv : Typing.Env
                                                       ) Syntax.VIdMap.empty cons
                                         end
           fun mkTopValConMap (cons, rep) = let val allConstructors = List.foldl (fn ((vid, _, _), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid)) Syntax.VIdSet.empty cons
-                                           in List.foldl (fn ((vid, longvid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, representation = rep }
-                                                                                          in Syntax.VIdMap.insert (m, Syntax.MkVId vid, (tysc, idstatus, longvid))
-                                                                                          end
+                                           in List.foldl (fn ((vid, conid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, representation = rep }
+                                                                                        in Syntax.VIdMap.insert (m, Syntax.MkVId vid, (tysc, idstatus, TypedSyntax.MkShortVId conid))
+                                                                                        end
                                                          ) Syntax.VIdMap.empty cons
                                            end
-          val mkExConMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ExceptionConstructor))) Syntax.VIdMap.empty
-          val mkStrMap = List.foldl (fn ((name, str), m) => Syntax.StrIdMap.insert (m, Syntax.MkStrId name, TypedSyntax.MkSignature str)) Syntax.StrIdMap.empty
           val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
           val tyVarB = TypedSyntax.NamedTyVar ("'b", 0)
           val tyVarC = TypedSyntax.NamedTyVar ("'c", 0)
@@ -334,142 +239,83 @@ val initialEnv : Typing.Env
           val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
                                 , valEnv = emptyValEnv
                                 }
-          val sig_Int = { tyConMap = mkTyMap []
-                        , valMap = mkValMap
-                                       [("~", TypeScheme ([], primTy_int --> primTy_int))
-                                       ,("abs", TypeScheme ([], primTy_int --> primTy_int))
-                                       ]
-                        , strMap = mkStrMap []
-                        }
-          val sig_Real = { tyConMap = mkTyMap []
-                         , valMap = mkValMap
-                                        [("abs", TypeScheme ([], primTy_real --> primTy_real))
-                                        ]
-                         , strMap = mkStrMap []
-                         }
-          val sig_Array = { tyConMap = mkTyMap []
-                          , valMap = mkValMap
-                                         [("array", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, tyA) --> arrayOf tyA))
-                                         ,("fromList", TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
-                                         ,("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> arrayOf tyA))
-                                         ]
-                          , strMap = mkStrMap []
-                          }
-          val sig_Vector = { tyConMap = mkTyMap []
-                           , valMap = mkValMap
-                                          [("tabulate", TypeScheme ([(tyVarA, [])], mkPairType(primTy_int, primTy_int --> tyA) --> vectorOf tyA))
-                                          ,("concat", TypeScheme ([(tyVarA, [])], listOf (vectorOf tyA) --> vectorOf tyA))
-                                          ]
-                           , strMap = mkStrMap []
-                           }
-          val sig_Lua_Lib = { tyConMap = mkTyMap []
-                            , valMap = mkValMap
-                                           [("assert", TypeScheme ([], primTy_Lua_value))
-                                           ,("error", TypeScheme ([], primTy_Lua_value))
-                                           ,("getmetatable", TypeScheme ([], primTy_Lua_value))
-                                           ,("pairs", TypeScheme ([], primTy_Lua_value))
-                                           ,("pcall", TypeScheme ([], primTy_Lua_value))
-                                           ,("setmetatable", TypeScheme ([], primTy_Lua_value))
-                                           ,("math", TypeScheme ([], primTy_Lua_value))
-                                           ,("string", TypeScheme ([], primTy_Lua_value))
-                                           ,("table", TypeScheme ([], primTy_Lua_value))
-                                           ]
-                            , strMap = mkStrMap
-                                           [("math", { tyConMap = mkTyMap []
-                                                     , valMap = mkValMap
-                                                                    [("abs", TypeScheme ([], primTy_Lua_value))
-                                                                    ,("type'", TypeScheme ([], primTy_Lua_value))
-                                                                    ,("maxinteger", TypeScheme ([], primTy_Lua_value))
-                                                                    ,("mininteger", TypeScheme ([], primTy_Lua_value))
-                                                                    ]
-                                                     , strMap = mkStrMap []
-                                                     }
-                                            )
-                                           ,("string", { tyConMap = mkTyMap []
-                                                       , valMap = mkValMap
-                                                                      [("format", TypeScheme ([], primTy_Lua_value))
-                                                                      ]
-                                                       , strMap = mkStrMap []
-                                                       }
-                                            )
-                                           ,("table", { tyConMap = mkTyMap []
-                                                       , valMap = mkValMap
-                                                                      [("pack", TypeScheme ([], primTy_Lua_value))
-                                                                      ,("unpack", TypeScheme ([], primTy_Lua_value))
-                                                                      ]
-                                                       , strMap = mkStrMap []
-                                                       }
-                                            )
-                                           ]
-                            }
-          val sig_Lua = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_Lua_value)]
-                        , valMap = mkValMap
-                                       [("global", TypeScheme ([], primTy_string --> primTy_Lua_value))
-                                       ,("call", TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                       ,("method", TypeScheme ([], mkPairType (primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
-                                       ,("NIL", TypeScheme ([], primTy_Lua_value))
-                                       ,("newTable", TypeScheme ([], primTy_unit --> primTy_Lua_value))
-                                       ,("function", TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
-                                       ]
-                        , strMap = mkStrMap [("Lib", sig_Lua_Lib)]
-                        }
-          val sig_JavaScript = { tyConMap = mkTyMap [(Syntax.MkTyCon "value", tyStr_JavaScript_value)]
-                               , valMap = mkValMap
-                                              [("call", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
-                                              ,("new", TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
-                                              ,("method", TypeScheme ([], mkPairType(primTy_JavaScript_value, primTy_wideString) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
-                                              ,("encodeUtf8", TypeScheme ([], primTy_wideString --> primTy_string))
-                                              ,("decodeUtf8", TypeScheme ([], primTy_string --> primTy_wideString))
-                                              ,("require", TypeScheme ([], primTy_JavaScript_value))
-                                              ]
-                               , strMap = mkStrMap []
-                               }
-          val sig_LunarML = { tyConMap = mkTyMap []
-                            , valMap = mkValMap
-                                           [("assumePure", TypeScheme ([(tyVarA, [])], tyA --> tyA))
-                                           ,("assumeDiscardable", TypeScheme ([(tyVarA, [])], tyA --> tyA))
-                                           ]
-                            , strMap = mkStrMap []
-                            }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
-                               [mkTopValConMap ([("ref", LongVId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
+                               [mkTopValConMap ([("ref", VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
                                                 ], Syntax.REP_REF)
-                               ,mkTopValConMap ([("true", LongVId_true, TypeScheme ([], primTy_bool))
-                                                ,("false", LongVId_false, TypeScheme ([], primTy_bool))
+                               ,mkTopValConMap ([("true", VId_true, TypeScheme ([], primTy_bool))
+                                                ,("false", VId_false, TypeScheme ([], primTy_bool))
                                                 ], Syntax.REP_BOOL)
-                               ,mkTopValConMap ([("nil", LongVId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
-                                                ,("::", LongVId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType (tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
+                               ,mkTopValConMap ([("nil", VId_nil, TypeScheme ([(tyVarA, [])], listOf tyA)) (* forall 'a. 'a list *)
+                                                ,("::", VId_DCOLON, TypeScheme ([(tyVarA, [])], mkPairType (tyA, listOf tyA) --> listOf tyA)) (* forall 'a. 'a * 'a list -> 'a list *)
                                                 ], Syntax.REP_LIST)
-                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ExceptionConstructor, vid)))
+                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ExceptionConstructor, TypedSyntax.MkShortVId vid)))
                                            Syntax.VIdMap.empty
-                                           [("Match", LongVId_Match, TypeScheme ([], primTy_exn))
-                                           ,("Bind", LongVId_Bind, TypeScheme ([], primTy_exn))
-                                           ,("Div", LongVId_Div, TypeScheme ([], primTy_exn))
-                                           ,("Overflow", LongVId_Overflow, TypeScheme ([], primTy_exn))
-                                           ,("Size", LongVId_Size, TypeScheme ([], primTy_exn))
-                                           ,("Subscript", LongVId_Subscript, TypeScheme ([], primTy_exn))
-                                           ,("Fail", LongVId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
-                                           ,("_Prim.Lua.LuaError", LongVId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
+                                           [("Match", VId_Match, TypeScheme ([], primTy_exn))
+                                           ,("Bind", VId_Bind, TypeScheme ([], primTy_exn))
+                                           ,("Div", VId_Div, TypeScheme ([], primTy_exn))
+                                           ,("Overflow", VId_Overflow, TypeScheme ([], primTy_exn))
+                                           ,("Size", VId_Size, TypeScheme ([], primTy_exn))
+                                           ,("Subscript", VId_Subscript, TypeScheme ([], primTy_exn))
+                                           ,("Fail", VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
+                                           ,("_Prim.Lua.LuaError", VId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
                                            ]
-                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, vid)))
+                               ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)))
                                            Syntax.VIdMap.empty
-                                           [("_Prim.Vector.fromList", TypedSyntax.MkShortVId VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
-                                           ,("_Prim.Int.+", TypedSyntax.MkShortVId VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.-", TypedSyntax.MkShortVId VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.*", TypedSyntax.MkShortVId VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.div", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.mod", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.quot", TypedSyntax.MkShortVId VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.rem", TypedSyntax.MkShortVId VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Word.div", TypedSyntax.MkShortVId VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.mod", TypedSyntax.MkShortVId VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.<", TypedSyntax.MkShortVId VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
-                                           ,("exnName", TypedSyntax.MkShortVId VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
-                                           ,("_Prim.String.concat", TypedSyntax.MkShortVId VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
-                                           ,("_Prim.String.concatWith", TypedSyntax.MkShortVId VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
-                                           ,("_Prim.String.implode", TypedSyntax.MkShortVId VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
-                                           ,("_Prim.String.translate", TypedSyntax.MkShortVId VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
+                                           [("exnName", VId_exnName, TypeScheme ([], primTy_exn --> primTy_string))
+                                           ,("_Prim.Vector.fromList", VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
+                                           ,("_Prim.Int.~", VId_Int_TILDE, TypeScheme ([], primTy_int --> primTy_int))
+                                           ,("_Prim.Int.abs", VId_Int_abs, TypeScheme ([], primTy_int --> primTy_int))
+                                           ,("_Prim.Int.+", VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.-", VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.*", VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.div", VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.mod", VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.quot", VId_Int_quot_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Int.rem", VId_Int_rem_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
+                                           ,("_Prim.Word.div", VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("_Prim.Word.mod", VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
+                                           ,("_Prim.Word.<", VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
+                                           ,("_Prim.Real.abs", VId_Real_abs, TypeScheme ([], primTy_real --> primTy_real))
+                                           ,("_Prim.String.concat", VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
+                                           ,("_Prim.String.concatWith", VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
+                                           ,("_Prim.String.implode", VId_String_implode, TypeScheme ([], listOf primTy_char --> primTy_string))
+                                           ,("_Prim.String.translate", VId_String_translate, TypeScheme ([], function2 (primTy_string, primTy_char --> primTy_string, primTy_string)))
+                                           ,("_Prim.Vector.tabulate", VId_Vector_tabulate, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, primTy_int --> tyA) --> vectorOf tyA))
+                                           ,("_Prim.Vector.concat", VId_Vector_concat, TypeScheme ([(tyVarA, [])], listOf (vectorOf tyA) --> vectorOf tyA))
+                                           ,("_Prim.Array.array", VId_Array_array, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, tyA) --> arrayOf tyA))
+                                           ,("_Prim.Array.fromList", VId_Array_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
+                                           ,("_Prim.Array.tabulate", VId_Array_tabulate, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, primTy_int --> tyA) --> arrayOf tyA))
+                                           ,("_Prim.Lua.global", VId_Lua_global, TypeScheme ([], primTy_string --> primTy_Lua_value))
+                                           ,("_Prim.Lua.call", VId_Lua_call, TypeScheme ([], primTy_Lua_value --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                           ,("_Prim.Lua.method", VId_Lua_method, TypeScheme ([], mkPairType (primTy_Lua_value, primTy_string) --> vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value))
+                                           ,("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.newTable", VId_Lua_newTable, TypeScheme ([], primTy_unit --> primTy_Lua_value))
+                                           ,("_Prim.Lua.function", VId_Lua_function, TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.assert", VId_Lua_Lib_assert, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.error", VId_Lua_Lib_error, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.getmetatable", VId_Lua_Lib_getmetatable, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.pairs", VId_Lua_Lib_pairs, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.pcall", VId_Lua_Lib_pcall, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.setmetatable", VId_Lua_Lib_setmetatable, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math", VId_Lua_Lib_math, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.string", VId_Lua_Lib_string, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.table", VId_Lua_Lib_table, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math.abs", VId_Lua_Lib_math_abs, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math.type'", VId_Lua_Lib_math_type, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math.maxinteger", VId_Lua_Lib_math_maxinteger, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math.mininteger", VId_Lua_Lib_math_mininteger, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.string.format", VId_Lua_Lib_string_format, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.table.pack", VId_Lua_Lib_table_pack, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.table.unpack", VId_Lua_Lib_table_unpack, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.JavaScript.call", VId_JavaScript_call, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                           ,("_Prim.JavaScript.new", VId_JavaScript_new, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                           ,("_Prim.JavaScript.method", VId_JavaScript_method, TypeScheme ([], mkPairType(primTy_JavaScript_value, primTy_wideString) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                           ,("_Prim.JavaScript.encodeUtf8", VId_JavaScript_encodeUtf8, TypeScheme ([], primTy_wideString --> primTy_string))
+                                           ,("_Prim.JavaScript.decodeUtf8", VId_JavaScript_decodeUtf8, TypeScheme ([], primTy_string --> primTy_wideString))
+                                           ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))
+                                           ,("_Prim.assumePure", VId_assumePure, TypeScheme ([(tyVarA, [])], tyA --> tyA))
+                                           ,("_Prim.assumeDiscardable", VId_assumeDiscardable, TypeScheme ([(tyVarA, [])], tyA --> tyA))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
@@ -490,6 +336,8 @@ val initialEnv : Typing.Env
                                  ,("_Prim.IntInf.int", tyStr_intInf)
                                  ,("_Prim.Function2.function2", tyStr_function2)
                                  ,("_Prim.Function3.function3", tyStr_function3)
+                                 ,("_Prim.Lua.value", tyStr_Lua_value)
+                                 ,("_Prim.JavaScript.value", tyStr_JavaScript_value)
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
                                   TypedSyntax.TyNameMap.empty
@@ -512,16 +360,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
                                   ]
-         , strMap = List.foldl (fn ((name, strid, s), m) => Syntax.StrIdMap.insert (m, Syntax.MkStrId name, (s, TypedSyntax.MkLongStrId (strid, []))))
-                               Syntax.StrIdMap.empty
-                               [("Int", StrId_Int, sig_Int)
-                               ,("Real", StrId_Real, sig_Real)
-                               ,("Array", StrId_Array, sig_Array)
-                               ,("Vector", StrId_Vector, sig_Vector)
-                               ,("Lua", StrId_Lua, sig_Lua)
-                               ,("JavaScript", StrId_JavaScript, sig_JavaScript)
-                               ,("LunarML", StrId_LunarML, sig_LunarML)
-                               ]
+         , strMap = Syntax.StrIdMap.empty
          , sigMap = Syntax.SigIdMap.empty
          , funMap = Syntax.FunIdMap.empty
          , boundTyVars = Syntax.TyVarMap.empty

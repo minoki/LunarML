@@ -20,32 +20,23 @@ exception CodeGenError of string
  *)
 val builtins
     = let open InitialEnv
-          val map = List.foldl TypedSyntax.LongVIdMap.insert' TypedSyntax.LongVIdMap.empty
-                               [(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Int), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Real), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_String), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Vector), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Array), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_Lua), NONE)
-                               ,(TypedSyntax.MkShortVId (FSyntax.strIdToVId StrId_LunarML), NONE)
-                               ]
-      in List.foldl (fn ((vid, name), map) => TypedSyntax.LongVIdMap.insert (map, vid, SOME name)) map
+      in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
                     [(* ref *)
-                     (LongVId_ref, "_ref")
+                     (VId_ref, "_ref")
                     (* boolean *)
-                    ,(LongVId_true, "true") (* boolean literal *)
-                    ,(LongVId_false, "false") (* boolean literal *)
+                    ,(VId_true, "true") (* boolean literal *)
+                    ,(VId_false, "false") (* boolean literal *)
                     (* list *)
-                    ,(LongVId_nil, "_nil")
-                    ,(LongVId_DCOLON, "_cons")
+                    ,(VId_nil, "_nil")
+                    ,(VId_DCOLON, "_cons")
                     (* exn *)
-                    ,(LongVId_Match, "_Match")
-                    ,(LongVId_Bind, "_Bind")
-                    ,(LongVId_Div, "_Div")
-                    ,(LongVId_Overflow, "_Overflow")
-                    ,(LongVId_Size, "_Size")
-                    ,(LongVId_Subscript, "_Subscript")
-                    ,(LongVId_Fail, "_Fail")
+                    ,(VId_Match, "_Match")
+                    ,(VId_Bind, "_Bind")
+                    ,(VId_Div, "_Div")
+                    ,(VId_Overflow, "_Overflow")
+                    ,(VId_Size, "_Size")
+                    ,(VId_Subscript, "_Subscript")
+                    ,(VId_Fail, "_Fail")
                     ,(VId_Match_tag, "_Match_tag")
                     ,(VId_Bind_tag, "_Bind_tag")
                     ,(VId_Div_tag, "_Div_tag")
@@ -53,31 +44,31 @@ val builtins
                     ,(VId_Size_tag, "_Size_tag")
                     ,(VId_Subscript_tag, "_Subscript_tag")
                     ,(VId_Fail_tag, "_Fail_tag")
-                    ,(TypedSyntax.MkShortVId VId_exnName, "_exnName")
+                    ,(VId_exnName, "_exnName")
                     (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(TypedSyntax.MkShortVId VId_Int_add_bin, "__Int_add")
-                    ,(TypedSyntax.MkShortVId VId_Int_sub_bin, "__Int_sub")
-                    ,(TypedSyntax.MkShortVId VId_Int_mul_bin, "__Int_mul")
-                    ,(TypedSyntax.MkShortVId VId_Int_div_bin, "__Int_div")
-                    ,(TypedSyntax.MkShortVId VId_Int_mod_bin, "__Int_mod")
+                    ,(VId_Int_add_bin, "__Int_add")
+                    ,(VId_Int_sub_bin, "__Int_sub")
+                    ,(VId_Int_mul_bin, "__Int_mul")
+                    ,(VId_Int_div_bin, "__Int_div")
+                    ,(VId_Int_mod_bin, "__Int_mod")
                     (* word *)
-                    ,(TypedSyntax.MkShortVId VId_Word_div_bin, "__Word_div")
-                    ,(TypedSyntax.MkShortVId VId_Word_mod_bin, "__Word_mod")
-                    ,(TypedSyntax.MkShortVId VId_Word_LT_bin, "__Word_LT")
+                    ,(VId_Word_div_bin, "__Word_div")
+                    ,(VId_Word_mod_bin, "__Word_mod")
+                    ,(VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
-                    (* Array and Vector *)
+                    (* Vector and Array *)
+                    ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
+                    ,(VId_Vector_concat, "_Vector_concat")
+                    ,(VId_Vector_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
-                    ,(VId_Vector_concat, "_Vector_concat")
-                    ,(TypedSyntax.MkShortVId VId_Vector_fromList, "_VectorOrArray_fromList")
                     (* Lua interface *)
-                    ,(LongVId_Lua_LuaError, "_LuaError")
+                    ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_global, "_Lua_global")
                     ,(VId_Lua_call, "_Lua_call")
@@ -85,9 +76,6 @@ val builtins
                     ,(VId_Lua_NIL, "nil") (* literal *)
                     ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
-                    (* extra *)
-                    ,(VId_assumePure, "_id") (* no-op *)
-                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ,(VId_Lua_Lib_assert, "assert")
                     ,(VId_Lua_Lib_error, "error")
                     ,(VId_Lua_Lib_getmetatable, "getmetatable")
@@ -104,13 +92,15 @@ val builtins
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
+                    (* extra *)
+                    ,(VId_assumePure, "_id") (* no-op *)
+                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
 fun VIdToLua (vid as TypedSyntax.MkVId (name, n)) = if n < 0 then
-                                                        case TypedSyntax.LongVIdMap.find (builtins, TypedSyntax.MkShortVId vid) of
-                                                            NONE => raise Fail ("Unknown built-in symbol: " ^ name ^ "@" ^ Int.toString n)
-                                                          | SOME (SOME luaName) => LuaSyntax.PredefinedId luaName
-                                                          | SOME NONE => raise CodeGenError ("the built-in identifier " ^ TypedSyntax.print_VId vid ^ " has no runtime counterpart")
+                                                        case TypedSyntax.VIdMap.find (builtins, vid) of
+                                                            NONE => raise Fail ("the built-in symbol " ^ name ^ "@" ^ Int.toString n ^ " is not supported by Lua backend")
+                                                          | SOME luaName => LuaSyntax.PredefinedId luaName
                                                     else
                                                         LuaSyntax.UserDefinedId vid
 
@@ -174,19 +164,6 @@ datatype Destination = Return
 (* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
 fun mapCont f [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
-
-local
-fun extractStrId (F.VarExp (TypedSyntax.MkVId (name, n))) = SOME (TypedSyntax.MkStrId (name, n), [])
-  | extractStrId(F.SProjectionExp(exp, F.StructLabel strid)) = (case extractStrId exp of
-                                                              SOME (strid0, revStrids) => SOME (strid0, strid :: revStrids)
-                                                            | NONE => NONE
-                                                         )
-  | extractStrId _ = NONE
-in
-fun extractLongVId (F.VarExp vid) = SOME (TypedSyntax.MkShortVId vid)
-  | extractLongVId (F.SProjectionExp (exp, F.ValueLabel vid)) = Option.map (fn (strid0, revStrids) => TypedSyntax.MkLongVId (strid0, List.rev revStrids, vid)) (extractStrId exp)
-  | extractLongVId _ = NONE
-end
 
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> L.Stat list *)
 fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
@@ -286,8 +263,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
     = let val doLuaCall = case (exp1, exp2) of
-                              (F.AppExp(vid_luacall, f), F.PrimExp(F.VectorOp, _, xs)) =>
-                              if F.isLongVId(vid_luacall, InitialEnv.VId_Lua_call) then
+                              (F.AppExp (F.VarExp vid_luacall, f), F.PrimExp (F.VectorOp, _, xs)) =>
+                              if TypedSyntax.eqVId (vid_luacall, InitialEnv.VId_Lua_call) then
                                   SOME (fn () => doExpCont ctx env f
                                                            (fn (stmts1, env, f) =>
                                                                mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
@@ -305,10 +282,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                   NONE
                             | _ => NONE
           val doLuaMethod = case (exp1, exp2) of
-                                (F.AppExp (vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
+                                (F.AppExp (F.VarExp vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
                                 (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
                                      SOME method =>
-                                     if F.isLongVId(vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
+                                     if TypedSyntax.eqVId (vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
                                          SOME (fn () => doExpCont ctx env self
                                                                   (fn (stmts1, env, self) =>
                                                                       mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
@@ -329,7 +306,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                               | _ => NONE
           (* doLuaGlobal: VId_Lua_global *)
           val isNoop = case exp1 of
-                           F.TyAppExp(vid, _) => F.isLongVId(vid, InitialEnv.VId_assumePure) orelse F.isLongVId(vid, InitialEnv.VId_assumeDiscardable)
+                           F.TyAppExp (F.VarExp vid, _) => TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
       in case List.mapPartial (fn x => x) [doLuaCall, doLuaMethod] of
              f :: _ => f ()
@@ -536,21 +513,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                 )
                      end
                  )
-      end
-  | doExpTo ctx env (exp as F.SProjectionExp (exp', F.ValueLabel vid)) dest
-    = let val builtin = case extractLongVId exp of
-                            SOME longvid => (case TypedSyntax.LongVIdMap.find (builtins, longvid) of
-                                                 SOME (SOME "nil") => SOME (L.ConstExp L.Nil)
-                                               | SOME (SOME "true") => SOME (L.ConstExp L.True)
-                                               | SOME (SOME "false") => SOME (L.ConstExp L.False)
-                                               | SOME (SOME luaName) => SOME (L.VarExp (L.PredefinedId luaName))
-                                               | SOME NONE => raise CodeGenError ("the built-in identifier " ^ TypedSyntax.print_LongVId longvid ^ " has no runtime counterpart")
-                                               | NONE => NONE
-                                            )
-                          | NONE => NONE
-      in case builtin of
-             SOME luaExpr => putPureTo ctx env dest ([], luaExpr)
-           | NONE => doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString (Syntax.getVIdName vid)))))
       end
   | doExpTo ctx env (exp as F.SProjectionExp (exp', label)) dest = let val field = case label of
                                                                                        F.ValueLabel vid => Syntax.getVIdName vid

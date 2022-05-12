@@ -925,7 +925,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
-  | isDiscardable (F.AppExp (F.TyAppExp (exp1', _), exp2)) = F.isLongVId (exp1', InitialEnv.VId_assumePure) orelse F.isLongVId (exp1', InitialEnv.VId_assumeDiscardable)
+  | isDiscardable (F.AppExp (F.TyAppExp (F.VarExp vid, _), exp2)) = TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3

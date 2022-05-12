@@ -526,7 +526,7 @@ type Env = { equalityForTyVarMap : TypedSyntax.VId TypedSyntax.TyVarMap.map
 val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                        , equalityForTyNameMap = TypedSyntax.TyNameMap.empty
                        , exnTagMap = let open InitialEnv
-                                     in List.foldl (fn ((con, tag), m) => TypedSyntax.VIdMap.insert (m, con, LongVIdToPath tag)) TypedSyntax.VIdMap.empty
+                                     in List.foldl (fn ((con, tag), m) => TypedSyntax.VIdMap.insert (m, con, FSyntax.Root tag)) TypedSyntax.VIdMap.empty
                                                    [(VId_Match, VId_Match_tag)
                                                    ,(VId_Bind, VId_Bind_tag)
                                                    ,(VId_Div, VId_Div_tag)
