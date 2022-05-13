@@ -18,6 +18,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -mexe                  Produce a standalone script.\n\
                                                 \  -mlib                  Produce a Lua module.\n\
                                                 \  --js                   Produce JavaScript code.\n\
+                                                \  --js-cps               Produce JavaScript code (CPS mode).\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
                                                 \  --dump                 Dump intermediate code.\n\
@@ -25,7 +26,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -O,--optimize          Try to optimize hard.\n\
                                                 \")
 datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-datatype Backend = BACKEND_LUA | BACKEND_JS
+datatype Backend = BACKEND_LUA | BACKEND_JS | BACKEND_JS_CPS
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
                , dump : DumpMode
@@ -65,6 +66,8 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "--js" then
              parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS } args
+         else if arg = "--js-cps" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS_CPS } args
          else if arg = "-h" orelse arg = "--help" then
              ( showHelp (); OS.Process.exit OS.Process.success )
          else if arg = "-v" orelse arg = "--version" then
@@ -97,6 +100,9 @@ and getTargetInfo opts = (case #backend opts of
                             | BACKEND_JS => { wideChar = TargetInfo.CHAR16
                                             , nativeString = TargetInfo.WIDE_STRING
                                             }
+                            | BACKEND_JS_CPS => { wideChar = TargetInfo.CHAR16
+                                                , nativeString = TargetInfo.WIDE_STRING
+                                                }
                          )
 and optimize ctx fdecs 0 = fdecs
   | optimize ctx fdecs n = let val ctx' = { nextVId = #nextVId (#toFContext (#driverContext ctx))
@@ -109,7 +115,7 @@ and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", progDir)
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -151,11 +157,12 @@ and doCompile opts fileName
                  )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
+               | CodeGenJsCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = progDir, relativeTo = OS.FileSys.getDir () })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -194,6 +201,7 @@ and doMLB opts mlbfilename
                   )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
+               | CodeGenJsCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
     = let val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
@@ -216,6 +224,21 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
           val mlinit = readFile mlinit_js
           val jsctx = { nextJsId = ref 0 }
           val js = CodeGenJs.doProgram jsctx CodeGenJs.initialEnv decs
+          val js = JsWriter.doProgram js
+          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
+          val () = TextIO.output (outs, mlinit)
+          val () = TextIO.output (outs, js)
+          val () = TextIO.closeOut outs
+      in ()
+      end
+  | emit (opts as { backend = BACKEND_JS_CPS, ... }) fileName nextId decs
+    = let val cexp = CpsTransform.transformDecs { nextVId = nextId } decs CSyntax.Abort
+          val progDir = OS.Path.dir progName
+          val base = OS.Path.base fileName
+          val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit-cps.js" }
+          val mlinit = readFile mlinit_js
+          val jsctx = { nextJsId = ref 0 }
+          val js = CodeGenJsCps.doProgram cexp
           val js = JsWriter.doProgram js
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
