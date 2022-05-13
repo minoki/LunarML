@@ -159,6 +159,32 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
     = VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map doValue (vector xs))])) :: doCExp cont
   | doCExp (C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs, result, cont })
     = VarStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp cont
+  | doCExp (C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp], result, cont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp cont
+  | doCExp (C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp], result, cont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp cont
+  | doCExp (C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp], result, cont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp cont
+  | doCExp (C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [], result, cont })
+    = let val tag = #tag info
+      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))])) :: doCExp cont
+      end
+  | doCExp (C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload], result, cont })
+    = let val tag = #tag info
+          val payload = doValue payload
+      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)])) :: doCExp cont
+      end
+  | doCExp (C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag], result, cont })
+    = let val tag = doValue tag
+      in VarStat (result, J.NewExp (tag, vector [])) :: doCExp cont
+      end
+  | doCExp (C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload], result, cont })
+    = let val tag = doValue tag
+          val payload = doValue payload
+      in VarStat (result, J.NewExp (tag, vector [payload])) :: doCExp cont
+      end
+  | doCExp (C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp], result, cont })
+    = [ J.ThrowStat (doValue exp) ] (* TODO: location information *)
   | doCExp (C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args, result, cont })
     = let fun doUnary f = case args of
                               [a] => f (doValue a)
@@ -174,7 +200,8 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                               | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
           fun doTernaryExp (f, pure : bool) = doTernary (fn (a, b, c) => VarStat (result, f (a, b, c)) :: doCExp cont)
       in case prim of
-             Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
+             Primitives.call2 => doTernaryExp (fn (f, a0, a1) => J.CallExp (f, vector [a0, a1]), false) (* TODO: exception handling? *)
+           | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (a, b) => J.AssignStat (J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp cont) (* REPRESENTATION_OF_REF *)
            | Primitives.Ref_read => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), false) (* REPRESENTATION_OF_REF *)
            | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, true)
@@ -212,6 +239,16 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
            | Primitives.WideChar_GT => doBinaryOp (J.GT, true)
            | Primitives.WideChar_LE => doBinaryOp (J.LE, true)
            | Primitives.WideChar_GE => doBinaryOp (J.GE, true)
+           | Primitives.String_EQUAL => doBinaryExp (fn (a, b) =>  J.CallExp (J.VarExp (J.PredefinedId "_String_EQUAL"), vector [a, b]), true)
+           | Primitives.String_LT => doBinaryExp (fn (a, b) => J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]), true)
+           | Primitives.String_HAT => doBinaryExp (fn (a, b) =>  J.CallExp (J.VarExp (J.PredefinedId "_String_append"), vector [a, b]), true)
+           | Primitives.String_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
+           | Primitives.String_str => doUnaryExp (fn a => J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]), true)
+           | Primitives.WideString_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.WideString_LT => doBinaryOp (J.LT, true)
+           | Primitives.WideString_GT => doBinaryOp (J.GT, true)
+           | Primitives.WideString_LE => doBinaryOp (J.LE, true)
+           | Primitives.WideString_GE => doBinaryOp (J.GE, true)
            | Primitives.WideString_HAT => doBinaryOp (J.PLUS, true)
            | Primitives.WideString_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
            | Primitives.WideString_str => doUnaryExp (fn a => a, true)

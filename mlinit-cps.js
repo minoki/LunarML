@@ -1,7 +1,7 @@
 function _id(k, x) { return [false, k, [x]]; }
-function _ref(x) { return { tag: "ref", payload: x }; }
+function _ref(k, x) { return [false, k, [{ tag: "ref", payload: x }]]; }
 const _nil = { tag: "nil" };
-function _cons(a) { return { tag: "::", payload: a }; }
+function _cons(k, a) { return [false, k, [{ tag: "::", payload: a }]]; }
 function _list(a) {
     var x = _nil;
     for (var i = a.length - 1; i >= 0; --i) {
@@ -29,7 +29,7 @@ _Subscript_tag.prototype.name = "Subscript";
 const _Subscript = new _Subscript_tag();
 function _Fail_tag(payload) { this.payload = payload; }
 _Fail_tag.prototype.name = "Fail";
-function _Fail(payload) { return new _Fail_tag(payload); }
+function _Fail(k, payload) { return [false, k, [new _Fail_tag(payload)]]; }
 function _String_EQUAL(s, t) {
     if (s === t) { return true; }
     var n = s.length;
@@ -165,15 +165,15 @@ function _method(k1, a) {
         return [false, k2, [f.apply(obj, args)]];
     }]];
 }
-function _encodeUtf8(s) {
+function _encodeUtf8(k, s) {
     var encoder = new TextEncoder();
-    return encoder.encode(s);
+    return [false, k, [encoder.encode(s)]];
 }
-function _decodeUtf8(s) {
+function _decodeUtf8(k, s) {
     var decoder = new TextDecoder();
-    return decoder.decode(s);
+    return [false, k, [decoder.decode(s)]];
 }
-function _exnName(e) { return _encodeUtf8(e.name); }
+function _exnName(k, e) { return _encodeUtf8(k, e.name); }
 function _String_LT(a, b) {
     var i = 0;
     var m = a.length, n = b.length;
