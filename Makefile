@@ -61,4 +61,7 @@ test: lunarml
 test-nodejs: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
 
+test-nodejs-cps: lunarml
+	$(LUA) test/run-nodejs.lua ./lunarml $(NODE) cps
+
 .PHONY: all test test-nodejs

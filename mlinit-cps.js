@@ -1,7 +1,7 @@
-function _id(k, x) { return [false, k, [x]]; }
-function _ref(k, x) { return [false, k, [{ tag: "ref", payload: x }]]; }
+function _id(k, h, x) { return [false, k, [x]]; }
+function _ref(k, h, x) { return [false, k, [{ tag: "ref", payload: x }]]; }
 const _nil = { tag: "nil" };
-function _cons(k, a) { return [false, k, [{ tag: "::", payload: a }]]; }
+function _cons(k, h, a) { return [false, k, [{ tag: "::", payload: a }]]; }
 function _list(a) {
     var x = _nil;
     for (var i = a.length - 1; i >= 0; --i) {
@@ -29,7 +29,7 @@ _Subscript_tag.prototype.name = "Subscript";
 const _Subscript = new _Subscript_tag();
 function _Fail_tag(payload) { this.payload = payload; }
 _Fail_tag.prototype.name = "Fail";
-function _Fail(k, payload) { return [false, k, [new _Fail_tag(payload)]]; }
+function _Fail(k, h, payload) { return [false, k, [new _Fail_tag(payload)]]; }
 function _String_EQUAL(s, t) {
     if (s === t) { return true; }
     var n = s.length;
@@ -148,32 +148,32 @@ function __Word_mod(x, y) {
 }
 const Math_abs = Math.abs;
 const Math_imul = Math.imul;
-function _call(k1, f) {
-    return [false, k1, [function(k2, args) {
+function _call(k1, h, f) {
+    return [false, k1, [function(k2, h, args) {
         return [false, k2, [f.apply(undefined, args)]];
     }]];
 }
-function _new(k1, f) {
-    return [false, k1, [function(k2, args) {
+function _new(k1, h, f) {
+    return [false, k1, [function(k2, h, args) {
         return [false, k2, [Reflect.construct(f, args)]];
     }]];
 }
-function _method(k1, a) {
+function _method(k1, h, a) {
     var obj = a[0];
     var f = obj[a[1]];
-    return [false, k1, [function(k2, args) {
+    return [false, k1, [function(k2, h, args) {
         return [false, k2, [f.apply(obj, args)]];
     }]];
 }
-function _encodeUtf8(k, s) {
+function _encodeUtf8(k, h, s) {
     var encoder = new TextEncoder();
     return [false, k, [encoder.encode(s)]];
 }
-function _decodeUtf8(k, s) {
+function _decodeUtf8(k, h, s) {
     var decoder = new TextDecoder();
     return [false, k, [decoder.decode(s)]];
 }
-function _exnName(k, e) { return _encodeUtf8(k, e.name); }
+function _exnName(k, h, e) { return _encodeUtf8(k, h, e.name); }
 function _String_LT(a, b) {
     var i = 0;
     var m = a.length, n = b.length;
@@ -272,14 +272,14 @@ function _String_translate(f, s) {
     }
     return r;
 }
-function _Array_array(t) {
+function _Array_array(k, h, t) {
     var n = t[0], init = t[1];
     if (n < 0) {
         throw _Size;
     }
     var a = new Array(n);
     a.fill(init);
-    return a;
+    return [false, k, [a]];
 }
 function _VectorOrArray_fromList(xs) {
     var a = [];
@@ -320,7 +320,7 @@ function _Vector_concat(xs) {
     return a;
 }
 function _run(f) {
-    var r = f();
+    var r = f(() => [true], e => { throw e; });
     while (!r[0]) {
         r = r[1].apply(undefined, r[2]);
     }

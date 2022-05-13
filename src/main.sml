@@ -232,13 +232,21 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
       in ()
       end
   | emit (opts as { backend = BACKEND_JS_CPS, ... }) fileName nextId decs
-    = let val cexp = CpsTransform.transformDecs { nextVId = nextId } decs CSyntax.Abort
+    = let val cont = let val n = !nextId
+                         val _ = nextId := n + 1
+                     in TypedSyntax.MkVId ("cont", n)
+                     end
+          val exnCont = let val n = !nextId
+                            val _ = nextId := n + 1
+                        in TypedSyntax.MkVId ("exh", n)
+                        end
+          val cexp = CpsTransform.transformDecs { nextVId = nextId } decs exnCont cont
           val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
           val jsctx = { nextJsId = ref 0 }
-          val js = CodeGenJsCps.doProgram cexp
+          val js = CodeGenJsCps.doProgram jsctx cont exnCont cexp
           val js = JsWriter.doProgram js
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)

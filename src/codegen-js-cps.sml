@@ -97,9 +97,13 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
 fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
 
-fun doCExp (C.Abort : C.CExp) : J.Stat list
-    = [J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.True])))]
-  | doCExp (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], args = _, result, cont })
+type Context = { nextJsId : int ref }
+fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
+                                 val _ = #nextJsId ctx := n + 1
+                             in TypedSyntax.MkVId ("tmp", n)
+                             end
+
+fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], args = _, result, cont, exnCont }) : J.Stat list
     = (case ty of
            F.TyVar tv => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
                                               ""
@@ -111,15 +115,15 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                                            J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ suffix)))
                                        else
                                            J.ConstExp (J.Numeral (LargeInt.toString x ^ suffix))
-                         in VarStat (result, exp) :: doCExp cont
+                         in VarStat (result, exp) :: doCExp ctx cont
                          end
          | _ => raise CodeGenError "PrimExp.IntConstOp: invalid type"
       )
-  | doCExp (C.PrimOp { primOp = F.WordConstOp x, tyargs = _, args = _, result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.WordConstOp x, tyargs = _, args = _, result, cont, exnCont })
     = let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-      in VarStat (result, exp) :: doCExp cont
+      in VarStat (result, exp) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _, result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _, result, cont, exnCont })
     = let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
                         (* JavaScript does not support hexadecimal floating-point literals *)
                     in case y of
@@ -129,9 +133,9 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                                          J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
                          | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
                     end
-      in VarStat (result, exp) :: doCExp cont
+      in VarStat (result, exp) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.StringConstOp x, tyargs = [ty], args = _, result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.StringConstOp x, tyargs = [ty], args = _, result, cont, exnCont })
     = let val exp = case ty of
                         F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_string then
                                           J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
@@ -140,9 +144,9 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                                       else
                                           raise CodeGenError "PrimExp.StringConstOp: invalid type"
                       | _ => raise CodeGenError "PrimExp.StringConstOp: invalid type"
-      in VarStat (result, exp) :: doCExp cont
+      in VarStat (result, exp) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.CharConstOp x, tyargs = [ty], args = _, result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.CharConstOp x, tyargs = [ty], args = _, result, cont, exnCont })
     = let val exp = case ty of
                         F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_char then
                                           J.ConstExp (J.Numeral (Int.toString x))
@@ -151,58 +155,65 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                                       else
                                           raise CodeGenError "PrimExp.CharConstOp: invalid type"
                       | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
-      in VarStat (result, exp) :: doCExp cont
+      in VarStat (result, exp) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.ListOp, tyargs = _, args = [], result, cont })
-    = VarStat (result, J.VarExp (J.PredefinedId "_nil")) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs, result, cont })
-    = VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map doValue (vector xs))])) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs, result, cont })
-    = VarStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp], result, cont })
-    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp], result, cont })
-    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp], result, cont })
-    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp cont
-  | doCExp (C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [], result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.ListOp, tyargs = _, args = [], result, cont, exnCont })
+    = VarStat (result, J.VarExp (J.PredefinedId "_nil")) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs, result, cont, exnCont })
+    = VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map doValue (vector xs))])) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs, result, cont, exnCont })
+    = VarStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp], result, cont, exnCont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp], result, cont, exnCont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp], result, cont, exnCont })
+    = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "payload"))) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [], result, cont, exnCont })
     = let val tag = #tag info
-      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))])) :: doCExp cont
+      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))])) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload], result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload], result, cont, exnCont })
     = let val tag = #tag info
           val payload = doValue payload
-      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)])) :: doCExp cont
+      in VarStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)])) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag], result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag], result, cont, exnCont })
     = let val tag = doValue tag
-      in VarStat (result, J.NewExp (tag, vector [])) :: doCExp cont
+      in VarStat (result, J.NewExp (tag, vector [])) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload], result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload], result, cont, exnCont })
     = let val tag = doValue tag
           val payload = doValue payload
-      in VarStat (result, J.NewExp (tag, vector [payload])) :: doCExp cont
+      in VarStat (result, J.NewExp (tag, vector [payload])) :: doCExp ctx cont
       end
-  | doCExp (C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp], result, cont })
-    = [ J.ThrowStat (doValue exp) ] (* TODO: location information *)
-  | doCExp (C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args, result, cont })
+  | doCExp ctx (C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp], result, cont, exnCont })
+    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, J.VarExp (J.UserDefinedId exnCont), J.ArrayExp (vector [doValue exp]) ]))) ] (* TODO: location information *)
+  | doCExp ctx (C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args, result, cont, exnCont })
     = let fun doUnary f = case args of
                               [a] => f (doValue a)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
-          fun doUnaryExp (f, pure) = doUnary (fn a => VarStat (result, f a) :: doCExp cont)
+          fun doUnaryExp (f, pure) = doUnary (fn a => VarStat (result, f a) :: doCExp ctx cont)
           fun doBinary f = case args of
                                [a, b] => f (doValue a, doValue b)
                              | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
-          fun doBinaryExp (f, pure : bool) = doBinary (fn (a, b) => VarStat (result, f (a, b)) :: doCExp cont)
+          fun doBinaryExp (f, pure : bool) = doBinary (fn (a, b) => VarStat (result, f (a, b)) :: doCExp ctx cont)
           fun doBinaryOp (binop, pure) = doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
           fun doTernary f = case args of
                                 [a, b, c] => f (doValue a, doValue b, doValue c)
                               | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
-          fun doTernaryExp (f, pure : bool) = doTernary (fn (a, b, c) => VarStat (result, f (a, b, c)) :: doCExp cont)
+          fun doTernaryExp (f, pure : bool) = doTernary (fn (a, b, c) => VarStat (result, f (a, b, c)) :: doCExp ctx cont)
       in case prim of
-             Primitives.call2 => doTernaryExp (fn (f, a0, a1) => J.CallExp (f, vector [a0, a1]), false) (* TODO: exception handling? *)
+             Primitives.call2 => doTernary (fn (f, a0, a1) => let val exnName = genSym ctx
+                                                              in J.TryCatchStat ( vector [VarStat (result, J.CallExp (f, vector [a0, a1]))]
+                                                                                , exnName
+                                                                                , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, J.VarExp (J.UserDefinedId exnCont), J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                                                                )
+                                                                 :: doCExp ctx cont
+                                                              end
+                                           )
            | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.Ref_set => doBinary (fn (a, b) => J.AssignStat (J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp cont) (* REPRESENTATION_OF_REF *)
+           | Primitives.Ref_set => doBinary (fn (a, b) => J.AssignStat (J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp ctx cont) (* REPRESENTATION_OF_REF *)
            | Primitives.Ref_read => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), false) (* REPRESENTATION_OF_REF *)
            | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Bool_not => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), true)
@@ -274,10 +285,10 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
            | Primitives.Unsafe_cast => doUnaryExp (fn a => a, true)
            | Primitives.Unsafe_Vector_sub => doBinaryExp (fn (vec, i) => J.IndexExp (vec, i), true)
            | Primitives.Unsafe_Array_sub => doBinaryExp (fn (arr, i) => J.IndexExp (arr, i), false)
-           | Primitives.Unsafe_Array_update => doTernary (fn (arr, i, v) => J.AssignStat (J.IndexExp (arr, i), v) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp cont)
+           | Primitives.Unsafe_Array_update => doTernary (fn (arr, i, v) => J.AssignStat (J.IndexExp (arr, i), v) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp ctx cont)
            | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), true)
            | Primitives.JavaScript_sub => doBinaryExp (fn (a, b) => J.IndexExp (a, b), false)
-           | Primitives.JavaScript_set => doTernary (fn (a, b, c) => J.AssignStat (J.IndexExp (a, b), c) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp cont)
+           | Primitives.JavaScript_set => doTernary (fn (a, b, c) => J.AssignStat (J.IndexExp (a, b), c) :: VarStat (result, J.UndefinedExp) (* ? *) :: doCExp ctx cont)
            | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, true)
            | Primitives.JavaScript_LT => doBinaryOp (J.LT, false)
@@ -303,9 +314,9 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript-CPS backend")
       end
-  | doCExp (C.PrimOp { primOp, tyargs = _, args = _, result, cont })
+  | doCExp ctx (C.PrimOp { primOp, tyargs = _, args = _, result, cont, exnCont })
     = raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")
-  | doCExp (C.Record { fields, result, cont })
+  | doCExp ctx (C.Record { fields, result, cont })
     = let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (label, doValue v) :: acc) [] fields
           fun isTuple (_, []) = true
             | isTuple (i, (Syntax.NumericLabel n, x) :: xs) = i = n andalso isTuple (i + 1, xs)
@@ -314,32 +325,32 @@ fun doCExp (C.Abort : C.CExp) : J.Stat list
                         J.ArrayExp (vector (List.map #2 fields))
                     else
                         J.ObjectExp (vector (List.map (fn (label, exp) => (LabelToObjectKey label, exp)) fields))
-      in VarStat (result, exp) :: doCExp cont
+      in VarStat (result, exp) :: doCExp ctx cont
       end
-  | doCExp (C.ExnTag { name, payloadTy, result, cont })
+  | doCExp ctx (C.ExnTag { name, payloadTy, result, cont })
     = [ let val value = case payloadTy of
                             NONE => J.FunctionExp (vector [], vector [])
                           | SOME _ => J.FunctionExp (vector [J.PredefinedId "payload"], vector [J.AssignStat (J.IndexExp (J.ThisExp, J.ConstExp (J.asciiStringAsWide "payload")), J.VarExp (J.PredefinedId "payload"))])
         in J.VarStat (vector [(result, SOME value)])
         end
       , J.AssignStat (J.IndexExp (J.IndexExp (J.VarExp (J.UserDefinedId result), J.ConstExp (J.asciiStringAsWide "prototype")), J.ConstExp (J.asciiStringAsWide "name")), J.ConstExp (J.asciiStringAsWide name))
-      ] @ doCExp cont
-  | doCExp (C.Projection { label, record, result, cont })
+      ] @ doCExp ctx cont
+  | doCExp ctx (C.Projection { label, record, result, cont })
     = let val label = case label of
                           Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
                         | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
-      in VarStat (result, J.IndexExp (doValue record, label)) :: doCExp cont
+      in VarStat (result, J.IndexExp (doValue record, label)) :: doCExp ctx cont
       end
-  | doCExp (C.App { applied, args })
+  | doCExp ctx (C.App { applied, args })
     = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue applied, J.ArrayExp (vector (List.map doValue args))]))) ]
-  | doCExp (C.If { cond, thenCont, elseCont })
-    = [ J.IfStat (doValue cond, vector (doCExp thenCont), vector (doCExp elseCont)) ]
-  | doCExp (C.Fix { functions, cont })
+  | doCExp ctx (C.If { cond, thenCont, elseCont })
+    = [ J.IfStat (doValue cond, vector (doCExp ctx thenCont), vector (doCExp ctx elseCont)) ]
+  | doCExp ctx (C.Fix { functions, cont })
     = let val (decs, assignments) = List.foldr (fn ((vid, params, body), (decs, assignments)) =>
-                                                   (J.VarStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp body))) :: assignments)
+                                                   (J.VarStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx body))) :: assignments)
                                                ) ([], []) functions
-      in decs @ assignments @ doCExp cont
+      in decs @ assignments @ doCExp ctx cont
       end
 
-fun doProgram cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [], vector (doCExp cexp))]))]
+fun doProgram ctx cont exnCont cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [J.UserDefinedId cont, J.UserDefinedId exnCont], vector (doCExp ctx cexp))]))]
 end;

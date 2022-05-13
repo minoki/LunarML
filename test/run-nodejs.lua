@@ -8,8 +8,15 @@ else
 end
 local compiler = arg[1] or "../lunarml"
 local js_interpreter = arg[2] or "node"
-function compile(file)
-  local h = io.popen(string.format("\"%s\" --js \"%s\" 2>&1", compiler, file), "r")
+local cps_mode = arg[3] == "cps"
+local outext = cps_mode and ".cps.js" or ".js"
+function compile(file, outfile)
+  local h
+  if cps_mode then
+    h = io.popen(string.format("\"%s\" --js-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  else
+    h = io.popen(string.format("\"%s\" --js --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  end
   local output = h:read("a")
   local succ = h:close()
   assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
@@ -21,11 +28,11 @@ function normalize_line_ending(s)
 end
 assert(normalize_line_ending("foo\r\nbar\r\n") == "foo\nbar\n")
 function compile_and_run(file)
-  local compile_succ, output = compile(file)
+  local jsfile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
+  local compile_succ, output = compile(file, jsfile)
   if not compile_succ then
     return false, output
   end
-  local jsfile = file:gsub("%.sml$", ".js"):gsub("%.mlb$", ".js")
   local h = assert(io.popen(string.format("\"%s\" \"%s\"", js_interpreter, jsfile), "r"))
   local actual_output = normalize_line_ending(h:read("a"))
   h:close()
@@ -64,7 +71,8 @@ function should_compile(dir)
     for _,f in ipairs(files) do
       local file = testdir .. "/" .. dir .. f
       print("Compiling " .. dir .. f .. "...")
-      if not compile(file) then
+      local jsfile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
+      if not compile(file, jsfile) then
         io.stderr:write(string.format("%s should compile, but it did not!\n", file))
         os.exit(1)
       end
@@ -76,7 +84,8 @@ function should_not_compile(dir)
     for _,f in ipairs(files) do
       local file = testdir .. "/" .. dir .. f
       print("Compiling " .. dir .. f .. "...")
-      if compile(file) then
+      local jsfile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
+      if compile(file, jsfile) then
         io.stderr:write(string.format("%s should not compile, but it did!\n", file))
         os.exit(1)
       end
