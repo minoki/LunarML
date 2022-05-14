@@ -67,6 +67,7 @@ val builtins
                     ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
+                    ,(VId_JavaScript_function, "_function")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
                     ,(VId_JavaScript_require, "require")

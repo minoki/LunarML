@@ -116,6 +116,7 @@ val VId_Lua_LuaError_tag = newVId "_Prim.Lua.LuaError.tag"
 val VId_JavaScript_call = newVId "_Prim.JavaScript.call"
 val VId_JavaScript_new = newVId "_Prim.JavaScript.new"
 val VId_JavaScript_method = newVId "_Prim.JavaScript.method"
+val VId_JavaScript_function = newVId "_Prim.JavaScript.function"
 val VId_JavaScript_encodeUtf8 = newVId "_Prim.JavaScript.encodeUtf8"
 val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
 val VId_JavaScript_require = newVId "_Prim.JavaScript.require" (* Node.js *)
@@ -314,6 +315,7 @@ val initialEnv : Typing.Env
                                            ,("_Prim.JavaScript.call", VId_JavaScript_call, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.new", VId_JavaScript_new, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.method", VId_JavaScript_method, TypeScheme ([], mkPairType(primTy_JavaScript_value, primTy_wideString) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
+                                           ,("_Prim.JavaScript.function", VId_JavaScript_function, TypeScheme ([], (vectorOf primTy_JavaScript_value --> primTy_JavaScript_value) --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.encodeUtf8", VId_JavaScript_encodeUtf8, TypeScheme ([], primTy_wideString --> primTy_string))
                                            ,("_Prim.JavaScript.decodeUtf8", VId_JavaScript_decodeUtf8, TypeScheme ([], primTy_string --> primTy_wideString))
                                            ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))

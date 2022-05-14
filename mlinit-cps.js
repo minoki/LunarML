@@ -283,8 +283,18 @@ function _Vector_concat(k, h, xs) {
     return [false, k, [a]];
 }
 function _run(f) {
-    var r = f(() => [true], e => { throw e; });
+    var r = f(result => [true, result], e => { throw e; });
     while (!r[0]) {
         r = r[1].apply(undefined, r[2]);
     }
+    return r[1];
+}
+function _function(k, h, f) {
+    return [false, k, [function() {
+        var r = f(result => [true, result], e => { throw e; }, arguments);
+        while (!r[0]) {
+            r = r[1].apply(undefined, r[2]);
+        }
+        return r[1];
+    }]];
 }

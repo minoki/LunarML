@@ -7,6 +7,7 @@ structure JavaScript : sig
               val call : value -> value vector -> value
               val new : value -> value vector -> value
               val method : value * WideString.string -> value vector -> value
+              val function : (value vector -> value) -> value
               val fromBool : bool -> value
               val fromInt : int -> value
               val fromWord : word -> value
@@ -105,6 +106,7 @@ type value = _Prim.JavaScript.value
 val call = _Prim.JavaScript.call
 val new = _Prim.JavaScript.new
 val method = _Prim.JavaScript.method
+val function = _Prim.JavaScript.function
 val encodeUtf8 = _Prim.JavaScript.encodeUtf8
 val decodeUtf8 = _Prim.JavaScript.decodeUtf8
 val require = _Prim.JavaScript.require

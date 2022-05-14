@@ -331,3 +331,8 @@ function _wrap(f) {
     F._MLTAIL_ = f;
     return F;
 }
+function _function(f) {
+    return function() {
+        return f(arguments);
+    };
+}
