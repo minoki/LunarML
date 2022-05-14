@@ -6,7 +6,14 @@ equal.sml
 end
 local
 ann "allowPrim true" "allowOverload true" in
+general.sml
+option.sml (* depends on unit (general.sml) *)
+int-prim-$(TARGET_LANG).sml
+list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml
+vector-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript *)
+vector.sml (* depends on vector-prim, option *)
+bool.sml
 mlbasis.sml
 word.sml
 scan-num.sml

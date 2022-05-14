@@ -53,7 +53,7 @@ local
                      else
                          Lua.unsafeFromValue result : vector
                   end
-    fun input1 f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt 1]), 0)
+    fun input1 f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromInt 1], 0)
                    in if Lua.isNil result then
                           NONE
                       else
@@ -62,16 +62,16 @@ local
     fun inputN (f, n : int) = if n < 0 then
                                   raise Size
                               else
-                                  let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromInt n]), 0)
+                                  let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromInt n], 0)
                                   in if Lua.isNil result then
                                          ""
                                      else
                                          (Lua.unsafeFromValue result : vector)
                                   end
-    fun inputAll f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "a"]), 0)
+    fun inputAll f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromString "a"], 0)
                      in Lua.unsafeFromValue result : vector
                      end
-    fun closeIn f = (Lua.method (f, "close") (vector []); ())
+    fun closeIn f = (Lua.method (f, "close") #[]; ())
     fun endOfStream f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromInt 0], 0)
                         in if Lua.isFalsy result then
                                true
@@ -80,7 +80,7 @@ local
                         end
 
     (* TEXT_IO *)
-    fun inputLine f = let val result = Vector.sub (Lua.method (f, "read") (vector [Lua.fromString "L"]), 0)
+    fun inputLine f = let val result = Vector.sub (Lua.method (f, "read") #[Lua.fromString "L"], 0)
                       in if Lua.isNil result then
                              NONE
                          else
@@ -111,10 +111,10 @@ local
     type outstream = Lua.value
     type vector = string
     type elem = char
-    fun output (f, s) = (Lua.method (f, "write") (vector [Lua.fromString s]); ())
-    fun output1 (f, c) = (Lua.method (f, "write") (vector [Lua.fromString (String.str c)]); ())
-    fun flushOut f = (Lua.method (f, "flush") (vector []); ())
-    fun closeOut f = (Lua.method (f, "close") (vector []); ())
+    fun output (f, s) = (Lua.method (f, "write") #[Lua.fromString s]; ())
+    fun output1 (f, c) = (Lua.method (f, "write") #[Lua.fromString (String.str c)]; ())
+    fun flushOut f = (Lua.method (f, "flush") #[]; ())
+    fun closeOut f = (Lua.method (f, "close") #[]; ())
     (* outputsubstr : outstream * substring -> unit *)
     fun openOut f = let val result = Lua.call io_open #[Lua.fromString f, Lua.fromString "w"]
                     in if Lua.isNil (Vector.sub (result, 0)) then

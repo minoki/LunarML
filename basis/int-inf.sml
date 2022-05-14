@@ -75,14 +75,14 @@ fun toInt ZERO = 0
 
 fun fromInt 0 = ZERO
   | fromInt x = if x > 0 then
-                    POSITIVE (vector [Word.fromInt x])
+                    POSITIVE #[Word.fromInt x]
                 else (* x < 0 *)
                     case Int.minInt of
                         SOME minInt => if x <> minInt then
-                                           NEGATIVE (vector [Word.fromInt (abs x)])
+                                           NEGATIVE #[Word.fromInt (abs x)]
                                        else
-                                           NEGATIVE (vector [Word.fromInt (abs (x + 1)) + 0w1])
-                      | NONE => NEGATIVE (vector [Word.fromInt (abs x)])
+                                           NEGATIVE #[Word.fromInt (abs (x + 1)) + 0w1]
+                      | NONE => NEGATIVE #[Word.fromInt (abs x)]
 
 val precision : Int.int option = NONE
 val minInt : int option = NONE
@@ -232,7 +232,7 @@ fun mulAbs (words, words') = let val m = Vector.length words
                              in normalize arr
                              end
 
-fun mulAbsSingle (words, 0w0) = vector []
+fun mulAbsSingle (words, 0w0) = #[]
   | mulAbsSingle (words, v) = let val m = Vector.length words
                                   val arr = Array.array (m + 1, 0w0)
                                   val () = let fun loop (i, k) = if i >= m then
@@ -370,7 +370,7 @@ fun ~>> (z as ZERO, _) = z
   | ~>> (POSITIVE words, amount) = POSITIVE (#1 (RShiftAbs (words, amount)))
   | ~>> (NEGATIVE words, amount) = NEGATIVE (let val (x, y) = RShiftAbs (words, amount)
                                              in if y then
-                                                    addAbs (x, vector [0w1])
+                                                    addAbs (x, #[0w1])
                                                 else
                                                     x
                                              end
@@ -419,7 +419,7 @@ fun quotRemAbs (words, words') : word vector * word vector
           val m = m' - n
       in if m < 0 then
              (* words < words' *)
-             (vector [], words)
+             (#[], words)
          else
              let val offset = Word.fromInt (clzWord (Vector.sub (words', n - 1))) (* <= Word.wordSize - 1 *)
                  val words = LShiftAbs (words, offset)
@@ -437,7 +437,7 @@ fun quotRemAbs (words, words') : word vector * word vector
                                       val u0 = Array.sub (words, j + n - 1)
                                       val v = Vector.sub (words', n - 1)
                                       val (q', r') = quotRem2 (u1, u0, v)
-                                      fun loop2 q' = let val w = mulAbsSingle (words', q') (* = mulAbs (vector [q'], words') *)
+                                      fun loop2 q' = let val w = mulAbsSingle (words', q') (* = mulAbs (#[q'], words') *)
                                                          val ws = ArraySlice.vector (ArraySlice.slice (words, j, NONE))
                                                      in case compareAbs (ws, w) of
                                                             LESS => loop2 (q' - 0w1)
@@ -479,13 +479,13 @@ fun div_ (_, ZERO) = raise Div
                                              end
   | div_ (POSITIVE words, NEGATIVE words') = let val (q, r) = quotRemAbs (words, words')
                                              in if Vector.length r > 0 then
-                                                    mkNonPositive (addAbs (q, vector [0w1]))
+                                                    mkNonPositive (addAbs (q, #[0w1]))
                                                 else
                                                     mkNonPositive q
                                              end
   | div_ (NEGATIVE words, POSITIVE words') = let val (q, r) = quotRemAbs (words, words')
                                              in if Vector.length r > 0 then
-                                                    mkNonPositive (addAbs (q, vector [0w1]))
+                                                    mkNonPositive (addAbs (q, #[0w1]))
                                                 else
                                                     mkNonPositive q
                                              end
@@ -521,13 +521,13 @@ fun divMod (_, ZERO) = raise Div
                                                end
   | divMod (POSITIVE words, NEGATIVE words') = let val (q, r) = quotRemAbs (words, words')
                                                in if Vector.length r > 0 then
-                                                      (mkNonPositive (addAbs (q, vector [0w1])), mkNonPositive (subAbs (words', r)))
+                                                      (mkNonPositive (addAbs (q, #[0w1])), mkNonPositive (subAbs (words', r)))
                                                   else
                                                       (mkNonPositive q, ZERO)
                                                end
   | divMod (NEGATIVE words, POSITIVE words') = let val (q, r) = quotRemAbs (words, words')
                                                in if Vector.length r > 0 then
-                                                      (mkNonPositive (addAbs (q, vector [0w1])), mkNonNegative (subAbs (words', r)))
+                                                      (mkNonPositive (addAbs (q, #[0w1])), mkNonNegative (subAbs (words', r)))
                                                   else
                                                       (mkNonPositive q, ZERO)
                                                end
@@ -603,7 +603,7 @@ fun notb x = negate (add (x, fromInt 1))
 
 local
     fun stringFmt (f, x) : string = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x], 0))
-    val ten_to_9 = POSITIVE (vector [0w1000000000])
+    val ten_to_9 = POSITIVE (#[0w1000000000])
 in
 fun toStringAbs ZERO = ""
   | toStringAbs x = if LT (x, ten_to_9) then

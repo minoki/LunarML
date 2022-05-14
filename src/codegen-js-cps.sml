@@ -56,16 +56,13 @@ val builtins
                     ,(VId_String_concat, "_String_concat")
                     ,(VId_String_concatWith, "_String_concatWith")
                     ,(VId_String_implode, "_String_implode")
-                    ,(VId_String_translate, "_String_translate")
                     (* real *)
                     ,(VId_Real_abs, "Math_abs") (* JS Math.abs *)
                     (* Vector and Array *)
-                    ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(VId_Vector_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
-                    ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
                     (* JS interface *)
                     ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
@@ -163,6 +160,11 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
     = VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map doValue (vector xs))])) :: doCExp ctx cont
   | doCExp ctx (C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs, result, cont, exnCont })
     = VarStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp ctx cont
+  | doCExp ctx (C.PrimOp { primOp = F.RecordEqualityOp, tyargs = _, args = [exp], result, cont, exnCont })
+    = (case exp of
+           C.Unit => VarStat (result, J.VarExp (J.PredefinedId "_Unit_EQUAL")) :: doCExp ctx cont
+         | _ => VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_Record_EQUAL"), vector [doValue exp])) :: doCExp ctx cont
+      )
   | doCExp ctx (C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp], result, cont, exnCont })
     = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp ctx cont
   | doCExp ctx (C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp], result, cont, exnCont })

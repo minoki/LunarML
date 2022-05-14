@@ -41,38 +41,40 @@ function _String_EQUAL(s, t) {
     }
     return true;
 }
-function _Unit_EQUAL(a) { return true; }
+function _Unit_EQUAL(k, h, a) { return [false, k, [true]]; }
 function _Record_EQUAL(fields) {
-    return function(a) {
+    return function(k, h, a) {
         var x = a[0], y = a[1];
-        for (var key in fields) {
-            if (Object.prototype.hasOwnProperty.call(fields, key)) {
-                var f = fields[key];
-                if (!f([x[key], y[key]])) {
-                    return false;
-                }
+        var keys = Object.keys(fields);
+        var go = function(k, h, i) {
+            if (i >= keys.length) {
+                return [false, k, [true]];
             }
-        }
-        return true;
+            var key = keys[i];
+            var f = fields[key];
+            var cont = (b) => (b ? [false, go, [k, h, i + 1]] : [false, k, [false]])
+            return [false, f, [cont, h, [x[key], y[key]]]];
+        };
+        return go(k, h, 0);
     };
 }
 const MIN_INT32 = -0x80000000;
 const MAX_INT32 = 0x7fffffff;
-function _Int_abs(x) {
+function _Int_abs(k, h, x) {
     if (x < 0) {
         if (x === MIN_INT32) {
-            throw _Overflow;
+            return [false, h, [_Overflow]];
         }
-        return -x;
+        return [false, k, [-x]];
     } else {
-        return x;
+        return [false, k, [x]];
     }
 }
-function _Int_negate(x) {
+function _Int_negate(k, h, x) {
     if (x === MIN_INT32) {
-        throw _Overflow;
+        return [false, h, [_Overflow]];
     }
-    return (-x)|0;
+    return [false, k, [(-x)|0]];
 }
 function __Int_add(x, y) {
     var z = x + y;
@@ -185,7 +187,7 @@ function _String_append(a, b) {
     c.set(b, a.length);
     return c;
 }
-function _String_concat(xs) {
+function _String_concat(k, h, xs) {
     var n = 0;
     var xs0 = xs;
     while (xs0.tag === "::") {
@@ -201,7 +203,7 @@ function _String_concat(xs) {
         m += s.length;
         xs = xs.payload[1];
     }
-    return a;
+    return [false, k, [a]];
 }
 function _String_concatWith(sep, xs) {
     var n = 0;
@@ -228,7 +230,7 @@ function _String_concatWith(sep, xs) {
     }
     return a;
 }
-function _String_implode(xs) {
+function _String_implode(k, h, xs) {
     var n = 0;
     var xs0 = xs;
     while (xs0.tag === "::") {
@@ -242,24 +244,7 @@ function _String_implode(xs) {
         xs = xs.payload[1];
         ++i;
     }
-    return a;
-}
-function _String_translate(f, s) {
-    var m = s.length;
-    var a = new Array(m);
-    var n = 0;
-    for (var i = 0; i < m; ++i) {
-        var t = f(s[i]);
-        a[i] = t;
-        n += t.length;
-    }
-    var r = new Uint8Array(n);
-    var l = 0;
-    for (var i = 0; i < m; ++i) {
-        r.set(a[i], l);
-        l += a[i].length;
-    }
-    return r;
+    return [false, k, [a]];
 }
 function _Array_array(k, h, t) {
     var n = t[0], init = t[1];
@@ -270,26 +255,15 @@ function _Array_array(k, h, t) {
     a.fill(init);
     return [false, k, [a]];
 }
-function _VectorOrArray_fromList(xs) {
+function _VectorOrArray_fromList(k, h, xs) {
     var a = [];
     while (xs.tag === "::") {
         a.push(xs.payload[0]);
         xs = xs.payload[1];
     }
-    return a;
+    return [false, k, [a]];
 }
-function _VectorOrArray_tabulate(t) {
-    var n = t[0], f = t[1];
-    if (n < 0) {
-        throw _Size;
-    }
-    var a = new Array(n);
-    for (var i = 0; i < n; ++i) {
-        a[i] = f(i);
-    }
-    return a;
-}
-function _Vector_concat(xs) {
+function _Vector_concat(k, h, xs) {
     var n = 0;
     var xs0 = xs;
     while (xs0.tag === "::") {
@@ -306,7 +280,7 @@ function _Vector_concat(xs) {
         }
         xs = xs.payload[1];
     }
-    return a;
+    return [false, k, [a]];
 }
 function _run(f) {
     var r = f(() => [true], e => { throw e; });
