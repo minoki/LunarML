@@ -636,9 +636,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                           doExpTo ctx env (Vector.sub (args, 0)) dest
                                       else
                                           raise CodeGenError "primop String.str: invalid number of arguments"
-           | Primitives.Vector_EQUAL => doTernary (fn (stmts, env, (eq, a, b)) =>
-                                                      putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]))
-                                                  )
            | Primitives.Vector_length => doUnary (fn (stmts, env, a) =>
                                                      putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                  )

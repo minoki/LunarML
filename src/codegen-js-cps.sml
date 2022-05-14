@@ -278,7 +278,6 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
            | Primitives.IntInf_notb => doUnaryExp (fn a => J.UnaryExp (J.BITNOT, a), true)
            | Primitives.IntInf_quot_unchecked => doBinaryOp (J.DIV, true)
            | Primitives.IntInf_rem_unchecked => doBinaryOp (J.MOD, true)
-           | Primitives.Vector_EQUAL => doTernaryExp (fn (eq, a, b) => J.CallExp (J.VarExp (J.PredefinedId "_Vector_EQUAL"), vector [eq, a, b]), true)
            | Primitives.Vector_length => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
            | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Array_length => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)

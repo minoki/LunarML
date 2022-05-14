@@ -406,11 +406,6 @@ do
       type = HomoBinary(intInf),
     },
     {
-      name = "Vector.=",
-      srcname = "Vector_EQUAL",
-      type = { vars = {TV.a}, args = {function1(bool, pair(TV.a, TV.a)), vector(TV.a), vector(TV.a)}, result = bool }
-    },
-    {
       name = "Vector.length",
       srcname = "Vector_length",
       type = { vars = {TV.a}, args = {vector(TV.a)}, result = int },

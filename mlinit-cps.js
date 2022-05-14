@@ -56,17 +56,6 @@ function _Record_EQUAL(fields) {
         return true;
     };
 }
-function _Vector_EQUAL(eq, x, y) {
-    if (x.length !== y.length) {
-        return false;
-    }
-    for (var i = 0; i < x.length; ++i) {
-        if (!eq([x[i], y[i]])) {
-            return false;
-        }
-    }
-    return true;
-}
 const MIN_INT32 = -0x80000000;
 const MAX_INT32 = 0x7fffffff;
 function _Int_abs(x) {

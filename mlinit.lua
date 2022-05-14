@@ -271,18 +271,6 @@ local function _VectorOrArray_tabulate(t)
 end
 
 -- Vector
-local function _Vector_EQUAL(eq, a, b)
-  local n = a.n
-  if n ~= b.n then
-    return false
-  end
-  for i = 1, n do
-    if not eq({a[i], b[i]}) then
-      return false
-    end
-  end
-  return true
-end
 local function _Vector_concat(xs)
   local n = 0
   local t = {}

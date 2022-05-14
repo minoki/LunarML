@@ -72,7 +72,6 @@ datatype PrimOp = EQUAL (* = *)
                 | IntInf_notb (* IntInf.notb *)
                 | IntInf_quot_unchecked (* IntInf.quot.unchecked *)
                 | IntInf_rem_unchecked (* IntInf.rem.unchecked *)
-                | Vector_EQUAL (* Vector.= *)
                 | Vector_length (* Vector.length *)
                 | Array_EQUAL (* Array.= *)
                 | Array_length (* Array.length *)
@@ -204,7 +203,6 @@ fun toString EQUAL = "="
   | toString IntInf_notb = "IntInf.notb"
   | toString IntInf_quot_unchecked = "IntInf.quot.unchecked"
   | toString IntInf_rem_unchecked = "IntInf.rem.unchecked"
-  | toString Vector_EQUAL = "Vector.="
   | toString Vector_length = "Vector.length"
   | toString Array_EQUAL = "Array.="
   | toString Array_length = "Array.length"
@@ -336,7 +334,6 @@ fun fromString "=" = SOME EQUAL
   | fromString "IntInf.notb" = SOME IntInf_notb
   | fromString "IntInf.quot.unchecked" = SOME IntInf_quot_unchecked
   | fromString "IntInf.rem.unchecked" = SOME IntInf_rem_unchecked
-  | fromString "Vector.=" = SOME Vector_EQUAL
   | fromString "Vector.length" = SOME Vector_length
   | fromString "Array.=" = SOME Array_EQUAL
   | fromString "Array.length" = SOME Array_length
@@ -509,7 +506,6 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.IntInf_notb = { vars = [], args = vector [intInf], result = intInf }
   | typeOf Primitives.IntInf_quot_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.IntInf_rem_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf Primitives.Vector_EQUAL = { vars = [(tyVarA, [])], args = vector [function1Of (bool, pairOf (tyA, tyA)), vectorOf (tyA), vectorOf (tyA)], result = bool }
   | typeOf Primitives.Vector_length = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int }
   | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
   | typeOf Primitives.Array_length = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int }
