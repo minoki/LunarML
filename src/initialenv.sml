@@ -239,6 +239,9 @@ val initialEnv : Typing.Env
           val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
                                 , valEnv = emptyValEnv
                                 }
+          val tyStr_cont = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_cont))
+                           , valEnv = emptyValEnv
+                           }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
                                [mkTopValConMap ([("ref", VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
@@ -338,6 +341,7 @@ val initialEnv : Typing.Env
                                  ,("_Prim.Function3.function3", tyStr_function3)
                                  ,("_Prim.Lua.value", tyStr_Lua_value)
                                  ,("_Prim.JavaScript.value", tyStr_JavaScript_value)
+                                 ,("_Prim.Cont.cont", tyStr_cont)
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
                                   TypedSyntax.TyNameMap.empty
@@ -359,6 +363,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_JavaScript_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_cont, { arity = 1, admitsEquality = false, overloadClass = NONE })
                                   ]
          , strMap = Syntax.StrIdMap.empty
          , sigMap = Syntax.SigIdMap.empty
@@ -422,6 +427,7 @@ val initialTyNameSet = let open Typing
                               ,primTyName_JavaScript_value
                               ,primTyName_function2
                               ,primTyName_function3
+                              ,primTyName_cont
                               ]
                        end
 end

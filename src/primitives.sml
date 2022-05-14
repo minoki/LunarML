@@ -80,6 +80,8 @@ datatype PrimOp = EQUAL (* = *)
                 | Unsafe_Array_sub (* Unsafe.Array.sub *)
                 | Unsafe_Array_update (* Unsafe.Array.update *)
                 | Exception_instanceof (* Exception.instanceof *)
+                | Cont_callcc (* Cont.callcc *)
+                | Cont_throw (* Cont.throw *)
                 | Lua_sub (* Lua.sub *)
                 | Lua_set (* Lua.set *)
                 | Lua_isNil (* Lua.isNil *)
@@ -211,6 +213,8 @@ fun toString EQUAL = "="
   | toString Unsafe_Array_sub = "Unsafe.Array.sub"
   | toString Unsafe_Array_update = "Unsafe.Array.update"
   | toString Exception_instanceof = "Exception.instanceof"
+  | toString Cont_callcc = "Cont.callcc"
+  | toString Cont_throw = "Cont.throw"
   | toString Lua_sub = "Lua.sub"
   | toString Lua_set = "Lua.set"
   | toString Lua_isNil = "Lua.isNil"
@@ -342,6 +346,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "Unsafe.Array.sub" = SOME Unsafe_Array_sub
   | fromString "Unsafe.Array.update" = SOME Unsafe_Array_update
   | fromString "Exception.instanceof" = SOME Exception_instanceof
+  | fromString "Cont.callcc" = SOME Cont_callcc
+  | fromString "Cont.throw" = SOME Cont_throw
   | fromString "Lua.sub" = SOME Lua_sub
   | fromString "Lua.set" = SOME Lua_set
   | fromString "Lua.isNil" = SOME Lua_isNil
@@ -430,6 +436,7 @@ functor TypeOfPrimitives (type ty
                           val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
+                          val contOf : ty -> ty
                           val IsEqType : constraint
                          ) : sig
                                val typeOf : Primitives.PrimOp -> { vars : (tv * constraint list) list, args : ty vector, result : ty }
@@ -514,6 +521,8 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Unsafe_Array_sub = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int], result = tyA }
   | typeOf Primitives.Unsafe_Array_update = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int, tyA], result = unit }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
+  | typeOf Primitives.Cont_callcc = { vars = [(tyVarA, [])], args = vector [function1Of (tyA, contOf (tyA))], result = tyA }
+  | typeOf Primitives.Cont_throw = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [contOf (tyA)], result = function1Of (tyB, tyA) }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }

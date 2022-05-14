@@ -245,6 +245,7 @@ val primTyName_wideString = TypedSyntax.MkTyName ("WideString.string", 15)
 val primTyName_intInf = TypedSyntax.MkTyName ("IntInf.int", 16)
 val primTyName_Lua_value = TypedSyntax.MkTyName ("Lua.value", 17)
 val primTyName_JavaScript_value = TypedSyntax.MkTyName ("JavaScript.value", 18)
+val primTyName_cont = TypedSyntax.MkTyName ("Cont.cont", 19)
 val primTy_unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int)
 val primTy_word = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word)
@@ -298,6 +299,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                fun function1Of (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, b, a)
                                                fun function2Of (a, b, c) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
+                                               fun contOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_cont)
                                                val IsEqType = TypedSyntax.IsEqType
                                               ) : sig
                                  val typeOf : Primitives.PrimOp -> { vars : (TypedSyntax.TyVar * TypedSyntax.UnaryConstraint list) list, args : TypedSyntax.Ty vector, result : TypedSyntax.Ty }

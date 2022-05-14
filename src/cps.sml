@@ -73,7 +73,30 @@ fun SLabelToLabel (F.ValueLabel vid) = Syntax.IdentifierLabel (Syntax.getVIdName
 (* transformT : Context -> F.Exp -> (* continuation variable *) C.Var -> C.CExp *)
 fun transform (ctx : Context) (exp : F.Exp) (h : C.Var (* exception handler *)) (k : C.Value -> C.CExp) : C.CExp
     = (case exp of
-           F.PrimExp (primOp, tyargs, args) => mapCont (fn (e, cont) => transform ctx e h cont)
+           F.PrimExp (F.PrimFnOp Primitives.Cont_callcc, tyargs, args) => if Vector.length args = 1 then
+                                                                              let val arg = Vector.sub (args, 0)
+                                                                                  val kk = genContSym ctx
+                                                                                  val x = genSym ctx
+                                                                              in C.Fix { functions = [(kk, [x], k (C.Var x))] (* letcont *)
+                                                                                       , cont = transform ctx arg h (fn v => C.App { applied = v, args = [C.Var kk, C.Var h, C.Var kk] })
+                                                                                       }
+                                                                              end
+                                                                          else
+                                                                              raise Fail "Cont.callcc: invalid number of arguments"
+         | F.PrimExp (F.PrimFnOp Primitives.Cont_throw, tyargs, args) => if Vector.length args = 1 then
+                                                                             let val arg = Vector.sub (args, 0)
+                                                                                 val f = genSym ctx
+                                                                                 val j = genContSym ctx
+                                                                                 val hh = genExnContSym ctx
+                                                                                 val x = genSym ctx
+                                                                              in transform ctx arg h (fn kk => C.Fix { functions = [(f, [j, hh, x], C.App { applied = kk, args = [C.Var x] })] (* apply continuation *)
+                                                                                                                     , cont = k (C.Var f)
+                                                                                                                     }
+                                                                                                     )
+                                                                              end
+                                                                          else
+                                                                              raise Fail "Cont.throw: invalid number of arguments"
+         | F.PrimExp (primOp, tyargs, args) => mapCont (fn (e, cont) => transform ctx e h cont)
                                                        (Vector.foldr (op ::) [] args)
                                                        (fn args => let val result = genSym ctx
                                                                    in C.PrimOp { primOp = primOp, tyargs = Vector.foldr (op ::) [] tyargs, args = args, result = result, cont = k (C.Var result), exnCont = h }
@@ -185,7 +208,28 @@ fun transform (ctx : Context) (exp : F.Exp) (h : C.Var (* exception handler *)) 
       )
 and transformT (ctx : Context) (exp : F.Exp) (h : C.Var (* exception handler *)) (k : C.Var (* continuation variable *)) : C.CExp
     = (case exp of
-           F.PrimExp (primOp, tyargs, args) => mapCont (fn (e, cont) => transform ctx e h cont)
+           F.PrimExp (F.PrimFnOp Primitives.Cont_callcc, tyargs, args) => if Vector.length args = 1 then
+                                                                              let val arg = Vector.sub (args, 0)
+                                                                                  val kk = genContSym ctx
+                                                                                  val x = genSym ctx
+                                                                              in transform ctx arg h (fn v => C.App { applied = v, args = [C.Var k, C.Var h, C.Var k] })
+                                                                              end
+                                                                          else
+                                                                              raise Fail "Cont.callcc: invalid number of arguments"
+         | F.PrimExp (F.PrimFnOp Primitives.Cont_throw, tyargs, args) => if Vector.length args = 1 then
+                                                                             let val arg = Vector.sub (args, 0)
+                                                                                 val f = genSym ctx
+                                                                                 val j = genContSym ctx
+                                                                                 val hh = genExnContSym ctx
+                                                                                 val x = genSym ctx
+                                                                              in transform ctx arg h (fn kk => C.Fix { functions = [(f, [j, hh, x], C.App { applied = kk, args = [C.Var x] })] (* apply continuation *)
+                                                                                                                     , cont = C.App { applied = C.Var k, args = [C.Var f] }
+                                                                                                                     }
+                                                                                                     )
+                                                                              end
+                                                                          else
+                                                                              raise Fail "Cont.throw: invalid number of arguments"
+         | F.PrimExp (primOp, tyargs, args) => mapCont (fn (e, cont) => transform ctx e h cont)
                                                        (Vector.foldr (op ::) [] args)
                                                        (fn args => let val result = genSym ctx
                                                                    in C.PrimOp { primOp = primOp
