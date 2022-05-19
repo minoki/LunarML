@@ -143,6 +143,8 @@ val VId_String_concatWith = newVId "_Prim.String.concatWith"
 val VId_String_implode = newVId "_Prim.String.implode"
 val VId_String_translate = newVId "_Prim.String.translate"
 
+val VId_DelimCont_topLevel = newVId "_Prim.DelimCont.topLevel"
+
 val initialEnv : Typing.Env
     = let open Typing
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
@@ -331,6 +333,7 @@ val initialEnv : Typing.Env
                                            ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.assumePure", VId_assumePure, TypeScheme ([(tyVarA, [])], tyA --> tyA))
                                            ,("_Prim.assumeDiscardable", VId_assumeDiscardable, TypeScheme ([(tyVarA, [])], tyA --> tyA))
+                                           ,("_Prim.DelimCont.topLevel", VId_DelimCont_topLevel, TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt)))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))

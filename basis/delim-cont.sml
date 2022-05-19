@@ -6,6 +6,7 @@ structure DelimCont : sig
               val withSubCont : 'b prompt * (('a,'b) subcont -> 'b) -> 'a
               val pushSubCont : ('a,'b) subcont * (unit -> 'a) -> 'b
               val abort : 'b prompt * 'b -> 'a
+              val topLevel : unit prompt
           end = struct
 datatype prompt = datatype _Prim.DelimCont.prompt
 datatype subcont = datatype _Prim.DelimCont.subcont
@@ -14,4 +15,5 @@ fun pushPrompt (p, f) = _primCall "DelimCont.pushPrompt" (p, f)
 fun withSubCont (p, f) = _primCall "DelimCont.withSubCont" (p, f)
 fun pushSubCont (sc, f) = _primCall "DelimCont.pushSubCont" (sc, f)
 fun abort (p, x) = withSubCont (p, fn _ => x)
+val topLevel = _Prim.DelimCont.topLevel
 end;

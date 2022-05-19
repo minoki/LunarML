@@ -76,6 +76,7 @@ val builtins
                     (* extra *)
                     ,(VId_assumePure, "_id") (* no-op *)
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
+                    ,(VId_DelimCont_topLevel, "_topLevel")
                     ]
       end
 

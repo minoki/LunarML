@@ -287,6 +287,7 @@ function _Prompt() {
 function _newPrompt() {
     return new _Prompt();
 }
+var _topLevel = new _Prompt();
 const _emptySeq = { tag: "nil" };
 function _consSeq(x, xs) {
     return { tag: "::", head: x, tail: xs };
@@ -343,7 +344,7 @@ function _pushSubCont(subcont, f, k, exh) {
 }
 function _run(f) {
     var metaCont_old = _metaCont;
-    _metaCont = _emptySeq;
+    _metaCont = _consSeq(_topLevel, _emptySeq);
     var r = f(result => [true, result], e => { _metaCont = metaCont_old; throw e; });
     while (!r[0]) {
         r = r[1].apply(undefined, r[2]);
