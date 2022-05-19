@@ -1,5 +1,7 @@
 structure JavaScript : sig
               type value
+              val undefined : value
+              val null : value
               val sub : value * value -> value
               val field : value * WideString.string -> value
               val set : value * value * value -> unit
@@ -103,6 +105,8 @@ structure JavaScript : sig
                         end
           end = struct
 type value = _Prim.JavaScript.value
+val undefined = _Prim.JavaScript.undefined
+val null = _Prim.JavaScript.null
 val call = _Prim.JavaScript.call
 val new = _Prim.JavaScript.new
 val method = _Prim.JavaScript.method

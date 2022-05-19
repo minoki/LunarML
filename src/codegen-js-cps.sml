@@ -64,6 +64,8 @@ val builtins
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     (* JS interface *)
+                    ,(VId_JavaScript_undefined, "undefined")
+                    ,(VId_JavaScript_null, "null")
                     ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")

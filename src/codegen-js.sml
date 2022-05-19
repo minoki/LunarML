@@ -77,6 +77,8 @@ val builtins
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
                     (* JS interface *)
+                    ,(VId_JavaScript_undefined, "undefined")
+                    ,(VId_JavaScript_null, "null")
                     ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
