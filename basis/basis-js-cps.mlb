@@ -1,4 +1,4 @@
 basis-js.mlb
 ann "allowPrim true" in
-cont.sml
+delim-cont.sml
 end

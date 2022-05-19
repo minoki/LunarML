@@ -245,6 +245,12 @@ val initialEnv : Typing.Env
           val tyStr_cont = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_cont))
                            , valEnv = emptyValEnv
                            }
+          val tyStr_prompt = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt))
+                             , valEnv = emptyValEnv
+                             }
+          val tyStr_subcont = { typeFunction = TypeFunction ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont))
+                              , valEnv = emptyValEnv
+                              }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
                                [mkTopValConMap ([("ref", VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
@@ -348,6 +354,8 @@ val initialEnv : Typing.Env
                                  ,("_Prim.Lua.value", tyStr_Lua_value)
                                  ,("_Prim.JavaScript.value", tyStr_JavaScript_value)
                                  ,("_Prim.Cont.cont", tyStr_cont)
+                                 ,("_Prim.DelimCont.prompt", tyStr_prompt)
+                                 ,("_Prim.DelimCont.subcont", tyStr_subcont)
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
                                   TypedSyntax.TyNameMap.empty
@@ -370,6 +378,8 @@ val initialEnv : Typing.Env
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_cont, { arity = 1, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_prompt, { arity = 1, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_subcont, { arity = 2, admitsEquality = false, overloadClass = NONE })
                                   ]
          , strMap = Syntax.StrIdMap.empty
          , sigMap = Syntax.SigIdMap.empty
@@ -434,6 +444,8 @@ val initialTyNameSet = let open Typing
                               ,primTyName_function2
                               ,primTyName_function3
                               ,primTyName_cont
+                              ,primTyName_prompt
+                              ,primTyName_subcont
                               ]
                        end
 end

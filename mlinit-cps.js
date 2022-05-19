@@ -282,19 +282,84 @@ function _Vector_concat(k, h, xs) {
     }
     return [false, k, [a]];
 }
+function _Prompt() {
+}
+function _newPrompt() {
+    return new _Prompt();
+}
+const _emptySeq = { tag: "nil" };
+function _consSeq(x, xs) {
+    return { tag: "::", head: x, tail: xs };
+}
+function _appendSeq(xs, ys) {
+    if (xs.tag === "nil") {
+        return ys;
+    } else {
+        return _consSeq(xs.head, _appendSeq(xs.tail, ys));
+    }
+}
+function _splitSeq(p, xs) {
+    if (xs.tag === "nil") {
+        throw new Error("Prompt was not found on the stack");
+    } else {
+        if (xs.head === p) {
+            return [_emptySeq, xs.tail];
+        } else {
+            var [ys, zs] = _splitSeq(p, xs.tail);
+            return [_consSeq(xs.head, ys), zs];
+        }
+    }
+}
+var _metaCont = _emptySeq;
+function _underflow(v) {
+    while (_metaCont.tag === "::") {
+        if (!(_metaCont.head instanceof _Prompt)) {
+            var k = _metaCont.head;
+            _metaCont = _metaCont.tail;
+            return [false, k, [v]];
+        }
+        _metaCont = _metaCont.tail;
+    }
+    return [true, v];
+}
+function _pushPrompt(p, f, k, exh) {
+    /* f : unit -> 'a */
+    /* What to do with exh? */
+    _metaCont = _consSeq(p, _consSeq(k, _metaCont));
+    return [false, f, [_underflow, exh, undefined]];
+}
+function _withSubCont(p, f, k, exh) {
+    /* f : ('a,'b) subcont -> 'b */
+    /* What to do with exh? */
+    var [aboveP, belowP] = _splitSeq(p, _metaCont);
+    _metaCont = belowP;
+    return [false, f, [_underflow, exh, _consSeq(k, aboveP)]];
+}
+function _pushSubCont(subcont, f, k, exh) {
+    /* f : unit -> 'a */
+    /* What to do with exh? */
+    _metaCont = _appendSeq(subcont, _consSeq(k, _metaCont));
+    return [false, f, [_underflow, exh, undefined]];
+}
 function _run(f) {
-    var r = f(result => [true, result], e => { throw e; });
+    var metaCont_old = _metaCont;
+    _metaCont = _emptySeq;
+    var r = f(result => [true, result], e => { _metaCont = metaCont_old; throw e; });
     while (!r[0]) {
         r = r[1].apply(undefined, r[2]);
     }
+    _metaCont = metaCont_old;
     return r[1];
 }
 function _function(k, h, f) {
     return [false, k, [function() {
-        var r = f(result => [true, result], e => { throw e; }, arguments);
+        var metaCont_old = _metaCont;
+        _metaCont = _emptySeq;
+        var r = f(result => [true, result], e => { _metaCont = metaCont_old; throw e; }, arguments);
         while (!r[0]) {
             r = r[1].apply(undefined, r[2]);
         }
+        _metaCont = metaCont_old;
         return r[1];
     }]];
 }

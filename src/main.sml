@@ -240,7 +240,7 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
                             val _ = nextId := n + 1
                         in TypedSyntax.MkVId ("exh", n)
                         end
-          val cexp = CpsTransform.transformDecs { nextVId = nextId } decs exnCont cont
+          val cexp = CpsTransform.transformDecs { nextVId = nextId } decs { exnCont = exnCont } cont
           val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit-cps.js" }

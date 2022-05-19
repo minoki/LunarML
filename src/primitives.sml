@@ -82,6 +82,10 @@ datatype PrimOp = EQUAL (* = *)
                 | Exception_instanceof (* Exception.instanceof *)
                 | Cont_callcc (* Cont.callcc *)
                 | Cont_throw (* Cont.throw *)
+                | DelimCont_newPrompt (* DelimCont.newPrompt *)
+                | DelimCont_pushPrompt (* DelimCont.pushPrompt *)
+                | DelimCont_withSubCont (* DelimCont.withSubCont *)
+                | DelimCont_pushSubCont (* DelimCont.pushSubCont *)
                 | Lua_sub (* Lua.sub *)
                 | Lua_set (* Lua.set *)
                 | Lua_isNil (* Lua.isNil *)
@@ -215,6 +219,10 @@ fun toString EQUAL = "="
   | toString Exception_instanceof = "Exception.instanceof"
   | toString Cont_callcc = "Cont.callcc"
   | toString Cont_throw = "Cont.throw"
+  | toString DelimCont_newPrompt = "DelimCont.newPrompt"
+  | toString DelimCont_pushPrompt = "DelimCont.pushPrompt"
+  | toString DelimCont_withSubCont = "DelimCont.withSubCont"
+  | toString DelimCont_pushSubCont = "DelimCont.pushSubCont"
   | toString Lua_sub = "Lua.sub"
   | toString Lua_set = "Lua.set"
   | toString Lua_isNil = "Lua.isNil"
@@ -348,6 +356,10 @@ fun fromString "=" = SOME EQUAL
   | fromString "Exception.instanceof" = SOME Exception_instanceof
   | fromString "Cont.callcc" = SOME Cont_callcc
   | fromString "Cont.throw" = SOME Cont_throw
+  | fromString "DelimCont.newPrompt" = SOME DelimCont_newPrompt
+  | fromString "DelimCont.pushPrompt" = SOME DelimCont_pushPrompt
+  | fromString "DelimCont.withSubCont" = SOME DelimCont_withSubCont
+  | fromString "DelimCont.pushSubCont" = SOME DelimCont_pushSubCont
   | fromString "Lua.sub" = SOME Lua_sub
   | fromString "Lua.set" = SOME Lua_set
   | fromString "Lua.isNil" = SOME Lua_isNil
@@ -437,6 +449,8 @@ functor TypeOfPrimitives (type ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
                           val contOf : ty -> ty
+                          val promptOf : ty -> ty
+                          val subcontOf : ty * ty -> ty
                           val IsEqType : constraint
                          ) : sig
                                val typeOf : Primitives.PrimOp -> { vars : (tv * constraint list) list, args : ty vector, result : ty }
@@ -523,6 +537,10 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
   | typeOf Primitives.Cont_callcc = { vars = [(tyVarA, [])], args = vector [function1Of (tyA, contOf (tyA))], result = tyA }
   | typeOf Primitives.Cont_throw = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [contOf (tyA)], result = function1Of (tyB, tyA) }
+  | typeOf Primitives.DelimCont_newPrompt = { vars = [(tyVarA, [])], args = vector [], result = promptOf (tyA) }
+  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, [])], args = vector [promptOf (tyA), function1Of (tyA, unit)], result = tyA }
+  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [promptOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
+  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }

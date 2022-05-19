@@ -195,7 +195,11 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
   | doCExp ctx (C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp], result, cont, exnCont })
     = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, J.VarExp (J.UserDefinedId exnCont), J.ArrayExp (vector [doValue exp]) ]))) ] (* TODO: location information *)
   | doCExp ctx (C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args, result, cont, exnCont })
-    = let fun doUnary f = case args of
+    = let fun doNullary f = case args of
+                                [] => f ()
+                              | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+          fun doNullaryExp (f, pure) = doNullary (fn () => VarStat (result, f ()) :: doCExp ctx cont)
+          fun doUnary f = case args of
                               [a] => f (doValue a)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
           fun doUnaryExp (f, pure) = doUnary (fn a => VarStat (result, f a) :: doCExp ctx cont)
@@ -316,6 +320,7 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
            | Primitives.JavaScript_isFalsy => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), false)
            | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), true)
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
+           | Primitives.DelimCont_newPrompt => doNullaryExp (fn () => J.CallExp (J.VarExp (J.PredefinedId "_newPrompt"), vector []), false)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript-CPS backend")
       end
   | doCExp ctx (C.PrimOp { primOp, tyargs = _, args = _, result, cont, exnCont })
@@ -355,6 +360,12 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
                                                ) ([], []) functions
       in decs @ assignments @ doCExp ctx cont
       end
+  | doCExp ctx (C.PushPrompt { prompt, f, cont, exnCont })
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushPrompt"), vector [doValue prompt, doValue f, doValue cont, doValue exnCont]))) ]
+  | doCExp ctx (C.WithSubCont { prompt, f, cont, exnCont })
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_withSubCont"), vector [doValue prompt, doValue f, doValue cont, doValue exnCont]))) ]
+  | doCExp ctx (C.PushSubCont { subCont, f, cont, exnCont })
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushSubCont"), vector [doValue subCont, doValue f, doValue cont, doValue exnCont]))) ]
 
 fun doProgram ctx cont exnCont cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [J.UserDefinedId cont, J.UserDefinedId exnCont], vector (doCExp ctx cexp))]))]
 end;
