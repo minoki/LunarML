@@ -1,4 +1,56 @@
-basis-js.mlb
-ann "allowPrim true" in
+basis-js-common.mlb
+local
+ann "allowPrim true" "allowOverload true" in
 delim-cont.sml
+javascript-callback-cps.sml
+text-io-nodejs-async.sml
+os-nodejs-async.sml
+command-line-nodejs.sml
+end
+in
+signature INTEGER
+signature WORD
+signature REAL
+signature CHAR
+signature STRING
+signature MONO_VECTOR
+signature MONO_ARRAY
+signature MONO_ARRAY_SLICE
+structure Unsafe (* extension; to be moved... *)
+structure JavaScript (* extension; to be moved... *)
+structure LunarML (* extension; to be moved... *)
+structure Array
+structure ArraySlice
+structure Bool
+structure Char
+structure CharArray
+structure CharArraySlice
+structure CharVector
+structure CommandLine
+structure General
+structure IEEEReal
+structure IO
+structure Int
+structure IntInf
+structure LargeWord
+structure List
+structure ListPair
+structure Math
+structure OS
+structure Option
+structure Real
+structure String
+structure StringCvt
+structure Substring
+structure TextIO
+structure Vector
+structure VectorSlice
+structure WideChar
+structure WideString
+structure Word
+structure Word16
+structure Word32
+structure Word64
+structure Word8
+top-level.sml
 end

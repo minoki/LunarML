@@ -1,14 +1,16 @@
 # LunarML
 
-A Standard ML compiler that produces Lua.
+A Standard ML compiler that produces Lua/JavaScript.
 
 ## Building
 
-You need a recent version of MLton to build the executable, and Lua 5.3+ to run the compiled script.
+You need a recent version of MLton to build the executable, and Lua 5.3+ or recent Node.js to run the compiled script.
 
 ```
 $ make
 $ make test
+$ make test-nodejs
+$ make test-nodejs-cps
 $ ./lunarml example/hello.sml
 $ lua example/hello.lua
 Hello world!
@@ -25,6 +27,7 @@ Modes of operation:
 * `-mexe` (default): Produce Lua program.
 * `-mlib`: Produce a Lua module.
 * `--js`: Produce a JavaScript program.
+* `--js-cps`: Produce a JavaScript program (CPS mode; supports delimited continuations).
 
 See `--help` for more information.
 

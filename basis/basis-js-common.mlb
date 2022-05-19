@@ -1,10 +1,34 @@
-basis-js-common.mlb
+infixes.sml
+_prim
+_primOverloads
+ann "allowPrim true" "allowBindEqual true" "allowOverload true" in
+equal.sml
+end
 local
 ann "allowPrim true" "allowOverload true" in
-javascript-callback.sml
-text-io-nodejs.sml
-os-nodejs.sml
-command-line-nodejs.sml
+general.sml
+option.sml (* depends on unit (general.sml) *)
+int-prim-$(TARGET_LANG).sml
+list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
+unsafe.sml
+vector-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript, List.tabulate *)
+vector.sml (* depends on vector-prim, option *)
+bool.sml
+widechar-prim.sml
+widestring-prim.sml (* depends on WideChar.char *)
+lunarml.sml
+javascript.sml
+string-prim-$(TARGET_LANG).sml
+array-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript, List.tabulate *)
+mlbasis-js.sml
+int-inf-js.sml
+word-js.sml
+io.sml
+vector-slice.sml
+array-slice.sml
+list-pair.sml
+mono-vector-js.sml
+mono-array-js.sml
 end
 in
 signature INTEGER
@@ -25,7 +49,6 @@ structure Char
 structure CharArray
 structure CharArraySlice
 structure CharVector
-structure CommandLine
 structure General
 structure IEEEReal
 structure IO
@@ -35,13 +58,11 @@ structure LargeWord
 structure List
 structure ListPair
 structure Math
-structure OS
 structure Option
 structure Real
 structure String
 structure StringCvt
 structure Substring
-structure TextIO
 structure Vector
 structure VectorSlice
 structure WideChar
@@ -51,5 +72,5 @@ structure Word16
 structure Word32
 structure Word64
 structure Word8
-top-level.sml
+top-level-mini.sml
 end

@@ -1,3 +1,5 @@
+structure LunarML = struct
+open LunarML
 structure DelimCont : sig
               type 'a prompt
               type ('a,'b) subcont
@@ -16,4 +18,5 @@ fun withSubCont (p, f) = _primCall "DelimCont.withSubCont" (p, f)
 fun pushSubCont (sc, f) = _primCall "DelimCont.pushSubCont" (sc, f)
 fun abort (p, x) = withSubCont (p, fn _ => x)
 val topLevel = _Prim.DelimCont.topLevel
+end
 end;

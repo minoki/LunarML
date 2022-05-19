@@ -246,3 +246,9 @@ should_run "extension/should_run/" {
 should_compile "extension/should_compile/" {
   "vector_exp_generalize.sml",
 }
+if cps_mode then
+  should_run "cps/should_run/" {
+    "product.sml",
+    "amb.sml",
+  }
+end
