@@ -1,10 +1,10 @@
 basis-js-common.mlb
 local
 ann "allowPrim true" "allowOverload true" in
-javascript-callback.sml
-text-io-nodejs.sml
-os-nodejs.sml
-command-line-nodejs.sml
+js/javascript-callback.sml
+nodejs/text-io.sml
+nodejs/os.sml
+nodejs/command-line.sml
 end
 in
 signature INTEGER

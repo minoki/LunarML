@@ -2,10 +2,10 @@ basis-js-common.mlb
 local
 ann "allowPrim true" "allowOverload true" in
 delim-cont.sml
-javascript-callback-cps.sml
-text-io-nodejs-async.sml
-os-nodejs-async.sml
-command-line-nodejs.sml
+js-cps/javascript-callback.sml
+nodejs/text-io-async.sml
+nodejs/os-async.sml
+nodejs/command-line.sml
 end
 in
 signature INTEGER

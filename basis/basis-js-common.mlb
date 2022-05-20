@@ -8,27 +8,27 @@ local
 ann "allowPrim true" "allowOverload true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
-int-prim-$(TARGET_LANG).sml
+$(TARGET_LANG)/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml
-vector-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript, List.tabulate *)
+$(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 widechar-prim.sml
 widestring-prim.sml (* depends on WideChar.char *)
 lunarml.sml
-javascript.sml
-string-prim-$(TARGET_LANG).sml
-array-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript, List.tabulate *)
+js-common/javascript.sml
+$(TARGET_LANG)/string-prim.sml
+$(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 mlbasis-js.sml
-int-inf-js.sml
-word-js.sml
+js-common/int-inf.sml
+js-common/word.sml
 io.sml
 vector-slice.sml
 array-slice.sml
 list-pair.sml
-mono-vector-js.sml
-mono-array-js.sml
+js-common/mono-vector.sml
+js-common/mono-array.sml
 end
 in
 signature INTEGER

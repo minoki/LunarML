@@ -8,26 +8,26 @@ local
 ann "allowPrim true" "allowOverload true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
-int-prim-$(TARGET_LANG).sml
+$(TARGET_LANG)/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml
-vector-prim-$(TARGET_LANG).sml (* depends on int, Unsafe, Subscript *)
+$(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 mlbasis.sml
-word.sml
+lua/word.sml
 scan-num.sml
 scan-text.sml
 io.sml
-text-io.sml
 vector-slice.sml
 array-slice.sml
 list-pair.sml
 int-inf.sml
-mono-vector.sml
-mono-array.sml
-os.sml
-commandline.sml
+lua/mono-vector.sml
+lua/mono-array.sml
+lua/text-io.sml
+lua/os.sml
+lua/command-line.sml
 end
 in
 signature INTEGER
