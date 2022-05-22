@@ -1,0 +1,223 @@
+maxFinite ... OK
+minPos ... OK
+minNormalPos ... OK
+0.0: positive zero
+~0.0: negative zero
+~ 0.0: negative zero
+1.0/posInf: positive zero
+1.0/negInf: negative zero
+realFloor 0.5: positive zero
+realFloor 0.0: positive zero
+realFloor ~0.0: negative zero
+realCeil ~0.5: negative zero
+realCeil 0.0: positive zero
+realCeil ~0.0: negative zero
+realTrunc 0.5: positive zero
+realTrunc ~0.5: negative zero
+realTrunc 0.0: positive zero
+realTrunc ~0.0: negative zero
+realRound 0.25: positive zero
+realRound ~0.25: negative zero
+realRound 0.5: positive zero
+realRound ~0.5: negative zero
+realRound 0.0: positive zero
+realRound ~0.0: negative zero
+abs 0.0: positive zero
+abs ~0.0: positive zero
+Real.abs 0.0: positive zero
+Real.abs ~0.0: positive zero
+realRound negInf: OK
+realFloor negInf: OK
+realCeil negInf: OK
+realTrunc negInf: OK
+abs negInf: OK
+realRound ~maxFinite: OK
+realFloor ~maxFinite: OK
+realCeil ~maxFinite: OK
+realTrunc ~maxFinite: OK
+abs ~maxFinite: OK
+realRound ~3.5: OK
+realFloor ~3.5: OK
+realCeil ~3.5: OK
+realTrunc ~3.5: OK
+abs ~3.5: OK
+realRound ~3.25: OK
+realFloor ~3.25: OK
+realCeil ~3.25: OK
+realTrunc ~3.25: OK
+abs ~3.25: OK
+realRound ~3.0: OK
+realFloor ~3.0: OK
+realCeil ~3.0: OK
+realTrunc ~3.0: OK
+abs ~3.0: OK
+realRound ~2.75: OK
+realFloor ~2.75: OK
+realCeil ~2.75: OK
+realTrunc ~2.75: OK
+abs ~2.75: OK
+realRound ~2.5: OK
+realFloor ~2.5: OK
+realCeil ~2.5: OK
+realTrunc ~2.5: OK
+abs ~2.5: OK
+realRound ~2.25: OK
+realFloor ~2.25: OK
+realCeil ~2.25: OK
+realTrunc ~2.25: OK
+abs ~2.25: OK
+realRound ~2.0: OK
+realFloor ~2.0: OK
+realCeil ~2.0: OK
+realTrunc ~2.0: OK
+abs ~2.0: OK
+realRound ~1.75: OK
+realFloor ~1.75: OK
+realCeil ~1.75: OK
+realTrunc ~1.75: OK
+abs ~1.75: OK
+realRound ~1.5: OK
+realFloor ~1.5: OK
+realCeil ~1.5: OK
+realTrunc ~1.5: OK
+abs ~1.5: OK
+realRound ~1.25: OK
+realFloor ~1.25: OK
+realCeil ~1.25: OK
+realTrunc ~1.25: OK
+abs ~1.25: OK
+realRound ~1.0: OK
+realFloor ~1.0: OK
+realCeil ~1.0: OK
+realTrunc ~1.0: OK
+abs ~1.0: OK
+realRound ~0.75: OK
+realFloor ~0.75: OK
+realCeil ~0.75: OK
+realTrunc ~0.75: OK
+abs ~0.75: OK
+realRound ~0.5: OK
+realFloor ~0.5: OK
+realCeil ~0.5: OK
+realTrunc ~0.5: OK
+abs ~0.5: OK
+realRound ~0.25: OK
+realFloor ~0.25: OK
+realCeil ~0.25: OK
+realTrunc ~0.25: OK
+abs ~0.25: OK
+realRound ~minNormalPos: OK
+realFloor ~minNormalPos: OK
+realCeil ~minNormalPos: OK
+realTrunc ~minNormalPos: OK
+abs ~minNormalPos: OK
+realRound ~minPos: OK
+realFloor ~minPos: OK
+realCeil ~minPos: OK
+realTrunc ~minPos: OK
+abs ~minPos: OK
+realRound ~0.0: OK
+realFloor ~0.0: OK
+realCeil ~0.0: OK
+realTrunc ~0.0: OK
+abs ~0.0: OK
+realRound 0.0: OK
+realFloor 0.0: OK
+realCeil 0.0: OK
+realTrunc 0.0: OK
+abs 0.0: OK
+realRound minPos: OK
+realFloor minPos: OK
+realCeil minPos: OK
+realTrunc minPos: OK
+abs minPos: OK
+realRound minNormalPos: OK
+realFloor minNormalPos: OK
+realCeil minNormalPos: OK
+realTrunc minNormalPos: OK
+abs minNormalPos: OK
+realRound 0.25: OK
+realFloor 0.25: OK
+realCeil 0.25: OK
+realTrunc 0.25: OK
+abs 0.25: OK
+realRound 0.5: OK
+realFloor 0.5: OK
+realCeil 0.5: OK
+realTrunc 0.5: OK
+abs 0.5: OK
+realRound 0.75: OK
+realFloor 0.75: OK
+realCeil 0.75: OK
+realTrunc 0.75: OK
+abs 0.75: OK
+realRound 1.0: OK
+realFloor 1.0: OK
+realCeil 1.0: OK
+realTrunc 1.0: OK
+abs 1.0: OK
+realRound 1.25: OK
+realFloor 1.25: OK
+realCeil 1.25: OK
+realTrunc 1.25: OK
+abs 1.25: OK
+realRound 1.5: OK
+realFloor 1.5: OK
+realCeil 1.5: OK
+realTrunc 1.5: OK
+abs 1.5: OK
+realRound 1.75: OK
+realFloor 1.75: OK
+realCeil 1.75: OK
+realTrunc 1.75: OK
+abs 1.75: OK
+realRound 2.0: OK
+realFloor 2.0: OK
+realCeil 2.0: OK
+realTrunc 2.0: OK
+abs 2.0: OK
+realRound 2.25: OK
+realFloor 2.25: OK
+realCeil 2.25: OK
+realTrunc 2.25: OK
+abs 2.25: OK
+realRound 2.5: OK
+realFloor 2.5: OK
+realCeil 2.5: OK
+realTrunc 2.5: OK
+abs 2.5: OK
+realRound 2.75: OK
+realFloor 2.75: OK
+realCeil 2.75: OK
+realTrunc 2.75: OK
+abs 2.75: OK
+realRound 3.0: OK
+realFloor 3.0: OK
+realCeil 3.0: OK
+realTrunc 3.0: OK
+abs 3.0: OK
+realRound 3.25: OK
+realFloor 3.25: OK
+realCeil 3.25: OK
+realTrunc 3.25: OK
+abs 3.25: OK
+realRound 3.5: OK
+realFloor 3.5: OK
+realCeil 3.5: OK
+realTrunc 3.5: OK
+abs 3.5: OK
+realRound maxFinite: OK
+realFloor maxFinite: OK
+realCeil maxFinite: OK
+realTrunc maxFinite: OK
+abs maxFinite: OK
+realRound posInf: OK
+realFloor posInf: OK
+realCeil posInf: OK
+realTrunc posInf: OK
+abs posInf: OK
+realRound NaN: OK
+realFloor NaN: OK
+realCeil NaN: OK
+realTrunc NaN: OK
+abs NaN: OK

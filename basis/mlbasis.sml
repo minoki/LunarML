@@ -661,9 +661,9 @@ fun isNan x = x != x
 fun ?= (x, y) = x == y orelse x != x orelse y != y (* EQUAL or UNORDERED *)
 fun unordered (x, y) = x != x orelse y != y
 fun isFinite x = negInf < x andalso x < posInf
-val maxFinite = 1.7976931348623157e308 : real (* 0x1.fffffffffffffp1023; assuming binary64 *)
-val minPos = 5.0e~324 : real (* 0x1p-1074; assuming binary64 *)
-val minNormalPos = 2.2250738585072e~308 : real (* 0x1p-1022; assuming binary64 *)
+val maxFinite = 0x1.fffffffffffffp1023 : real; (* approx. 1.7976931348623157e308; assuming binary64 *)
+val minPos = 0x1p~1074 : real; (* approx. 5e~324; assuming binary64 *)
+val minNormalPos = 0x1p~1022 : real; (* approx. 2.2250738585072014e~308; assuming binary64 *)
 fun isNormal x = let val absX = abs x
                  in minNormalPos <= absX andalso absX < posInf
                  end
@@ -768,9 +768,12 @@ fun realRound x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
                      else if fracPart > 0.5 orelse (fracPart == 0.5 andalso not intPartIsEven) then
                          intPart + 1.0
                      else (* ((fracPart == 0.5 orelse fracPart == ~0.5) andalso intPartIsEven) orelse isNan x *)
-                         intPart
+                         if x == ~0.5 then
+                             ~0.0 (* negative zero *)
+                         else
+                             intPart
                   end
-                      fun realFloor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
+fun realFloor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
                       val result = Vector.sub (results, 0)
                       val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
                   in if result == 0.0 andalso 1.0 / x < 0.0 then

@@ -138,6 +138,9 @@ function __Word_mod(x, y) {
     return (x % y)>>>0;
 }
 const Math_abs = Math.abs;
+function _Real_abs(k, h, x) {
+    return [false, k, [Math_abs(x)]];
+}
 const Math_imul = Math.imul;
 function _call(k1, h, f) {
     return [false, k1, [function(k2, h, args) {

@@ -198,6 +198,7 @@ should_run "mlbasis/should_run/" {
   "int-inf-wilson.sml",
   "seki-bernoulli.sml",
   "exn-name.sml",
+  "real.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",

@@ -57,7 +57,7 @@ val builtins
                     ,(VId_String_concatWith, "_String_concatWith")
                     ,(VId_String_implode, "_String_implode")
                     (* real *)
-                    ,(VId_Real_abs, "Math_abs") (* JS Math.abs *)
+                    ,(VId_Real_abs, "_Real_abs")
                     (* Vector and Array *)
                     ,(VId_Vector_concat, "_Vector_concat")
                     ,(VId_Vector_fromList, "_VectorOrArray_fromList")

@@ -208,6 +208,7 @@ should_run "mlbasis/should_run/" {
   "int-inf-wilson.sml",
   "seki-bernoulli.sml",
   "exn-name.sml",
+  "real.sml",
 }
 should_run "successor_ml/should_run/" {
   "record_extension_pattern.sml",
