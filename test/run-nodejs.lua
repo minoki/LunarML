@@ -249,6 +249,6 @@ should_compile "extension/should_compile/" {
 if cps_mode then
   should_run "cps/should_run/" {
     "product.sml",
-    "amb.sml",
+    "nondet.sml",
   }
 end
