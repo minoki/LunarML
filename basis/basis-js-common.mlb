@@ -23,6 +23,8 @@ $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulat
 mlbasis-js.sml
 js-common/int-inf.sml
 js-common/word.sml
+js-common/scan-num.sml
+scan-text.sml
 io.sml
 vector-slice.sml
 array-slice.sml

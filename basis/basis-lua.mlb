@@ -16,7 +16,7 @@ vector.sml (* depends on vector-prim, option *)
 bool.sml
 mlbasis.sml
 lua/word.sml
-scan-num.sml
+lua/scan-num.sml
 scan-text.sml
 io.sml
 vector-slice.sml

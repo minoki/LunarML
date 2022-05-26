@@ -46,6 +46,7 @@ structure JavaScript : sig
               val toUint32 : value -> word
               val require : value (* Node.js *)
               structure Lib : sig
+                            val parseFloat : value
                             val Number : value
                             structure Number : sig
                                           val isFinite : value
@@ -150,6 +151,7 @@ fun typeof x = _primCall "JavaScript.typeof" (x)
 fun toInt32 x = unsafeFromValue (orb (x, fromInt 0)) : int
 fun toUint32 x = unsafeFromValue (>>> (x, fromInt 0)) : word
 structure Lib = struct
+val parseFloat = LunarML.assumeDiscardable (global "parseFloat")
 val Object = LunarML.assumeDiscardable (global "Object")
 val Number = LunarML.assumeDiscardable (global "Number")
 structure Number = struct
