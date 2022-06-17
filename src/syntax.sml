@@ -456,7 +456,6 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ProjectionExp of SourcePos.span * Syntax.Label
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
-             | PrimValExp of SourcePos.span * string
              | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * ValBind list
              | RecValDec of SourcePos.span * Syntax.TyVar list * ValBind list
@@ -475,7 +474,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
      and FValBind = FValBind of SourcePos.span * FMRule list
      and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp
      and FPat = FPat of SourcePos.span * Pat list
-type Program = (Dec Syntax.StrDec) list
+type Program = ((Dec Syntax.TopDec) list) list
 
 local
     fun doFields i nil = nil

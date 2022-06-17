@@ -344,7 +344,6 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
   | doExp(ctx, env, UnfixedSyntax.ListExp(span, xs)) = Syntax.ListExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
   | doExp(ctx, env, UnfixedSyntax.VectorExp(span, xs)) = Syntax.VectorExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
-  | doExp(ctx, env, UnfixedSyntax.PrimValExp(span, name)) = Syntax.VarExp(span, Syntax.MkQualified([], Syntax.MkVId name))
   | doExp(ctx, env, UnfixedSyntax.PrimExp(span, name, tyargs, args))
     = let val primOp = case Primitives.fromString name of
                            SOME primOp => primOp
