@@ -91,24 +91,24 @@ fun parse ({ languageOptions }, name, lines, str) : UnfixedSyntax.Program option
       end
 
 datatype env' = MkEnv of env
-withtype env = { strMap : env' Syntax.StrIdMap.map }
-val emptyEnv : env = { strMap = Syntax.StrIdMap.empty }
-fun mergeEnv ({ strMap }, { strMap = strMap' }) : env = { strMap = Syntax.StrIdMap.unionWith #2 (strMap, strMap') }
+withtype env = env' Syntax.StrIdMap.map
+val emptyEnv : env = Syntax.StrIdMap.empty
+fun mergeEnv (strMap, strMap') : env = Syntax.StrIdMap.unionWith #2 (strMap, strMap')
 
 type core_usage = (* usedStructures *) Syntax.StrIdSet.set
 structure S = Syntax
 structure U = UnfixedSyntax
 
-fun doOpen (env : env) (S.MkQualified (strid0 :: strids, lastpart)) = (case Syntax.StrIdMap.find (#strMap env, strid0) of
+fun doOpen (env : env) (S.MkQualified (strid0 :: strids, lastpart)) = (case Syntax.StrIdMap.find (env, strid0) of
                                                                            NONE => emptyEnv
                                                                          | SOME (MkEnv env') => doOpen env' (S.MkQualified (strids, lastpart))
                                                                       )
-  | doOpen env (S.MkQualified ([], strid)) = (case Syntax.StrIdMap.find (#strMap env, strid) of
+  | doOpen env (S.MkQualified ([], strid)) = (case Syntax.StrIdMap.find (env, strid) of
                                                   NONE => emptyEnv
                                                 | SOME (MkEnv env') => env'
                                              )
 
-fun goQualified (env : env) (S.MkQualified (strid :: _, _)) = (case Syntax.StrIdMap.find (#strMap env, strid) of
+fun goQualified (env : env) (S.MkQualified (strid :: _, _)) = (case Syntax.StrIdMap.find (env, strid) of
                                                                    NONE => Syntax.StrIdSet.singleton strid
                                                                  | SOME _ => Syntax.StrIdSet.empty
                                                               )
@@ -193,11 +193,11 @@ and goDec env (U.ValDec (_, _, valbinds)) = (emptyEnv, List.foldl (fn (U.PatBind
                                                end
   | goDec env (U.OpenDec (_, longstrids)) = List.foldl (fn (longstrid, (env', usage)) =>
                                                            let val usage = case longstrid of
-                                                                               Syntax.MkQualified (strid :: _, _) => (case Syntax.StrIdMap.find (#strMap env, strid) of
+                                                                               Syntax.MkQualified (strid :: _, _) => (case Syntax.StrIdMap.find (env, strid) of
                                                                                                                           NONE => Syntax.StrIdSet.add (usage, strid)
                                                                                                                         | SOME _ => usage
                                                                                                                      )
-                                                                             | Syntax.MkQualified ([], strid) => (case Syntax.StrIdMap.find (#strMap env, strid) of
+                                                                             | Syntax.MkQualified ([], strid) => (case Syntax.StrIdMap.find (env, strid) of
                                                                                                                       NONE => Syntax.StrIdSet.add (usage, strid)
                                                                                                                     | SOME _ => usage
                                                                                                                  )
@@ -221,7 +221,7 @@ val emptyModuleEnv : module_env = { strMap = Syntax.StrIdMap.empty, sigMap = Syn
 fun mergeModuleEnv ({ strMap, sigMap, funMap }, { strMap = strMap', sigMap = sigMap', funMap = funMap' }) : module_env
     = { strMap = Syntax.StrIdMap.unionWith #2 (strMap, strMap'), sigMap = Syntax.SigIdMap.unionWith #2 (sigMap, sigMap'), funMap = Syntax.FunIdMap.unionWith #2 (funMap, funMap') }
 
-fun toCoreEnv ({ strMap, ... } : module_env) : env = { strMap = strMap }
+fun toCoreEnv ({ strMap, ... } : module_env) : env = strMap
 
 type module_usage = { usedStructures : Syntax.StrIdSet.set
                     , usedSignatures : Syntax.SigIdSet.set
@@ -253,7 +253,7 @@ fun goSpec (env : module_env) (S.ValDesc (_, items)) : env' Syntax.StrIdMap.map 
                                                                                          | ((_, SOME ty), acc) => Syntax.StrIdSet.union (goTy (toCoreEnv env) ty, acc)) Syntax.StrIdSet.empty descs))
   | goSpec env (S.StrDesc (_, descs)) = List.foldl (fn ((strid, sigexp), (strMap, usage)) =>
                                                        let val (sig', usage') = goSigExp env sigexp
-                                                       in (Syntax.StrIdMap.insert (strMap, strid, MkEnv { strMap = sig' }), unionModuleUsage (usage, usage'))
+                                                       in (Syntax.StrIdMap.insert (strMap, strid, MkEnv sig'), unionModuleUsage (usage, usage'))
                                                        end) (Syntax.StrIdMap.empty, emptyModuleUsage) descs
   | goSpec env (S.Include (_, sigexp)) = goSigExp env sigexp
   | goSpec env (S.Sharing (_, specs, longtycons)) = goSpecs env specs
@@ -269,7 +269,7 @@ and goSpecs env [] = (Syntax.StrIdMap.empty, emptyModuleUsage)
 and goSigExp env (S.BasicSigExp (_, specs)) : env' Syntax.StrIdMap.map * module_usage = goSpecs env specs
   | goSigExp env (S.SigIdExp (_, sigid)) = (case Syntax.SigIdMap.find (#sigMap env, sigid) of
                                                 NONE => (Syntax.StrIdMap.empty, { usedStructures = Syntax.StrIdSet.empty, usedSignatures = Syntax.SigIdSet.singleton sigid, usedFunctors = Syntax.FunIdSet.empty })
-                                              | SOME (MkEnv { strMap }) => (strMap, emptyModuleUsage)
+                                              | SOME (MkEnv strMap) => (strMap, emptyModuleUsage)
                                            )
   | goSigExp env (S.TypeRealisationExp (_, sigexp, _, longtycon, ty)) = let val usage = goTy (toCoreEnv env) ty
                                                                         in (Syntax.StrIdMap.empty, fromCoreUsage usage)
@@ -279,18 +279,18 @@ fun goStrExp (env : module_env) (S.StructExp (_, strdecs)) : env' Syntax.StrIdMa
   | goStrExp env (S.StrIdExp (_, longstrid)) = (case longstrid of
                                                     S.MkQualified ([], strid) => (case Syntax.StrIdMap.find (#strMap env, strid) of
                                                                                       NONE => (Syntax.StrIdMap.empty, { usedStructures = Syntax.StrIdSet.singleton strid, usedSignatures = Syntax.SigIdSet.empty, usedFunctors = Syntax.FunIdSet.empty })
-                                                                                    | SOME (MkEnv { strMap }) => (strMap, emptyModuleUsage)
+                                                                                    | SOME (MkEnv strMap) => (strMap, emptyModuleUsage)
                                                                                  )
                                                   | S.MkQualified (strid :: strids, lastpart) => (case Syntax.StrIdMap.find (#strMap env, strid) of
                                                                                                       NONE => (Syntax.StrIdMap.empty, { usedStructures = Syntax.StrIdSet.singleton strid, usedSignatures = Syntax.SigIdSet.empty, usedFunctors = Syntax.FunIdSet.empty })
-                                                                                                    | SOME (MkEnv { strMap }) =>
+                                                                                                    | SOME (MkEnv strMap) =>
                                                                                                       let fun go (strMap, [], strid) = (case Syntax.StrIdMap.find (strMap, strid) of
                                                                                                                                             NONE => Syntax.StrIdMap.empty
-                                                                                                                                          | SOME (MkEnv { strMap }) => strMap
+                                                                                                                                          | SOME (MkEnv strMap) => strMap
                                                                                                                                        )
                                                                                                             | go (strMap, strid :: strids, lastpart) = (case Syntax.StrIdMap.find (strMap, strid) of
                                                                                                                                                             NONE => Syntax.StrIdMap.empty
-                                                                                                                                                          | SOME (MkEnv { strMap }) => go (strMap, strids, lastpart)
+                                                                                                                                                          | SOME (MkEnv strMap) => go (strMap, strids, lastpart)
                                                                                                                                                        )
                                                                                                       in (go (strMap, strids, lastpart), emptyModuleUsage)
                                                                                                       end
@@ -307,19 +307,19 @@ fun goStrExp (env : module_env) (S.StructExp (_, strdecs)) : env' Syntax.StrIdMa
   | goStrExp env (S.FunctorAppExp (_, funid, strexp)) = let val (_, usage) = goStrExp env strexp
                                                         in case Syntax.FunIdMap.find (#funMap env, funid) of
                                                                NONE => (Syntax.StrIdMap.empty, { usedStructures = #usedStructures usage, usedSignatures = #usedSignatures usage, usedFunctors = Syntax.FunIdSet.add (#usedFunctors usage, funid) })
-                                                             | SOME (MkEnv { strMap = s }) => (s, usage)
+                                                             | SOME (MkEnv s) => (s, usage)
                                                         end
   | goStrExp env (S.LetInStrExp (_, strdecs, strexp)) = let val (s, usage) = goStrDecs env strdecs
                                                             val env' = { strMap = Syntax.StrIdMap.unionWith #2 (#strMap env, s), sigMap = #sigMap env, funMap = #funMap env }
                                                             val (s', usage') = goStrExp env' strexp
                                                         in (s', unionModuleUsage (usage, usage'))
                                                         end
-and goStrDec (env : module_env) (S.CoreDec (_, dec)) = let val ({ strMap }, usage) = goDec (toCoreEnv env) dec
+and goStrDec (env : module_env) (S.CoreDec (_, dec)) = let val (strMap, usage) = goDec (toCoreEnv env) dec
                                                        in (strMap, fromCoreUsage usage)
                                                        end
   | goStrDec env (S.StrBindDec (_, binds)) = List.foldl (fn ((strid, strexp), (strMap, usage)) =>
                                                             let val (s, usage') = goStrExp env strexp
-                                                            in (Syntax.StrIdMap.insert (strMap, strid, MkEnv { strMap = s }), unionModuleUsage (usage, usage'))
+                                                            in (Syntax.StrIdMap.insert (strMap, strid, MkEnv s), unionModuleUsage (usage, usage'))
                                                             end) (Syntax.StrIdMap.empty, emptyModuleUsage) binds
   | goStrDec env (S.LocalStrDec (_, decs1, decs2)) = let val (env', usage1) = goStrDecs env decs1
                                                          val (env'', usage2) = goStrDecs (mergeModuleEnv (env, { strMap = env', sigMap = Syntax.SigIdMap.empty, funMap = Syntax.FunIdMap.empty })) decs2
@@ -336,21 +336,21 @@ fun goTopDec env (S.StrDec dec) = let val (strMap, usage) = goStrDec env dec
                                   end
   | goTopDec env (S.SigDec binds) = let val (sigMap, usage) = List.foldl (fn ((sigid, sigexp), (sigMap, usage)) =>
                                                                              let val (s, usage') = goSigExp env sigexp
-                                                                             in (Syntax.SigIdMap.insert (sigMap, sigid, MkEnv { strMap = s }), unionModuleUsage (usage, usage'))
+                                                                             in (Syntax.SigIdMap.insert (sigMap, sigid, MkEnv s), unionModuleUsage (usage, usage'))
                                                                              end) (Syntax.SigIdMap.empty, emptyModuleUsage) binds
                                     in ({ strMap = Syntax.StrIdMap.empty, sigMap = sigMap, funMap = Syntax.FunIdMap.empty }, usage)
                                     end
   | goTopDec env (S.FunDec binds) = let val (funMap, usage) = List.foldl (fn ((_, funid, S.NamedFunExp (paramId, sigexp, body)), (funMap, usage)) =>
                                                                              let val (p, usage') = goSigExp env sigexp
-                                                                                 val env' = { strMap = Syntax.StrIdMap.insert (#strMap env, paramId, MkEnv { strMap = p }), sigMap = #sigMap env, funMap = #funMap env }
+                                                                                 val env' = { strMap = Syntax.StrIdMap.insert (#strMap env, paramId, MkEnv p), sigMap = #sigMap env, funMap = #funMap env }
                                                                                  val (s, usage'') = goStrExp env' body
-                                                                             in (Syntax.FunIdMap.insert (funMap, funid, MkEnv { strMap = s }), unionModuleUsage (usage, unionModuleUsage (usage', usage'')))
+                                                                             in (Syntax.FunIdMap.insert (funMap, funid, MkEnv s), unionModuleUsage (usage, unionModuleUsage (usage', usage'')))
                                                                              end
                                                                          | ((_, funid, S.AnonymousFunExp (sigexp, body)), (funMap, usage)) =>
                                                                            let val (p, usage') = goSigExp env sigexp
                                                                                val env' = { strMap = Syntax.StrIdMap.unionWith #2 (#strMap env, p), sigMap = #sigMap env, funMap = #funMap env }
                                                                                val (s, usage'') = goStrExp env' body
-                                                                           in (Syntax.FunIdMap.insert (funMap, funid, MkEnv { strMap = s }), unionModuleUsage (usage, unionModuleUsage (usage', usage'')))
+                                                                           in (Syntax.FunIdMap.insert (funMap, funid, MkEnv s), unionModuleUsage (usage, unionModuleUsage (usage', usage'')))
                                                                            end) (Syntax.FunIdMap.empty, emptyModuleUsage) binds
                                     in ({ strMap = Syntax.StrIdMap.empty, sigMap = Syntax.SigIdMap.empty, funMap = funMap }, usage)
                                     end
