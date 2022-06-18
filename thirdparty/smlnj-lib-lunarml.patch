@@ -1,0 +1,242 @@
+diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
+--- smlnj-lib-original/Util/graph-scc-fn.sml	2020-04-20 05:46:13.000000000 +0900
++++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-18 17:18:17.000000000 +0900
+@@ -9,7 +9,7 @@
+  * author: Matthias Blume
+  *)
+ 
+-functor GraphSCCFn (Nd: ORD_KEY) :> GRAPH_SCC where Nd = Nd =
++functor GraphSCCFn (Nd: ORD_KEY) :> GRAPH_SCC where type Nd.ord_key = Nd.ord_key =
+   struct
+     structure Nd = Nd
+ 
+diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
+--- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00.000000000 +0900
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-18 17:40:42.000000000 +0900
+@@ -0,0 +1,226 @@
++local
++$(SML_LIB)/basis/basis.mlb
++ansi-term.sml
++mono-array-sort-sig.sml
++array-qsort-fn.sml
++array-sort-sig.sml
++array-qsort.sml
++atom-sig.sml
++fnv-hash.sml
++atom.sml
++lib-base-sig.sml
++lib-base.sml
++ord-key-sig.sml
++binary-map-fn.sml
++atom-binary-map.sml
++binary-set-fn.sml
++atom-binary-set.sml
++redblack-map-fn.sml
++atom-redblack-map.sml
++redblack-set-fn.sml
++atom-redblack-set.sml
++atom-map.sml
++atom-set.sml
++hash-key-sig.sml
++hash-table-rep.sml
++mono-hash-table-sig.sml
++hash-table-fn.sml
++atom-table.sml
++base64-sig.sml
++base64.sml
++bit-array-sig.sml
++bit-array.sml
++bsearch-fn.sml
++char-map-sig.sml
++char-map.sml
++dynamic-array-sig.sml
++dynamic-array.sml
++mono-dynamic-array-sig.sml
++dynamic-array-fn.sml
++fifo-sig.sml
++fifo.sml
++fmt-fields.sml
++format-sig.sml
++real-format.sml
++format.sml
++format-comb-sig.sml
++format-comb.sml
++graph-scc-sig.sml
++graph-scc-fn.sml
++hash-string.sml
++mono-hash-set-sig.sml
++hash-set-fn.sml
++hash-table-sig.sml
++hash-table.sml
++mono-hash2-table-sig.sml
++hash2-table-fn.sml
++keyword-fn.sml
++int-binary-map.sml
++int-binary-set.sml
++int-hash-table.sml
++int-list-map.sml
++int-list-set.sml
++int-redblack-map.sml
++int-redblack-set.sml
++interval-domain-sig.sml
++interval-set-sig.sml
++interval-set-fn.sml
++io-util-sig.sml
++io-util.sml
++getopt-sig.sml
++getopt.sml
++mono-priorityq-sig.sml
++priority-sig.sml
++left-priorityq-fn.sml
++list-format-sig.sml
++list-format.sml
++list-map-fn.sml
++listsort-sig.sml
++list-mergesort.sml
++list-set-fn.sml
++list-xprod-sig.sml
++list-xprod.sml
++mono-array-fn.sml
++ord-map-sig.sml
++ord-set-sig.sml
++parser-comb-sig.sml
++parser-comb.sml
++path-util-sig.sml
++path-util.sml
++plist-sig.sml
++plist.sml
++target64-prime-sizes.sml
++queue-sig.sml
++queue.sml
++rand-sig.sml
++rand.sml
++random-sig.sml
++random.sml
++scan-sig.sml
++scan.sml
++uref-sig.sml
++simple-uref.sml
++splaytree-sig.sml
++splaytree.sml
++splay-map-fn.sml
++splay-set-fn.sml
++time-limit.sml
++uref.sml
++word-hash-table.sml
++word-redblack-map.sml
++word-redblack-set.sml
++real-order-stats.sml
++univariate-stats.sml
++utf8-sig.sml
++utf8.sml
++in
++signature ARRAY_SORT
++signature ATOM
++signature BASE64
++signature BIT_ARRAY
++signature CHAR_MAP
++signature DYNAMIC_ARRAY
++signature FIFO
++signature FORMAT
++signature FORMAT_COMB
++signature GRAPH_SCC
++signature HASH_KEY
++signature HASH_TABLE
++signature INTERVAL_DOMAIN
++signature INTERVAL_SET
++signature IO_UTIL
++signature GET_OPT
++signature LIB_BASE
++signature LIST_FORMAT
++signature LIST_SORT
++signature LIST_XPROD
++signature MONO_ARRAY_SORT
++signature MONO_DYNAMIC_ARRAY
++signature MONO_HASH_SET
++signature MONO_HASH_TABLE
++signature MONO_HASH2_TABLE
++signature MONO_PRIORITYQ
++signature ORD_KEY
++signature ORD_MAP
++signature ORD_SET
++signature PARSER_COMB
++signature PATH_UTIL
++signature PRIORITY
++signature PROP_LIST
++signature QUEUE
++signature RAND
++signature RANDOM
++signature SCAN
++signature SPLAY_TREE
++signature UREF
++signature UTF8
++structure ANSITerm
++structure ArrayQSort
++structure Atom
++structure AtomBinaryMap
++structure AtomBinarySet
++structure AtomRedBlackMap
++structure AtomRedBlackSet
++structure AtomMap
++structure AtomSet
++structure AtomTable
++structure Base64
++structure BitArray
++structure CharMap
++structure DynamicArray
++structure Fifo
++structure FNVHash
++structure Format
++structure FormatComb
++structure HashString
++structure HashTable
++structure IntBinaryMap
++structure IntBinarySet
++structure IntHashTable
++structure IntListMap
++structure IntListSet
++structure IntRedBlackMap
++structure IntRedBlackSet
++structure IOUtil
++structure GetOpt
++structure LibBase
++structure ListFormat
++structure ListMergeSort
++structure ListXProd
++structure ParserComb
++structure PathUtil
++structure PrimeSizes
++structure PropList
++structure Queue
++structure Rand
++structure Random
++structure Scan
++structure SimpleURef
++structure TimeLimit
++structure URef
++structure WordHashTable
++structure WordRedBlackMap
++structure WordRedBlackSet
++structure RealOrderStats
++structure UnivariateStats
++structure UTF8
++functor ArrayQSortFn
++functor BSearchFn
++functor BinaryMapFn
++functor BinarySetFn
++functor DynamicArrayFn
++functor GraphSCCFn
++functor HashSetFn
++functor HashTableFn
++functor Hash2TableFn
++functor IntervalSetFn
++functor KeywordFn
++functor LeftPriorityQFn
++functor ListMapFn
++functor ListSetFn
++functor MonoArrayFn
++functor RedBlackMapFn
++functor RedBlackSetFn
++functor SplayMapFn
++functor SplaySetFn
++end
