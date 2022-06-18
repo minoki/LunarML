@@ -28,6 +28,7 @@ val comment = let val commentRest = P.fix (fn commentRest => (P.try (CP.string "
               in P.try (CP.string "(*") >> commentRest
               end
 val whiteSpace = P.skipMany (comment <|> (() <$ CP.oneOf [#" ",#"\t"] (* no newline *)) <?> "")
+val whiteSpaceOrNewLine = P.skipMany (comment <|> (() <$ CP.oneOf [#" ",#"\t",#"\r",#"\n"]) <?> "")
 fun lexeme p = p <* whiteSpace
 val identLetter = CP.alphaNum <|> CP.oneOf [#"_",#"'"]
 fun reserved name = lexeme (P.try (CP.string name >> P.notFollowedBy identLetter))
@@ -138,25 +139,25 @@ val ppbool = P.fix (fn ppbool =>
                        end
                    )
 val pathname = stdpn <|> stringLiteral
-fun ppkeyword kwd = CP.char #"#" >> P.many (CP.oneOf [#" ",#"\t"]) >> reserved kwd
+fun ppkeyword kwd = P.try (CP.char #"#" >> P.many (CP.oneOf [#" ",#"\t"]) >> reserved kwd)
 val ppif = ppkeyword "if"
 val ppelif = ppkeyword "elif"
 val ppelse = ppkeyword "else"
 val ppendif = ppkeyword "endif"
 val pperror = ppkeyword "error"
 (* val ppline = ppkeyword "line" *)
-fun pplist p = let val line = P.notFollowedBy (CP.char #"#") >> whiteSpace >> P.many p <* P.optional_ CP.endOfLine
+fun pplist p = let val line = P.notFollowedBy (CP.char #"#") >> whiteSpace >> P.many p <* CP.endOfLine
+                   val line' = P.notFollowedBy (CP.char #"#") >> whiteSpace >> P.many p <* P.optional_ CP.endOfLine
                in P.fix (fn entries =>
                             let val rest = P.fix (fn rest =>
                                                      (ppendif >> P.optional_ CP.endOfLine >> P.pure [])
                                                          <|> ((ppelif >> ppbool <* CP.endOfLine) >>= (fn cond => entries >>= (fn then' => (fn else' => [CMSyntax.PPConditional (cond, then', else')]) <$> rest)))
                                                          <|> (ppelse >> CP.endOfLine >> entries <* (ppendif >> CP.endOfLine))
                                                  )
-                            in ((ppif >> ppbool <* CP.endOfLine) >>= (fn cond => entries >>= (fn then' => (fn else' => [CMSyntax.PPConditional (cond, then', else')]) <$> rest)))
-                                   <|> (fn xs => [CMSyntax.PPError (String.implode xs)]) <$> (pperror >> P.many (CP.noneOf [#"\r",#"\n"]) <* CP.endOfLine)
-                                   <|> (List.map CMSyntax.PPJust) <$> line
-                                   <|> (CP.endOfLine >> entries)
-                                   <|> P.pure []
+                                val entry = ((ppif >> ppbool <* CP.endOfLine) >>= (fn cond => entries >>= (fn then' => (fn else' => [CMSyntax.PPConditional (cond, then', else')]) <$> rest)))
+                                                <|> (fn xs => [CMSyntax.PPError (String.implode xs)]) <$> (pperror >> P.many (CP.noneOf [#"\r",#"\n"]) <* CP.endOfLine)
+                                                <|> (List.map CMSyntax.PPJust <$> P.try line)
+                            in List.concat <$> P.many entry
                             end
                         )
                end
@@ -164,4 +165,6 @@ val elst = pplist (CMSyntax.MLSymbol <$> mlSymbol) (* TODO: difference, intersec
 val members = pplist ((fn pn => CMSyntax.Member { pathname = pn }) <$> pathname) (* TODO: class, toolopts *)
 val is = reserved "is" <|> reserved "IS"
 val library = libkw >> elst >>= (fn exports => is >> members >>= (fn members => P.pure (exports, members)))
+val group = groupkw >> elst >>= (fn exports => is >> members >>= (fn members => P.pure (exports, members)))
+val cmfile = whiteSpaceOrNewLine >> (library <|> group) <* P.eof
 end;

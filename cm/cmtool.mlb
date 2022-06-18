@@ -16,4 +16,5 @@ $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 cm-syntax.sml
 cm-parser.sml
 cm-analyzer.sml
+cm-eval.sml
 cmtool.sml
