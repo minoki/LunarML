@@ -12,7 +12,7 @@ diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarm
  
 diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
 --- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00.000000000 +0900
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-18 17:40:42.000000000 +0900
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-18 20:28:10.000000000 +0900
 @@ -0,0 +1,226 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
@@ -27,8 +27,10 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +lib-base-sig.sml
 +lib-base.sml
 +ord-key-sig.sml
++ord-map-sig.sml
 +binary-map-fn.sml
 +atom-binary-map.sml
++ord-set-sig.sml
 +binary-set-fn.sml
 +atom-binary-set.sml
 +redblack-map-fn.sml
@@ -97,8 +99,6 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +list-xprod-sig.sml
 +list-xprod.sml
 +mono-array-fn.sml
-+ord-map-sig.sml
-+ord-set-sig.sml
 +parser-comb-sig.sml
 +parser-comb.sml
 +path-util-sig.sml
