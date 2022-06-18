@@ -21,6 +21,7 @@ js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 mlbasis-js.sml
+substring.sml
 js-common/int-inf.sml
 js-common/word.sml
 js-common/scan-num.sml

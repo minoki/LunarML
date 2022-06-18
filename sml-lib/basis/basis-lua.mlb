@@ -15,6 +15,7 @@ $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 mlbasis.sml
+substring.sml
 lua/word.sml
 lua/scan-num.sml
 scan-text.sml

@@ -1059,34 +1059,6 @@ fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
                           | NONE => NONE
 end
 
-structure Substring :> sig
-              type substring
-              type char = char
-              type string = string
-              val sub : substring * int -> char
-              val size : substring -> int
-              val base : substring -> string * int * int
-              val full : string -> substring
-              val string : substring -> string
-              val getc : substring -> (char * substring) option
-          end = struct
-type char = char
-type string = string
-type substring = string * int * int (* the underlying string, the starting index, the size *)
-fun sub ((s, i, z), j) = if 0 <= j andalso j < z then
-                             String.sub (s, i + j)
-                         else
-                             raise Subscript
-fun size (_, _, z) = z
-fun base x = x
-fun full s = (s, 0, String.size s)
-fun string (s, i, z) = String.substring (s, i, z)
-fun getc (s, i, z) = if z = 0 then
-                         NONE
-                     else
-                         SOME (String.sub (s, i), (s, i + 1, z - 1))
-end;
-
 signature CHAR = sig
     eqtype char
     eqtype string

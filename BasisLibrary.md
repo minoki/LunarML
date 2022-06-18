@@ -406,6 +406,9 @@ structure Substring :> sig
   val full : string -> substring
   val string : substring -> string
   val getc : substring -> (char * substring) option
+  val compare : substring * substring -> order
+  val foldl : (char * 'a -> 'a) -> 'a -> substring -> 'a
+  val foldr : (char * 'a -> 'a) -> 'a -> substring -> 'a
 end
 
 structure List : sig
@@ -545,6 +548,10 @@ signature MONO_VECTOR = sig
   val update : vector * int * elem -> vector
   val concat : vector list -> vector
   val map : (elem -> elem) -> vector -> vector
+  val foldli : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
+  val foldri : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
+  val foldl : (elem * 'a -> 'a) -> 'a -> vector -> 'a
+  val foldr : (elem * 'a -> 'a) -> 'a -> vector -> 'a
   val exists : (elem -> bool) -> vector -> bool
   val all : (elem -> bool) -> vector -> bool
 end
