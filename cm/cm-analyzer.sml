@@ -271,8 +271,9 @@ and goSigExp env (S.BasicSigExp (_, specs)) : env' Syntax.StrIdMap.map * module_
                                                 NONE => (Syntax.StrIdMap.empty, { usedStructures = Syntax.StrIdSet.empty, usedSignatures = Syntax.SigIdSet.singleton sigid, usedFunctors = Syntax.FunIdSet.empty })
                                               | SOME (MkEnv strMap) => (strMap, emptyModuleUsage)
                                            )
-  | goSigExp env (S.TypeRealisationExp (_, sigexp, _, longtycon, ty)) = let val usage = goTy (toCoreEnv env) ty
-                                                                        in (Syntax.StrIdMap.empty, fromCoreUsage usage)
+  | goSigExp env (S.TypeRealisationExp (_, sigexp, _, longtycon, ty)) = let val (s, usage) = goSigExp env sigexp
+                                                                            val usage' = goTy (toCoreEnv env) ty
+                                                                        in (s, unionModuleUsage (usage, fromCoreUsage usage'))
                                                                         end
 
 fun goStrExp (env : module_env) (S.StructExp (_, strdecs)) : env' Syntax.StrIdMap.map * module_usage = goStrDecs env strdecs

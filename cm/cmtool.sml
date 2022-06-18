@@ -14,14 +14,14 @@ fun run [] = ()
                                             val graph = CMEval.graph state
                                             val sorted = CMEval.sort (state, graph)
                                             val exports = CMEval.processExports (state, exports)
-                                        in (* CMSyntax.MLSymbolMap.appi (fn (sym, file) => print (CMSyntax.MLSymbol.toString sym ^ ": " ^ file ^ "\n")) definedIn
+                                        in print "=== <sym> is defined in <file> ===\n"
+                                         ; CMSyntax.MLSymbolMap.appi (fn (sym, file) => print (CMSyntax.MLSymbol.toString sym ^ ": " ^ file ^ "\n")) definedIn
+                                         ; print "=== <file> uses <sym> ===\n"
                                          ; CMEval.StringMap.appi (fn (file, set) => print (file ^ ": " ^ String.concatWith "," (List.map CMSyntax.MLSymbol.toString (CMSyntax.MLSymbolSet.listItems set)) ^ "\n")) uses
+                                         ; print "=== <file> depends on <files> ===\n"
                                          ; CMEval.StringMap.appi (fn (file, set) => print (file ^ ": " ^ String.concatWith "," (CMEval.StringSet.listItems set) ^ "\n")) graph
-                                         ; print "===\n"
-                                         ; List.app (fn file => print (file ^ "\n")) (List.rev allFilesRev)
-                                         ; print "===\n"
-                                            *)
-                                            print "local\n"
+                                         ; print "=== MLB ===\n"
+                                         ; print "local\n"
                                          ; List.app (fn file => print (file ^ "\n")) (List.rev sorted)
                                          ; print "in\n"
                                          ; List.app (fn item => print (CMSyntax.MLSymbol.toString item ^ "\n")) exports
