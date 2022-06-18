@@ -1,5 +1,9 @@
 all: smlnj-lib/Util/smlnj-lib.mlb ml-yacc/lib/mlyacc-lib.mlb
 
+install: install-smlnj-lib install-mlyacc-lib
+
+.PHONY: all install
+
 #
 # smlnj-lib
 #
@@ -14,11 +18,15 @@ smlnj-lib/Util/smlnj-lib.mlb: smlnj-lib.tgz
 
 smlnj-lib: smlnj-lib/Util/smlnj-lib.mlb
 
+install-smlnj-lib: smlnj-lib
+	mkdir -p ../sml-lib/smlnj-lib/Util/
+	cp smlnj-lib/Util/*.sml smlnj-lib/Util/*.mlb ../sml-lib/smlnj-lib/Util/
+
 # For LunarML maintainer
 smlnj-lib-lunarml.patch:
 	diff --recursive -u -N smlnj-lib-original smlnj-lib-lunarml > smlnj-lib-lunarml.patch || true
 
-.PHONY: smlnj-lib smlnj-lib-lunarml.patch
+.PHONY: smlnj-lib smlnj-lib-lunarml.patch install-smlnj-lib
 
 #
 # mlyacc-lib
@@ -37,4 +45,8 @@ ml-yacc/lib/mlyacc-lib.mlb: mlyacc-lib.mlb ml-yacc/lib/sources.cm
 
 ml-yacc: ml-yacc/lib/mlyacc-lib.mlb
 
-.PHONY: ml-yacc
+install-mlyacc-lib: ml-yacc
+	mkdir -p ../sml-lib/mlyacc-lib/
+	cp ml-yacc/lib/*.sml ml-yacc/lib/*.sig ml-yacc/lib/*.mlb ../sml-lib/mlyacc-lib/
+
+.PHONY: ml-yacc install-mlyacc-lib
