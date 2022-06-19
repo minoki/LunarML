@@ -26,6 +26,8 @@ list-pair.sml
 int-inf.sml
 lua/mono-vector.sml
 lua/mono-array.sml
+lua/unsafe-extra.sml
+lua/byte.sml
 lua/text-io.sml
 lua/os.sml
 lua/command-line.sml
@@ -37,6 +39,7 @@ signature REAL
 signature CHAR
 signature STRING
 signature MONO_VECTOR
+signature MONO_VECTOR_SLICE
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
 structure Unsafe (* extension; to be moved... *)
@@ -72,5 +75,11 @@ structure IntInf
 structure CharVector
 structure CharArray
 structure CharArraySlice
+structure Word8Vector
+structure Word8VectorSlice
+structure Word8Array
+structure Word8ArraySlice
+signature BYTE
+structure Byte
 top-level.sml
 end

@@ -10,8 +10,11 @@ signature MONO_ARRAY = sig
     val sub : array * int -> elem
     val update : array * int * elem -> unit
     val vector : array -> vector
+    val copy : { src : array, dst : array, di : int } -> unit
     val appi : (int * elem -> unit) -> array -> unit
     val app : (elem -> unit) -> array -> unit
+    val modifyi : (int * elem -> elem) -> array -> unit
+    val modify : (elem -> elem) -> array -> unit
 end;
 
 signature MONO_ARRAY_SLICE = sig
@@ -41,8 +44,11 @@ functor GenericMonoArrayAndArraySlice (type elem) : sig
                           val length : array -> int
                           val sub : array * int -> elem
                           val update : array * int * elem -> unit
+                          val copy : { src : array, dst : array, di : int } -> unit
                           val appi : (int * elem -> unit) -> array -> unit
                           val app : (elem -> unit) -> array -> unit
+                          val modifyi : (int * elem -> elem) -> array -> unit
+                          val modify : (elem -> elem) -> array -> unit
                       end
             structure MonoArraySlice : sig
                           type elem = elem
@@ -69,6 +75,30 @@ type array = elem Array.array
 type slice = elem ArraySlice.slice
 end
 end;
+
+structure Word8ArrayAndArraySlice :> sig
+              structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
+                                                where type elem = Word8.word
+              structure Word8ArraySlice : MONO_ARRAY_SLICE where type vector = Word8Vector.vector
+                                                           where type vector_slice = Word8VectorSlice.slice
+                                                           where type array = Word8Array.array
+                                                           where type elem = Word8.word
+          end
+  = struct
+  structure Base = GenericMonoArrayAndArraySlice (type elem = Word8.word)
+  structure Word8Array = struct
+  open Base.MonoArray
+  type vector = Word8Vector.vector
+  fun vector (a : array) = Word8Vector.tabulate (length a, fn i => sub (a, i))
+  end
+  structure Word8ArraySlice = struct
+  open Base.MonoArraySlice
+  type vector = Word8Vector.vector
+  type vector_slice = Word8VectorSlice.slice
+  fun vector (a : slice) = Word8Vector.tabulate (ArraySlice.length a, fn i => ArraySlice.sub (a, i))
+  end
+end;
+open Word8ArrayAndArraySlice;
 
 structure CharArrayAndArraySlice :> sig
               structure CharArray : MONO_ARRAY where type vector = CharVector.vector

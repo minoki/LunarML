@@ -1296,6 +1296,7 @@ structure Array : sig
               val length : 'a array -> int
               val sub : 'a array * int -> 'a
               val update : 'a array * int * 'a -> unit
+              val copy : { src : 'a array, dst : 'a array, di : int } -> unit
               val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
               val appi : (int * 'a -> unit) -> 'a array -> unit
               val app : ('a -> unit) -> 'a array -> unit
@@ -1305,6 +1306,9 @@ structure Array : sig
               val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val toList : 'a array -> 'a list
+              val fromVector : 'a vector -> 'a array
+              val toVector : 'a array -> 'a vector
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
@@ -1318,6 +1322,19 @@ fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                                  raise Subscript
                              else
                                  Unsafe.Array.update (arr, i, value)
+fun copy { src, dst, di } = let val srcLen = length src
+                            in if 0 <= di andalso di + srcLen <= length dst then
+                                   let fun loop i = if i >= srcLen then
+                                                        ()
+                                                    else
+                                                        ( Unsafe.Array.update (dst, di + i, Unsafe.Array.sub (src, i))
+                                                        ; loop (i + 1)
+                                                        )
+                                   in loop 0
+                                   end
+                               else
+                                   raise Subscript
+                            end
 fun copyVec { src, dst, di } = let val srcLen = Vector.length src
                                in if 0 <= di andalso di + Vector.length src <= length dst then
                                       let fun loop i = if i >= srcLen then
@@ -1400,4 +1417,7 @@ fun foldr f init arr = let fun loop (i, acc) = if i < 0 then
 val array = _Prim.Array.array
 val fromList = _Prim.Array.fromList
 val tabulate = _Prim.Array.tabulate
+fun toList a = List.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
+fun fromVector v = tabulate (Vector.length v, fn i => Unsafe.Vector.sub (v, i))
+fun toVector a = Vector.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
 end; (* structure Array *)

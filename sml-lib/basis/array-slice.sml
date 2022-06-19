@@ -9,6 +9,21 @@ structure ArraySlice :> sig
               val vector : 'a slice -> 'a Vector.vector
               val copy : { src : 'a slice, dst : 'a Array.array, di : int } -> unit
               val copyVec : { src : 'a VectorSlice.slice, dst : 'a Array.array, di : int } -> unit
+              val isEmpty : 'a slice -> bool
+              val getItem : 'a slice -> ('a * 'a slice) option
+              val appi : (int * 'a -> unit) -> 'a slice -> unit
+              val app : ('a -> unit) -> 'a slice -> unit
+              val modifyi : (int * 'a -> 'a) -> 'a slice -> unit
+              val modify : ('a -> 'a) -> 'a slice -> unit
+              val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a slice -> 'b
+              val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a slice -> 'b
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b
+              val findi : (int * 'a -> bool) -> 'a slice -> (int * 'a) option
+              val find : ('a -> bool) -> 'a slice -> 'a option
+              val exists : ('a -> bool) -> 'a slice -> bool
+              val all : ('a -> bool) -> 'a slice -> bool
+              val collate : ('a * 'a -> order) -> 'a slice * 'a slice -> order
           end = struct
 (* invariant: 0 <= start <= start + length <= Array.length base *)
 type 'a slice = { base : 'a array
@@ -68,4 +83,123 @@ fun copyVec { src = slice, dst, di } = let val length = VectorSlice.length slice
                                                             )
                                        in loop 0
                                        end
-end
+fun isEmpty { base, start, length } = length = 0
+fun getItem { base, start, length } = if length > 0 then
+                                          SOME (Unsafe.Array.sub (base, start), { base = base, start = start + 1, length = length - 1 })
+                                      else
+                                          NONE
+fun appi f { base, start, length } = let fun loop i = if i >= length then
+                                                          ()
+                                                      else
+                                                          (f (i, Unsafe.Array.sub (base, start + i)) : unit; loop (i + 1))
+                                     in loop 0
+                                     end
+fun app f { base, start, length } = let val z = start + length
+                                        fun loop i = if i >= z then
+                                                         ()
+                                                     else
+                                                         (f (Unsafe.Array.sub (base, i)) : unit; loop (i + 1))
+                                    in loop start
+                                    end
+fun modifyi f { base, start, length } = let fun loop i = if i >= length then
+                                                             ()
+                                                         else
+                                                             let val j = start + i
+                                                             in Unsafe.Array.update (base, j, f (i, Unsafe.Array.sub (base, j)))
+                                                              ; loop (i + 1)
+                                                             end
+                                        in loop 0
+                                        end
+fun modify f { base, start, length } = let val z = start + length
+                                           fun loop i = if i >= z then
+                                                            ()
+                                                        else
+                                                            ( Unsafe.Array.update (base, i, f (Unsafe.Array.sub (base, i)))
+                                                            ; loop (i + 1)
+                                                            )
+                                       in loop start
+                                       end
+fun foldli f init { base, start, length } = let fun loop (i, acc) = if i >= length then
+                                                                        acc
+                                                                    else
+                                                                        let val j = start + i
+                                                                        in loop (i + 1, f (i, Unsafe.Array.sub (base, j), acc))
+                                                                        end
+                                            in loop (0, init)
+                                            end
+fun foldri f init { base, start, length } = let fun loop (i, acc) = if i < 0 then
+                                                                        acc
+                                                                    else
+                                                                        let val j = start + i
+                                                                        in loop (i - 1, f (i, Unsafe.Array.sub (base, j), acc))
+                                                                        end
+                                            in loop (length - 1, init)
+                                            end
+fun foldl f init { base, start, length } = let val z = start + length
+                                               fun loop (i, acc) = if i >= z then
+                                                                       acc
+                                                                   else
+                                                                       loop (i + 1, f (Unsafe.Array.sub (base, i), acc))
+                                           in loop (start, init)
+                                           end
+fun foldr f init { base, start, length } = let fun loop (i, acc) = if i < start then
+                                                                       acc
+                                                                   else
+                                                                       loop (i - 1, f (Unsafe.Array.sub (base, i), acc))
+                                           in loop (start + length - 1, init)
+                                           end
+fun findi f { base, start, length } = let fun loop i = if i >= length then
+                                                         NONE
+                                                     else
+                                                         let val x = Unsafe.Array.sub (base, start + i)
+                                                         in if f (i, x) then
+                                                                SOME (i, x)
+                                                            else
+                                                                loop (i + 1)
+                                                         end
+                                      in loop 0
+                                      end
+fun find f { base, start, length } = let val z = start + length
+                                         fun loop i = if i >= z then
+                                                          NONE
+                                                      else
+                                                          let val x = Unsafe.Array.sub (base, i)
+                                                          in if f x then
+                                                                 SOME x
+                                                             else
+                                                                 loop (i + 1)
+                                                          end
+                                     in loop start
+                                     end
+fun exists f { base, start, length } = let val z = start + length
+                                           fun loop i = if i >= z then
+                                                            false
+                                                        else
+                                                            if f (Unsafe.Array.sub (base, i)) then
+                                                                true
+                                                            else
+                                                                loop (i + 1)
+                                       in loop start
+                                       end
+fun all f { base, start, length } = let val z = start + length
+                                        fun loop i = if i >= z then
+                                                         true
+                                                     else
+                                                         if not (f (Unsafe.Array.sub (base, i))) then
+                                                             false
+                                                         else
+                                                             loop (i + 1)
+                                    in loop start
+                                    end
+fun collate compare (xs, ys) = let val xl = length xs
+                                   val yl = length ys
+                                   fun loop i = case (xl = i, yl = i) of
+                                                    (true, true) => EQUAL
+                                                  | (true, false) => LESS
+                                                  | (false, true) => GREATER
+                                                  | (false, false) => case compare (sub (xs, i), sub (ys, i)) of
+                                                                          EQUAL => loop (i + 1)
+                                                                        | t => t
+                               in loop 0
+                               end
+end;

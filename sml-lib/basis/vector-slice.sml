@@ -43,6 +43,6 @@ fun exists f { base, start, length } = let fun loop i = if i >= length then
                                                                 true
                                                             else
                                                                 loop (i + 1)
-                                       in loop start
+                                       in loop 0
                                        end
 end
