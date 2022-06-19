@@ -1299,6 +1299,12 @@ structure Array : sig
               val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
               val appi : (int * 'a -> unit) -> 'a array -> unit
               val app : ('a -> unit) -> 'a array -> unit
+              val modifyi : (int * 'a -> 'a) -> 'a array -> unit
+              val modify : ('a -> 'a) -> 'a array -> unit
+              val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
           end = struct
 datatype array = datatype array
 datatype vector = datatype vector
@@ -1343,6 +1349,54 @@ fun app f arr = let val n = length arr
                                      )
                 in loop 0
                 end
+fun modifyi f arr = let val n = length arr
+                        fun loop i = if i >= n then
+                                         ()
+                                     else
+                                         let val x = Unsafe.Array.sub (arr, i)
+                                             val y = f (i, x)
+                                         in Unsafe.Array.update (arr, i, y)
+                                          ; loop (i + 1)
+                                         end
+                    in loop 0
+                    end
+fun modify f arr = let val n = length arr
+                       fun loop i = if i >= n then
+                                        ()
+                                    else
+                                        let val x = Unsafe.Array.sub (arr, i)
+                                            val y = f x
+                                        in Unsafe.Array.update (arr, i, y)
+                                         ; loop (i + 1)
+                                        end
+                   in loop 0
+                   end
+fun foldli f init arr = let val n = length arr
+                            fun loop (i, acc) = if i >= n then
+                                                    acc
+                                                else
+                                                    loop (i + 1, f (i, Unsafe.Array.sub (arr, i), acc))
+                        in loop (0, init)
+                        end
+fun foldri f init arr = let fun loop (i, acc) = if i < 0 then
+                                                    acc
+                                                else
+                                                    loop (i - 1, f (i, Unsafe.Array.sub (arr, i), acc))
+                        in loop (length arr - 1, init)
+                        end
+fun foldl f init arr = let val n = length arr
+                           fun loop (i, acc) = if i >= n then
+                                                   acc
+                                               else
+                                                   loop (i + 1, f (Unsafe.Array.sub (arr, i), acc))
+                       in loop (0, init)
+                       end
+fun foldr f init arr = let fun loop (i, acc) = if i < 0 then
+                                                   acc
+                                               else
+                                                   loop (i - 1, f (Unsafe.Array.sub (arr, i), acc))
+                       in loop (length arr - 1, init)
+                       end
 val array = _Prim.Array.array
 val fromList = _Prim.Array.fromList
 val tabulate = _Prim.Array.tabulate

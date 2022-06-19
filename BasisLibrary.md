@@ -522,6 +522,12 @@ structure Array : sig
   val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
   val appi : (int * 'a -> unit) -> 'a array -> unit
   val app : ('a -> unit) -> 'a array -> unit
+  val modifyi : (int * 'a -> 'a) -> 'a array -> unit
+  val modify : ('a -> 'a) -> 'a array -> unit
+  val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
+  val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
+  val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+  val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
 end
 
 structure ArraySlice :> sig
