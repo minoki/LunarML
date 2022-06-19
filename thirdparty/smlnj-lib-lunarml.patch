@@ -1,3 +1,45 @@
+diff --recursive -u -N smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util/base64.sml
+--- smlnj-lib-original/Util/base64.sml	2012-09-25 00:54:30.000000000 +0900
++++ smlnj-lib-lunarml/Util/base64.sml	2022-06-19 19:17:44.000000000 +0900
+@@ -15,6 +15,7 @@
+     structure W8V = Word8Vector
+     structure W8A = Word8Array
+     structure UCV = Unsafe.CharVector
++    structure UCA = Unsafe.CharArray
+     structure UW8V = Unsafe.Word8Vector
+ 
+   (* encoding table *)
+@@ -59,16 +60,16 @@
+     local
+       fun encode64 (vec, start, len) = let
+ 	    val outLen = 4 * Int.quot(len + 2, 3)
+-	    val outBuf = Unsafe.CharVector.create outLen
++	    val outBuf = Unsafe.CharArray.create outLen
+ 	    val nTriples = Int.quot(len, 3)
+ 	    val extra = Int.rem(len, 3)
+ 	    fun insBuf (i, (c1, c2, c3, c4)) = let
+ 		  val idx = 4*i
+ 		  in
+-		    UCV.update(outBuf, idx,   c1);
+-		    UCV.update(outBuf, idx+1, c2);
+-		    UCV.update(outBuf, idx+2, c3);
+-		    UCV.update(outBuf, idx+3, c4)
++		    UCA.update(outBuf, idx,   c1);
++		    UCA.update(outBuf, idx+1, c2);
++		    UCA.update(outBuf, idx+2, c3);
++		    UCA.update(outBuf, idx+3, c4)
+ 		  end
+ 	    fun loop (i, idx) = if (i < nTriples)
+ 		  then (
+@@ -81,7 +82,7 @@
+ 		    (* end case *))
+ 	    in
+ 	      loop (0, start);
+-	      outBuf
++	      CharArray.vector outBuf
+ 	    end
+     in
+ 
 diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
 --- smlnj-lib-original/Util/graph-scc-fn.sml	2020-04-20 05:46:13.000000000 +0900
 +++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-18 17:18:17.000000000 +0900
