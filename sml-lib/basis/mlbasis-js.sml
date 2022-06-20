@@ -553,6 +553,7 @@ structure String : sig
               val <= : string * string -> bool
               val > : string * string -> bool
               val >= : string * string -> bool
+              val implodeRev : char list -> string
           end = struct
 type string = string
 type char = char
@@ -561,6 +562,7 @@ val str = String.str
 val op ^ = String.^
 val sub = String.sub
 val implode = String.implode
+fun implodeRev l = implode (List.rev l)
 fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
                                                             raise Subscript
                                                         else
@@ -572,16 +574,16 @@ fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse 
   | extract (s, i, SOME j) = substring (s, i, j)
 fun concatWith (s : string) (l : string list) : string = _primCall "call2" (_Prim.String.concatWith, s, l)
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
-fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implode (List.rev acc) :: revTokens)
+fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
                        | go (revTokens, acc, x :: xs) = if f x then
-                                                            go (if List.null acc then revTokens else implode (List.rev acc) :: revTokens, [], xs)
+                                                            go (if List.null acc then revTokens else implodeRev acc :: revTokens, [], xs)
                                                         else
                                                             go (revTokens, x :: acc, xs)
                  in go ([], [], explode s)
                  end
-fun fields f s = let fun go (revFields, acc, []) = List.rev (implode (List.rev acc) :: revFields)
+fun fields f s = let fun go (revFields, acc, []) = List.rev (implodeRev acc :: revFields)
                        | go (revFields, acc, x :: xs) = if f x then
-                                                            go (implode (List.rev acc) :: revFields, [], xs)
+                                                            go (implodeRev acc :: revFields, [], xs)
                                                         else
                                                             go (revFields, x :: acc, xs)
                  in go ([], [], explode s)
@@ -602,28 +604,6 @@ fun compare (s, t) = if s = t then
 open String (* size, ^, str, <, <=, >, >=, concat, implode, translate, map *)
 end (* structure String *)
 val op ^ : string * string -> string = String.^;
-
-structure StringCvt :> sig
-              datatype radix = BIN | OCT | DEC | HEX
-              datatype realfmt = SCI of int option
-                               | FIX of int option
-                               | GEN of int option
-                               | EXACT
-              type ('a, 'b) reader = 'b -> ('a * 'b) option
-              type cs
-              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
-          end where type radix = StringCvt.radix
-              where type realfmt = StringCvt.realfmt = struct
-open StringCvt
-type cs = string * int (* the underlying string, the starting index *)
-fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
-                                                    SOME (String.sub (s, i), (s, i + 1))
-                                                else
-                                                    NONE
-                                  ) (s, 0) of
-                            SOME (x, _) => SOME x
-                          | NONE => NONE
-end
 
 signature CHAR = sig
     eqtype char
@@ -755,6 +735,62 @@ open Char (* <, <=, >, >= *)
 (* scan, fromString, toCString, fromCString *)
 end (* structure Char *)
 
+structure StringCvt :> sig
+              datatype radix = BIN | OCT | DEC | HEX
+              datatype realfmt = SCI of int option
+                               | FIX of int option
+                               | GEN of int option
+                               | EXACT
+              type ('a, 'b) reader = 'b -> ('a * 'b) option
+              val padLeft : char -> int -> string -> string
+              val padRight : char -> int -> string -> string
+              val splitl : (char -> bool) -> (char, 'a) reader -> 'a -> string * 'a
+              val takel : (char -> bool) -> (char, 'a) reader -> 'a -> string
+              val dropl : (char -> bool) -> (char, 'a) reader -> 'a -> 'a
+              val skipWS : (char, 'a) reader -> 'a -> 'a
+              type cs
+              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
+          end where type radix = StringCvt.radix
+              where type realfmt = StringCvt.realfmt = struct
+open StringCvt
+fun padLeft c i s = if String.size s >= i orelse i <= 0 then
+                        s
+                    else
+                        let val c = String.str c
+                            fun loop (j, acc) = if j <= 0 then
+                                                    String.concat acc
+                                                else
+                                                    loop (j - 1, c :: acc)
+                        in loop (i - String.size s, [s])
+                        end
+fun padRight c i s = if String.size s >= i orelse i <= 0 then
+                         s
+                     else
+                         let val c = String.str c
+                             fun loop (j, acc) = if j <= 0 then
+                                                     String.concat (s :: acc)
+                                                 else
+                                                     loop (j - 1, c :: acc)
+                         in loop (i - String.size s, [])
+                         end
+fun splitl f rdr src = let fun loop (acc, src) = case rdr src of
+                                                     NONE => (String.implodeRev acc, src)
+                                                   | SOME (x, src') => loop (x :: acc, src')
+                       in loop ([], src)
+                       end
+fun takel f rdr s = #1 (splitl f rdr s)
+fun dropl f rdr s = #2 (splitl f rdr s)
+fun skipWS rdr = dropl Char.isSpace rdr
+type cs = string * int (* the underlying string, the starting index *)
+fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
+                                                    SOME (String.sub (s, i), (s, i + 1))
+                                                else
+                                                    NONE
+                                  ) (s, 0) of
+                            SOME (x, _) => SOME x
+                          | NONE => NONE
+end
+
 signature STRING = sig
     eqtype string
     eqtype char
@@ -789,7 +825,7 @@ signature STRING = sig
     (* val fromCString : String.string -> string option *)
     (* from https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING: *)
     (* val rev : string -> string *)
-    (* val implodeRev : char list -> string *)
+    val implodeRev : char list -> string
     (* val concatWithMap : string -> ('a -> string) -> 'a list -> string *)
 end;
 
@@ -857,6 +893,11 @@ structure Array : sig
               val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val exists : ('a -> bool) -> 'a array -> bool
+              val all : ('a -> bool) -> 'a array -> bool
+              val toList : 'a array -> 'a list
+              val fromVector : 'a vector -> 'a array
+              val toVector : 'a array -> 'a vector
           end = struct
 open Array (* datatype array, length, sub, update, array, fromList, tabulate *)
 datatype vector = datatype vector
@@ -940,4 +981,21 @@ fun foldr f init arr = let fun loop (i, acc) = if i < 0 then
                                                    loop (i - 1, f (Unsafe.Array.sub (arr, i), acc))
                        in loop (length arr - 1, init)
                        end
+fun exists f arr = let val n = length arr
+                       fun loop i = if i >= n then
+                                        false
+                                    else
+                                        f (Unsafe.Array.sub (arr, i)) orelse loop (i + 1)
+                   in loop 0
+                   end
+fun all f arr = let val n = length arr
+                    fun loop i = if i >= n then
+                                     true
+                                 else
+                                     f (Unsafe.Array.sub (arr, i)) andalso loop (i + 1)
+                in loop 0
+                end
+fun toList a = List.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
+fun fromVector v = tabulate (Vector.length v, fn i => Unsafe.Vector.sub (v, i))
+fun toVector a = Vector.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
 end; (* structure Array *)

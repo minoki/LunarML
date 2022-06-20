@@ -24,6 +24,7 @@ mlbasis-js.sml
 substring.sml
 js-common/int-inf.sml
 js-common/word.sml
+scan-bool.sml
 js-common/scan-num.sml
 scan-text.sml
 io.sml
@@ -34,6 +35,7 @@ js-common/mono-vector.sml
 js-common/mono-array.sml
 end
 in
+signature BOOL
 signature INTEGER
 signature WORD
 signature REAL

@@ -109,8 +109,8 @@ structure String :> STRING where type string = string where type char = Char.cha
 fun scan getc strm = let fun go (strm, revAcc) = case scanChar (getc, strm) of
                                                      Parsed (c, strm') => go (strm', c :: revAcc)
                                                    | Skipped strm' => go (strm', revAcc)
-                                                   | Error => SOME (String.implode (List.rev revAcc), strm)
-                                                   | Empty => SOME (String.implode (List.rev revAcc), strm)
+                                                   | Error => SOME (String.implodeRev revAcc, strm)
+                                                   | Empty => SOME (String.implodeRev revAcc, strm)
                      in case scanChar (getc, strm) of
                             Parsed (c, strm') => go (strm', [c])
                           | Skipped strm' => go (strm', [])

@@ -142,9 +142,9 @@ local
       | go (revArcs, xs) = let val (arc, rest) = takeArc ([], xs)
                            in go (arc :: revArcs, rest)
                            end
-    and takeArc (acc, #"/" :: xs) = (String.implode (List.rev acc), xs)
+    and takeArc (acc, #"/" :: xs) = (String.implodeRev acc, xs)
       | takeArc (acc, x :: xs) = takeArc (x :: acc, xs)
-      | takeArc (acc, xs as []) = (String.implode (List.rev acc), xs)
+      | takeArc (acc, xs as []) = (String.implodeRev acc, xs)
 in
 fun mkCanonical path = case String.explode path of
                            [] => "."

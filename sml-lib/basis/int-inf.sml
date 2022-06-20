@@ -1,8 +1,9 @@
 (* assumption: Int.precision = Word.wordSize, Word.wordSize is even *)
-structure IntInf :> sig
+structure IntInfImpl :> sig
               (* INTEGER *)
               eqtype int
-              (* val toLarge, fromLarge *)
+              val toLarge : int -> int
+              val fromLarge : int -> int
               val toInt : int -> Int.int
               val fromInt : Int.int -> int
               val precision : Int.int option (* = NONE *)
@@ -28,10 +29,8 @@ structure IntInf :> sig
               val sameSign : int * int -> bool
               val fmt : StringCvt.radix -> int -> string
               val toString : int -> string
-              (*
               val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
               val fromString : string -> int option
-              *)
 
               (* INT_INF *)
               val divMod : int * int -> int * int
@@ -46,6 +45,23 @@ structure IntInf :> sig
               val notb : int -> int
               val << : int * Word.word -> int
               val ~>> : int * Word.word -> int
+
+              (* others *)
+              val fromWord : Word.word -> int
+              val fromWordX : Word.word -> int
+              val toWord : int -> Word.word
+              val fromWord8 : Word8.word -> int
+              val fromWord8X : Word8.word -> int
+              val toWord8 : int -> Word8.word
+              val fromWord16 : Word16.word -> int
+              val fromWord16X : Word16.word -> int
+              val toWord16 : int -> Word16.word
+              val fromWord32 : Word32.word -> int
+              val fromWord32X : Word32.word -> int
+              val toWord32 : int -> Word32.word
+              val fromWord64 : Word64.word -> int
+              val fromWord64X : Word64.word -> int
+              val toWord64 : int -> Word64.word
           end = struct
 structure Vector = struct
 open Vector
@@ -61,6 +77,8 @@ datatype int = ZERO
              | POSITIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
              | NEGATIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
 
+fun toLarge x = x
+fun fromLarge x = x
 fun toInt ZERO = 0
   | toInt (POSITIVE words) = if Vector.length words > 1 then
                                  raise Overflow
@@ -83,6 +101,37 @@ fun fromInt 0 = ZERO
                                        else
                                            NEGATIVE #[Word.fromInt (abs (x + 1)) + 0w1]
                       | NONE => NEGATIVE #[Word.fromInt (abs x)]
+
+fun fromWord 0w0 = ZERO
+  | fromWord w = POSITIVE #[w]
+fun fromWordX w = fromInt (Word.toIntX w)
+fun toWord ZERO = 0w0
+  | toWord (POSITIVE words) = Vector.sub (words, 0)
+  | toWord (NEGATIVE words) = ~ (Vector.sub (words, 0))
+fun fromWord8 0w0 = ZERO
+  | fromWord8 w = POSITIVE #[Word.fromLarge (Word8.toLarge w)]
+fun fromWord8X w = fromInt (Word8.toIntX w)
+fun toWord8 ZERO = 0w0
+  | toWord8 (POSITIVE words) = Word8.fromLarge (Word.toLarge (Vector.sub (words, 0)))
+  | toWord8 (NEGATIVE words) = ~ (Word8.fromLarge (Word.toLarge (Vector.sub (words, 0))))
+fun fromWord16 0w0 = ZERO
+  | fromWord16 w = POSITIVE #[Word.fromLarge (Word16.toLarge w)]
+fun fromWord16X w = fromInt (Word16.toIntX w)
+fun toWord16 ZERO = 0w0
+  | toWord16 (POSITIVE words) = Word16.fromLarge (Word.toLarge (Vector.sub (words, 0)))
+  | toWord16 (NEGATIVE words) = ~ (Word16.fromLarge (Word.toLarge (Vector.sub (words, 0))))
+fun fromWord32 0w0 = ZERO
+  | fromWord32 w = POSITIVE #[Word.fromLarge (Word32.toLarge w)]
+fun fromWord32X w = fromInt (Word32.toIntX w)
+fun toWord32 ZERO = 0w0
+  | toWord32 (POSITIVE words) = Word32.fromLarge (Word.toLarge (Vector.sub (words, 0)))
+  | toWord32 (NEGATIVE words) = ~ (Word32.fromLarge (Word.toLarge (Vector.sub (words, 0))))
+fun fromWord64 0w0 = ZERO
+  | fromWord64 w = POSITIVE #[Word.fromLarge w]
+fun fromWord64X w = fromInt (Word64.toIntX w) (* assume 64-bit int *)
+fun toWord64 ZERO = 0w0
+  | toWord64 (POSITIVE words) = Word.toLarge (Vector.sub (words, 0))
+  | toWord64 (NEGATIVE words) = ~ (Word.toLarge (Vector.sub (words, 0)))
 
 val precision : Int.int option = NONE
 val minInt : int option = NONE
@@ -639,6 +688,84 @@ fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
                              | NEGATIVE words => "~" ^ fmtHexAbs words
                           )
 
+local
+    open ScanNumUtils
+    fun scanDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (add (mul (radix, x), fromInt (digitToInt c)), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (fromInt (digitToInt c), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+    fun scanNegativeDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (sub (mul (radix, x), fromInt (digitToInt c)), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (fromInt (~ (digitToInt c)), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+in
+fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 2, isBinDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 2, isBinDigit, getc) strm
+                                   end
+  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 8, isOctDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 8, isOctDigit, getc) strm
+                                   end
+  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 10, Char.isDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 10, Char.isDigit, getc) strm
+                                   end
+  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                       val strm = case getc strm of
+                                                      SOME (#"0", strm') =>
+                                                      (case getc strm' of
+                                                           SOME (c, strm'') =>
+                                                           if c = #"x" orelse c = #"X" then
+                                                               case getc strm'' of
+                                                                   SOME (c, _) => if Char.isHexDigit c then
+                                                                                      strm''
+                                                                                  else
+                                                                                      strm
+                                                                 | NONE => strm
+                                                           else
+                                                               strm
+                                                         | NONE => strm
+                                                      )
+                                                    | _ => strm
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 16, Char.isHexDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 16, Char.isHexDigit, getc) strm
+                                   end
+fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+
 (* Overloaded identifiers *)
 val op + = add
 val op - = sub
@@ -653,6 +780,53 @@ fun x <= y = not (y < x)
 fun x > y = y < x
 fun x >= y = not (x < y)
 end
+structure IntInf : sig
+              (* INTEGER *)
+              eqtype int
+              val toLarge : int -> int
+              val fromLarge : int -> int
+              val toInt : int -> Int.int
+              val fromInt : Int.int -> int
+              val precision : Int.int option (* = NONE *)
+              val minInt : int option (* = NONE *)
+              val maxInt : int option (* = NONE *)
+              val + : int * int -> int
+              val - : int * int -> int
+              val * : int * int -> int
+              val div : int * int -> int
+              val mod : int * int -> int
+              val quot : int * int -> int
+              val rem : int * int -> int
+              val compare : int * int -> order
+              val < : int * int -> bool
+              val <= : int * int -> bool
+              val > : int * int -> bool
+              val >= : int * int -> bool
+              val ~ : int -> int
+              val abs : int -> int
+              val min : int * int -> int
+              val max : int * int -> int
+              val sign : int -> Int.int
+              val sameSign : int * int -> bool
+              val fmt : StringCvt.radix -> int -> string
+              val toString : int -> string
+              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
+              val fromString : string -> int option
+
+              (* INT_INF *)
+              val divMod : int * int -> int * int
+              val quotRem : int * int -> int * int
+              (*
+              val pow : int * Int.int -> int
+              val log2 : int -> Int.int
+              val orb : int * int -> int
+              val xorb : int * int -> int
+              val andb : int * int -> int
+              *)
+              val notb : int -> int
+              val << : int * Word.word -> int
+              val ~>> : int * Word.word -> int
+          end = IntInfImpl;
 _overload "Int" [IntInf.int]
   { + = IntInf.+
   , - = IntInf.-
@@ -666,4 +840,4 @@ _overload "Int" [IntInf.int]
   , > = IntInf.>
   , >= = IntInf.>=
   , fromInt = IntInf.fromInt
-  }
+  };

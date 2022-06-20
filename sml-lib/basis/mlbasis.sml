@@ -365,7 +365,7 @@ signature INTEGER = sig
     val abs : int -> int
     val min : int * int -> int
     val max : int * int -> int
-    val sign : int -> int
+    val sign : int -> Int.int
     val sameSign : int * int -> bool
     val fmt : StringCvt.radix -> int -> string
     val toString : int -> string
@@ -961,6 +961,7 @@ structure String : sig
               val <= : string * string -> bool
               val > : string * string -> bool
               val >= : string * string -> bool
+              val implodeRev : char list -> string
           end = struct
 type string = string
 type char = char
@@ -996,6 +997,9 @@ fun concatWith (s : string) (l : string list) : string = let val result = Lua.ca
 fun implode (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
                                        end
+fun implodeRev (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList (List.rev l))]
+                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                          end
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
 fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
@@ -1003,16 +1007,16 @@ fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua
 fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
                                                            in Lua.unsafeFromValue (Vector.sub (result, 0))
                                                            end
-fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implode (List.rev acc) :: revTokens)
+fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
                        | go (revTokens, acc, x :: xs) = if f x then
-                                                            go (if List.null acc then revTokens else implode (List.rev acc) :: revTokens, [], xs)
+                                                            go (if List.null acc then revTokens else implodeRev acc :: revTokens, [], xs)
                                                         else
                                                             go (revTokens, x :: acc, xs)
                  in go ([], [], explode s)
                  end
-fun fields f s = let fun go (revFields, acc, []) = List.rev (implode (List.rev acc) :: revFields)
+fun fields f s = let fun go (revFields, acc, []) = List.rev (implodeRev acc :: revFields)
                        | go (revFields, acc, x :: xs) = if f x then
-                                                            go (implode (List.rev acc) :: revFields, [], xs)
+                                                            go (implodeRev acc :: revFields, [], xs)
                                                         else
                                                             go (revFields, x :: acc, xs)
                  in go ([], [], explode s)
@@ -1036,28 +1040,6 @@ val op ^ : string * string -> string = String.^
 val concat : string list -> string = String.concat
 val size : string -> int = String.size
 val str : char -> string = String.str;
-
-structure StringCvt :> sig
-              datatype radix = BIN | OCT | DEC | HEX
-              datatype realfmt = SCI of int option
-                               | FIX of int option
-                               | GEN of int option
-                               | EXACT
-              type ('a, 'b) reader = 'b -> ('a * 'b) option
-              type cs
-              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
-          end where type radix = StringCvt.radix
-              where type realfmt = StringCvt.realfmt = struct
-open StringCvt
-type cs = string * int (* the underlying string, the starting index *)
-fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
-                                                    SOME (String.sub (s, i), (s, i + 1))
-                                                else
-                                                    NONE
-                                  ) (s, 0) of
-                            SOME (x, _) => SOME x
-                          | NONE => NONE
-end
 
 signature CHAR = sig
     eqtype char
@@ -1202,6 +1184,62 @@ end (* structure Char *)
 val chr = Char.chr
 val ord = Char.ord;
 
+structure StringCvt :> sig
+              datatype radix = BIN | OCT | DEC | HEX
+              datatype realfmt = SCI of int option
+                               | FIX of int option
+                               | GEN of int option
+                               | EXACT
+              type ('a, 'b) reader = 'b -> ('a * 'b) option
+              val padLeft : char -> int -> string -> string
+              val padRight : char -> int -> string -> string
+              val splitl : (char -> bool) -> (char, 'a) reader -> 'a -> string * 'a
+              val takel : (char -> bool) -> (char, 'a) reader -> 'a -> string
+              val dropl : (char -> bool) -> (char, 'a) reader -> 'a -> 'a
+              val skipWS : (char, 'a) reader -> 'a -> 'a
+              type cs
+              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
+          end where type radix = StringCvt.radix
+              where type realfmt = StringCvt.realfmt = struct
+open StringCvt
+fun padLeft c i s = if String.size s >= i orelse i <= 0 then
+                        s
+                    else
+                        let val c = String.str c
+                            fun loop (j, acc) = if j <= 0 then
+                                                    String.concat acc
+                                                else
+                                                    loop (j - 1, c :: acc)
+                        in loop (i - String.size s, [s])
+                        end
+fun padRight c i s = if String.size s >= i orelse i <= 0 then
+                         s
+                     else
+                         let val c = String.str c
+                             fun loop (j, acc) = if j <= 0 then
+                                                     String.concat (s :: acc)
+                                                 else
+                                                     loop (j - 1, c :: acc)
+                         in loop (i - String.size s, [])
+                         end
+fun splitl f rdr src = let fun loop (acc, src) = case rdr src of
+                                                     NONE => (String.implodeRev acc, src)
+                                                   | SOME (x, src') => loop (x :: acc, src')
+                       in loop ([], src)
+                       end
+fun takel f rdr s = #1 (splitl f rdr s)
+fun dropl f rdr s = #2 (splitl f rdr s)
+fun skipWS rdr = dropl Char.isSpace rdr
+type cs = string * int (* the underlying string, the starting index *)
+fun scanString scan s = case scan (fn (s, i) => if i < String.size s then
+                                                    SOME (String.sub (s, i), (s, i + 1))
+                                                else
+                                                    NONE
+                                  ) (s, 0) of
+                            SOME (x, _) => SOME x
+                          | NONE => NONE
+end
+
 signature STRING = sig
     eqtype string
     eqtype char
@@ -1236,7 +1274,7 @@ signature STRING = sig
     (* val fromCString : String.string -> string option *)
     (* from https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING: *)
     (* val rev : string -> string *)
-    (* val implodeRev : char list -> string *)
+    val implodeRev : char list -> string
     (* val concatWithMap : string -> ('a -> string) -> 'a list -> string *)
 end;
 
@@ -1296,6 +1334,7 @@ structure Array : sig
               val length : 'a array -> int
               val sub : 'a array * int -> 'a
               val update : 'a array * int * 'a -> unit
+              val vector : 'a array -> 'a vector
               val copy : { src : 'a array, dst : 'a array, di : int } -> unit
               val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
               val appi : (int * 'a -> unit) -> 'a array -> unit
@@ -1306,6 +1345,8 @@ structure Array : sig
               val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val exists : ('a -> bool) -> 'a array -> bool
+              val all : ('a -> bool) -> 'a array -> bool
               val toList : 'a array -> 'a list
               val fromVector : 'a vector -> 'a array
               val toVector : 'a array -> 'a vector
@@ -1322,6 +1363,7 @@ fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                                  raise Subscript
                              else
                                  Unsafe.Array.update (arr, i, value)
+fun vector a = Vector.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
 fun copy { src, dst, di } = let val srcLen = length src
                             in if 0 <= di andalso di + srcLen <= length dst then
                                    let fun loop i = if i >= srcLen then
@@ -1414,6 +1456,20 @@ fun foldr f init arr = let fun loop (i, acc) = if i < 0 then
                                                    loop (i - 1, f (Unsafe.Array.sub (arr, i), acc))
                        in loop (length arr - 1, init)
                        end
+fun exists f arr = let val n = length arr
+                       fun loop i = if i >= n then
+                                        false
+                                    else
+                                        f (Unsafe.Array.sub (arr, i)) orelse loop (i + 1)
+                   in loop 0
+                   end
+fun all f arr = let val n = length arr
+                    fun loop i = if i >= n then
+                                     true
+                                 else
+                                     f (Unsafe.Array.sub (arr, i)) andalso loop (i + 1)
+                in loop 0
+                end
 val array = _Prim.Array.array
 val fromList = _Prim.Array.fromList
 val tabulate = _Prim.Array.tabulate

@@ -127,6 +127,12 @@ structure StringCvt :> sig
                    | GEN of int option
                    | EXACT
   type ('a,'b) reader = 'b -> ('a * 'b) option
+  val padLeft : char -> int -> string -> string
+  val padRight : char -> int -> string -> string
+  val splitl : (char -> bool) -> (char, 'a) reader -> 'a -> string * 'a
+  val takel : (char -> bool) -> (char, 'a) reader -> 'a -> string
+  val dropl : (char -> bool) -> (char, 'a) reader -> 'a -> 'a
+  val skipWS : (char, 'a) reader -> 'a -> 'a
   type cs
   val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
 end
@@ -135,6 +141,8 @@ structure Bool : sig
   datatype bool = datatype bool
   val not : bool -> bool
   val toString : bool -> string
+  val scan : (char, 'a) StringCvt.reader -> (bool, 'a) StringCvt.reader
+  val fromString : string -> bool option
 end
 
 signature INTEGER = sig
@@ -162,7 +170,7 @@ signature INTEGER = sig
   val abs : int -> int
   val min : int * int -> int
   val max : int * int -> int
-  val sign : int -> int
+  val sign : int -> Int.int
   val sameSign : int * int -> bool
   val fmt : StringCvt.radix -> int -> string
   val toString : int -> string
@@ -392,6 +400,9 @@ signature STRING = sig
   val fromString : String.string -> string option
   val toCString : string -> String.string
   (* val fromCString : String.string -> string option *)
+
+  (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING *)
+  val implodeRev : char list -> string
 end
 
 structure String :> STRING where type string = string
@@ -405,8 +416,22 @@ structure Substring :> sig
   val base : substring -> string * int * int
   val full : string -> substring
   val string : substring -> string
+  val isEmpty : substring -> bool
   val getc : substring -> (char * substring) option
+  val first : substring -> char option
+  val triml : int -> substring -> substring
+  val trimr : int -> substring -> substring
+  val slice : substring * int * int option -> substring
+  val concat : substring list -> string
+  val concatWith : string -> substring list -> string
+  val isPrefix : string -> substring -> bool
   val compare : substring * substring -> order
+  val splitl : (char -> bool) -> substring -> substring * substring
+  val splitr : (char -> bool) -> substring -> substring * substring
+  val dropl : (char -> bool) -> substring -> substring
+  val dropr : (char -> bool) -> substring -> substring
+  val takel : (char -> bool) -> substring -> substring
+  val taker : (char -> bool) -> substring -> substring
   val foldl : (char * 'a -> 'a) -> 'a -> substring -> 'a
   val foldr : (char * 'a -> 'a) -> 'a -> substring -> 'a
 end
@@ -528,6 +553,11 @@ structure Array : sig
   val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
   val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
   val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+  val exists : ('a -> bool) -> 'a array -> bool
+  val all : ('a -> bool) -> 'a array -> bool
+  val toList : 'a array -> 'a list
+  val fromVector : 'a vector -> 'a array
+  val toVector : 'a array -> 'a vector
 end
 
 structure ArraySlice :> sig
