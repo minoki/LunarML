@@ -90,10 +90,10 @@ fun p <|> q = fn s => case p s of
                         | Err (true, e) => Err (true, e)
 fun fail message = fn (s : internalState) => Err (false, { pos = #pos s, messages = [Message message] })
 infix 0 <?>
-fun p <?> msg = fn s => case p s of
-                            Ok' r => Ok' r
-                          | Err (false, _) => Err (false, { pos = #pos s, messages = [Expected msg] })
-                          | Err e => Err e
+fun p <?> msg = fn (s : internalState) => case p s of
+                                              Ok' r => Ok' r
+                                            | Err (false, _) => Err (false, { pos = #pos s, messages = [Expected msg] })
+                                            | Err e => Err e
 val label = op <?>
 fun try p = fn s => case p s of
                         Ok' r => Ok' r
