@@ -1,52 +1,53 @@
 (* assumption: Int.precision = Word.wordSize, Word.wordSize is even *)
+
+signature INT_INF = sig
+    (* INTEGER *)
+    eqtype int
+    val toLarge : int -> int
+    val fromLarge : int -> int
+    val toInt : int -> Int.int
+    val fromInt : Int.int -> int
+    val precision : Int.int option (* = NONE *)
+    val minInt : int option (* = NONE *)
+    val maxInt : int option (* = NONE *)
+    val + : int * int -> int
+    val - : int * int -> int
+    val * : int * int -> int
+    val div : int * int -> int
+    val mod : int * int -> int
+    val quot : int * int -> int
+    val rem : int * int -> int
+    val compare : int * int -> order
+    val < : int * int -> bool
+    val <= : int * int -> bool
+    val > : int * int -> bool
+    val >= : int * int -> bool
+    val ~ : int -> int
+    val abs : int -> int
+    val min : int * int -> int
+    val max : int * int -> int
+    val sign : int -> Int.int
+    val sameSign : int * int -> bool
+    val fmt : StringCvt.radix -> int -> string
+    val toString : int -> string
+    val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
+    val fromString : string -> int option
+
+    (* INT_INF *)
+    val divMod : int * int -> int * int
+    val quotRem : int * int -> int * int
+    val pow : int * Int.int -> int
+    val log2 : int -> Int.int
+    val orb : int * int -> int
+    val xorb : int * int -> int
+    val andb : int * int -> int
+    val notb : int -> int
+    val << : int * Word.word -> int
+    val ~>> : int * Word.word -> int
+end
+
 structure IntInfImpl :> sig
-              (* INTEGER *)
-              eqtype int
-              val toLarge : int -> int
-              val fromLarge : int -> int
-              val toInt : int -> Int.int
-              val fromInt : Int.int -> int
-              val precision : Int.int option (* = NONE *)
-              val minInt : int option (* = NONE *)
-              val maxInt : int option (* = NONE *)
-              val + : int * int -> int
-              val - : int * int -> int
-              val * : int * int -> int
-              val div : int * int -> int
-              val mod : int * int -> int
-              val quot : int * int -> int
-              val rem : int * int -> int
-              val compare : int * int -> order
-              val < : int * int -> bool
-              val <= : int * int -> bool
-              val > : int * int -> bool
-              val >= : int * int -> bool
-              val ~ : int -> int
-              val abs : int -> int
-              val min : int * int -> int
-              val max : int * int -> int
-              val sign : int -> Int.int
-              val sameSign : int * int -> bool
-              val fmt : StringCvt.radix -> int -> string
-              val toString : int -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
-              val fromString : string -> int option
-
-              (* INT_INF *)
-              val divMod : int * int -> int * int
-              val quotRem : int * int -> int * int
-              (*
-              val pow : int * Int.int -> int
-              val log2 : int -> Int.int
-              val orb : int * int -> int
-              val xorb : int * int -> int
-              val andb : int * int -> int
-              *)
-              val notb : int -> int
-              val << : int * Word.word -> int
-              val ~>> : int * Word.word -> int
-
-              (* others *)
+              include INT_INF
               val fromWord : Word.word -> int
               val fromWordX : Word.word -> int
               val toWord : int -> Word.word
@@ -76,6 +77,16 @@ end
 datatype int = ZERO
              | POSITIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
              | NEGATIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
+
+fun mkNonNegative words = if Vector.length words = 0 then
+                              ZERO
+                          else
+                              POSITIVE words
+
+fun mkNonPositive words = if Vector.length words = 0 then
+                              ZERO
+                          else
+                              NEGATIVE words
 
 fun toLarge x = x
 fun fromLarge x = x
@@ -356,6 +367,156 @@ fun compare (ZERO, ZERO) = EQUAL
   | compare (NEGATIVE words, NEGATIVE words') = compareAbs (words', words)
   | compare (NEGATIVE _, (* ZERO | POSITIVE _ *) _) = LESS
 
+fun pow (x : int, y : Int.int) : int = if y < 0 then
+                                           if x = fromInt 1 then
+                                               x
+                                           else if x = fromInt ~1 then
+                                               if Int.rem (y, 2) = 0 then
+                                                   fromInt 1
+                                               else
+                                                   x
+                                           else if LT (x, fromInt ~1) orelse LT (fromInt 1, x) then
+                                               ZERO
+                                           else
+                                               raise Div
+                                       else if y = 0 then
+                                           fromInt 1
+                                       else
+                                           let fun loop (acc, _, 0) = acc
+                                                 | loop (acc, m, 1) = mul (acc, m)
+                                                 | loop (acc, m, y) = if y mod 2 = 0 then
+                                                                          loop (acc, mul (m, m), y div 2)
+                                                                      else
+                                                                          loop (mul (acc, m), mul (m, m), y div 2)
+                                           in loop (x, x, y - 1)
+                                           end
+
+fun log2Word 0w0 = raise Domain
+  | log2Word 0w1 = 1
+  | log2Word x = 1 + log2Word (x div 0w2)
+
+fun log2 (POSITIVE words) = let val n = Vector.length words - 1
+                            in Word.wordSize * n + log2Word (Vector.sub (words, n))
+                            end
+  | log2 _ = raise Domain
+
+fun orbAbs (words, words') = let val m = Vector.length words
+                                 val n = Vector.length words'
+                                 val l = Int.max (m, n)
+                                 val arr = Array.array (l, 0w0)
+                                 fun loop i = if i = l then
+                                                  ()
+                                              else
+                                                  let val w = if i < m then Vector.sub (words, i) else 0w0
+                                                      val w' = if i < n then Vector.sub (words', i) else 0w0
+                                                  in Array.update (arr, i, Word.orb (w, w'))
+                                                   ; loop (i + 1)
+                                                  end
+                             in loop 0
+                              ; Array.vector arr
+                             end
+
+fun xorbAbs (words, words') = let val m = Vector.length words
+                                  val n = Vector.length words'
+                                  val l = Int.max (m, n)
+                                  val arr = Array.array (l, 0w0)
+                                  fun loop i = if i = l then
+                                                   ()
+                                               else
+                                                   let val w = if i < m then Vector.sub (words, i) else 0w0
+                                                       val w' = if i < n then Vector.sub (words', i) else 0w0
+                                                   in Array.update (arr, i, Word.xorb (w, w'))
+                                                    ; loop (i + 1)
+                                                   end
+                              in loop 0
+                               ; normalize arr
+                              end
+
+fun andbAbs (words, words') = let val m = Vector.length words
+                                  val n = Vector.length words'
+                                  val l = Int.min (m, n)
+                                  val arr = Array.array (l, 0w0)
+                                  fun loop i = if i = l then
+                                                   ()
+                                               else
+                                                   let val w = Vector.sub (words, i)
+                                                       val w' = Vector.sub (words', i)
+                                                   in Array.update (arr, i, Word.andb (w, w'))
+                                                    ; loop (i + 1)
+                                                   end
+                              in loop 0
+                               ; normalize arr
+                              end
+
+(* words andb notb words' *)
+fun andNotbAbs (words, words') = let val m = Vector.length words
+                                     val n = Vector.length words'
+                                     val l = m
+                                     val arr = Array.array (l, 0w0)
+                                     fun loop i = if i = l then
+                                                      ()
+                                                  else
+                                                      let val w = Vector.sub (words, i)
+                                                          val w' = if i < n then Vector.sub (words', i) else 0w0
+                                                      in Array.update (arr, i, Word.andb (w, Word.notb w'))
+                                                       ; loop (i + 1)
+                                                      end
+                                 in loop 0
+                                  ; normalize arr
+                                 end
+
+(* notb (words xorb notb words') *)
+fun notXorNotbAbs (words, words') = let val m = Vector.length words
+                                        val n = Vector.length words'
+                                        val l = Int.max (m, n)
+                                        val arr = Array.array (l, 0w0)
+                                        fun loop i = if i = l then
+                                                         ()
+                                                     else
+                                                         let val w = if i < m then Vector.sub (words, i) else 0w0
+                                                             val w' = if i < n then Vector.sub (words', i) else 0w0
+                                                         in Array.update (arr, i, Word.notb (Word.xorb (w, Word.notb w')))
+                                                          ; loop (i + 1)
+                                                         end
+                                    in loop 0
+                                     ; normalize arr
+                                    end
+
+fun notb_NEGATIVE words = if Vector.length words = 1 andalso Vector.sub (words, 0) = 0w1 then
+                              #[]
+                          else
+                              subAbs (words, #[0w1])
+fun notb_NonNegative words = NEGATIVE (addAbs (#[0w1], words))
+
+(* fun notb x = sub (fromInt ~1, x) *)
+fun notb ZERO = NEGATIVE #[0w1]
+  | notb (POSITIVE words) = NEGATIVE (addAbs (#[0w1], words))
+  | notb (NEGATIVE words) = if Vector.length words = 1 andalso Vector.sub (words, 0) = 0w1 then
+                                ZERO
+                            else
+                                POSITIVE (subAbs (words, #[0w1]))
+
+fun orb (ZERO, y) = y
+  | orb (x, ZERO) = x
+  | orb (POSITIVE words, POSITIVE words') = POSITIVE (orbAbs (words, words'))
+  | orb (POSITIVE words, NEGATIVE words') = notb_NonNegative (andNotbAbs (notb_NEGATIVE words', words))
+  | orb (NEGATIVE words, POSITIVE words') = notb_NonNegative (andNotbAbs (notb_NEGATIVE words, words'))
+  | orb (NEGATIVE words, NEGATIVE words') = notb_NonNegative (andbAbs (notb_NEGATIVE words, notb_NEGATIVE words'))
+
+fun andb (z as ZERO, y) = z
+  | andb (x, z as ZERO) = z
+  | andb (POSITIVE words, POSITIVE words') = mkNonNegative (andbAbs (words, words'))
+  | andb (POSITIVE words, NEGATIVE words') = mkNonNegative (andNotbAbs (words, notb_NEGATIVE words'))
+  | andb (NEGATIVE words, POSITIVE words') = mkNonNegative (andNotbAbs (words', notb_NEGATIVE words))
+  | andb (NEGATIVE words, NEGATIVE words') = notb_NonNegative (orbAbs (notb_NEGATIVE words, notb_NEGATIVE words'))
+
+fun xorb (ZERO, y) = y
+  | xorb (x, ZERO) = x
+  | xorb (POSITIVE words, POSITIVE words') = mkNonNegative (xorbAbs (words, words'))
+  | xorb (POSITIVE words, NEGATIVE words') = notb_NonNegative (notXorNotbAbs (words, notb_NEGATIVE words'))
+  | xorb (NEGATIVE words, POSITIVE words') = notb_NonNegative (notXorNotbAbs (words', notb_NEGATIVE words))
+  | xorb (NEGATIVE words, NEGATIVE words') = mkNonNegative (xorbAbs (notb_NEGATIVE words, notb_NEGATIVE words'))
+
 fun LShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wordSize
                                     val minor = amount mod Word.fromInt Word.wordSize
                                     val n = Vector.length words + Word.toInt major
@@ -510,16 +671,6 @@ fun quotRemAbs (words, words') : word vector * word vector
               ; (normalize quotient, #1 (RShiftAbs (normalize words, offset)))
              end
       end
-
-fun mkNonNegative words = if Vector.length words = 0 then
-                              ZERO
-                          else
-                              POSITIVE words
-
-fun mkNonPositive words = if Vector.length words = 0 then
-                              ZERO
-                          else
-                              NEGATIVE words
 
 fun div_ (_, ZERO) = raise Div
   | div_ (z as ZERO, _) = z
@@ -780,53 +931,7 @@ fun x <= y = not (y < x)
 fun x > y = y < x
 fun x >= y = not (x < y)
 end
-structure IntInf : sig
-              (* INTEGER *)
-              eqtype int
-              val toLarge : int -> int
-              val fromLarge : int -> int
-              val toInt : int -> Int.int
-              val fromInt : Int.int -> int
-              val precision : Int.int option (* = NONE *)
-              val minInt : int option (* = NONE *)
-              val maxInt : int option (* = NONE *)
-              val + : int * int -> int
-              val - : int * int -> int
-              val * : int * int -> int
-              val div : int * int -> int
-              val mod : int * int -> int
-              val quot : int * int -> int
-              val rem : int * int -> int
-              val compare : int * int -> order
-              val < : int * int -> bool
-              val <= : int * int -> bool
-              val > : int * int -> bool
-              val >= : int * int -> bool
-              val ~ : int -> int
-              val abs : int -> int
-              val min : int * int -> int
-              val max : int * int -> int
-              val sign : int -> Int.int
-              val sameSign : int * int -> bool
-              val fmt : StringCvt.radix -> int -> string
-              val toString : int -> string
-              val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
-              val fromString : string -> int option
-
-              (* INT_INF *)
-              val divMod : int * int -> int * int
-              val quotRem : int * int -> int * int
-              (*
-              val pow : int * Int.int -> int
-              val log2 : int -> Int.int
-              val orb : int * int -> int
-              val xorb : int * int -> int
-              val andb : int * int -> int
-              *)
-              val notb : int -> int
-              val << : int * Word.word -> int
-              val ~>> : int * Word.word -> int
-          end = IntInfImpl;
+structure IntInf :> INT_INF where type int = IntInfImpl.int = IntInfImpl;
 _overload "Int" [IntInf.int]
   { + = IntInf.+
   , - = IntInf.-

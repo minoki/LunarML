@@ -36,9 +36,7 @@ signature INT_INF = sig
     val divMod : int * int -> int * int
     val quotRem : int * int -> int * int
     val pow : int * Int.int -> int
-    (*
     val log2 : int -> Int.int
-    *)
     val orb : int * int -> int
     val xorb : int * int -> int
     val andb : int * int -> int
@@ -178,6 +176,18 @@ fun pow (x : int, y : Int.int) : int = if y < 0 then
                                            let val y = fromInt y
                                            in JavaScript.unsafeFromValue (JavaScript.** (JavaScript.unsafeToValue x, JavaScript.unsafeToValue y))
                                            end
+fun log2Small (acc : Int.int, x : int) = if x = 1 then
+                                             acc
+                                         else
+                                             log2Small (Int.+ (acc, 1), quot (x, 2))
+fun log2Big (acc : Int.int, x : int) = if LT (x, 0x100000000) then
+                                           log2Small (acc, x)
+                                       else
+                                           log2Big (Int.+ (acc, 32), quot (x, 0x100000000))
+fun log2 (x : int) = if LE (x, 0) then
+                         raise Domain
+                     else
+                         log2Big (0, x)
 fun orb (x, y) = _primCall "IntInf.orb" (x, y)
 fun xorb (x, y) = _primCall "IntInf.xorb" (x, y)
 fun andb (x, y) = _primCall "IntInf.andb" (x, y)
