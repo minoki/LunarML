@@ -2229,7 +2229,7 @@ fun lookupLongTyConInQSignature (ctx, span, s : T.QSignature, longtycon) : T.Typ
              SOME tystr => tystr
            | NONE => emitError (ctx, [span], "unknown type constructor '" ^ name ^ "'")
       end
-fun getTypeNameFromTypeStructure (ctx, { typeFunction = T.TypeFunction (tyvars, T.TyCon (_, tyargs, tyname)), ... }) : (T.TyName * int) option
+fun getTypeNameFromTypeStructure (ctx, { typeFunction = T.TypeFunction (tyvars, T.TyCon (_, tyargs, tyname)), ... } : T.TypeStructure) : (T.TyName * int) option
     = let val arity = List.length tyvars
       in if List.length tyargs = arity then
              if ListPair.allEq (fn (tv, T.TyVar (_, tv')) => tv = tv' | _ => false) (tyvars, tyargs) then

@@ -904,14 +904,14 @@ val invalidBoundNames0 = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true"
 val invalidBoundNames1 = S.VIdSet.add (invalidBoundNames0, S.MkVId "=")
 val invalidConstructorNames0 = S.VIdSet.add (invalidBoundNames0, S.MkVId "it")
 val invalidConstructorNames1 = S.VIdSet.add (invalidConstructorNames0, S.MkVId "=")
-fun invalidBoundNames opts = if #allowBindEqual opts then
-                                 invalidBoundNames0
-                             else
-                                 invalidBoundNames1
-fun invalidConstructorNames opts = if #allowBindEqual opts then
-                                       invalidConstructorNames0
-                                   else
-                                       invalidConstructorNames1
+fun invalidBoundNames (opts : LanguageOptions.options) = if #allowBindEqual opts then
+                                                             invalidBoundNames0
+                                                         else
+                                                             invalidBoundNames1
+fun invalidConstructorNames (opts : LanguageOptions.options) = if #allowBindEqual opts then
+                                                                   invalidConstructorNames0
+                                                               else
+                                                                   invalidConstructorNames1
 
 (* doPat : LanguageOptions.options -> S.Pat -> unit *)
 fun doPat opts (S.WildcardPat _) = ()
