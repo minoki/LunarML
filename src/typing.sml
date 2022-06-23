@@ -101,23 +101,11 @@ fun envToSigEnv(env : Env) : SigEnv
       , boundTyVars = #boundTyVars env
       }
 
-fun freeTyVarsInTypeScheme (bound, TypedSyntax.TypeScheme (tyvars, ty)) = TypedSyntax.freeTyVarsInTy (TypedSyntax.TyVarSet.addList (bound, List.map #1 tyvars), ty)
-fun freeTyVarsInSignature (bound, { valMap, tyConMap, strMap } : TypedSyntax.Signature)
-    = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _), set) => TypedSyntax.TyVarSet.union (set, freeTyVarsInTypeScheme (bound, tysc))) TypedSyntax.TyVarSet.empty valMap
-      in Syntax.StrIdMap.foldl (fn (TypedSyntax.MkSignature s, set) => TypedSyntax.TyVarSet.union (set, freeTyVarsInSignature (bound, s))) valMapSet strMap
-      end
-fun freeTyVarsInEnv(bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap, boundTyVars } : Env)
-    = let val boundTyVars = Syntax.TyVarMap.foldl (fn (tv, set) => TypedSyntax.TyVarSet.add (set, tv)) TypedSyntax.TyVarSet.empty boundTyVars
-          val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _, _), set) => TypedSyntax.TyVarSet.union (set, freeTyVarsInTypeScheme (bound, tysc))) boundTyVars valMap
-          (* TODO: tyConMap? *)
-      in Syntax.StrIdMap.foldl (fn ((s, _), set) => TypedSyntax.TyVarSet.union (set, freeTyVarsInSignature (bound, s))) valMapSet strMap
-      end
+fun freeTyVarsInEnv (bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap, boundTyVars } : Env)
+    = Syntax.TyVarMap.foldl (fn (tv, set) => TypedSyntax.TyVarSet.add (set, tv)) TypedSyntax.TyVarSet.empty boundTyVars
 fun freeAnonymousTyVarsInTypeScheme (bound, TypedSyntax.TypeScheme (tyvars, ty)) = TypedSyntax.freeAnonymousTyVarsInTy (bound, ty)
 fun freeAnonymousTyVarsInEnv (bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap, boundTyVars } : Env)
-    = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _, _), set) => TypedSyntax.AnonymousTyVarSet.union (set, freeAnonymousTyVarsInTypeScheme (bound, tysc))) TypedSyntax.AnonymousTyVarSet.empty valMap
-          (* TODO: tyConMap? *)
-      in valMapSet
-      end
+    = Syntax.VIdMap.foldl (fn ((tysc, _, _), set) => TypedSyntax.AnonymousTyVarSet.union (set, freeAnonymousTyVarsInTypeScheme (bound, tysc))) TypedSyntax.AnonymousTyVarSet.empty valMap
 
 type Context = { nextTyVar : int ref
                , nextVId : int ref
