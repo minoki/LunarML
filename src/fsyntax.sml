@@ -106,7 +106,7 @@ fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
                   in RecordExp (doFields 1 xs)
                   end
-fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.NamedTyVar (name, n)
+fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.MkTyVar (name, n)
 fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
 fun AsciiStringAsNativeString (targetInfo : TargetInfo.target_info, s : string) = let val ty = case #nativeString targetInfo of
                                                                                                    TargetInfo.NARROW_STRING => TyCon ([], Typing.primTyName_string)
@@ -569,7 +569,7 @@ fun updateOverloadMap(f, env : Env) : Env = { equalityForTyVarMap = #equalityFor
 
 fun freshTyVar(ctx : Context) = let val n = !(#nextTyVar ctx)
                                 in #nextTyVar ctx := n + 1
-                                 ; TypedSyntax.AnonymousTyVar n
+                                 ; TypedSyntax.MkTyVar ("'?", n)
                                 end
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1
@@ -601,6 +601,7 @@ local structure T = TypedSyntax
                       end
 in
 fun toFTy (ctx : Context, env : Env, T.TyVar (span, tv)) = F.TyVar tv
+  | toFTy (ctx, env, T.AnonymousTyVar (span, T.MkAnonymousTyVar n)) = raise Fail ("unexpected anonymous type variable " ^ Int.toString n)
   | toFTy (ctx, env, T.RecordType (span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy (ctx, env, ty)) fields)
   | toFTy (ctx, env, T.TyCon (span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
   | toFTy (ctx, env, T.FnType (span, paramTy, resultTy)) = let fun doTy ty = toFTy (ctx, env, ty)
@@ -965,6 +966,7 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                                                       NONE => raise Fail ("equality for the type variable not found: " ^ TypedSyntax.PrettyPrint.print_TyVar tv)
                                                     | SOME vid => F.VarExp vid
                                                  )
+  | getEquality (ctx, env, T.AnonymousTyVar (span, T.MkAnonymousTyVar n)) = raise Fail ("unexpected anonymous type variable " ^ Int.toString n)
   | getEquality (ctx, env, T.RecordType (span, fields)) = F.RecordEqualityExp (Syntax.LabelMap.foldli (fn (label, ty, xs) => (label, getEquality (ctx, env, ty)) :: xs) [] fields)
   | getEquality (ctx, env, T.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs (ctx, env, []) = (env, [])

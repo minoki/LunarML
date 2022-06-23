@@ -112,16 +112,20 @@ fun freeTyVarsInEnv(bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap
           (* TODO: tyConMap? *)
       in Syntax.StrIdMap.foldl (fn ((s, _), set) => TypedSyntax.TyVarSet.union (set, freeTyVarsInSignature (bound, s))) valMapSet strMap
       end
-fun freeTyVarsInConstraint (bound, TypedSyntax.EqConstr (span, ty1, ty2)) = TypedSyntax.TyVarSet.union (TypedSyntax.freeTyVarsInTy (bound, ty1), TypedSyntax.freeTyVarsInTy (bound, ty2))
-  | freeTyVarsInConstraint (bound, TypedSyntax.UnaryConstraint (span, ty, unaryConstraint)) = TypedSyntax.TyVarSet.union (TypedSyntax.freeTyVarsInTy (bound, ty), TypedSyntax.freeTyVarsInUnaryConstraint (bound, unaryConstraint))
+fun freeAnonymousTyVarsInTypeScheme (bound, TypedSyntax.TypeScheme (tyvars, ty)) = TypedSyntax.freeAnonymousTyVarsInTy (bound, ty)
+fun freeAnonymousTyVarsInEnv (bound, { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap, boundTyVars } : Env)
+    = let val valMapSet = Syntax.VIdMap.foldl (fn ((tysc, _, _), set) => TypedSyntax.AnonymousTyVarSet.union (set, freeAnonymousTyVarsInTypeScheme (bound, tysc))) TypedSyntax.AnonymousTyVarSet.empty valMap
+          (* TODO: tyConMap? *)
+      in valMapSet
+      end
 
 type Context = { nextTyVar : int ref
                , nextVId : int ref
                }
 
 type InferenceContext = { context : Context
-                        , tyVarConstraints : (((SourcePos.span * TypedSyntax.UnaryConstraint) list) TypedSyntax.TyVarMap.map) ref
-                        , tyVarSubst : (TypedSyntax.Ty TypedSyntax.TyVarMap.map) ref
+                        , tyVarConstraints : (((SourcePos.span * TypedSyntax.UnaryConstraint) list) TypedSyntax.AnonymousTyVarMap.map) ref
+                        , tyVarSubst : (TypedSyntax.Ty TypedSyntax.AnonymousTyVarMap.map) ref
                         }
 
 exception TypeError of SourcePos.span list * string
@@ -191,6 +195,7 @@ fun lookupLongVIdInEnv (ctx, env : Env, span, longvid as Syntax.MkQualified ([],
 
 (* getConstructedType : Context * SourcePos.span * TypedSyntax.Ty -> TypedSyntax.TyCon *)
 fun getConstructedType (ctx, span, TypedSyntax.TyVar _) = emitError (ctx, [span], "getConstructedType: got a type variable")
+  | getConstructedType (ctx, span, TypedSyntax.AnonymousTyVar _) = emitError (ctx, [span], "getConstructedType: got a type variable")
   | getConstructedType (ctx, span, TypedSyntax.RecordType _) = emitError (ctx, [span], "getConstructedType: got a record")
   | getConstructedType (ctx, span, TypedSyntax.TyCon (_, tyargs, tycon)) = tycon
   | getConstructedType (ctx, span, TypedSyntax.FnType (_, _, t)) = getConstructedType (ctx, span, t)
@@ -270,11 +275,11 @@ fun isRefOrArray (tyname : TypedSyntax.TyName) = TypedSyntax.eqTyName (tyname, p
 structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                type tv = TypedSyntax.TyVar
                                                type constraint = TypedSyntax.UnaryConstraint
-                                               val tyVarA = TypedSyntax.AnonymousTyVar 0
-                                               val tyVarB = TypedSyntax.AnonymousTyVar 1
-                                               val tyVarC = TypedSyntax.AnonymousTyVar 2
-                                               val tyVarD = TypedSyntax.AnonymousTyVar 3
-                                               val tyVarEqA = TypedSyntax.AnonymousTyVar 0
+                                               val tyVarA = TypedSyntax.MkTyVar ("'a", 0)
+                                               val tyVarB = TypedSyntax.MkTyVar ("'b", 1)
+                                               val tyVarC = TypedSyntax.MkTyVar ("'c", 2)
+                                               val tyVarD = TypedSyntax.MkTyVar ("'d", 3)
+                                               val tyVarEqA = TypedSyntax.MkTyVar ("''a", 0)
                                                val tyA = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarA)
                                                val tyB = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarB)
                                                val tyC = TypedSyntax.TyVar (SourcePos.nullSpan, tyVarC)
@@ -314,10 +319,10 @@ fun newContext() : Context
       , nextVId = ref 100
       }
 
-fun addTyVarConstraint (ctx : InferenceContext, tv : TypedSyntax.TyVar, span : SourcePos.span, ct : TypedSyntax.UnaryConstraint)
+fun addTyVarConstraint (ctx : InferenceContext, tv : TypedSyntax.AnonymousTyVar, span : SourcePos.span, ct : TypedSyntax.UnaryConstraint)
     = let val cts = !(#tyVarConstraints ctx)
-          val xs = Option.getOpt (TypedSyntax.TyVarMap.find (cts, tv), [])
-      in #tyVarConstraints ctx := TypedSyntax.TyVarMap.insert (cts, tv, (span, ct) :: xs)
+          val xs = Option.getOpt (TypedSyntax.AnonymousTyVarMap.find (cts, tv), [])
+      in #tyVarConstraints ctx := TypedSyntax.AnonymousTyVarMap.insert (cts, tv, (span, ct) :: xs)
       end
 
 fun renewVId (ctx : Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId
@@ -329,8 +334,8 @@ fun renewVId (ctx : Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId
 fun genTyVarId(ctx : Context)
     = let val id = !(#nextTyVar ctx)
       in #nextTyVar ctx := id + 1 ; id end
-fun genTyVar (ctx, Syntax.MkTyVar tvname) = TypedSyntax.NamedTyVar (tvname, genTyVarId ctx)
-fun freshTyVar (ctx : Context) = TypedSyntax.AnonymousTyVar (genTyVarId ctx)
+fun genTyVar (ctx, Syntax.MkTyVar tvname) = TypedSyntax.MkTyVar (tvname, genTyVarId ctx)
+fun freshTyVar (ctx : Context) = TypedSyntax.MkAnonymousTyVar (genTyVarId ctx)
 
 fun newVId(ctx : Context, Syntax.MkVId name) = let val n = !(#nextVId ctx)
                                                in #nextVId ctx := n + 1
@@ -365,27 +370,29 @@ local
     structure S = Syntax
     structure T = TypedSyntax
 in
-(* occurCheck : T.TyVar -> T.Ty -> bool; returns true if the type variable occurs in the type *)
-fun occurCheck tv = let fun check (T.TyVar (_, tv')) = T.eqUTyVar (tv, tv')
+(* occurCheck : T.AnonymousTyVar -> T.Ty -> bool; returns true if the type variable occurs in the type *)
+fun occurCheck tv = let fun check (T.AnonymousTyVar (_, tv')) = tv = tv'
+                          | check (T.TyVar (_, _)) = false
                           | check (T.RecordType (_, xs)) = Syntax.LabelMap.exists check xs
                           | check (T.TyCon (_, tyargs, tycon)) = List.exists check tyargs
                           | check (T.FnType (_, ty1, ty2)) = check ty1 orelse check ty2
                     in check
                     end
 
-(* substituteTy : T.TyVar * T.Ty -> T.Ty -> T.Ty *)
+(* substituteTy : T.AnonymousTyVar * T.Ty -> T.Ty -> T.Ty *)
 fun substituteTy (tv, replacement) =
-    let fun substTy (ty as T.TyVar (_, tv')) = if T.eqUTyVar (tv, tv') then
-                                                   replacement
-                                               else
-                                                   ty
+    let fun substTy (ty as T.AnonymousTyVar (_, tv')) = if tv = tv' then
+                                                            replacement
+                                                        else
+                                                            ty
+          | substTy (ty as T.TyVar _) = ty
           | substTy (T.RecordType (span, fields)) = T.RecordType (span, Syntax.LabelMap.map substTy fields)
           | substTy (T.TyCon (span, tyargs, tycon)) = T.TyCon (span, List.map substTy tyargs, tycon)
           | substTy (T.FnType (span, ty1, ty2)) = T.FnType (span, substTy ty1, substTy ty2)
     in substTy
     end
 
-(* substituteConstraint : TyVar * Ty -> Constraint -> Constraint *)
+(* substituteConstraint : T.AnonymousTyVar * Ty -> Constraint -> Constraint *)
 fun substituteConstraint (tv, replacement) =
     let val substTy = substituteTy (tv, replacement)
     in fn T.EqConstr (span, ty1, ty2) => T.EqConstr (span, substTy ty1, substTy ty2)
@@ -407,12 +414,10 @@ fun substituteConstraint (tv, replacement) =
     end
 
 val applySubstTy = T.applySubstTy
-fun applySubstEnv subst
+val applySubstAnonymousTyVar = T.applySubstAnonymousTyVar
+fun applySubstEnv (subst : T.Ty T.AnonymousTyVarMap.map)
     = let fun substTypeScheme (T.TypeScheme (tyvars, ty))
-              = let val subst' = T.TyVarMap.filteri (fn (tv, ty) => not (List.exists (fn (tv', _) => T.eqUTyVar (tv', tv)) tyvars)) subst
-                in T.TypeScheme (tyvars, applySubstTy subst' ty)
-                               (* TODO: unwanted capture? e.g. 'a. 'a list * 'c, 'c := 'b * 'a *)
-                end
+              = T.TypeScheme (tyvars, applySubstAnonymousTyVar subst ty)
           fun substSignature ({ valMap, tyConMap, strMap } : T.Signature) : T.Signature
               = { valMap = S.VIdMap.map (fn (tysc, ids) => (substTypeScheme tysc, ids)) valMap
                 , tyConMap = tyConMap (* ??? *)
@@ -434,7 +439,7 @@ fun applySubstEnv subst
 fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
     = let val (subst, tyargs) = List.foldl (fn ((v, preds), (set, rest)) =>
                                                let val tv = freshTyVar (#context ctx)
-                                                   val tyarg = T.TyVar (span, tv)
+                                                   val tyarg = T.AnonymousTyVar (span, tv)
                                                in List.app (fn pred => addTyVarConstraint (ctx, tv, span, pred)) preds
                                                 ; (T.TyVarMap.insert (set, v, tyarg), (tyarg, preds) :: rest)
                                                end
@@ -447,15 +452,15 @@ fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
 fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = ()
   | unify (ctx, env, ct :: ctrs)
     = (case ct of
-           T.EqConstr (span1, T.TyVar (span2, tv as T.AnonymousTyVar _), ty) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
-         | T.EqConstr (span1, ty, T.TyVar (span2, tv as T.AnonymousTyVar _)) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
-         | T.EqConstr (span1, T.TyVar (span2, tv as T.NamedTyVar (name, x)), T.TyVar (span3, tv' as T.NamedTyVar (name', x'))) =>
+           T.EqConstr (span1, T.AnonymousTyVar (span2, tv), ty) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
+         | T.EqConstr (span1, ty, T.AnonymousTyVar (span2, tv)) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
+         | T.EqConstr (span1, T.TyVar (span2, tv as T.MkTyVar (name, x)), T.TyVar (span3, tv' as T.MkTyVar (name', x'))) =>
            if T.eqUTyVar (tv, tv') then
                unify(ctx, env, ctrs) (* do nothing *)
            else
                emitTypeError (ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
-         | T.EqConstr (span1, T.TyVar (span2, T.NamedTyVar (name, _)), ty) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
-         | T.EqConstr (span1, ty, T.TyVar (span2, T.NamedTyVar (name, _))) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | T.EqConstr (span1, T.TyVar (span2, T.MkTyVar (name, _)), ty) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
+         | T.EqConstr (span1, ty, T.TyVar (span2, T.MkTyVar (name, _))) => emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name)
          | T.EqConstr (span, T.FnType (_, s0, s1), T.FnType (_, t0, t1)) => unify (ctx, env, T.EqConstr (span, s0, t0) :: T.EqConstr (span, s1, t1) :: ctrs)
          | T.EqConstr (span1, T.RecordType (span2, fields), T.RecordType (span3, fields')) =>
            if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields then
@@ -483,8 +488,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                 )
               | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
               | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a function type")
-              | T.TyVar (span2, tv) =>
-                (case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+              | T.TyVar (span2, _) => emitTypeError (ctx, [span1, span2], "record field for an named type variable")
+              | T.AnonymousTyVar (span2, tv) =>
+                (case TypedSyntax.AnonymousTyVarMap.find (!(#tyVarSubst ctx), tv) of
                      SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, T.HasField { label = label, fieldTy = fieldTy }) :: ctrs)
                    | NONE => ( addTyVarConstraint (ctx, tv, span1, T.HasField { label = label, fieldTy = fieldTy })
                              ; unify(ctx, env, ctrs)
@@ -506,8 +512,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                 end
               | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
               | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record field for a function type")
-              | T.TyVar (span2, tv) =>
-                case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+              | T.TyVar (span2, _) => emitTypeError (ctx, [span1, span2], "record field for an named type variable")
+              | T.AnonymousTyVar (span2, tv) =>
+                case TypedSyntax.AnonymousTyVarMap.find (!(#tyVarSubst ctx), tv) of
                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, c) :: ctrs)
                   | NONE => ( addTyVarConstraint (ctx, tv, span1, c)
                             ; unify (ctx, env, ctrs)
@@ -526,8 +533,9 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                 end
               | T.TyCon (span2, _, _) => emitTypeError (ctx, [span1, span2], "record extension for a non-record type")
               | T.FnType (span2, _, _) => emitTypeError (ctx, [span1, span2], "record extension for a function type")
-              | T.TyVar (span2, tv) =>
-                case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+              | T.TyVar (span2, _) => emitTypeError (ctx, [span1, span2], "record extension for an named type variable")
+              | T.AnonymousTyVar (span2, tv) =>
+                case TypedSyntax.AnonymousTyVarMap.find (!(#tyVarSubst ctx), tv) of
                     SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, c) :: ctrs)
                   | NONE => ( addTyVarConstraint (ctx, tv, span1, c)
                             ; unify (ctx, env, ctrs)
@@ -687,39 +695,39 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   else
                       emitTypeError (ctx, [span1, span2], "invalid string constant")
                end
-         | T.UnaryConstraint (span1, T.TyVar (span2, tv), pred) =>
-           (case TypedSyntax.TyVarMap.find (!(#tyVarSubst ctx), tv) of
+         | T.UnaryConstraint (span1, T.TyVar (span2, tv as T.MkTyVar (name, _)), T.IsEqType) =>
+           if T.tyVarAdmitsEquality name then
+               unify (ctx, env, ctrs)
+           else
+               emitTypeError (ctx, [span1, span2], "the type variable " ^ name ^ " does not admit equality")
+         | T.UnaryConstraint (span1, T.TyVar (span2, tv as T.MkTyVar (name, _)), _) =>
+           emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
+         | T.UnaryConstraint (span1, T.AnonymousTyVar (span2, tv), pred) =>
+           (case TypedSyntax.AnonymousTyVarMap.find (!(#tyVarSubst ctx), tv) of
                 SOME replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, pred) :: ctrs)
-              | NONE => case (tv, pred) of
-                            (T.NamedTyVar (name, _), T.IsEqType) =>
-                            if T.tyVarAdmitsEquality name then
-                                unify(ctx, env, ctrs)
-                            else
-                                emitTypeError (ctx, [span1, span2], "the type variable " ^ name ^ " does not admit equality")
-                          | (T.NamedTyVar (name, _), _) => emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
-                          | _ => (addTyVarConstraint (ctx, tv, span1, pred) ; unify (ctx, env, ctrs))
+              | NONE => (addTyVarConstraint (ctx, tv, span1, pred); unify (ctx, env, ctrs))
            )
       )
-and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, tv : T.TyVar, ty : T.Ty, ctrs : T.Constraint list) : unit
+and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, tv : T.AnonymousTyVar, ty : T.Ty, ctrs : T.Constraint list) : unit
     = let val subst = !(#tyVarSubst ctx)
-      in case TypedSyntax.TyVarMap.find (subst, tv) of
+      in case TypedSyntax.AnonymousTyVarMap.find (subst, tv) of
              SOME replacement => unify (ctx, env, T.EqConstr (span, replacement, ty) :: ctrs)
            | NONE =>
-             let val ty = applySubstTy subst ty
-             in if (case ty of T.TyVar (_, tv') => T.eqUTyVar (tv, tv') | _ => false) then (* ty = TyVar tv *)
+             let val ty = applySubstAnonymousTyVar subst ty
+             in if (case ty of T.AnonymousTyVar (_, tv') => tv = tv' | _ => false) then (* ty = AnonymousTyVar tv *)
                     unify(ctx, env, ctrs) (* do nothing *)
                 else if occurCheck tv ty then
-                    emitTypeError (ctx, [span, T.getSourceSpanOfTy ty], "unification failed: occurrence check (" ^ TypedSyntax.print_TyVar tv ^ " in " ^ TypedSyntax.print_Ty ty ^ ((case ty of T.TyVar (_, tv') => if T.eqUTyVar (tv, tv') then "eqtyvar" else ", not eqtyvar" | _ => ", not tyvar")) ^ ")")
+                    emitTypeError (ctx, [span, T.getSourceSpanOfTy ty], "unification failed: occurrence check (" ^ TypedSyntax.print_AnonymousTyVar tv ^ " in " ^ TypedSyntax.print_Ty ty ^ ")")
                 else
                     let val tvc = !(#tyVarConstraints ctx)
-                        val xs = case TypedSyntax.TyVarMap.find (tvc, tv) of
-                                     SOME xs => ( #tyVarConstraints ctx := #1 (TypedSyntax.TyVarMap.remove (tvc, tv))
+                        val xs = case TypedSyntax.AnonymousTyVarMap.find (tvc, tv) of
+                                     SOME xs => ( #tyVarConstraints ctx := #1 (TypedSyntax.AnonymousTyVarMap.remove (tvc, tv))
                                                 ; xs
                                                 )
                                    | NONE => []
                         fun toConstraint (span, predicate) = T.UnaryConstraint (span, ty, predicate)
-                        val subst' = TypedSyntax.TyVarMap.map (substituteTy (tv, ty)) subst
-                    in #tyVarSubst ctx := TypedSyntax.TyVarMap.insert (subst', tv, ty)
+                        val subst' = TypedSyntax.AnonymousTyVarMap.map (substituteTy (tv, ty)) subst
+                    in #tyVarSubst ctx := TypedSyntax.AnonymousTyVarMap.insert (subst', tv, ty)
                      ; unify(ctx, env, List.map toConstraint xs @ List.map (substituteConstraint (tv, ty)) ctrs)
                     end
              end
@@ -754,7 +762,7 @@ fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
 (* typeCheckPat : InferenceContext * Env * S.Pat * (* type hint *) T.Ty option -> T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat *)
 fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHint : T.Ty option) : T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat
     = (case typeHint of
-           NONE => let val ty = T.TyVar (span, freshTyVar (#context ctx))
+           NONE => let val ty = T.AnonymousTyVar (span, freshTyVar (#context ctx))
                    in (ty, S.VIdMap.empty, T.WildcardPat span)
                    end
          | SOME expectedTy => (expectedTy, S.VIdMap.empty, T.WildcardPat span)
@@ -763,7 +771,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
     = (case scon of
            Syntax.IntegerConstant _   => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
-                                                          val ty = T.TyVar (span, tv)
+                                                          val ty = T.AnonymousTyVar (span, tv)
                                                       in addTyVarConstraint (ctx, tv, span, T.IsInt)
                                                        ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
@@ -774,7 +782,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                                          )
          | Syntax.WordConstant _      => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
-                                                          val ty = T.TyVar (span, tv)
+                                                          val ty = T.AnonymousTyVar (span, tv)
                                                       in addTyVarConstraint (ctx, tv, span, T.IsWord)
                                                        ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
@@ -786,7 +794,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
          | Syntax.RealConstant _      => emitTypeError (ctx, [span], "no real constant may occur in a pattern")
          | Syntax.CharacterConstant _ => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
-                                                          val ty = T.TyVar (span, tv)
+                                                          val ty = T.AnonymousTyVar (span, tv)
                                                       in addTyVarConstraint (ctx, tv, span, T.IsChar)
                                                        ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
@@ -797,7 +805,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                                          )
          | Syntax.StringConstant _    => (case typeHint of
                                               NONE => let val tv = freshTyVar (#context ctx)
-                                                          val ty = T.TyVar (span, tv)
+                                                          val ty = T.AnonymousTyVar (span, tv)
                                                       in addTyVarConstraint (ctx, tv, span, T.IsString)
                                                        ; addTyVarConstraint (ctx, tv, span, T.IsEqType)
                                                        ; (ty, S.VIdMap.empty, T.SConPat (span, scon, ty))
@@ -812,7 +820,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
            SOME (_, Syntax.ValueConstructor _, _) => emitTypeError (ctx, [span], "VarPat: invalid pattern")
          | SOME (_, Syntax.ExceptionConstructor, _) => emitTypeError (ctx, [span], "VarPat: invalid pattern")
          | _ => (case typeHint of
-                     NONE => let val ty = TypedSyntax.TyVar (span, freshTyVar (#context ctx))
+                     NONE => let val ty = TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx))
                                  val vid' = newVId (#context ctx, vid)
                              in (ty, S.VIdMap.singleton (vid, (vid', ty)), T.VarPat (span, vid', ty))
                              end
@@ -833,7 +841,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
       in case ellipsis of
              SOME (S.WildcardPat wspan) =>
              let val recordTy = case typeHint of
-                                    NONE => T.TyVar (sourceSpan, freshTyVar (#context ctx))
+                                    NONE => T.AnonymousTyVar (sourceSpan, freshTyVar (#context ctx))
                                   | SOME expectedTy => expectedTy
                  fun oneField (label, ty) = addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.HasField { label = label, fieldTy = ty }))
              in List.app oneField fieldTypes
@@ -841,7 +849,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
              end
            | SOME basePat =>
              let val recordTy = case typeHint of
-                                    NONE => T.TyVar (sourceSpan, freshTyVar (#context ctx))
+                                    NONE => T.AnonymousTyVar (sourceSpan, freshTyVar (#context ctx))
                                   | SOME expectedTy => expectedTy
                  val (baseTy, vars', basePat) = typeCheckPat (ctx, env, basePat, NONE)
              in addConstraint (ctx, env, T.UnaryConstraint (sourceSpan, recordTy, T.RecordExt { fields = fieldTypes, baseTy = baseTy }))
@@ -904,7 +912,7 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
   | typeCheckPat (ctx, env, S.VectorPat (span, pats, ellipsis), typeHint)
     = let val elemTy = case typeHint of
                            SOME (T.TyCon (_, [elemTy], _)) => elemTy
-                         | _ => TypedSyntax.TyVar (span, freshTyVar (#context ctx))
+                         | _ => TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx))
           val pats = Vector.map (fn pat => let val (elemTy', vars, pat) = typeCheckPat (ctx, env, pat, SOME elemTy)
                                            in addConstraint (ctx, env, T.EqConstr (span, elemTy, elemTy'))
                                             ; (vars, pat)
@@ -979,12 +987,12 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
                                              fun doUTy (T.TyVar (span, tv)) = (case T.TyVarMap.find (tyVarMap, tv) of
                                                                                    SOME ty => doTy ty
                                                                                  | NONE => case tv of
-                                                                                               T.NamedTyVar (name, _) => if T.tyVarAdmitsEquality name then
+                                                                                               T.MkTyVar (name, _) => if T.tyVarAdmitsEquality name then
                                                                                                                              SOME []
                                                                                                                          else
                                                                                                                              NONE
-                                                                                             | _ => NONE (* error *)
                                                                               )
+                                               | doUTy (T.AnonymousTyVar _) = NONE (* should not occur *)
                                                | doUTy (T.RecordType (span, fields)) = doUTypes (Syntax.LabelMap.foldl (op ::) [] fields)
                                                | doUTy (T.TyCon (span, tyargs, tyname)) = if isRefOrArray tyname then
                                                                                               SOME []
@@ -1042,7 +1050,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
     = let val ty = case scon of
                        Syntax.IntegerConstant x   => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
-                                                                      val ty = T.TyVar (span, tv)
+                                                                      val ty = T.AnonymousTyVar (span, tv)
                                                                   in addTyVarConstraint (ctx, tv, span, T.IsInt)
                                                                    ; ty
                                                                   end
@@ -1052,7 +1060,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                                      )
                      | Syntax.WordConstant x      => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
-                                                                      val ty = T.TyVar (span, tv)
+                                                                      val ty = T.AnonymousTyVar (span, tv)
                                                                   in addTyVarConstraint (ctx, tv, span, T.IsWord)
                                                                    ; ty
                                                                   end
@@ -1063,7 +1071,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                      | Syntax.RealConstant x      => primTy_real (* TODO: overloaded literals *)
                      | Syntax.CharacterConstant x => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
-                                                                      val ty = T.TyVar (span, tv)
+                                                                      val ty = T.AnonymousTyVar (span, tv)
                                                                   in addTyVarConstraint (ctx, tv, span, T.IsChar)
                                                                    ; ty
                                                                   end
@@ -1073,7 +1081,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                                      )
                      | Syntax.StringConstant x    => (case typeHint of
                                                           NONE => let val tv = freshTyVar (#context ctx)
-                                                                      val ty = T.TyVar (span, tv)
+                                                                      val ty = T.AnonymousTyVar (span, tv)
                                                                   in addTyVarConstraint (ctx, tv, span, T.IsString)
                                                                    ; ty
                                                                   end
@@ -1103,7 +1111,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
       end
   | typeCheckExp (ctx, env, S.RecordExp (span, fields, SOME baseExp), typeHint)
     = let val (baseTy, baseExp) = typeCheckExp (ctx, env, baseExp, NONE)
-          val recordTy = T.TyVar (span, freshTyVar (#context ctx))
+          val recordTy = T.AnonymousTyVar (span, freshTyVar (#context ctx))
           fun oneField (label, exp) = let val typeHint' = case typeHint of
                                                               SOME (T.RecordType (_, m)) => Syntax.LabelMap.find (m, label)
                                                             | _ => NONE
@@ -1131,7 +1139,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                           T.FnType (_, argTy', retTy) => ( addConstraint (ctx, env, T.EqConstr (span, argTy, argTy')) ; retTy )
                         | _ => let val retTy = case typeHint of
                                                    SOME expectedTy => expectedTy
-                                                 | _ => T.TyVar (span, freshTyVar (#context ctx))
+                                                 | _ => T.AnonymousTyVar (span, freshTyVar (#context ctx))
                                in addConstraint (ctx, env, T.EqConstr (span, funTy, T.FnType (span, argTy, retTy))) (* funTy = (argTy -> retTy) *)
                                 ; retTy
                                end
@@ -1155,7 +1163,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
     = let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME primTy_exn)
           val resultTy = case typeHint of
                              SOME expectedTy => expectedTy
-                           | NONE => T.TyVar (span, freshTyVar (#context ctx))
+                           | NONE => T.AnonymousTyVar (span, freshTyVar (#context ctx))
       in addConstraint (ctx, env, T.EqConstr (span, expTy, primTy_exn)) (* expTy = exn *)
        ; (resultTy, T.RaiseExp (span, resultTy, exp))
       end
@@ -1188,14 +1196,14 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
   | typeCheckExp (ctx, env, S.ProjectionExp (span, label), typeHint)
     = let val (recordTy, fieldTy) = case typeHint of
                                         SOME (T.FnType (_, argTy, retTy)) => (argTy, retTy)
-                                      | _ => (TypedSyntax.TyVar (span, freshTyVar (#context ctx)), TypedSyntax.TyVar (span, freshTyVar (#context ctx)))
+                                      | _ => (TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx)), TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx)))
       in addConstraint (ctx, env, T.UnaryConstraint (span, recordTy, T.HasField { label = label, fieldTy = fieldTy }))
        ; (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
   | typeCheckExp (ctx, env, S.ListExp (span, xs), typeHint)
     = let val elemTy = case typeHint of
                            SOME (T.TyCon (_, [elemTy], _)) => elemTy
-                         | _ => TypedSyntax.TyVar (span, freshTyVar (#context ctx))
+                         | _ => TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx))
           val xs = Vector.map (fn exp => let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME elemTy)
                                          in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
                                           ; exp
@@ -1205,7 +1213,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
   | typeCheckExp (ctx, env, S.VectorExp (span, xs), typeHint)
     = let val elemTy = case typeHint of
                            SOME (T.TyCon (_, [elemTy], _)) => elemTy
-                         | _ => TypedSyntax.TyVar (span, freshTyVar (#context ctx))
+                         | _ => TypedSyntax.AnonymousTyVar (span, freshTyVar (#context ctx))
           val xs = Vector.map (fn exp => let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME elemTy)
                                          in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
                                           ; exp
@@ -1224,7 +1232,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                        emitTypeError (ctx, [span], "wrong number of arguments to _primCall; expected " ^ Int.toString (Vector.length argTypes) ^ ", but got " ^ Int.toString (Vector.length args))
           val (subst, tyargs) = List.foldr (fn ((v, preds), (m, rest)) =>
                                                let val tv = freshTyVar (#context ctx)
-                                                   val tyarg = T.TyVar (span, tv)
+                                                   val tyarg = T.AnonymousTyVar (span, tv)
                                                in List.app (fn pred => addTyVarConstraint (ctx, tv, span, pred)) preds
                                                 ; (T.TyVarMap.insert (m, v, tyarg), tyarg :: rest)
                                                end
@@ -1262,6 +1270,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
           val subst = !(#tyVarSubst ctx)
           val env' = applySubstEnv subst env
           val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env')
+          val aTyVars_env = freeAnonymousTyVarsInEnv (T.AnonymousTyVarSet.empty, env')
           fun generalize ({ sourceSpan = span, pat, exp, expTy, valEnv : (T.VId * T.Ty) S.VIdMap.map, generalizable = false }, (valbinds, valEnvRest : (T.VId * T.TypeScheme) S.VIdMap.map))
               = let val vars = Syntax.VIdMap.listItems valEnv
                 in case vars of
@@ -1308,43 +1317,54 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                 end
             | generalize({ sourceSpan = span, pat, exp, expTy, valEnv, generalizable = true }, (valbinds, valEnvRest))
               = let fun doVal (vid,ty)
-                        = let val ty' = applySubstTy subst ty
+                        = let val ty' = applySubstAnonymousTyVar subst ty
                               val tyVars_ty = T.freeTyVarsInTy (T.TyVarSet.empty, ty')
+                              val aTyVars_ty = T.freeAnonymousTyVarsInTy (T.AnonymousTyVarSet.empty, ty')
                               fun isEqualityType (_, TypedSyntax.IsEqType) = true
                                 | isEqualityType _ = false
-                              fun isGeneralizable (tv : T.TyVar) = case TypedSyntax.TyVarMap.find (tvc, tv) of
-                                                                       NONE => true
-                                                                     | SOME tvs => List.all isEqualityType tvs
-                              val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
-                              fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
-                                                   (tv, [T.IsEqType])
-                                               else
-                                                   case TypedSyntax.TyVarMap.find (tvc, tv) of
-                                                       NONE => (tv, [])
-                                                     | SOME tvs => if List.exists isEqualityType tvs then
-                                                                       (tv, [T.IsEqType])
-                                                                   else (* should not reach here *)
-                                                                       (tv, [])
-                              val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
-                          in (vid, tysc)
+                              fun isGeneralizable (tv : T.AnonymousTyVar) = case T.AnonymousTyVarMap.find (tvc, tv) of
+                                                                                NONE => true
+                                                                              | SOME tvs => List.all isEqualityType tvs
+                              val tyVars = T.TyVarSet.difference (tyVars_ty, tyVars_env)
+                              val aTyVars = T.AnonymousTyVarSet.difference (T.AnonymousTyVarSet.filter isGeneralizable aTyVars_ty, aTyVars_env)
+                              fun doTyVar (tv as T.MkTyVar (name, _)) = if T.tyVarAdmitsEquality name then
+                                                                            (tv, [T.IsEqType])
+                                                                        else
+                                                                            (tv, [])
+                              fun doATyVar (tv as T.MkAnonymousTyVar n, (acc, subst))
+                                  = case TypedSyntax.AnonymousTyVarMap.find (tvc, tv) of
+                                        NONE => let val tv' = T.MkTyVar ("'?", n)
+                                                in ((tv', []) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                end
+                                      | SOME tvs => if List.exists isEqualityType tvs then
+                                                        let val tv' = T.MkTyVar ("''?", n)
+                                                        in ((tv', [T.IsEqType]) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                        end
+                                                    else (* should not reach here *)
+                                                        let val tv' = T.MkTyVar ("'?", n)
+                                                        in ((tv', []) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                        end
+                              val (tvs, asubst) = T.AnonymousTyVarSet.foldl doATyVar ([], T.AnonymousTyVarMap.empty) aTyVars
+                              val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars) @ tvs, applySubstAnonymousTyVar asubst ty')
+                          in (vid, tysc, asubst)
                           end
                     val valEnv' = Syntax.VIdMap.map doVal valEnv
                     val valEnv'L = Syntax.VIdMap.listItems valEnv'
-                    val allPoly = List.all (fn (_, T.TypeScheme (tv, _)) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
+                    val allPoly = List.all (fn (_, T.TypeScheme (tv, _), _) => not (List.null tv)) valEnv'L (* all bindings are generalized? *)
                     val espan = TypedSyntax.getSourceSpanOfExp exp
                     fun polyPart [] = []
-                      | polyPart ((vid, T.TypeScheme ([], _)) :: rest) = polyPart rest
-                      | polyPart ((vid, tysc) :: rest) = let val vid' = renewVId (#context ctx) vid
-                                                             val pat' = TypedSyntax.renameVarsInPat (TypedSyntax.VIdMap.insert (TypedSyntax.VIdMap.empty, vid, vid')) pat
-                                                         in T.PolyVarBind (span, vid, tysc, TypedSyntax.CaseExp (espan, exp, expTy, [(TypedSyntax.filterVarsInPat (fn x => x = vid') pat', TypedSyntax.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))])) :: polyPart rest
-                                                         end
-                    fun isMonoVar vid = List.exists (fn (vid', T.TypeScheme (tvs, _)) => T.eqVId (vid, vid') andalso List.null tvs) valEnv'L
+                      | polyPart ((vid, T.TypeScheme ([], _), _) :: rest) = polyPart rest
+                      | polyPart ((vid, tysc, asubst) :: rest) = let val vid' = renewVId (#context ctx) vid
+                                                                     val pat' = TypedSyntax.renameVarsInPat (TypedSyntax.VIdMap.insert (TypedSyntax.VIdMap.empty, vid, vid')) pat
+                                                                 in T.PolyVarBind (span, vid, tysc, #doExp (T.mapTy (#context ctx, asubst)) (#doExp (T.mapTy (#context ctx, subst)) (TypedSyntax.CaseExp (espan, exp, expTy, [(TypedSyntax.filterVarsInPat (fn x => x = vid') pat', TypedSyntax.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))])))) :: polyPart rest
+                                                                 end
+                    fun isMonoVar vid = List.exists (fn (vid', T.TypeScheme (tvs, _), _) => T.eqVId (vid, vid') andalso List.null tvs) valEnv'L
                     val valbind' = if allPoly then
                                        polyPart valEnv'L
                                    else
-                                       let val xs = List.mapPartial (fn (vid, tysc) => case tysc of
-                                                                                           T.TypeScheme ([], ty) => SOME (vid, ty)
-                                                                                         | T.TypeScheme (_ :: _, _) => NONE
+                                       let val xs = List.mapPartial (fn (vid, tysc, asubst) => case tysc of
+                                                                                                   T.TypeScheme ([], ty) => SOME (vid, ty)
+                                                                                                 | T.TypeScheme (_ :: _, _) => NONE
                                                                     ) valEnv'L
                                        in case xs of
                                               [(vid, ty)] => let val vid' = renewVId (#context ctx) vid
@@ -1358,7 +1378,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                    in T.TupleBind (span, xs, T.CaseExp (espan, exp, expTy, [(pat', tup)])) :: polyPart valEnv'L
                                                    end
                                        end
-                in (valbind' @ valbinds, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [span], "duplicate identifier in a binding")) (Syntax.VIdMap.map (fn (vid, tysc) => (vid, tysc)) valEnv', valEnvRest))
+                in (valbind' @ valbinds, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [span], "duplicate identifier in a binding")) (Syntax.VIdMap.map (fn (vid, tysc, _) => (vid, tysc)) valEnv', valEnvRest))
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, T.MkShortVId vid)) valEnv)
@@ -1392,35 +1412,48 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
           val tvc = !(#tyVarConstraints ctx)
           val subst = !(#tyVarSubst ctx)
           val env' = applySubstEnv subst localEnv
-          val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, applySubstEnv subst env)
+          val env'' = applySubstEnv subst env
+          val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env'')
+          val aTyVars_env = freeAnonymousTyVarsInEnv (T.AnonymousTyVarSet.empty, env'')
           fun generalize ({ sourceSpan = span, pat, exp, expTy, valEnv }, (valbinds, valEnvRest))
               = let fun doVal (vid, ty)
-                        = let val ty' = applySubstTy subst ty
+                        = let val ty' = applySubstAnonymousTyVar subst ty
                               val tyVars_ty = T.freeTyVarsInTy (T.TyVarSet.empty, ty')
+                              val aTyVars_ty = T.freeAnonymousTyVarsInTy (T.AnonymousTyVarSet.empty, ty')
                               fun isEqualityType (_, TypedSyntax.IsEqType) = true
                                 | isEqualityType _ = false
-                              fun isGeneralizable (tv : T.TyVar) = case TypedSyntax.TyVarMap.find (tvc, tv) of
-                                                                       NONE => true
-                                                                     | SOME tvs => List.all isEqualityType tvs
-                              val tyVars = T.TyVarSet.difference (T.TyVarSet.filter isGeneralizable tyVars_ty, tyVars_env)
-                              fun doTyVar tv = if (case tv of T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name | _ => false) then
-                                                   (tv, [T.IsEqType])
-                                               else
-                                                   case T.TyVarMap.find (tvc, tv) of
-                                                       NONE => (tv, [])
-                                                     | SOME tvs => if List.exists isEqualityType tvs then
-                                                                       (tv, [T.IsEqType])
-                                                                   else (* should not reach here *)
-                                                                       (tv, [])
-                              val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars), ty')
-                          in (vid, tysc)
+                              fun isGeneralizable (tv : T.AnonymousTyVar) = case T.AnonymousTyVarMap.find (tvc, tv) of
+                                                                                NONE => true
+                                                                              | SOME tvs => List.all isEqualityType tvs
+                              val tyVars = T.TyVarSet.difference (tyVars_ty, tyVars_env)
+                              val aTyVars = T.AnonymousTyVarSet.difference (T.AnonymousTyVarSet.filter isGeneralizable aTyVars_ty, aTyVars_env)
+                              fun doTyVar (tv as T.MkTyVar (name, _)) = if T.tyVarAdmitsEquality name then
+                                                                            (tv, [T.IsEqType])
+                                                                        else
+                                                                            (tv, [])
+                              fun doATyVar (tv as T.MkAnonymousTyVar n, (acc, subst))
+                                  = case TypedSyntax.AnonymousTyVarMap.find (tvc, tv) of
+                                        NONE => let val tv' = T.MkTyVar ("'?", n)
+                                                in ((tv', []) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                end
+                                      | SOME tvs => if List.exists isEqualityType tvs then
+                                                        let val tv' = T.MkTyVar ("''?", n)
+                                                        in ((tv', [T.IsEqType]) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                        end
+                                                    else (* should not reach here *)
+                                                        let val tv' = T.MkTyVar ("'?", n)
+                                                        in ((tv', []) :: acc, T.AnonymousTyVarMap.insert (subst, tv, T.TyVar (span, tv')))
+                                                        end
+                              val (tvs, asubst) = T.AnonymousTyVarSet.foldl doATyVar ([], T.AnonymousTyVarMap.empty) aTyVars
+                              val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars) @ tvs, applySubstAnonymousTyVar asubst ty')
+                          in (vid, tysc, asubst)
                           end
                     val valEnv' = Syntax.VIdMap.map doVal valEnv
-                    val valbinds = Syntax.VIdMap.foldr (fn ((vid, tysc), rest) => T.PolyVarBind (span, vid, tysc, exp) :: rest) valbinds valEnv'
+                    val valbinds = Syntax.VIdMap.foldr (fn ((vid, tysc, asubst), rest) => T.PolyVarBind (span, vid, tysc, #doExp (T.mapTy (#context ctx, asubst)) (#doExp (T.mapTy (#context ctx, subst)) exp)) :: rest) valbinds valEnv'
                 in (valbinds, Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds''
-          val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
+          val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc, _) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
       in (env', [T.RecValDec (span, valbinds)])
       end
   | typeCheckDec(ctx, env, S.TypeDec(span, typbinds))
@@ -1781,8 +1814,8 @@ fun print_Env ({ tyConMap, valMap, strMap, boundTyVars, ... } : Env) = "Env{tyMa
 end (* structure PrettyPrint *)
 open PrettyPrint
           *)
-(* applyDefaultTypes : Context * (SourcePos.span * T.UnaryConstraint list) TypedSyntax.TyVarMap.map * TypedSyntax.TopDec list -> T.Ty T.TyVarMap.map *)
-fun applyDefaultTypes (ctx, tvc, decs : T.Dec list) : T.Ty T.TyVarMap.map =
+(* applyDefaultTypes : Context * (SourcePos.span * T.UnaryConstraint list) TypedSyntax.AnonymousTyVarMap.map * TypedSyntax.Dec list -> T.Ty T.TyVarMap.map *)
+fun applyDefaultTypes (ctx, tvc, decs : T.Dec list) : T.Ty T.AnonymousTyVarMap.map =
     let fun findClass [] = NONE
           | findClass ((span, TypedSyntax.IsInt) :: _) = SOME (span, Syntax.CLASS_INT)
           | findClass ((span, TypedSyntax.IsWord) :: _) = SOME (span, Syntax.CLASS_WORD)
@@ -1916,7 +1949,7 @@ fun applyDefaultTypes (ctx, tvc, decs : T.Dec list) : T.Ty T.TyVarMap.map =
                 | TypedSyntax.IsReal => if eq then emitError (ctx, span1 :: spans, "real does not admit equality") else doReal (span1, xs) (* cannot occur *)
                 | TypedSyntax.IsChar => doChar (span1, xs) (* cannot occur *)
                 | TypedSyntax.IsString => doString (span1, xs) (* cannot occur *)
-        fun doTyVar tv = case T.TyVarMap.find (tvc, tv) of
+        fun doTyVar tv = case T.AnonymousTyVarMap.find (tvc, tv) of
                              NONE => primTy_unit
                            | SOME constraints => case findClass constraints of
                                                      SOME (span, Syntax.CLASS_INT) => doInt (span, constraints)
@@ -1925,23 +1958,23 @@ fun applyDefaultTypes (ctx, tvc, decs : T.Dec list) : T.Ty T.TyVarMap.map =
                                                    | SOME (span, Syntax.CLASS_CHAR) => doChar (span, constraints)
                                                    | SOME (span, Syntax.CLASS_STRING) => doString (span, constraints)
                                                    | NONE => defaultTyForConstraints (false, [], constraints)
-        val freeTyVars = TypedSyntax.freeTyVarsInDecs (TypedSyntax.TyVarSet.empty, decs)
-    in TypedSyntax.TyVarSet.foldl (fn (tv, map) => TypedSyntax.TyVarMap.insert (map, tv, doTyVar tv)) TypedSyntax.TyVarMap.empty freeTyVars
+        val freeTyVars = TypedSyntax.freeTyVarsInDecs (TypedSyntax.AnonymousTyVarSet.empty, decs)
+    in TypedSyntax.AnonymousTyVarSet.foldl (fn (tv, map) => TypedSyntax.AnonymousTyVarMap.insert (map, tv, doTyVar tv)) TypedSyntax.AnonymousTyVarMap.empty freeTyVars
     end
 
 fun typeCheckCoreDecs (ctx : Context, env, decs) : Env * TypedSyntax.Dec list
     = let val ictx = { context = ctx
-                     , tyVarConstraints = ref TypedSyntax.TyVarMap.empty
-                     , tyVarSubst = ref TypedSyntax.TyVarMap.empty
+                     , tyVarConstraints = ref TypedSyntax.AnonymousTyVarMap.empty
+                     , tyVarSubst = ref TypedSyntax.AnonymousTyVarMap.empty
                      }
           val (env, decs) = typeCheckDecs (ictx, env, decs)
           val subst = !(#tyVarSubst ictx)
           val tvc = !(#tyVarConstraints ictx)
           val env = applySubstEnv subst env
-          val decs = #doDecs (TypedSyntax.mapTy (ctx, subst, false)) decs
+          val decs = #doDecs (TypedSyntax.mapTy (ctx, subst)) decs
           val subst = applyDefaultTypes (ctx, tvc, decs)
           val env = applySubstEnv subst env
-          val decs = #doDecs (TypedSyntax.mapTy (ctx, subst, false)) decs
+          val decs = #doDecs (TypedSyntax.mapTy (ctx, subst)) decs
       in (env, decs)
       end
 
@@ -1951,6 +1984,8 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                     ()
                 else
                     emitError (ctx, [span], "type variable scope violation: " ^ TypedSyntax.PrettyPrint.print_TyVar tv)
+            | goTy (T.AnonymousTyVar (span, tv))
+              = emitError (ctx, [span], "type variable scope violation: " ^ TypedSyntax.PrettyPrint.print_AnonymousTyVar tv)
             | goTy (T.RecordType (span, fields)) = Syntax.LabelMap.app goTy fields
             | goTy (T.TyCon (span, tyargs, tyname))
               = if T.TyNameSet.member (tynameset, tyname) then
@@ -2151,6 +2186,7 @@ fun addSignatureToEnv (env : SigEnv, s : T.Signature, tyNameMap : TyNameAttr T.T
 
 fun applySubstTyConInTy (ctx : Context, subst : T.TypeFunction T.TyNameMap.map) : T.Ty -> T.Ty
     = let fun goTy (ty as T.TyVar _) = ty
+            | goTy (ty as T.AnonymousTyVar _) = ty
             | goTy (T.RecordType (span, fields)) = T.RecordType (span, Syntax.LabelMap.map goTy fields)
             | goTy (T.TyCon (span, tyargs, tycon)) = (case T.TyNameMap.find (subst, tycon) of
                                                           NONE => T.TyCon (span, List.map goTy tyargs, tycon)
@@ -2180,6 +2216,7 @@ fun applySubstTyConInSig (ctx : Context, subst : T.TypeFunction T.TyNameMap.map)
 
 fun refreshTyNameInTy (ctx : Context, subst : T.TyName T.TyNameMap.map) : T.Ty -> T.Ty
     = let fun goTy (ty as T.TyVar _) = ty
+            | goTy (ty as T.AnonymousTyVar _) = ty
             | goTy (T.RecordType (span, fields)) = T.RecordType (span, Syntax.LabelMap.map goTy fields)
             | goTy (T.TyCon (span, tyargs, tycon)) = let val tyargs = List.map goTy tyargs
                                                     in case T.TyNameMap.find (subst, tycon) of
@@ -2209,9 +2246,9 @@ fun checkEquality (ctx : Context, env : ('val,'str) Env', tyvars : T.TyVarSet.se
                                               true
                                           else
                                               (case tv of
-                                                   T.NamedTyVar (name, _) => T.tyVarAdmitsEquality name
-                                                 | _ => false (* error *)
+                                                   T.MkTyVar (name, _) => T.tyVarAdmitsEquality name
                                               )
+            | goTy (T.AnonymousTyVar _) = false (* should be an error *)
             | goTy (T.RecordType (span, fields)) = Syntax.LabelMap.all goTy fields
             | goTy (T.TyCon (span, tyargs, tyname)) = isRefOrArray tyname
                                                       orelse (let val { admitsEquality, ... } = lookupTyNameInEnv (ctx, env, span, tyname)
@@ -2590,7 +2627,7 @@ fun sameType (T.TyVar (span1, tv), T.TyVar (span2, tv')) = tv = tv'
 
 fun sameTypeScheme (ctx, span, T.TypeScheme (tyvarsE, tyE), T.TypeScheme (tyvarsA, tyA))
     = if List.length tyvarsE = List.length tyvarsA then
-          let val tyvars = List.map (fn _ => freshTyVar(ctx)) tyvarsE
+          let val tyvars = List.map (fn _ => genTyVar (ctx, Syntax.MkTyVar "?")) tyvarsE
               (* constraints are ignored *)
               val substE = ListPair.foldlEq (fn ((tv, _), tv', m) => T.TyVarMap.insert (m, tv, T.TyVar (span, tv'))) T.TyVarMap.empty (tyvarsE, tyvars)
               val substA = ListPair.foldlEq (fn ((tv, _), tv', m) => T.TyVarMap.insert (m, tv, T.TyVar (span, tv'))) T.TyVarMap.empty (tyvarsA, tyvars)
@@ -2683,7 +2720,7 @@ and matchTyDesc (ctx, env, span, expected : T.TypeStructure, actual : T.TypeStru
           val numE = Syntax.VIdMap.numItems valEnvE
           val { typeFunction = T.TypeFunction (tyvarsA, tyA), valEnv = valEnvA } = actual
       in if List.length tyvarsE = List.length tyvarsA then
-             let val tyvars = List.map (fn _ => freshTyVar(ctx)) tyvarsE
+             let val tyvars = List.map (fn _ => genTyVar (ctx, Syntax.MkTyVar "?")) tyvarsE
                  val substE = ListPair.foldlEq (fn (tv, tv', m) => T.TyVarMap.insert (m, tv, T.TyVar (span, tv'))) T.TyVarMap.empty (tyvarsE, tyvars)
                  val substA = ListPair.foldlEq (fn (tv, tv', m) => T.TyVarMap.insert (m, tv, T.TyVar (span, tv'))) T.TyVarMap.empty (tyvarsA, tyvars)
                  val tyE = applySubstTy substE tyE
@@ -2708,13 +2745,13 @@ and matchTyDesc (ctx, env, span, expected : T.TypeStructure, actual : T.TypeStru
 and matchValDesc (ctx, env, span, expected : T.TypeScheme, longvid : T.LongVId, actual : T.TypeScheme, ids : Syntax.ValueConstructorInfo Syntax.IdStatus) : T.TypeScheme * T.Dec list * T.LongVId
     = let val T.TypeScheme (tyvarsE, tyE) = expected
           val ictx = { context = ctx
-                     , tyVarConstraints = ref TypedSyntax.TyVarMap.empty
-                     , tyVarSubst = ref TypedSyntax.TyVarMap.empty
+                     , tyVarConstraints = ref TypedSyntax.AnonymousTyVarMap.empty
+                     , tyVarSubst = ref TypedSyntax.AnonymousTyVarMap.empty
                      }
           val (tyA, tyargsA) = instantiate (ictx, span, actual)
           val () = addConstraint (ictx, env, T.EqConstr (span, tyE, tyA))
           val subst = !(#tyVarSubst ictx)
-          val doTy = TypedSyntax.applySubstTy subst
+          val doTy = TypedSyntax.applySubstAnonymousTyVar subst
           val vid = newVId (ctx, case longvid of
                                      T.MkShortVId (T.MkVId (name, _)) => Syntax.MkVId name
                                    | T.MkLongVId (_, _, vid) => vid
@@ -2940,7 +2977,7 @@ fun typeCheckFunExp' (ctx, span, paramEnv, paramSig, strid, strexp) : TypedSynta
                           , bound = #bound actualSignature @ additionalTyNames
                           }
           val payloadTypes = List.map (fn { tyname, arity, admitsEquality } =>
-                                          let val tyvars = List.tabulate (arity, fn _ => freshTyVar(ctx))
+                                          let val tyvars = List.tabulate (arity, fn _ => genTyVar (ctx, Syntax.MkTyVar "?"))
                                           in T.TypeFunction (tyvars, T.TyCon (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tyname))
                                           end) (#bound resultSig)
           val funsig = { bound = List.map (fn tyname => let val { arity, admitsEquality, longtycon } = T.TyNameMap.lookup (#bound paramSig, tyname)

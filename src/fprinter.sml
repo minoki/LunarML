@@ -7,8 +7,7 @@ fun doVId (Syntax.MkVId name) = [P.Fragment name]
 fun doStrId (Syntax.MkStrId name) = [P.Fragment name]
 fun doLabel (Syntax.NumericLabel n) = [P.Fragment (Int.toString n)]
   | doLabel (Syntax.IdentifierLabel x) = [P.Fragment x]
-fun doTyVar (TypedSyntax.NamedTyVar (name, n)) = [P.Fragment (name ^ "@" ^ Int.toString n)]
-  | doTyVar (TypedSyntax.AnonymousTyVar n) = [P.Fragment ("_@" ^ Int.toString n)]
+fun doTyVar (TypedSyntax.MkTyVar (name, n)) = [P.Fragment (name ^ "@" ^ Int.toString n)]
 fun doKind prec F.TypeKind = [P.Fragment "Type"]
   | doKind prec (F.ArrowKind (k1, k2)) = showParen (prec >= 1) (doKind 1 k1 @ P.Fragment " -> " :: doKind 0 k2)
 fun doTy prec (F.TyVar tv) = doTyVar tv

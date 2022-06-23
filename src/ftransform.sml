@@ -301,14 +301,10 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
                           }
     = let val refreshVId = refreshVId ctx
-          fun refreshTyVar (TypedSyntax.NamedTyVar (name, _)) = let val n = !(#nextTyVar ctx)
-                                                                in #nextTyVar ctx := n + 1
-                                                                 ; TypedSyntax.NamedTyVar (name, n)
-                                                                end
-            | refreshTyVar (TypedSyntax.AnonymousTyVar _) = let val n = !(#nextTyVar ctx)
-                                                            in #nextTyVar ctx := n + 1
-                                                             ; TypedSyntax.AnonymousTyVar n
-                                                            end
+          fun refreshTyVar (TypedSyntax.MkTyVar (name, _)) = let val n = !(#nextTyVar ctx)
+                                                             in #nextTyVar ctx := n + 1
+                                                              ; TypedSyntax.MkTyVar (name, n)
+                                                             end
           fun doTy env (ty as F.TyVar tv) = (case TypedSyntax.TyVarMap.find (#tyMap env, tv) of
                                                  SOME tv => F.TyVar tv
                                                | NONE => ty

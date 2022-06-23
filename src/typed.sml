@@ -4,17 +4,15 @@
  *)
 structure TypedSyntax = struct
 datatype VId = MkVId of string * int
-datatype TyVar = NamedTyVar of string * int
-               | AnonymousTyVar of int
+datatype TyVar = MkTyVar of string * int
+datatype AnonymousTyVar = MkAnonymousTyVar of int
 datatype TyName = MkTyName of string * int
 datatype StrId = MkStrId of string * int
 datatype FunId = MkFunId of string * int
 datatype LongVId = MkShortVId of VId
                  | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
 datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
-fun eqUTyVar (NamedTyVar (name, a), NamedTyVar (name', b)) = name = name' andalso a = b
-  | eqUTyVar(AnonymousTyVar a, AnonymousTyVar b) = a = b
-  | eqUTyVar(_, _) = false
+fun eqUTyVar (MkTyVar (name, a), MkTyVar (name', b)) = name = name' andalso a = b
 fun eqTyName(MkTyName(_,a),MkTyName(_,b)) = a = b
 fun eqVId(a, b : VId) = a = b
 fun eqULongVId(MkShortVId a, MkShortVId b) = eqVId(a, b)
@@ -25,18 +23,23 @@ fun tyVarAdmitsEquality name = String.isPrefix "''" name
 
 structure TyVarKey = struct
 type ord_key = TyVar
-fun compare (NamedTyVar (x, a), NamedTyVar (y, b)) = (case String.compare (x, y) of
-                                                          EQUAL => Int.compare (a, b)
-                                                        | ord => ord
-                                                     )
-  | compare(AnonymousTyVar(a), AnonymousTyVar(b)) = Int.compare(a,b)
-  | compare(NamedTyVar _, AnonymousTyVar _) = LESS
-  | compare(AnonymousTyVar _, NamedTyVar _) = GREATER
+fun compare (MkTyVar (x, a), MkTyVar (y, b)) = (case Int.compare (a, b) of
+                                                    EQUAL => String.compare (x, y)
+                                                  | ord => ord
+                                               )
 end : ORD_KEY
 structure TyVarSet = RedBlackSetFn(TyVarKey)
 structure TyVarMap = RedBlackMapFn(TyVarKey)
 
-datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
+structure AnonymousTyVarKey = struct
+type ord_key = AnonymousTyVar
+fun compare (MkAnonymousTyVar a, MkAnonymousTyVar b) = Int.compare (a, b)
+end : ORD_KEY
+structure AnonymousTyVarSet = RedBlackSetFn (AnonymousTyVarKey)
+structure AnonymousTyVarMap = RedBlackMapFn (AnonymousTyVarKey)
+
+datatype Ty = TyVar of SourcePos.span * TyVar (* named type variable *)
+            | AnonymousTyVar of SourcePos.span * AnonymousTyVar (* anonymous type variable; only used during type checking *)
             | RecordType of SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
             | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
@@ -227,6 +230,7 @@ fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 end
 
 fun getSourceSpanOfTy(TyVar(span, _)) = span
+  | getSourceSpanOfTy (AnonymousTyVar (span, _)) = span
   | getSourceSpanOfTy(RecordType(span, _)) = span
   | getSourceSpanOfTy(TyCon(span, _, _)) = span
   | getSourceSpanOfTy(FnType(span, _, _)) = span
@@ -256,8 +260,8 @@ fun print_FunId(MkFunId(name,n)) = name ^ "@" ^ Int.toString n
 fun print_LongVId(MkShortVId(vid)) = print_VId vid
   | print_LongVId(MkLongVId(strid, strids, vid)) = "MkLongVId(" ^ print_StrId strid ^ "," ^ Syntax.print_list Syntax.print_StrId strids ^ "," ^ Syntax.print_VId vid ^ ")"
 fun print_LongStrId(MkLongStrId(strid, strids)) = String.concatWith "." (print_StrId strid :: List.map (fn Syntax.MkStrId name => name) strids)
-fun print_TyVar (NamedTyVar (tvname, n)) = "NamedTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
-  | print_TyVar(AnonymousTyVar(n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
+fun print_TyVar (MkTyVar (tvname, n)) = "MkTyVar(\"" ^ String.toString tvname ^ "\"," ^ Int.toString n ^ ")"
+fun print_AnonymousTyVar (MkAnonymousTyVar n) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
 fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
   | print_TyName (MkTyName ("word", 1)) = "primTyName_word"
   | print_TyName (MkTyName ("real", 2)) = "primTyName_real"
@@ -269,6 +273,7 @@ fun print_TyName (MkTyName ("int", 0)) = "primTyName_int"
   | print_TyName (MkTyName ("list", 8)) = "primTyName_list"
   | print_TyName (MkTyName(tyconname, n)) = "MkTyName(\"" ^ String.toString tyconname ^ "\"," ^ Int.toString n ^ ")"
 fun print_Ty (TyVar(_,x)) = "TyVar(" ^ print_TyVar x ^ ")"
+  | print_Ty (AnonymousTyVar (_, MkAnonymousTyVar n)) = "AnonymousTyVar(" ^ Int.toString n ^ ")"
   | print_Ty (RecordType(_,xs)) = let val xs = Syntax.LabelMap.listItemsi xs
                                   in case Syntax.extractTuple (1, xs) of
                                          NONE => "RecordType " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label,print_Ty)) xs
@@ -376,9 +381,23 @@ fun freeTyVarsInTy(bound, ty)
                               TyVarSet.empty
                           else
                               TyVarSet.singleton tv
+         | AnonymousTyVar (_, tv) => TyVarSet.empty
          | RecordType(_,xs) => Syntax.LabelMap.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
          | TyCon(_,xs,_) => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
          | FnType(_,s,t) => TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
+      )
+
+(* freeAnonymousTyVarsInTy : AnonymousTyVarSet * Ty -> AnonymousTyVarSet *)
+fun freeAnonymousTyVarsInTy (bound, ty)
+    = (case ty of
+           AnonymousTyVar (_, tv) => if AnonymousTyVarSet.member (bound, tv) then
+                                         AnonymousTyVarSet.empty
+                                     else
+                                         AnonymousTyVarSet.singleton tv
+         | TyVar _ => AnonymousTyVarSet.empty
+         | RecordType (_, xs) => Syntax.LabelMap.foldl (fn (ty, set) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), set)) AnonymousTyVarSet.empty xs
+         | TyCon (_, xs, _) => List.foldl (fn (ty, set) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), set)) AnonymousTyVarSet.empty xs
+         | FnType (_, s, t) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, s), freeAnonymousTyVarsInTy (bound, t))
       )
 
 (* applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
@@ -388,36 +407,38 @@ fun applySubstTy subst
                      NONE => ty
                    | SOME replacement => replacement
                 )
+            | substTy (ty as AnonymousTyVar _) = ty
             | substTy (RecordType(span, fields)) = RecordType (span, Syntax.LabelMap.map substTy fields)
             | substTy (TyCon(span, tyargs, tycon)) = TyCon(span, List.map substTy tyargs, tycon)
             | substTy (FnType(span, ty1, ty2)) = FnType(span, substTy ty1, substTy ty2)
       in substTy
       end
 
-(* mapTy : Context * Ty TyVarMap.map * bool -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, ... } *)
-fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
-    = let val doTy = applySubstTy subst
-          val range = TyVarMap.foldl (fn (ty, tyvarset) => TyVarSet.union(freeTyVarsInTy(TyVarSet.empty, ty), tyvarset)) TyVarSet.empty subst
-          fun genFreshTyVars(subst, tyvars) = List.foldr (fn (tv, (subst, tyvars)) => if avoidCollision andalso TyVarSet.member (range, tv) then
-                                                                                          let val nextTyVar = #nextTyVar ctx
-                                                                                              val x = !nextTyVar
-                                                                                              val () = nextTyVar := x + 1
-                                                                                              val tv' = case tv of
-                                                                                                            NamedTyVar (name, _) => NamedTyVar (name, x)
-                                                                                                          | AnonymousTyVar _ => AnonymousTyVar x
-                                                                                          in (TyVarMap.insert (subst, tv, TyVar(SourcePos.nullSpan, tv')), tv' :: tyvars)
-                                                                                        end
-                                                                                      else
-                                                                                          (subst, tv :: tyvars))
-                                                         (subst, []) tyvars
+(* applySubstAnonymousTyVar : Ty T.AnonymousTyVarMap.map -> Ty -> Ty *)
+fun applySubstAnonymousTyVar subst
+    = let fun substTy (ty as AnonymousTyVar (_, tv'))
+              = (case AnonymousTyVarMap.find (subst, tv') of
+                     NONE => ty
+                   | SOME replacement => replacement
+                )
+            | substTy (ty as TyVar _) = ty
+            | substTy (RecordType (span, fields)) = RecordType (span, Syntax.LabelMap.map substTy fields)
+            | substTy (TyCon (span, tyargs, tycon)) = TyCon (span, List.map substTy tyargs, tycon)
+            | substTy (FnType (span, ty1, ty2)) = FnType (span, substTy ty1, substTy ty2)
+      in substTy
+      end
+
+(* mapTy : Context * Ty AnonymousTyVarMap.map -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, ... } *)
+fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst)
+    = let val doTy = applySubstAnonymousTyVar subst
           fun doUnaryConstraint (HasField { label, fieldTy }) = HasField { label = label, fieldTy = doTy fieldTy }
             | doUnaryConstraint (RecordExt { fields, baseTy }) = RecordExt { fields = List.map (fn (label, ty) => (label, doTy ty)) fields, baseTy = doTy baseTy }
             | doUnaryConstraint (SubrecordOf { extraFields, extendedTy }) = SubrecordOf { extraFields = List.map (fn (label, ty) => (label, doTy ty)) extraFields, extendedTy = doTy extendedTy }
             | doUnaryConstraint ct = ct
-          fun doTypeScheme(TypeScheme (tyvarsWithConstraints, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
-                                                                         val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
-                                                                     in TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty)
-                                                                     end
+          fun doTypeScheme (TypeScheme (tyvarsWithConstraints, ty)) = let val tyvars = List.map #1 tyvarsWithConstraints
+                                                                          val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
+                                                                      in TypeScheme (ListPair.zip (tyvars, constraints), applySubstAnonymousTyVar subst ty)
+                                                                      end
           val doValEnv = VIdMap.map (fn (tysc, idstatus) => (doTypeScheme tysc, idstatus))
           fun doExp(SConExp(span, scon, ty)) = SConExp(span, scon, doTy ty)
             | doExp(VarExp(span, longvid, idstatus, tyargs)) = VarExp(span, longvid, idstatus, List.map (fn (ty, cts) => (doTy ty, List.map doUnaryConstraint cts)) tyargs)
@@ -442,14 +463,12 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
             | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
             | doDec(GroupDec(span, decs)) = GroupDec(span, List.map doDec decs)
             | doDec(OverloadDec(span, class, tyname, map)) = OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
-            | doDec (EqualityDec (span, typarams, tyname, exp)) = let val (subst, tyvars) = genFreshTyVars (subst, typarams)
-                                                                  in EqualityDec (span, tyvars, tyname, #doExp (mapTy (ctx, subst, avoidCollision)) exp)
-                                                                  end
+            | doDec (EqualityDec (span, tyvars, tyname, exp)) = EqualityDec (span, tyvars, tyname, doExp exp)
           and doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
-            | doValBind(PolyVarBind(span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val (subst, tyvars) = genFreshTyVars(subst, List.map #1 tyvarsWithConstraints)
-                                                                                                           val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
-                                                                                                       in PolyVarBind(span, vid, TypeScheme (ListPair.zip (tyvars, constraints), applySubstTy subst ty), #doExp (mapTy (ctx, subst, avoidCollision)) exp)
-                                                                                                       end
+            | doValBind (PolyVarBind (span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = let val tyvars = List.map #1 tyvarsWithConstraints
+                                                                                                             val constraints = List.map (fn (_, cts) => List.map doUnaryConstraint cts) tyvarsWithConstraints
+                                                                                                         in PolyVarBind (span, vid, TypeScheme (ListPair.zip (tyvars, constraints), applySubstAnonymousTyVar subst ty), doExp exp)
+                                                                                                         end
           and doMatch(pat, exp) = (doPat pat, doExp exp)
           and doPat(pat as WildcardPat _) = pat
             | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
@@ -459,19 +478,14 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
             | doPat(VectorPat(span, pats, ellipsis, elemTy)) = VectorPat(span, Vector.map doPat pats, ellipsis, doTy elemTy)
-          and doTypBind(TypBind(span, tyvars, tycon, ty)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                            in TypBind(span, tyvars, tycon, applySubstTy subst ty)
-                                                            end
-          and doDatBind(DatBind(span, tyvars, tycon, conbinds, eq)) = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                                                          fun doConBind (ConBind (span, vid, optTy, info)) = ConBind (span, vid, Option.map (applySubstTy subst) optTy, info)
-                                                                      in DatBind(span, tyvars, tycon, List.map doConBind conbinds, eq)
-                                                                      end
+          and doTypBind (TypBind (span, tyvars, tycon, ty)) = TypBind (span, tyvars, tycon, applySubstAnonymousTyVar subst ty)
+          and doDatBind (DatBind (span, tyvars, tycon, conbinds, eq)) = let fun doConBind (ConBind (span, vid, optTy, info)) = ConBind (span, vid, Option.map (applySubstAnonymousTyVar subst) optTy, info)
+                                                                        in DatBind (span, tyvars, tycon, List.map doConBind conbinds, eq)
+                                                                        end
           and doExBind(ExBind(span, vid, optTy)) = ExBind(span, vid, Option.map doTy optTy)
             | doExBind(ExReplication(span, vid, longvid, optTy)) = ExReplication(span, vid, longvid, Option.map doTy optTy)
           fun doTypeStructure { typeFunction = TypeFunction(tyvars, ty), valEnv }
-              = { typeFunction = let val (subst, tyvars) = genFreshTyVars(subst, tyvars)
-                                 in TypeFunction(tyvars, applySubstTy subst ty)
-                                 end
+              = { typeFunction = TypeFunction (tyvars, applySubstAnonymousTyVar subst ty)
                 , valEnv = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valEnv
                 }
           fun doSignature({ valMap, tyConMap, strMap } : Signature) = { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (doTypeScheme tysc, ids)) valMap
@@ -512,107 +526,84 @@ fun mapTy (ctx : { nextTyVar : int ref, nextVId : 'a }, subst, avoidCollision)
          }
       end
 
-(* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
-fun freeTyVarsInPat(bound, pat)
+(* freeTyVarsInPat : TyVarSet * Pat -> AnonymousTyVarSet *)
+fun freeTyVarsInPat (bound, pat)
     = (case pat of
-           WildcardPat _ => TyVarSet.empty
-         | SConPat(_, _, ty) => freeTyVarsInTy(bound, ty)
-         | VarPat(_, _, ty) => freeTyVarsInTy(bound, ty)
-         | RecordPat{ fields = xs, ... } => List.foldl (fn ((_, pat), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty xs
-         | ConPat { payload = NONE, tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
-         | ConPat { payload = SOME (ty, pat), tyargs, ... } => List.foldl (fn (ty, set) => TyVarSet.union (freeTyVarsInTy (bound, ty), set)) (TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInPat (bound, pat))) tyargs
-         | TypedPat(_, pat, ty) => TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInTy(bound, ty))
-         | LayeredPat(_, _, ty, pat) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInPat(bound, pat))
-         | VectorPat(_, pats, _, elemTy) => Vector.foldl (fn (pat, set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) (freeTyVarsInTy(bound, elemTy)) pats
+           WildcardPat _ => AnonymousTyVarSet.empty
+         | SConPat (_, _, ty) => freeAnonymousTyVarsInTy (bound, ty)
+         | VarPat (_, _, ty) => freeAnonymousTyVarsInTy (bound, ty)
+         | RecordPat { fields = xs, ... } => List.foldl (fn ((_, pat), set) => AnonymousTyVarSet.union (freeTyVarsInPat (bound, pat), set)) AnonymousTyVarSet.empty xs
+         | ConPat { payload = NONE, tyargs, ... } => List.foldl (fn (ty, set) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), set)) AnonymousTyVarSet.empty tyargs
+         | ConPat { payload = SOME (ty, pat), tyargs, ... } => List.foldl (fn (ty, set) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), set)) (AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInPat (bound, pat))) tyargs
+         | TypedPat (_, pat, ty) => AnonymousTyVarSet.union (freeTyVarsInPat (bound, pat), freeAnonymousTyVarsInTy (bound, ty))
+         | LayeredPat (_, _, ty, pat) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInPat (bound, pat))
+         | VectorPat (_, pats, _, elemTy) => Vector.foldl (fn (pat, set) => AnonymousTyVarSet.union (freeTyVarsInPat (bound, pat), set)) (freeAnonymousTyVarsInTy (bound, elemTy)) pats
       )
 
-(* freeTyVarsInExp : TyVarSet * Exp -> TyVarSet *)
-fun freeTyVarsInExp(bound, exp)
+(* freeTyVarsInExp : AnonymousTyVarSet * Exp -> AnonymousTyVarSet *)
+fun freeTyVarsInExp (bound, exp)
     = (case exp of
-           SConExp(_, _, ty) => freeTyVarsInTy(bound, ty)
-         | VarExp(_, _, _, tyargs) => List.foldl (fn ((ty,cts), set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty tyargs
-         | RecordExp(_, xs) => List.foldl (fn ((_, exp), set) => TyVarSet.union(freeTyVarsInExp(bound, exp), set)) TyVarSet.empty xs
-         | RecordExtExp { sourceSpan = _, fields, baseExp, baseTy } => List.foldl (fn ((_, exp), set) => TyVarSet.union (freeTyVarsInExp (bound, exp), set)) (TyVarSet.union (freeTyVarsInExp (bound, baseExp), freeTyVarsInTy (bound, baseTy))) fields
-         | LetInExp(_, decls, exp) => TyVarSet.union(freeTyVarsInDecs(bound, decls), freeTyVarsInExp(bound, exp))
-         | AppExp(_, exp1, exp2) => TyVarSet.union(freeTyVarsInExp(bound, exp1), freeTyVarsInExp(bound, exp2))
-         | TypedExp(_, exp, ty) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInTy(bound, ty))
-         | HandleExp(_, exp, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), freeTyVarsInMatches(bound, matches, TyVarSet.empty))
-         | RaiseExp(_, ty, exp) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInExp(bound, exp))
-         | IfThenElseExp(_, exp1, exp2, exp3) => TyVarSet.union(freeTyVarsInExp(bound, exp1), TyVarSet.union(freeTyVarsInExp(bound, exp2), freeTyVarsInExp(bound, exp3)))
-         | CaseExp(_, exp, ty, matches) => TyVarSet.union(freeTyVarsInExp(bound, exp), TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInMatches(bound, matches, TyVarSet.empty)))
-         | FnExp(_, vid, ty, body) => TyVarSet.union(freeTyVarsInTy(bound, ty), freeTyVarsInExp(bound, body))
-         | ProjectionExp { recordTy = recordTy, fieldTy = fieldTy, ... } => TyVarSet.union(freeTyVarsInTy(bound, recordTy), freeTyVarsInTy(bound, fieldTy))
-         | ListExp(_, xs, ty) => Vector.foldl (fn (x, set) => TyVarSet.union(freeTyVarsInExp(bound, x), set)) (freeTyVarsInTy(bound, ty)) xs
-         | VectorExp(_, xs, ty) => Vector.foldl (fn (x, set) => TyVarSet.union(freeTyVarsInExp(bound, x), set)) (freeTyVarsInTy(bound, ty)) xs
-         | PrimExp(_, _, tyargs, args) => let val set = Vector.foldl (fn (ty, set) => TyVarSet.union(set, freeTyVarsInTy(bound, ty))) TyVarSet.empty tyargs
-                                          in Vector.foldl (fn (x, set) => TyVarSet.union(set, freeTyVarsInExp(bound, x))) set args
-                                          end
+           SConExp (_, _, ty) => freeAnonymousTyVarsInTy (bound, ty)
+         | VarExp (_, _, _, tyargs) => List.foldl (fn ((ty, cts), set) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), set)) AnonymousTyVarSet.empty tyargs
+         | RecordExp (_, xs) => List.foldl (fn ((_, exp), set) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp), set)) AnonymousTyVarSet.empty xs
+         | RecordExtExp { sourceSpan = _, fields, baseExp, baseTy } => List.foldl (fn ((_, exp), set) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp), set)) (AnonymousTyVarSet.union (freeTyVarsInExp (bound, baseExp), freeAnonymousTyVarsInTy (bound, baseTy))) fields
+         | LetInExp (_, decls, exp) => AnonymousTyVarSet.union (freeTyVarsInDecs (bound, decls), freeTyVarsInExp (bound, exp))
+         | AppExp (_, exp1, exp2) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp1), freeTyVarsInExp (bound, exp2))
+         | TypedExp (_, exp, ty) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp), freeAnonymousTyVarsInTy (bound, ty))
+         | HandleExp (_, exp, matches) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInMatches (bound, matches, AnonymousTyVarSet.empty))
+         | RaiseExp (_, ty, exp) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
+         | IfThenElseExp (_, exp1, exp2, exp3) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp1), AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp2), freeTyVarsInExp (bound, exp3)))
+         | CaseExp (_, exp, ty, matches) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, exp), AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInMatches (bound, matches, AnonymousTyVarSet.empty)))
+         | FnExp (_, vid, ty, body) => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInExp (bound, body))
+         | ProjectionExp { recordTy = recordTy, fieldTy = fieldTy, ... } => AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, recordTy), freeAnonymousTyVarsInTy (bound, fieldTy))
+         | ListExp (_, xs, ty) => Vector.foldl (fn (x, set) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, x), set)) (freeAnonymousTyVarsInTy (bound, ty)) xs
+         | VectorExp (_, xs, ty) => Vector.foldl (fn (x, set) => AnonymousTyVarSet.union (freeTyVarsInExp (bound, x), set)) (freeAnonymousTyVarsInTy (bound, ty)) xs
+         | PrimExp (_, _, tyargs, args) => let val set = Vector.foldl (fn (ty, set) => AnonymousTyVarSet.union (set, freeAnonymousTyVarsInTy (bound, ty))) AnonymousTyVarSet.empty tyargs
+                                           in Vector.foldl (fn (x, set) => AnonymousTyVarSet.union (set, freeTyVarsInExp (bound, x))) set args
+                                           end
       )
-and freeTyVarsInMatches(bound, nil, acc) = acc
-  | freeTyVarsInMatches(bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches(bound, rest, TyVarSet.union(acc, TyVarSet.union(freeTyVarsInPat(bound, pat), freeTyVarsInExp(bound, exp))))
-and freeTyVarsInDecs(bound, decls) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInDec(bound, dec))) TyVarSet.empty decls
-and freeTyVarsInDec(bound, dec)
+and freeTyVarsInMatches (bound, nil, acc) = acc
+  | freeTyVarsInMatches (bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches (bound, rest, AnonymousTyVarSet.union (acc, AnonymousTyVarSet.union (freeTyVarsInPat (bound, pat), freeTyVarsInExp (bound, exp))))
+and freeTyVarsInDecs (bound, decls) = List.foldl (fn (dec, set) => AnonymousTyVarSet.union (set, freeTyVarsInDec (bound, dec))) AnonymousTyVarSet.empty decls
+and freeTyVarsInDec (bound, dec)
     = (case dec of
-           ValDec(_, valbinds) => List.foldl (fn (valbind, acc) => TyVarSet.union(acc, freeTyVarsInValBind(bound, valbind))) TyVarSet.empty valbinds
-         | RecValDec(_, valbinds) => List.foldl (fn (valbind, acc) => TyVarSet.union(acc, freeTyVarsInValBind(bound, valbind))) TyVarSet.empty valbinds
-         | TypeDec(_, typbinds) => List.foldl (fn (typbind, acc) => TyVarSet.union(acc, freeTyVarsInTypBind(bound, typbind))) TyVarSet.empty typbinds
-         | DatatypeDec(_, datbinds) => List.foldl (fn (datbind, acc) => TyVarSet.union(acc, freeTyVarsInDatBind(bound, datbind))) TyVarSet.empty datbinds
-         | ExceptionDec(_, exbinds) => List.foldl (fn (exbind, acc) => TyVarSet.union(acc, freeTyVarsInExBind(bound, exbind))) TyVarSet.empty exbinds
-         | GroupDec(_, decs) => freeTyVarsInDecs(bound, decs)
-         | OverloadDec(_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, freeTyVarsInExp(bound, exp))) TyVarSet.empty map
-         | EqualityDec (_, typarams, tyname, exp) => let val bound' = TyVarSet.addList (bound, typarams)
-                                                     in freeTyVarsInExp (bound', exp)
-                                                     end
+           ValDec (_, valbinds) => List.foldl (fn (valbind, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInValBind (bound, valbind))) AnonymousTyVarSet.empty valbinds
+         | RecValDec (_, valbinds) => List.foldl (fn (valbind, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInValBind (bound, valbind))) AnonymousTyVarSet.empty valbinds
+         | TypeDec (_, typbinds) => List.foldl (fn (typbind, acc) => AnonymousTyVarSet.union (acc, freeAnonymousTyVarsInTypBind (bound, typbind))) AnonymousTyVarSet.empty typbinds
+         | DatatypeDec (_, datbinds) => List.foldl (fn (datbind, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInDatBind (bound, datbind))) AnonymousTyVarSet.empty datbinds
+         | ExceptionDec (_, exbinds) => List.foldl (fn (exbind, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInExBind (bound, exbind))) AnonymousTyVarSet.empty exbinds
+         | GroupDec (_, decs) => freeTyVarsInDecs (bound, decs)
+         | OverloadDec (_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInExp (bound, exp))) AnonymousTyVarSet.empty map
+         | EqualityDec (_, typarams, tyname, exp) => freeTyVarsInExp (bound, exp)
       )
-and freeTyVarsInValBind(bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => TyVarSet.union(acc, freeTyVarsInTy(bound, ty))) (freeTyVarsInExp(bound, exp)) xs
-  | freeTyVarsInValBind(bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = let val bound' = TyVarSet.addList(bound, List.map #1 tyvars)
-                                                                                   in TyVarSet.union(freeTyVarsInTy(bound', ty), freeTyVarsInExp(bound', exp))
-                                                                                   end
-and freeTyVarsInTypBind(bound, TypBind(_, tyvars, tycon, ty)) = freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty)
-and freeTyVarsInDatBind(bound, DatBind(_, tyvars, tycon, conbinds, _)) = let val bound' = TyVarSet.addList(bound, tyvars)
-                                                                         in List.foldl (fn (conbind, acc) => TyVarSet.union(acc, freeTyVarsInConBind(bound', conbind))) TyVarSet.empty conbinds
-                                                                         end
-and freeTyVarsInConBind (bound, ConBind (_, vid, NONE, info)) = TyVarSet.empty
-  | freeTyVarsInConBind (bound, ConBind (_, vid, SOME ty, info)) = freeTyVarsInTy (bound, ty)
-and freeTyVarsInExBind(bound, ExBind(_, vid, NONE)) = TyVarSet.empty
-  | freeTyVarsInExBind(bound, ExBind(_, vid, SOME ty)) = freeTyVarsInTy(bound, ty)
-  | freeTyVarsInExBind(bound, ExReplication(_, _, _, NONE)) = TyVarSet.empty
-  | freeTyVarsInExBind(bound, ExReplication(_, _, _, SOME ty)) = freeTyVarsInTy(bound, ty)
-and freeTyVarsInUnaryConstraint(bound, unaryConstraint)
+and freeTyVarsInValBind (bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => AnonymousTyVarSet.union (acc, freeAnonymousTyVarsInTy (bound, ty))) (freeTyVarsInExp (bound, exp)) xs
+  | freeTyVarsInValBind (bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = AnonymousTyVarSet.union (freeAnonymousTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
+and freeAnonymousTyVarsInTypBind (bound, TypBind (_, tyvars, tycon, ty)) = freeAnonymousTyVarsInTy (bound, ty)
+and freeTyVarsInDatBind (bound, DatBind (_, tyvars, tycon, conbinds, _)) = List.foldl (fn (conbind, acc) => AnonymousTyVarSet.union (acc, freeTyVarsInConBind (bound, conbind))) AnonymousTyVarSet.empty conbinds
+and freeTyVarsInConBind (bound, ConBind (_, vid, NONE, info)) = AnonymousTyVarSet.empty
+  | freeTyVarsInConBind (bound, ConBind (_, vid, SOME ty, info)) = freeAnonymousTyVarsInTy (bound, ty)
+and freeTyVarsInExBind (bound, ExBind (_, vid, NONE)) = AnonymousTyVarSet.empty
+  | freeTyVarsInExBind (bound, ExBind (_, vid, SOME ty)) = freeAnonymousTyVarsInTy (bound, ty)
+  | freeTyVarsInExBind (bound, ExReplication (_, _, _, NONE)) = AnonymousTyVarSet.empty
+  | freeTyVarsInExBind (bound, ExReplication (_, _, _, SOME ty)) = freeAnonymousTyVarsInTy (bound, ty)
+and freeTyVarsInUnaryConstraint (bound, unaryConstraint)
     = (case unaryConstraint of
-           HasField { label = _, fieldTy } => freeTyVarsInTy (bound, fieldTy)
-         | RecordExt { fields, baseTy } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, baseTy)) fields
-         | SubrecordOf { extraFields, extendedTy } => List.foldl (fn ((_, fieldTy), acc) => TyVarSet.union (acc, freeTyVarsInTy (bound, fieldTy))) (freeTyVarsInTy (bound, extendedTy)) extraFields
-         | IsEqType     => TyVarSet.empty
-         | IsIntegral   => TyVarSet.empty
-         | IsSignedReal => TyVarSet.empty
-         | IsRing       => TyVarSet.empty
-         | IsField      => TyVarSet.empty
-         | IsSigned     => TyVarSet.empty
-         | IsOrdered    => TyVarSet.empty
-         | IsInt        => TyVarSet.empty
-         | IsWord       => TyVarSet.empty
-         | IsReal       => TyVarSet.empty
-         | IsChar       => TyVarSet.empty
-         | IsString     => TyVarSet.empty
+           HasField { label = _, fieldTy } => freeAnonymousTyVarsInTy (bound, fieldTy)
+         | RecordExt { fields, baseTy } => List.foldl (fn ((_, fieldTy), acc) => AnonymousTyVarSet.union (acc, freeAnonymousTyVarsInTy (bound, fieldTy))) (freeAnonymousTyVarsInTy (bound, baseTy)) fields
+         | SubrecordOf { extraFields, extendedTy } => List.foldl (fn ((_, fieldTy), acc) => AnonymousTyVarSet.union (acc, freeAnonymousTyVarsInTy (bound, fieldTy))) (freeAnonymousTyVarsInTy (bound, extendedTy)) extraFields
+         | IsEqType     => AnonymousTyVarSet.empty
+         | IsIntegral   => AnonymousTyVarSet.empty
+         | IsSignedReal => AnonymousTyVarSet.empty
+         | IsRing       => AnonymousTyVarSet.empty
+         | IsField      => AnonymousTyVarSet.empty
+         | IsSigned     => AnonymousTyVarSet.empty
+         | IsOrdered    => AnonymousTyVarSet.empty
+         | IsInt        => AnonymousTyVarSet.empty
+         | IsWord       => AnonymousTyVarSet.empty
+         | IsReal       => AnonymousTyVarSet.empty
+         | IsChar       => AnonymousTyVarSet.empty
+         | IsString     => AnonymousTyVarSet.empty
       )
-
-fun freeTyVarsInSignature(bound, { valMap, tyConMap, strMap } : Signature) = TyVarSet.empty (* TODO: implement *)
-fun freeTyVarsInStrExp(bound, StructExp { ... }) = TyVarSet.empty (* TODO: tyConMap *)
-  | freeTyVarsInStrExp(bound, StrIdExp _) = TyVarSet.empty
-  | freeTyVarsInStrExp(bound, PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = freeTyVarsInStrExp(bound, strExp) (* TODO *)
-  | freeTyVarsInStrExp(bound, FunctorAppExp { sourceSpan, funId, argumentTypes, argumentStr, packageSig })
-    = freeTyVarsInStrExp(bound, argumentStr) (* TODO: argumentTypes, packageSig *)
-  | freeTyVarsInStrExp(bound, LetInStrExp(_, strdecs, strexp)) = TyVarSet.union(freeTyVarsInStrDecs(bound, strdecs), freeTyVarsInStrExp(bound, strexp))
-and freeTyVarsInStrDec(bound, CoreDec(_, dec)) = freeTyVarsInDec(bound, dec)
-  | freeTyVarsInStrDec(bound, StrBindDec(_, _, strexp, { s, bound = _ })) = TyVarSet.union(freeTyVarsInStrExp(bound, strexp), freeTyVarsInSignature(bound, s))
-  | freeTyVarsInStrDec(bound, GroupStrDec(_, decs)) = freeTyVarsInStrDecs(bound, decs)
-and freeTyVarsInStrDecs(bound, decs) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInStrDec(bound, dec))) TyVarSet.empty decs
-
-fun freeTyVarsInFunExp(bound, (tynames, strid, s, strexp)) = TyVarSet.union(freeTyVarsInSignature(bound, s), freeTyVarsInStrExp(bound, strexp))
-fun freeTyVarsInTopDec(bound, StrDec(strdec)) = freeTyVarsInStrDec(bound, strdec)
-  | freeTyVarsInTopDec(bound, FunDec(funid, funexp)) = freeTyVarsInFunExp(bound, funexp)
-fun freeTyVarsInTopDecs(bound, decs) = List.foldl (fn (dec, set) => TyVarSet.union(set, freeTyVarsInTopDec(bound, dec))) TyVarSet.empty decs
 
 (* filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
 fun filterVarsInPat pred =

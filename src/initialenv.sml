@@ -161,10 +161,10 @@ val initialEnv : Typing.Env
                                                                                         end
                                                          ) Syntax.VIdMap.empty cons
                                            end
-          val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
-          val tyVarB = TypedSyntax.NamedTyVar ("'b", 0)
-          val tyVarC = TypedSyntax.NamedTyVar ("'c", 0)
-          val tyVarD = TypedSyntax.NamedTyVar ("'d", 0)
+          val tyVarA = TypedSyntax.MkTyVar ("'a", 0)
+          val tyVarB = TypedSyntax.MkTyVar ("'b", 1)
+          val tyVarC = TypedSyntax.MkTyVar ("'c", 2)
+          val tyVarD = TypedSyntax.MkTyVar ("'d", 3)
           val TypeFunction = TypedSyntax.TypeFunction
           val TypeScheme = TypedSyntax.TypeScheme
           val emptyValEnv = TypedSyntax.emptyValEnv
@@ -395,8 +395,8 @@ val primOverloadEnv : Typing.Env
     = let open Typing
           val TypeScheme = TypedSyntax.TypeScheme
           fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
-          val tyVarA = TypedSyntax.NamedTyVar ("'a", 0)
-          val tyVarEqA = TypedSyntax.NamedTyVar ("''a", 0)
+          val tyVarA = TypedSyntax.MkTyVar ("'a", 0)
+          val tyVarEqA = TypedSyntax.MkTyVar ("''a", 0)
           val tyA = mkTyVar tyVarA
           val tyEqA = mkTyVar tyVarEqA
           infixr -->
