@@ -134,6 +134,8 @@ should_compile "should_compile/" {
   "signature_sharing3.sml",
   "withtype.sml",
   "sharing_structures.sml",
+  "generalization1.sml",
+  "record.sml",
 }
 should_not_compile "should_not_compile/" {
   "fixity.sml",
@@ -185,6 +187,7 @@ should_not_compile "should_not_compile/" {
   "reserved_valdesc.sml",
   "invalid-bound-name1.sml",
   "invalid-bound-name2.sml",
+  "flex-record.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
