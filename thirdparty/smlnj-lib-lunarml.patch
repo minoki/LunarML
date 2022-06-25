@@ -54,7 +54,7 @@ diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarm
  
 diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
 --- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00.000000000 +0900
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-18 20:28:10.000000000 +0900
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-20 22:40:58.000000000 +0900
 @@ -0,0 +1,226 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
@@ -125,8 +125,8 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +interval-domain-sig.sml
 +interval-set-sig.sml
 +interval-set-fn.sml
-+io-util-sig.sml
-+io-util.sml
++(* io-util-sig.sml
++io-util.sml *)
 +getopt-sig.sml
 +getopt.sml
 +mono-priorityq-sig.sml
@@ -143,17 +143,17 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +mono-array-fn.sml
 +parser-comb-sig.sml
 +parser-comb.sml
-+path-util-sig.sml
-+path-util.sml
++(* path-util-sig.sml
++path-util.sml *)
 +plist-sig.sml
 +plist.sml
-+target64-prime-sizes.sml
++(* target64-prime-sizes.sml *)
 +queue-sig.sml
 +queue.sml
-+rand-sig.sml
++(* rand-sig.sml
 +rand.sml
 +random-sig.sml
-+random.sml
++random.sml *)
 +scan-sig.sml
 +scan.sml
 +uref-sig.sml
@@ -162,13 +162,13 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +splaytree.sml
 +splay-map-fn.sml
 +splay-set-fn.sml
-+time-limit.sml
++(* time-limit.sml *)
 +uref.sml
 +word-hash-table.sml
 +word-redblack-map.sml
 +word-redblack-set.sml
-+real-order-stats.sml
-+univariate-stats.sml
++(* real-order-stats.sml
++univariate-stats.sml *)
 +utf8-sig.sml
 +utf8.sml
 +in
@@ -186,7 +186,7 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +signature HASH_TABLE
 +signature INTERVAL_DOMAIN
 +signature INTERVAL_SET
-+signature IO_UTIL
++(* signature IO_UTIL *)
 +signature GET_OPT
 +signature LIB_BASE
 +signature LIST_FORMAT
@@ -202,12 +202,12 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +signature ORD_MAP
 +signature ORD_SET
 +signature PARSER_COMB
-+signature PATH_UTIL
++(* signature PATH_UTIL *)
 +signature PRIORITY
 +signature PROP_LIST
 +signature QUEUE
-+signature RAND
-+signature RANDOM
++(* signature RAND
++signature RANDOM *)
 +signature SCAN
 +signature SPLAY_TREE
 +signature UREF
@@ -239,28 +239,28 @@ diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/U
 +structure IntListSet
 +structure IntRedBlackMap
 +structure IntRedBlackSet
-+structure IOUtil
++(* structure IOUtil *)
 +structure GetOpt
 +structure LibBase
 +structure ListFormat
 +structure ListMergeSort
 +structure ListXProd
 +structure ParserComb
-+structure PathUtil
-+structure PrimeSizes
++(* structure PathUtil *)
++(* structure PrimeSizes *)
 +structure PropList
 +structure Queue
-+structure Rand
-+structure Random
++(* structure Rand
++structure Random *)
 +structure Scan
 +structure SimpleURef
-+structure TimeLimit
++(* structure TimeLimit *)
 +structure URef
 +structure WordHashTable
 +structure WordRedBlackMap
 +structure WordRedBlackSet
-+structure RealOrderStats
-+structure UnivariateStats
++(* structure RealOrderStats
++structure UnivariateStats *)
 +structure UTF8
 +functor ArrayQSortFn
 +functor BSearchFn
