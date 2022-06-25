@@ -601,8 +601,10 @@ local structure T = TypedSyntax
                       end
 in
 fun toFTy (ctx : Context, env : Env, T.TyVar (span, tv)) = F.TyVar tv
-  | toFTy (ctx, env, T.AnonymousTyVar (span, T.MkAnonymousTyVar n)) = raise Fail ("unexpected anonymous type variable " ^ Int.toString n)
+  | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = toFTy (ctx, env, ty)
+  | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
   | toFTy (ctx, env, T.RecordType (span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy (ctx, env, ty)) fields)
+  | toFTy (ctx, env, T.RecordExtType (span, fields, baseTy)) = raise Fail "unexpected record extension"
   | toFTy (ctx, env, T.TyCon (span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
   | toFTy (ctx, env, T.FnType (span, paramTy, resultTy)) = let fun doTy ty = toFTy (ctx, env, ty)
                                                            in F.FnType (doTy paramTy, doTy resultTy)
@@ -966,8 +968,10 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                                                       NONE => raise Fail ("equality for the type variable not found: " ^ TypedSyntax.PrettyPrint.print_TyVar tv)
                                                     | SOME vid => F.VarExp vid
                                                  )
-  | getEquality (ctx, env, T.AnonymousTyVar (span, T.MkAnonymousTyVar n)) = raise Fail ("unexpected anonymous type variable " ^ Int.toString n)
+  | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = getEquality (ctx, env, ty)
+  | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
   | getEquality (ctx, env, T.RecordType (span, fields)) = F.RecordEqualityExp (Syntax.LabelMap.foldli (fn (label, ty, xs) => (label, getEquality (ctx, env, ty)) :: xs) [] fields)
+  | getEquality (ctx, env, T.RecordExtType (span, fields, baseTy)) = raise Fail "unexpected record extension"
   | getEquality (ctx, env, T.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs (ctx, env, []) = (env, [])
   | toFDecs (ctx, env, T.ValDec (span, valbinds) :: decs)
