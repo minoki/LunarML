@@ -124,9 +124,7 @@ local
                                                                    else if f (sub (s, j)) then
                                                                        loop (j + 1)
                                                                    else
-                                                                       let val j' = j - 1
-                                                                       in ({ base = base, start = start, length = j' }, { base = base, start = start + j', length = length - j' })
-                                                                       end
+                                                                       ({ base = base, start = start, length = j }, { base = base, start = start + j, length = length - j })
                                                   in loop 0
                                                   end
     fun splitr f (s as { base, start, length }) = let fun loop j = if j < 0 then

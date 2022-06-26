@@ -203,6 +203,7 @@ should_run "mlbasis/should_run/" {
   "seki-bernoulli.sml",
   "exn-name.sml",
   "real.sml",
+  "substring.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
