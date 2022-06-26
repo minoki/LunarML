@@ -15,8 +15,9 @@ $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
 mlbasis.sml
-substring.sml
 lua/word.sml
+lua/mono-vector.sml
+substring.sml
 scan-bool.sml
 lua/scan-num.sml
 scan-text.sml
@@ -26,7 +27,6 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 large-int-is-int-inf.sml
-lua/mono-vector.sml
 lua/mono-array.sml
 lua/unsafe-extra.sml
 lua/byte.sml
@@ -77,6 +77,7 @@ structure LargeWord
 structure IntInf
 structure LargeInt
 structure CharVector
+structure CharVectorSlice
 structure CharArray
 structure CharArraySlice
 structure Word8Vector

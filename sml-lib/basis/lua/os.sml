@@ -23,6 +23,10 @@ structure OS :> sig
                             val joinDirFile : { dir : string, file : string } -> string
                             val dir : string -> string
                             val file : string -> string
+                            val splitBaseExt : string -> { base : string, ext : string option }
+                            val joinBaseExt : { base : string, ext : string option } -> string
+                            val base : string -> string
+                            val ext : string -> string option
                             val mkCanonical : string -> string
                             val mkAbsolute : { path : string, relativeTo : string } -> string
                             val mkRelative : { path : string, relativeTo : string } -> string
@@ -247,6 +251,27 @@ fun joinDirFile { dir, file } = let val { isAbs, vol, arcs } = fromString dir
                                 end
 val dir = #dir o splitDirFile
 val file = #file o splitDirFile
+fun splitBaseExt path = let val { isAbs, vol, arcs } = fromString path
+                            fun go (revAcc, [lastArc]) = let val (l, r) = Substring.splitr (fn c => c <> #".") (Substring.full lastArc)
+                                                             val l = Substring.string l
+                                                             and r = Substring.string r
+                                                             val (base, ext) = case (l, r) of
+                                                                                   ("", _) => (lastArc, NONE)
+                                                                                 | (_, "") => (lastArc, NONE)
+                                                                                 | (".", _) => (lastArc, NONE)
+                                                                                 | (base, ext) => (String.substring (base, 0, String.size base - 1), SOME ext)
+                                                         in { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev (base :: revAcc) }, ext = ext }
+                                                         end
+                              | go (revAcc, x :: xs) = go (x :: revAcc, xs)
+                              | go (revAcc, []) = { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, ext = NONE }
+                        in go ([], arcs)
+                        end
+fun joinBaseExt { base, ext } = case ext of
+                                    NONE => base
+                                  | SOME "" => base
+                                  | SOME x => base ^ "." ^ x
+fun base path = #base (splitBaseExt path)
+fun ext path = #ext (splitBaseExt path)
 local
     fun go (revArcs, []) = String.concatWith "/" (List.rev revArcs)
       | go (_ :: revArcs, #"." :: #"." :: #"/" :: xs) = go (revArcs, xs)

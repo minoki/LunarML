@@ -34,7 +34,7 @@ structure CharArrayAndArraySlice :> sig
               structure CharArray : MONO_ARRAY where type vector = CharVector.vector
                                                where type elem = char
               structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vector
-                                                          where type vector_slice = Substring.substring
+                                                          where type vector_slice = CharVectorSlice.slice
                                                           where type array = CharArray.array
                                                           where type elem = char
           end
@@ -113,7 +113,7 @@ type elem = char
 type array = JavaScript.value (* TODO: equality *)
 type slice = { base : array, start : int, length : int }
 type vector = CharVector.vector
-type vector_slice = Substring.substring
+type vector_slice = CharVectorSlice.slice
 fun length ({ length = n, ... } : slice) = n
 fun sub ({ base, start, length } : slice, i) = if 0 <= i andalso i < length then
                                                    CharArray.sub (base, start + i)

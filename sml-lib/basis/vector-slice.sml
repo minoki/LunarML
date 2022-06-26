@@ -6,6 +6,7 @@ structure VectorSlice :> sig
               val slice : 'a Vector.vector * int * int option -> 'a slice
               val subslice : 'a slice * int * int option -> 'a slice
               val vector : 'a slice -> 'a Vector.vector
+              val getItem : 'a slice -> ('a * 'a slice) option
               val exists : ('a -> bool) -> 'a slice -> bool
           end = struct
 (* invariant: 0 <= start <= start + length <= Vector.length base *)
@@ -36,6 +37,10 @@ fun subslice ({ base, start, length }, i, NONE) = if 0 <= i andalso i <= length 
                                                     else
                                                         raise Subscript
 fun vector { base, start, length } = Vector.tabulate (length, fn i => Unsafe.Vector.sub (base, start + i))
+fun getItem { base, start, length } = if length > 0 then
+                                          SOME (Unsafe.Vector.sub (base, start), { base = base, start = start + 1, length = length - 1 })
+                                      else
+                                          NONE
 fun exists f { base, start, length } = let fun loop i = if i >= length then
                                                             false
                                                         else

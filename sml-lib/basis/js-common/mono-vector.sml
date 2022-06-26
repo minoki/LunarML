@@ -23,6 +23,23 @@ signature MONO_VECTOR = sig
     (* val collate *)
 end;
 
+signature MONO_VECTOR_SLICE = sig
+    type elem
+    type vector
+    type slice
+    val length : slice -> int
+    val sub : slice * int -> elem
+    val full : vector -> slice
+    val slice : vector * int * int option -> slice
+    val subslice : slice * int * int option -> slice
+    val base : slice -> vector * int * int
+    val vector : slice -> vector
+    val isEmpty : slice -> bool
+    val getItem : slice -> (elem * slice) option
+    val exists : (elem -> bool) -> slice -> bool
+    val all : (elem -> bool) -> slice -> bool
+end
+
 (* structure Word8Vector :> MONO_VECTOR where type elem = Word8.word *)
 
 structure CharVector :> MONO_VECTOR where type vector = String.string

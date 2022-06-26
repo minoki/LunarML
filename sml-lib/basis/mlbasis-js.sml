@@ -548,6 +548,7 @@ structure String : sig
               val tokens : (char -> bool) -> string -> string list
               val fields : (char -> bool) -> string -> string list
               val isPrefix : string -> string -> bool
+              val isSuffix : string -> string -> bool
               val compare : string * string -> order
               val < : string * string -> bool
               val <= : string * string -> bool
@@ -594,7 +595,14 @@ fun isPrefix prefix s = let val n = size prefix
                            else
                                substring (s, 0, n) = prefix
                         end
-(* isSubstring, isSuffix, collate, toString, scan, fromString, toCString, fromCString *)
+fun isSuffix suffix s = let val n = size suffix
+                            val m = size s
+                        in if n > m then
+                               false
+                           else
+                               substring (s, m - n, n) = suffix
+                        end
+(* isSubstring, collate, toString, scan, fromString, toCString, fromCString *)
 fun compare (s, t) = if s = t then
                          EQUAL
                      else if String.< (s, t) then
@@ -811,7 +819,7 @@ signature STRING = sig
     val fields : (char -> bool) -> string -> string list
     val isPrefix : string -> string -> bool
     (* val isSubstring : string -> string -> bool *)
-    (* val isSuffix : string -> string -> bool *)
+    val isSuffix : string -> string -> bool
     val compare : string * string -> order
     (* val collate : (char * char -> order) -> string * string -> order *)
     val < : string * string -> bool

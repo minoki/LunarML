@@ -34,7 +34,10 @@ signature MONO_VECTOR_SLICE = sig
     val subslice : slice * int * int option -> slice
     val base : slice -> vector * int * int
     val vector : slice -> vector
+    val isEmpty : slice -> bool
+    val getItem : slice -> (elem * slice) option
     val exists : (elem -> bool) -> slice -> bool
+    val all : (elem -> bool) -> slice -> bool
 end
 
 signature WORD8_VECTOR_EXTRA = sig
@@ -148,6 +151,11 @@ fun subslice ({ base, start, length }, i, NONE) = if 0 <= i andalso i <= length 
                                                         raise Subscript
 fun base { base = b, start, length } = (b, start, length)
 fun vector { base, start, length } = Word8Vector.tabulate (length, fn i => Word8Vector.sub (base, start + i))
+fun isEmpty { base, start, length } = length = 0
+fun getItem { base, start, length } = if length > 0 then
+                                          SOME (Word8Vector.sub (base, start), { base = base, start = start + 1, length = length - 1 })
+                                      else
+                                          NONE
 fun exists f { base, start, length } = let fun loop i = if i >= length then
                                                             false
                                                         else
@@ -157,6 +165,15 @@ fun exists f { base, start, length } = let fun loop i = if i >= length then
                                                                 loop (i + 1)
                                        in loop start
                                        end
+fun all f { base, start, length } = let fun loop i = if i >= length then
+                                                         true
+                                                     else
+                                                         if not (f (Word8Vector.sub (base, start + i))) then
+                                                             false
+                                                         else
+                                                             loop (i + 1)
+                                    in loop start
+                                    end
 end
 
 structure CharVector :> MONO_VECTOR where type vector = String.string

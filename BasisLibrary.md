@@ -399,7 +399,7 @@ signature STRING = sig
   val fields : (char -> bool) -> string -> string list
   val isPrefix : string -> string -> bool
   (* val isSubstring : string -> string -> bool *)
-  (* val isSuffix : string -> string -> bool *)
+  val isSuffix : string -> string -> bool
   val compare : string * string -> order
   (* val collate : (char * char -> order) -> string * string -> order *)
   val < : string * string -> bool
@@ -542,6 +542,7 @@ structure VectorSlice :> sig
   val slice : 'a Vector.vector * int * int option -> 'a slice
   val subslice : 'a slice * int * int option -> 'a slice
   val vector : 'a slice -> 'a Vector.vector
+  val getItem : 'a slice -> ('a * 'a slice) option
   val exists : ('a -> bool) -> 'a slice -> bool
 end
 
@@ -620,6 +621,27 @@ end
 
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
+
+signature MONO_VECTOR_SLICE = sig
+  type elem
+  type vector
+  type slice
+  val length : slice -> int
+  val sub : slice * int -> elem
+  val full : vector -> slice
+  val slice : vector * int * int option -> slice
+  val subslice : slice * int * int option -> slice
+  val base : slice -> vector * int * int
+  val vector : slice -> vector
+  val isEmpty : slice -> bool
+  val getItem : slice -> (elem * slice) option
+  val exists : (elem -> bool) -> slice -> bool
+  val all : (elem -> bool) -> slice -> bool
+end
+
+structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = String.string
+                                               where type elem = char
+                                               where type slice = Substring.substring
 
 signature MONO_ARRAY = sig
   eqtype array

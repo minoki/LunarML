@@ -21,7 +21,9 @@ js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 mlbasis-js.sml
+js-common/mono-vector.sml
 substring.sml
+js-common/mono-array.sml
 js-common/int-inf.sml
 js-common/word.sml
 scan-bool.sml
@@ -31,8 +33,6 @@ io.sml
 vector-slice.sml
 array-slice.sml
 list-pair.sml
-js-common/mono-vector.sml
-js-common/mono-array.sml
 end
 in
 signature BOOL
@@ -42,6 +42,7 @@ signature REAL
 signature CHAR
 signature STRING
 signature MONO_VECTOR
+signature MONO_VECTOR_SLICE
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
 structure Unsafe (* extension; to be moved... *)
@@ -54,6 +55,7 @@ structure Char
 structure CharArray
 structure CharArraySlice
 structure CharVector
+structure CharVectorSlice
 structure General
 structure IEEEReal
 structure IO
