@@ -1402,16 +1402,13 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                          ) T.TyVarMap.empty allTyVars
                     val exp = #doExp (T.applySubstTyInExpOrDec unboundTyVars) exp
                     val subst = List.foldl (fn ((_, vid', T.TypeScheme (tyvars', _), _), subst) =>
-                                               if vid' = vid then
-                                                   subst
-                                               else
-                                                   T.VIdMap.insert (subst, vid', fn (span, idstatus as Syntax.ValueVariable, []) =>
-                                                                                    let val tyargs' = List.map (fn (tv, c) => case T.TyVarMap.find (unboundTyVars, tv) of
-                                                                                                                                  NONE => (T.TyVar (span, tv), c)
-                                                                                                                                | SOME a => (a, c)) tyvars'
-                                                                                    in T.VarExp (span, T.MkShortVId vid', idstatus, tyargs')
-                                                                                    end
-                                                                               | (_, _, _) => emitTypeError (ctx, [span], "invalid use of recursive identifier"))
+                                               T.VIdMap.insert (subst, vid', fn (span, idstatus as Syntax.ValueVariable, []) =>
+                                                                                let val tyargs' = List.map (fn (tv, c) => case T.TyVarMap.find (unboundTyVars, tv) of
+                                                                                                                              NONE => (T.TyVar (span, tv), c)
+                                                                                                                            | SOME a => (a, c)) tyvars'
+                                                                                in T.VarExp (span, T.MkShortVId vid', idstatus, tyargs')
+                                                                                end
+                                                                           | (_, _, _) => emitTypeError (ctx, [span], "invalid use of recursive identifier"))
                                            ) T.VIdMap.empty valbinds
                     val exp = #doExp (T.substVId subst) exp
                 in T.PolyVarBind (span, vid, tysc, exp)
