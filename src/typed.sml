@@ -413,6 +413,144 @@ fun applySubstTy subst
       in substTy
       end
 
+fun applySubstTyInPat subst
+    = let val doTy = applySubstTy subst
+          fun doPat (pat as WildcardPat _) = pat
+            | doPat (SConPat (span, scon, ty)) = SConPat (span, scon, doTy ty)
+            | doPat (VarPat (span, vid, ty)) = VarPat (span, vid, doTy ty)
+            | doPat (RecordPat { sourceSpan, fields, ellipsis }) = RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat pat)) fields, ellipsis = Option.map doPat ellipsis }
+            | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
+            | doPat (TypedPat (span, pat, ty)) = TypedPat (span, doPat pat, doTy ty)
+            | doPat (LayeredPat (span, vid, ty, pat)) = LayeredPat (span, vid, doTy ty, doPat pat)
+            | doPat (VectorPat (span, pats, ellipsis, elemTy)) = VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
+      in doPat
+      end
+
+fun applySubstTyInExpOrDec subst
+    = let val doTy = applySubstTy subst
+          val doPat = applySubstTyInPat subst
+          fun doExp (SConExp (span, scon, ty)) = SConExp (span, scon, doTy ty)
+            | doExp (VarExp (span, longvid, idstatus, tyargs)) = VarExp (span, longvid, idstatus, List.map (fn (ty, c) => (doTy ty, c)) tyargs)
+            | doExp (RecordExp (span, fields)) = RecordExp (span, List.map (fn (label, exp) => (label, doExp exp)) fields)
+            | doExp (RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = RecordExtExp { sourceSpan = sourceSpan, fields = List.map (fn (label, exp) => (label, doExp exp)) fields, baseExp = doExp baseExp, baseTy = doTy baseTy }
+            | doExp (LetInExp (span, decs, exp)) = LetInExp (span, List.map doDec decs, doExp exp)
+            | doExp (AppExp (span, exp1, exp2)) = AppExp (span, doExp exp1, doExp exp2)
+            | doExp (TypedExp (span, exp, ty)) = TypedExp (span, doExp exp, doTy ty)
+            | doExp (HandleExp (span, exp, matches)) = HandleExp (span, doExp exp, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
+            | doExp (RaiseExp (span, ty, exp)) = RaiseExp (span, doTy ty, doExp exp)
+            | doExp (IfThenElseExp (span, exp1, exp2, exp3)) = IfThenElseExp (span, doExp exp1, doExp exp2, doExp exp3)
+            | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
+            | doExp (FnExp (span, vid, ty, exp)) = FnExp (span, vid, doTy ty, doExp exp)
+            | doExp (ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
+            | doExp (ListExp (span, elems, elemTy)) = ListExp (span, Vector.map doExp elems, doTy elemTy)
+            | doExp (VectorExp (span, elems, elemTy)) = VectorExp (span, Vector.map doExp elems, doTy elemTy)
+            | doExp (PrimExp (span, primOp, tyargs, args)) = PrimExp (span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
+          and doDec (ValDec (span, valbinds)) = ValDec (span, List.map doValBind valbinds)
+            | doDec (RecValDec (span, valbinds)) = RecValDec (span, List.map doValBind valbinds)
+            | doDec (TypeDec (span, typbinds)) = let fun doTypBind (TypBind (span, tyvars, tycon, ty)) = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
+                                                                                                         in TypBind (span, tyvars, tycon, applySubstTy subst' ty)
+                                                                                                         end
+                                                 in TypeDec (span, List.map doTypBind typbinds)
+                                                 end
+            | doDec (DatatypeDec (span, datbinds)) = let fun doDatBind (DatBind (span, tyvars, tyname, conbinds, admitsEquality))
+                                                             = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
+                                                                   val doTy' = applySubstTy subst'
+                                                               in DatBind (span, tyvars, tyname, List.map (fn ConBind (span, vid, optTy, info) => ConBind (span, vid, Option.map doTy' optTy, info)) conbinds, admitsEquality)
+                                                               end
+                                                     in DatatypeDec (span, List.map doDatBind datbinds)
+                                                     end
+            | doDec (ExceptionDec (span, exbinds)) = let fun doExBind (ExBind (span, vid, optTy)) = ExBind (span, vid, Option.map doTy optTy)
+                                                           | doExBind (ExReplication (span, vid, longvid, optTy)) = ExReplication (span, vid, longvid, Option.map doTy optTy)
+                                                     in ExceptionDec (span, List.map doExBind exbinds)
+                                                     end
+            | doDec (GroupDec (span, decs)) = GroupDec (span, List.map doDec decs)
+            | doDec (OverloadDec (span, class, tyname, map)) = OverloadDec (span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
+            | doDec (EqualityDec (span, tyvars, tyname, exp)) = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
+                                                                in EqualityDec (span, tyvars, tyname, #doExp (applySubstTyInExpOrDec subst') exp)
+                                                                end
+          and doValBind (TupleBind (span, binds, exp)) = TupleBind (span, List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
+            | doValBind (PolyVarBind (span, vid, TypeScheme (tyvars, ty), exp)) = let val subst' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
+                                                                                  in PolyVarBind (span, vid, TypeScheme (tyvars, applySubstTy subst' ty), #doExp (applySubstTyInExpOrDec subst') exp)
+                                                                                  end
+      in { doExp = doExp, doDec = doDec }
+      end
+
+fun boundVIdsInPat (WildcardPat _) = VIdSet.empty
+  | boundVIdsInPat (SConPat _) = VIdSet.empty
+  | boundVIdsInPat (VarPat (span, vid, ty)) = VIdSet.singleton vid
+  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) VIdSet.empty fields
+  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME base }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) (boundVIdsInPat base) fields
+  | boundVIdsInPat (ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo }) = VIdSet.empty
+  | boundVIdsInPat (ConPat { sourceSpan, longvid, payload = SOME (ty, pat), tyargs, valueConstructorInfo }) = boundVIdsInPat pat
+  | boundVIdsInPat (TypedPat (span, pat, ty)) = boundVIdsInPat pat
+  | boundVIdsInPat (LayeredPat (span, vid, ty, pat)) = VIdSet.add (boundVIdsInPat pat, vid)
+  | boundVIdsInPat (VectorPat (span, pats, ellipsis, ty)) = Vector.foldl (fn (pat, acc) => VIdSet.union (boundVIdsInPat pat, acc)) VIdSet.empty pats
+
+fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list -> Exp) VIdMap.map)
+    = let fun remove' (map, key) = if VIdMap.inDomain (map, key) then
+                                       #1 (VIdMap.remove (map, key))
+                                   else
+                                       map
+          fun removeKeys (map, keys) = VIdSet.foldl (fn (key, map) => remove' (map, key)) map keys
+          fun boundVIdsInValBinds valbinds = List.foldl (fn (TupleBind (span, vids, exp), acc) => List.foldl (fn ((vid, ty), acc) => VIdSet.add (acc, vid)) acc vids
+                                                        | (PolyVarBind (span, vid, tysc, exp), acc) => VIdSet.add (acc, vid)) VIdSet.empty valbinds
+          fun doExp (e as SConExp _) = e
+            | doExp (e as VarExp (span, MkShortVId vid, idstatus, tyargs)) = (case VIdMap.find (subst, vid) of
+                                                                                  NONE => e
+                                                                                | SOME s => s (span, idstatus, tyargs)
+                                                                             )
+            | doExp (e as VarExp (_, MkLongVId _, _, _)) = e
+            | doExp (RecordExp (span, fields)) = RecordExp (span, List.map (fn (label, exp) => (label, doExp exp)) fields)
+            | doExp (RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = RecordExtExp { sourceSpan = sourceSpan, fields = List.map (fn (label, exp) => (label, doExp exp)) fields, baseExp = doExp baseExp, baseTy = baseTy }
+            | doExp (LetInExp (span, decs, exp)) = let val (env, decs) = doDecs decs
+                                                       val subst' = removeKeys (subst, env)
+                                                   in LetInExp (span, decs, #doExp (substVId subst') exp)
+                                                   end
+            | doExp (AppExp (span, exp1, exp2)) = AppExp (span, doExp exp1, doExp exp2)
+            | doExp (TypedExp (span, exp, ty)) = TypedExp (span, doExp exp, ty)
+            | doExp (HandleExp (span, exp, matches)) = HandleExp (span, doExp exp, doMatches matches)
+            | doExp (RaiseExp (span, ty, exp)) = RaiseExp (span, ty, doExp exp)
+            | doExp (IfThenElseExp (span, exp1, exp2, exp3)) = IfThenElseExp (span, doExp exp1, doExp exp2, doExp exp3)
+            | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, ty, doMatches matches)
+            | doExp (FnExp (span, vid, ty, exp)) = let val subst' = remove' (subst, vid)
+                                                   in FnExp (span, vid, ty, #doExp (substVId subst') exp)
+                                                   end
+            | doExp (e as ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = e
+            | doExp (ListExp (span, elems, elemTy)) = ListExp (span, Vector.map doExp elems, elemTy)
+            | doExp (VectorExp (span, elems, elemTy)) = VectorExp (span, Vector.map doExp elems, elemTy)
+            | doExp (PrimExp (span, primOp, tyargs, args)) = PrimExp (span, primOp, tyargs, Vector.map doExp args)
+          and doMatches matches = List.map (fn (pat, exp) => let val subst' = removeKeys (subst, boundVIdsInPat pat)
+                                                             in (pat, #doExp (substVId subst') exp)
+                                                             end) matches
+          and doDec (ValDec (span, valbinds)) = (boundVIdsInValBinds valbinds, ValDec (span, List.map (fn TupleBind (span, vids, exp) => TupleBind (span, vids, doExp exp)
+                                                                                                      | PolyVarBind (span, vid, tysc, exp) => PolyVarBind (span, vid, tysc, doExp exp)) valbinds))
+            | doDec (RecValDec (span, valbinds)) = let val bound = boundVIdsInValBinds valbinds
+                                                       val subst' = removeKeys (subst, bound)
+                                                       val doExp' = #doExp (substVId subst')
+                                                       val valbinds' = List.map (fn TupleBind (span, vids, exp) => TupleBind (span, vids, doExp' exp)
+                                                                                | PolyVarBind (span, vid, tysc, exp) => PolyVarBind (span, vid, tysc, doExp' exp)
+                                                                                ) valbinds
+                                                   in (bound, RecValDec (span, valbinds'))
+                                                   end
+            | doDec (d as TypeDec (span, typbinds)) = (VIdSet.empty, d)
+            | doDec (d as DatatypeDec (span, datbinds)) = (List.foldl (fn (DatBind (_, _, _, conbinds, admitsEquality), acc) => List.foldl (fn (ConBind (_, vid, _, _), acc) => VIdSet.add (acc, vid)) acc conbinds) VIdSet.empty datbinds, d)
+            | doDec (d as ExceptionDec (span, exbinds)) = (List.foldl (fn (ExBind (span, vid, optTy), acc) => VIdSet.add (acc, vid)
+                                                                      | (ExReplication (span, vid, longvid, optTy), acc) => VIdSet.add (acc, vid) (* longvid? *)
+                                                                      ) VIdSet.empty exbinds, d)
+            | doDec (GroupDec (span, decs)) = let val (env, decs) = doDecs decs
+                                              in (env, GroupDec (span, decs))
+                                              end
+            | doDec (OverloadDec (span, class, tyname, map)) = (VIdSet.empty, OverloadDec (span, class, tyname, Syntax.OverloadKeyMap.map doExp map))
+            | doDec (EqualityDec (span, tyvars, tyname, exp)) = (VIdSet.empty, EqualityDec (span, tyvars, tyname, doExp exp))
+          and doDecs decs = let val (env, decs) = List.foldl (fn (dec, (env, decs)) => let val subst' = removeKeys (subst, env)
+                                                                                           val (env', dec) = #doDec (substVId subst') dec
+                                                                                       in (VIdSet.union (env', env), dec :: decs)
+                                                                                       end) (VIdSet.empty, []) decs
+                            in (env, List.rev decs)
+                            end
+      in { doExp = doExp, doDec = doDec, doDecs = doDecs }
+      end
+
 fun forceTy (ty as TyVar _) = ty
   | forceTy (ty as AnonymousTyVar (span, tv)) = (case !tv of
                                                      Unbound _ => ty

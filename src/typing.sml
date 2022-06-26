@@ -1331,6 +1331,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
               = List.map (fn S.PatBind (span, pat, exp) => (span, typeCheckPat (ctx', env, pat, NONE), exp)) valbinds
           val localValEnv = List.foldl (fn ((_, (_, ve, _), _), acc) => Syntax.VIdMap.unionWith #1 (acc, ve)) Syntax.VIdMap.empty valbinds'
           val localValMap = Syntax.VIdMap.map (fn (vid', ty) => (T.TypeScheme ([], ty), Syntax.ValueVariable, T.MkShortVId vid')) localValEnv
+          val tyvarseq' = List.map (fn tv => (tv, genTyVar (#context ctx, tv))) tyvarseq
           val localEnv = let val { valMap, tyConMap, tyNameMap, strMap, sigMap, funMap, boundTyVars } = env
                          in { valMap = Syntax.VIdMap.unionWith #2 (valMap, localValMap)
                             , tyConMap = tyConMap
@@ -1338,7 +1339,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                             , strMap = strMap
                             , sigMap = sigMap
                             , funMap = funMap
-                            , boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx, tv))) boundTyVars tyvarseq
+                            , boundTyVars = List.foldl Syntax.TyVarMap.insert' boundTyVars tyvarseq'
                             }
                          end
           val valbinds'' = List.map (fn (span, (patTy, newValEnv, pat), exp) =>
@@ -1352,7 +1353,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                         end
                                     ) valbinds'
           val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env)
-          fun generalize ({ sourceSpan = span, pat, exp, expTy, valEnv }, (valbinds, valEnvRest))
+          fun generalize ({ sourceSpan = span, pat, exp, expTy, valEnv }, (valbinds, valEnvRest, tyVarsAcc))
               = let fun doVal (vid, ty)
                         = let val ty = T.forceTy ty
                               val tyVars = T.freeTyVarsInTy (tyVars_env, ty)
@@ -1384,15 +1385,40 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                else
                                                    (tv, [])
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars) @ aTyVars, ty)
-                          in (vid, tysc)
+                          in (vid, tysc, aTyVars)
                           end
                     val valEnv' = Syntax.VIdMap.map doVal valEnv
-                    val valbinds = Syntax.VIdMap.foldr (fn ((vid, tysc), rest) => T.PolyVarBind (span, vid, tysc, exp) :: rest) valbinds valEnv'
-                in (valbinds, Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest))
+                    val aTyVars = Syntax.VIdMap.foldl (fn ((_, _, aTyVars), acc) => List.foldl (fn ((tv, _), acc) => T.TyVarSet.add (acc, tv)) acc aTyVars) T.TyVarSet.empty valEnv'
+                    val valbinds = Syntax.VIdMap.foldr (fn ((vid, tysc, _), rest) => (span, vid, tysc, exp) :: rest) valbinds valEnv'
+                in (valbinds, Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest), T.TyVarSet.union (aTyVars, tyVarsAcc))
                 end
-          val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds''
-          val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
-      in (env', [T.RecValDec (span, valbinds)])
+          val (valbinds, valEnv, allTyVars) = List.foldr generalize ([], Syntax.VIdMap.empty, T.TyVarSet.fromList (List.map #2 tyvarseq')) valbinds''
+          fun fixRecursion (span, vid, tysc as T.TypeScheme (tyvars, ty), exp)
+              = let val unboundTyVars = T.TyVarSet.foldl (fn (tv, acc) =>
+                                                             if List.exists (fn (tv', _) => tv = tv') tyvars then
+                                                                 acc
+                                                             else
+                                                                 T.TyVarMap.insert (acc, tv, T.AnonymousTyVar (span, freshTyVar (ctx, span, if T.tyVarAdmitsEquality tv then [T.IsEqType] else [])))
+                                                         ) T.TyVarMap.empty allTyVars
+                    val exp = #doExp (T.applySubstTyInExpOrDec unboundTyVars) exp
+                    val subst = List.foldl (fn ((_, vid', T.TypeScheme (tyvars', _), _), subst) =>
+                                               if vid' = vid then
+                                                   subst
+                                               else
+                                                   T.VIdMap.insert (subst, vid', fn (span, idstatus as Syntax.ValueVariable, []) =>
+                                                                                    let val tyargs' = List.map (fn (tv, c) => case T.TyVarMap.find (unboundTyVars, tv) of
+                                                                                                                                  NONE => (T.TyVar (span, tv), c)
+                                                                                                                                | SOME a => (a, c)) tyvars'
+                                                                                    in T.VarExp (span, T.MkShortVId vid', idstatus, tyargs')
+                                                                                    end
+                                                                               | (_, _, _) => emitTypeError (ctx, [span], "invalid use of recursive identifier"))
+                                           ) T.VIdMap.empty valbinds
+                    val exp = #doExp (T.substVId subst) exp
+                in T.PolyVarBind (span, vid, tysc, exp)
+                end
+          val valbinds' = List.map fixRecursion valbinds
+          val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc, _) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
+      in (env', [T.RecValDec (span, valbinds')])
       end
   | typeCheckDec(ctx, env, S.TypeDec(span, typbinds))
     = let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))

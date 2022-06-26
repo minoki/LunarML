@@ -135,6 +135,7 @@ should_compile "should_compile/" {
   "withtype.sml",
   "sharing_structures.sml",
   "generalization1.sml",
+  "generalization2.sml",
   "record.sml",
 }
 should_not_compile "should_not_compile/" {
