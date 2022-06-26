@@ -24,7 +24,7 @@ install-smlnj-lib: smlnj-lib
 
 # For LunarML maintainer
 smlnj-lib-lunarml.patch:
-	diff --recursive -u -N smlnj-lib-original smlnj-lib-lunarml > smlnj-lib-lunarml.patch || true
+	diff --recursive -u -N -x '*~' smlnj-lib-original smlnj-lib-lunarml > smlnj-lib-lunarml.patch || true
 
 .PHONY: smlnj-lib smlnj-lib-lunarml.patch install-smlnj-lib
 

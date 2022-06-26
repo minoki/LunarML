@@ -1,6 +1,6 @@
-diff --recursive -u -N smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util/base64.sml
+diff --recursive -u -N -x '*~' smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util/base64.sml
 --- smlnj-lib-original/Util/base64.sml	2012-09-25 00:54:30.000000000 +0900
-+++ smlnj-lib-lunarml/Util/base64.sml	2022-06-19 19:17:44.000000000 +0900
++++ smlnj-lib-lunarml/Util/base64.sml	2022-06-26 10:23:02.000000000 +0900
 @@ -15,6 +15,7 @@
      structure W8V = Word8Vector
      structure W8A = Word8Array
@@ -40,9 +40,9 @@ diff --recursive -u -N smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util
  	    end
      in
  
-diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
+diff --recursive -u -N -x '*~' smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
 --- smlnj-lib-original/Util/graph-scc-fn.sml	2020-04-20 05:46:13.000000000 +0900
-+++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-18 17:18:17.000000000 +0900
++++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-26 10:23:02.000000000 +0900
 @@ -9,7 +9,7 @@
   * author: Matthias Blume
   *)
@@ -52,9 +52,21 @@ diff --recursive -u -N smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarm
    struct
      structure Nd = Nd
  
-diff --recursive -u -N smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
+diff --recursive -u -N -x '*~' smlnj-lib-original/Util/hash-table-rep.sml smlnj-lib-lunarml/Util/hash-table-rep.sml
+--- smlnj-lib-original/Util/hash-table-rep.sml	2018-09-26 21:01:19.000000000 +0900
++++ smlnj-lib-lunarml/Util/hash-table-rep.sml	2022-06-26 21:57:10.000000000 +0900
+@@ -75,7 +75,7 @@
+ 		  val i' = i+i
+ 		  in
+ 		    if i' < Array.maxLen then f i' else i
+-		  end
++		  end handle Overflow => i
+ 	  in
+ 	    f 0x10000
+ 	  end
+diff --recursive -u -N -x '*~' smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
 --- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00.000000000 +0900
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-20 22:40:58.000000000 +0900
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-26 10:23:02.000000000 +0900
 @@ -0,0 +1,226 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
