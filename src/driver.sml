@@ -8,7 +8,7 @@ datatype OutputMode = ExecutableMode | LibraryMode
 
 fun rep(c, n) = CharVector.tabulate(n, fn _ => c)
 fun untab s = String.map (fn #"\t" => #" " | c => c) s
-fun printPos(name, lines, p) =
+fun printPos (name, lines, p : SourcePos.pos) =
     if #file p = name then
         let val l = #line p - 1
             val c = #column p - 1
@@ -24,7 +24,7 @@ fun printPos(name, lines, p) =
         end
     else
         () (* what to do? *)
-fun printSpan(name, lines, {start=p1, end_=p2}) =
+fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
     if #file p1 = name andalso #file p2 = name then
         if #line p1 = #line p2 then
             let val l = #line p1 - 1
