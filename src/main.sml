@@ -254,4 +254,5 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
           val () = TextIO.closeOut outs
       in ()
       end
-val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA } (CommandLine.arguments ());
+val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA } (CommandLine.arguments ())
+        handle Fail msg => TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n");
