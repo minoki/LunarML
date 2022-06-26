@@ -46,6 +46,12 @@ sources = \
 lunarml: LunarML.mlb $(sources)
 	mlton -output $@ LunarML.mlb
 
+lunarml.gen2: lunarml LunarML.mlb $(sources)
+	./lunarml -o lunarml.gen2.lua LunarML.mlb
+	echo "#!/usr/bin/env lua" > $@
+	cat lunarml.gen2.lua >> $@
+	chmod +x $@
+
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
 
