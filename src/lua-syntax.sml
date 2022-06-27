@@ -154,20 +154,20 @@ fun findNextFragment [] = NONE
   | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
   | findNextFragment (Fragment s :: _) = SOME s
   | findNextFragment (_ :: fragments) = findNextFragment fragments
-fun processIndent (indent, []) = []
-  | processIndent (indent, Fragment s :: fragments) = s :: processIndent (indent, fragments)
-  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 2, fragments)
-  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 2, fragments)
-  | processIndent (indent, Indent :: fragments) = CharVector.tabulate (indent, fn _ => #" ") :: processIndent (indent, fragments)
-  | processIndent (indent, OptSemicolon :: fragments) = (case findNextFragment fragments of
-                                                            NONE => "\n" :: processIndent (indent, fragments)
-                                                          | SOME next => if String.sub (next, 0) = #"(" then
-                                                                             ";\n" :: processIndent (indent, fragments)
-                                                                         else
-                                                                             "\n" :: processIndent (indent, fragments)
-                                                        )
-  | processIndent (indent, LineTerminator :: fragments) = "\n" :: processIndent (indent, fragments)
-fun buildProgram fragments = String.concat (processIndent (0, fragments))
+fun processIndent (revAcc, indent, []) = List.rev revAcc
+  | processIndent (revAcc, indent, Fragment s :: fragments) = processIndent (s :: revAcc, indent, fragments)
+  | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 2, fragments)
+  | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 2, fragments)
+  | processIndent (revAcc, indent, Indent :: fragments) = processIndent (CharVector.tabulate (indent, fn _ => #" ") :: revAcc, indent, fragments)
+  | processIndent (revAcc, indent, OptSemicolon :: fragments) = (case findNextFragment fragments of
+                                                                     NONE => processIndent ("\n" :: revAcc, indent, fragments)
+                                                                   | SOME next => if String.sub (next, 0) = #"(" then
+                                                                                      processIndent (";\n" :: revAcc, indent, fragments)
+                                                                                  else
+                                                                                      processIndent ("\n" :: revAcc, indent, fragments)
+                                                                )
+  | processIndent (revAcc, indent, LineTerminator :: fragments) = processIndent ("\n" :: revAcc, indent, fragments)
+fun buildProgram fragments = String.concat (processIndent ([], 0, fragments))
 
 fun idToFragment id = [ Fragment (IdToLua id) ]
 fun vidToFragment id = [ Fragment (IdToLua (LuaSyntax.UserDefinedId id)) ]

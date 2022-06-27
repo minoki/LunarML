@@ -201,13 +201,13 @@ fun findNextFragment [] = NONE
   | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
   | findNextFragment (Fragment s :: _) = SOME s
   | findNextFragment (_ :: fragments) = findNextFragment fragments
-fun processIndent (indent, []) = []
-  | processIndent (indent, Fragment s :: fragments) = s :: processIndent (indent, fragments)
-  | processIndent (indent, IncreaseIndent :: fragments) = processIndent (indent + 4, fragments)
-  | processIndent (indent, DecreaseIndent :: fragments) = processIndent (indent - 4, fragments)
-  | processIndent (indent, Indent :: fragments) = CharVector.tabulate (indent, fn _ => #" ") :: processIndent (indent, fragments)
-  | processIndent (indent, LineTerminator :: fragments) = "\n" :: processIndent (indent, fragments)
-fun buildProgram fragments = String.concat (processIndent (0, fragments))
+fun processIndent (revAcc, indent, []) = List.rev revAcc
+  | processIndent (revAcc, indent, Fragment s :: fragments) = processIndent (s :: revAcc, indent, fragments)
+  | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 4, fragments)
+  | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 4, fragments)
+  | processIndent (revAcc, indent, Indent :: fragments) = processIndent (CharVector.tabulate (indent, fn _ => #" ") :: revAcc, indent, fragments)
+  | processIndent (revAcc, indent, LineTerminator :: fragments) = processIndent ("\n" :: revAcc, indent, fragments)
+fun buildProgram fragments = String.concat (processIndent ([], 0, fragments))
 
 type Exp = Fragment list
 fun paren true exp = Fragment "(" :: exp @ [ Fragment ")" ]
