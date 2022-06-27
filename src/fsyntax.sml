@@ -637,8 +637,8 @@ fun cookIntegerConstant(ctx, env, span, value : IntInf.int, ty)
                                                                else
                                                                    let val (q, r) = IntInf.quotRem (x, ~0x80000000)
                                                                        val y = case q of
-                                                                                   1 => F.IntConstExp (~0x80000000, intTy)
-                                                                                 | ~1 => F.AppExp (TILDE, F.IntConstExp (~0x80000000, intTy))
+                                                                                   1 => F.AppExp (fromInt, F.IntConstExp (~0x80000000, intTy))
+                                                                                 | ~1 => F.AppExp (TILDE, F.AppExp (fromInt, F.IntConstExp (~0x80000000, intTy)))
                                                                                  | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromInt, F.IntConstExp (~0x80000000, intTy))])
                                                                    in if r = 0 then
                                                                           y
