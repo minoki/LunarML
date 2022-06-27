@@ -204,6 +204,7 @@ should_run "mlbasis/should_run/" {
   "exn-name.sml",
   "real.sml",
   "substring.sml",
+  "os-path.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
