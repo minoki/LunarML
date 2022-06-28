@@ -109,7 +109,7 @@ signature INTEGER = sig
     val abs : int -> int
     val min : int * int -> int
     val max : int * int -> int
-    val sign : int -> int
+    val sign : int -> Int.int
     val sameSign : int * int -> bool
     val fmt : StringCvt.radix -> int -> string
     val toString : int -> string
@@ -892,6 +892,8 @@ structure Array : sig
               val length : 'a array -> int
               val sub : 'a array * int -> 'a
               val update : 'a array * int * 'a -> unit
+              val vector : 'a array -> 'a vector
+              val copy : { src : 'a array, dst : 'a array, di : int } -> unit
               val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
               val appi : (int * 'a -> unit) -> 'a array -> unit
               val app : ('a -> unit) -> 'a array -> unit
@@ -910,6 +912,20 @@ structure Array : sig
 open Array (* datatype array, length, sub, update, array, fromList, tabulate *)
 datatype vector = datatype vector
 val maxLen = Vector.maxLen
+fun vector a = Vector.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
+fun copy { src, dst, di } = let val srcLen = length src
+                            in if 0 <= di andalso di + srcLen <= length dst then
+                                   let fun loop i = if i >= srcLen then
+                                                        ()
+                                                    else
+                                                        ( Unsafe.Array.update (dst, di + i, Unsafe.Array.sub (src, i))
+                                                        ; loop (i + 1)
+                                                        )
+                                   in loop 0
+                                   end
+                               else
+                                   raise Subscript
+                            end
 fun copyVec { src, dst, di } = let val srcLen = Vector.length src
                                in if 0 <= di andalso di + Vector.length src <= length dst then
                                       let fun loop i = if i >= srcLen then

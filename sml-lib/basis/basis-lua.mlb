@@ -19,6 +19,7 @@ lua/word.sml
 lua/mono-vector.sml
 substring.sml
 scan-bool.sml
+scan-num-utils.sml
 lua/scan-num.sml
 scan-text.sml
 io.sml
@@ -29,7 +30,7 @@ int-inf.sml
 large-int-is-int-inf.sml
 lua/mono-array.sml
 lua/unsafe-extra.sml
-lua/byte.sml
+byte.sml
 lua/text-io.sml
 lua/os.sml
 lua/command-line.sml

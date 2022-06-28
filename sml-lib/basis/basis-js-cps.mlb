@@ -8,6 +8,8 @@ nodejs/os-async.sml
 nodejs/command-line.sml
 end
 in
+signature BOOL
+signature BYTE
 signature INTEGER
 signature WORD
 signature REAL
@@ -22,6 +24,7 @@ structure LunarML (* extension; to be moved... *)
 structure Array
 structure ArraySlice
 structure Bool
+structure Byte
 structure Char
 structure CharArray
 structure CharArraySlice

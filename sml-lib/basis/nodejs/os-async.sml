@@ -23,6 +23,10 @@ structure OS :> sig
                             val joinDirFile : { dir : string, file : string } -> string
                             val dir : string -> string
                             val file : string -> string
+                            val splitBaseExt : string -> { base : string, ext : string option }
+                            val joinBaseExt : { base : string, ext : string option } -> string
+                            val base : string -> string
+                            val ext : string -> string option
                             val mkCanonical : string -> string
                             val mkAbsolute : { path : string, relativeTo : string } -> string
                             val mkRelative : { path : string, relativeTo : string } -> string
@@ -105,7 +109,8 @@ fun isAbsolute path = if String.isPrefix "/" path then (* TODO: Windows *)
                           false
 fun isRelative path = not (isAbsolute path)
 fun fromString path = case String.fields (fn c => c = #"/") path of (* TODO: Windows *)
-                          "" :: xs => { isAbs = true, vol = "", arcs = xs }
+                          [""] => { isAbs = false, vol = "", arcs = [] }
+                        | "" :: xs => { isAbs = true, vol = "", arcs = xs }
                         | xs => { isAbs = false, vol = "", arcs = xs }
 local
     fun isValidArc arc = CharVector.all (fn c => c <> #"/") arc
@@ -126,7 +131,7 @@ end
 fun splitDirFile path = let val { isAbs, vol, arcs } = fromString path
                             fun go (revAcc, [last]) = { dir = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, file = last }
                               | go (revAcc, x :: xs) = go (x :: revAcc, xs)
-                              | go (revAcc, []) = raise Path
+                              | go (revAcc, []) = { dir = toString { isAbs = isAbs, vol = vol, arcs = [] }, file = "" }
                         in go ([], arcs)
                         end
 fun joinDirFile { dir, file } = let val { isAbs, vol, arcs } = fromString dir
@@ -134,9 +139,33 @@ fun joinDirFile { dir, file } = let val { isAbs, vol, arcs } = fromString dir
                                 end
 val dir = #dir o splitDirFile
 val file = #file o splitDirFile
+fun splitBaseExt path = let val { isAbs, vol, arcs } = fromString path
+                            fun go (revAcc, [lastArc]) = let val (l, r) = Substring.splitr (fn c => c <> #".") (Substring.full lastArc)
+                                                             val l = Substring.string l
+                                                             and r = Substring.string r
+                                                             val (base, ext) = case (l, r) of
+                                                                                   ("", _) => (lastArc, NONE)
+                                                                                 | (_, "") => (lastArc, NONE)
+                                                                                 | (".", _) => (lastArc, NONE)
+                                                                                 | (base, ext) => (String.substring (base, 0, String.size base - 1), SOME ext)
+                                                         in { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev (base :: revAcc) }, ext = ext }
+                                                         end
+                              | go (revAcc, x :: xs) = go (x :: revAcc, xs)
+                              | go (revAcc, []) = { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, ext = NONE }
+                        in go ([], arcs)
+                        end
+fun joinBaseExt { base, ext } = case ext of
+                                    NONE => base
+                                  | SOME "" => base
+                                  | SOME x => base ^ "." ^ x
+fun base path = #base (splitBaseExt path)
+fun ext path = #ext (splitBaseExt path)
 local
     fun go (revArcs, []) = String.concatWith "/" (List.rev revArcs)
+      | go ([], #"." :: #"." :: nil) = ""
+      | go (_ :: revArcs, #"." :: #"." :: nil) = go (revArcs, [])
       | go (_ :: revArcs, #"." :: #"." :: #"/" :: xs) = go (revArcs, xs)
+      | go (revArcs, #"." :: nil) = go (revArcs, [])
       | go (revArcs, #"." :: #"/" :: xs) = go (revArcs, xs)
       | go (revArcs, #"/" :: xs) = go (revArcs, xs)
       | go (revArcs, xs) = let val (arc, rest) = takeArc ([], xs)
@@ -164,29 +193,27 @@ fun mkAbsolute { path, relativeTo } = if isAbsolute path then
                                           path
                                       else
                                           mkCanonical (concat (relativeTo, path))
-fun mkRelative { path, relativeTo } = if isRelative path then
-                                          path
-                                      else if isRelative relativeTo then
-                                          raise Path
-                                      else
-                                          let val abs = mkCanonical relativeTo
-                                          in if path = abs then
-                                                 currentArc
-                                             else
-                                                 let fun stripCommonPrefix (xs, ys) = case (Substring.getc xs, Substring.getc ys) of
-                                                                                          (SOME (x, xs'), SOME (y, ys')) => if x = y then
-                                                                                                                                stripCommonPrefix (xs', ys')
-                                                                                                                            else
-                                                                                                                                (xs, ys)
-                                                                                        | (_, _) => (xs, ys)
-                                                     val (path', abs') = stripCommonPrefix (Substring.full path, Substring.full abs)
-                                                     val abs'' = String.fields (fn c => c = #"/") (Substring.string abs')
-                                                 in
-                                                     case abs'' of
-                                                         [""] => Substring.string path'
-                                                       | xs => String.concatWith "/" (List.map (fn _ => "..") xs) ^ "/" ^ path
-                                                 end
-                                          end
+fun mkRelative { path, relativeTo } = case (fromString path, fromString relativeTo) of
+                                          ({ isAbs = false, ... }, _) => path (* path is relative *)
+                                        | (_, { isAbs = false, ... }) => raise Path (* relativeTo is relative *)
+                                        | ({ isAbs = true, vol = pVol, arcs = pArcs }, { isAbs = true, vol = rVol, arcs = _ }) =>
+                                          if pVol <> rVol then
+                                              raise Path
+                                          else
+                                              let val abs = mkCanonical relativeTo
+                                              in if path = abs then
+                                                     currentArc
+                                                 else
+                                                     let val rArcs = #arcs (fromString abs)
+                                                         fun stripCommonPrefix (xs as (x :: xs'), ys as (y :: ys')) = if x = y then
+                                                                                                                          stripCommonPrefix (xs', ys')
+                                                                                                                      else
+                                                                                                                          (xs, ys)
+                                                           | stripCommonPrefix (xs, ys) = (xs, ys)
+                                                         val (path', abs') = stripCommonPrefix (pArcs, rArcs)
+                                                     in toString { isAbs = false, vol = pVol, arcs = List.map (fn _ => "..") abs' @ (case path' of [""] => [] | _ => path') }
+                                                     end
+                                              end
 end
 structure Process = struct
 type status = int

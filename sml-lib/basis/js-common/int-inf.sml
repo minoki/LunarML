@@ -1,7 +1,8 @@
 signature INT_INF = sig
     (* INTEGER *)
     eqtype int
-    (* val toLarge, fromLarge *)
+    val toLarge : int -> int
+    val fromLarge : int -> int
     val toInt : int -> Int.int
     val fromInt : Int.int -> int
     val precision : Int.int option (* = NONE *)
@@ -27,10 +28,8 @@ signature INT_INF = sig
     val sameSign : int * int -> bool
     val fmt : StringCvt.radix -> int -> string
     val toString : int -> string
-    (*
     val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
     val fromString : string -> int option
-    *)
 
     (* INT_INF *)
     val divMod : int * int -> int * int
@@ -55,6 +54,8 @@ fun LT (x, y) = _primCall "IntInf.<" (x, y)
 fun LE (x, y) = _primCall "IntInf.<=" (x, y)
 fun GT (x, y) = _primCall "IntInf.>" (x, y)
 fun GE (x, y) = _primCall "IntInf.>=" (x, y)
+fun toLarge x = x
+fun fromLarge x = x
 fun toInt (x : int) : Int.int = if LE (minSmallInt, x) andalso LE (x, maxSmallInt) then
                                     JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
                                 else
@@ -160,6 +161,85 @@ fun fmt StringCvt.BIN (x : int) = let val s = if GE (x, 0) then
                           in JavaScript.encodeUtf8 (JavaScript.unsafeFromValue s : WideString.string)
                           end
 fun toString (x : int) : string = fmt StringCvt.DEC x
+
+local
+    open ScanNumUtils
+    fun scanDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (radix * x + fromInt (digitToInt c), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (fromInt (digitToInt c), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+    fun scanNegativeDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (radix * x - fromInt (digitToInt c), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (fromInt (Int.~ (digitToInt c)), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+in
+fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 2, isBinDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 2, isBinDigit, getc) strm
+                                   end
+  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 8, isOctDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 8, isOctDigit, getc) strm
+                                   end
+  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 10, Char.isDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 10, Char.isDigit, getc) strm
+                                   end
+  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                       val strm = case getc strm of
+                                                      SOME (#"0", strm') =>
+                                                      (case getc strm' of
+                                                           SOME (c, strm'') =>
+                                                           if c = #"x" orelse c = #"X" then
+                                                               case getc strm'' of
+                                                                   SOME (c, _) => if Char.isHexDigit c then
+                                                                                      strm''
+                                                                                  else
+                                                                                      strm
+                                                                 | NONE => strm
+                                                           else
+                                                               strm
+                                                         | NONE => strm
+                                                      )
+                                                    | _ => strm
+                                   in if isNegative then
+                                          scanNegativeDigits (fromInt 16, Char.isHexDigit, getc) strm
+                                      else
+                                          scanDigits (fromInt 16, Char.isHexDigit, getc) strm
+                                   end
+fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+
 fun pow (x : int, y : Int.int) : int = if y < 0 then
                                            if x = 1 then
                                                x

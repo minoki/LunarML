@@ -147,8 +147,8 @@ end
 
 signature INTEGER = sig
   eqtype int
-  (* val toLarge : int -> LargeInt.int *)
-  (* val fromLarge : LargeInt.int -> int *)
+  val toLarge : int -> LargeInt.int
+  val fromLarge : LargeInt.int -> int
   val toInt : int -> Int.int
   val fromInt : Int.int -> int
   val precision : Int.int option
@@ -192,6 +192,7 @@ structure IntInf :> sig
   val << : int * Word.word -> int
   val ~>> : int * Word.word -> int
 end
+structure LargeInt : INTEGER = IntInf
 
 signature WORD = sig
   eqtype word
@@ -202,9 +203,9 @@ signature WORD = sig
   val toLargeWordX : word -> LargeWord.word
   val fromLarge : LargeWord.word -> word
   val fromLargeWord : LargeWord.word -> word
-  (* val toLargeInt *)
-  (* val toLargeIntX *)
-  (* val fromLargeInt *)
+  val toLargeInt : word -> LargeInt.int
+  val toLargeIntX : word -> LargeInt.int
+  val fromLargeInt : LargeInt.int -> word
   val toInt : word -> int
   val toIntX : word -> int
   val fromInt : int -> word
@@ -610,6 +611,8 @@ signature MONO_VECTOR = sig
   val sub : vector * int -> elem
   val update : vector * int * elem -> vector
   val concat : vector list -> vector
+  val appi : (int * elem -> unit) -> vector -> unit
+  val app : (elem -> unit) -> vector -> unit
   val map : (elem -> elem) -> vector -> vector
   val foldli : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
   val foldri : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
@@ -655,8 +658,11 @@ signature MONO_ARRAY = sig
   val sub : array * int -> elem
   val update : array * int * elem -> unit
   val vector : array -> vector
+  val copy : { src : array, dst : array, di : int } -> unit
   val appi : (int * elem -> unit) -> array -> unit
   val app : (elem -> unit) -> array -> unit
+  val modifyi : (int * elem -> elem) -> array -> unit
+  val modify : (elem -> elem) -> array -> unit
 end
 
 signature MONO_ARRAY_SLICE = sig
@@ -681,6 +687,15 @@ structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vecto
                                             where type vector_slice = Substring.substring
                                             where type array = CharArray.array
                                             where type elem = char
+
+signature BYTE = sig
+  val byteToChar : Word8.word -> char
+  val charToByte : char -> Word8.word
+  val bytesToString : Word8Vector.vector -> string
+  val stringToBytes : string -> Word8Vector.vector
+end
+
+structure Byte :> BYTE
 
 structure IO : sig
   exception Io of { name : string
@@ -740,6 +755,10 @@ structure OS : sig
     val joinDirFile : { dir : string, file : string } -> string
     val dir : string -> string
     val file : string -> string
+    val splitBaseExt : string -> { base : string, ext : string option }
+    val joinBaseExt : { base : string, ext : string option } -> string
+    val base : string -> string
+    val ext : string -> string option
     val mkCanonical : string -> string
     val mkAbsolute : { path : string, relativeTo : string } -> string
     val mkRelative : { path : string, relativeTo : string } -> string

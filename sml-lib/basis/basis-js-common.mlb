@@ -21,13 +21,17 @@ js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 mlbasis-js.sml
-js-common/mono-vector.sml
-substring.sml
-js-common/mono-array.sml
+scan-num-utils.sml
 js-common/int-inf.sml
 js-common/word.sml
+js-common/mono-vector.sml (* depends on Word8 *)
+substring.sml
+js-common/mono-array.sml
+js-common/scan-num.sml (* depends on Word8, Substring *)
+large-int-is-int-inf.sml
+js-common/unsafe-extra.sml
+byte.sml
 scan-bool.sml
-js-common/scan-num.sml
 scan-text.sml
 io.sml
 vector-slice.sml
@@ -36,6 +40,7 @@ list-pair.sml
 end
 in
 signature BOOL
+signature BYTE
 signature INTEGER
 signature WORD
 signature REAL
@@ -51,6 +56,7 @@ structure LunarML (* extension; to be moved... *)
 structure Array
 structure ArraySlice
 structure Bool
+structure Byte
 structure Char
 structure CharArray
 structure CharArraySlice
@@ -61,6 +67,8 @@ structure IEEEReal
 structure IO
 structure Int
 structure IntInf
+structure LargeInt
+structure LargeReal = Real
 structure LargeWord
 structure List
 structure ListPair
@@ -79,5 +87,9 @@ structure Word16
 structure Word32
 structure Word64
 structure Word8
+structure Word8Vector
+structure Word8VectorSlice
+structure Word8Array
+structure Word8ArraySlice
 top-level-mini.sml
 end

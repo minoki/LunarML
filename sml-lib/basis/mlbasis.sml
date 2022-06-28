@@ -1483,5 +1483,5 @@ val fromList = _Prim.Array.fromList
 val tabulate = _Prim.Array.tabulate
 fun toList a = List.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
 fun fromVector v = tabulate (Vector.length v, fn i => Unsafe.Vector.sub (v, i))
-fun toVector a = Vector.tabulate (length a, fn i => Unsafe.Array.sub (a, i))
+val toVector = vector
 end; (* structure Array *)

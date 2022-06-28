@@ -1,6 +1,12 @@
 local
     fun BigIntToWord (x : IntInf.int) : word = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
     fun WordToBigInt (x : word) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
+    fun asBigInt8 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asIntN #[JavaScript.fromInt 8, JavaScript.unsafeToValue x])
+    fun asBigUint8 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asUintN #[JavaScript.fromInt 8, JavaScript.unsafeToValue x])
+    fun asBigInt16 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asIntN #[JavaScript.fromInt 16, JavaScript.unsafeToValue x])
+    fun asBigUint16 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asUintN #[JavaScript.fromInt 16, JavaScript.unsafeToValue x])
+    fun asBigInt32 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asIntN #[JavaScript.fromInt 32, JavaScript.unsafeToValue x])
+    fun asBigUint32 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asUintN #[JavaScript.fromInt 32, JavaScript.unsafeToValue x])
     fun asBigInt64 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asIntN #[JavaScript.fromInt 64, JavaScript.unsafeToValue x])
     fun asBigUint64 (x : IntInf.int) : IntInf.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt.asUintN #[JavaScript.fromInt 64, JavaScript.unsafeToValue x])
     structure WordImpl :> sig
@@ -187,6 +193,24 @@ local
                   val wordToLarge : Word.word -> LargeWord.word
                   val wordToLargeX : Word.word -> LargeWord.word
                   val wordFromLarge : LargeWord.word -> Word.word
+                  structure IntInfImpl : sig
+                                include INT_INF
+                                val fromWord : Word.word -> int
+                                val fromWordX : Word.word -> int
+                                val toWord : int -> Word.word
+                                val fromWord8 : Word8.word -> int
+                                val fromWord8X : Word8.word -> int
+                                val toWord8 : int -> Word8.word
+                                val fromWord16 : Word16.word -> int
+                                val fromWord16X : Word16.word -> int
+                                val toWord16 : int -> Word16.word
+                                val fromWord32 : Word32.word -> int
+                                val fromWord32X : Word32.word -> int
+                                val toWord32 : int -> Word32.word
+                                val fromWord64 : Word64.word -> int
+                                val fromWord64X : Word64.word -> int
+                                val toWord64 : int -> Word64.word
+                            end where type int = IntInf.int
               end = struct
     structure Word8 = struct
     type word = Word.word
@@ -334,6 +358,24 @@ local
     fun wordToLarge x = WordToBigInt x
     val wordToLargeX = Word32.toLargeX
     val wordFromLarge = Word32.fromLarge
+    structure IntInfImpl = struct
+    fun fromWord (x : Word.word) : IntInf.int = WordToBigInt x
+    fun fromWord8 (x : Word8.word) : IntInf.int = WordToBigInt x
+    fun fromWord16 (x : Word16.word) : IntInf.int = WordToBigInt x
+    fun fromWord32 (x : Word32.word) : IntInf.int = WordToBigInt x
+    fun fromWord64 (x : Word64.word) : IntInf.int = x
+    fun fromWordX (x : Word.word) : IntInf.int = asBigInt32 (WordToBigInt x)
+    fun fromWord8X (x : Word8.word) : IntInf.int = asBigInt8 (WordToBigInt x)
+    fun fromWord16X (x : Word16.word) : IntInf.int = asBigInt16 (WordToBigInt x)
+    fun fromWord32X (x : Word32.word) : IntInf.int = asBigInt32 (WordToBigInt x)
+    fun fromWord64X (x : Word64.word) : IntInf.int = asBigInt64 x
+    fun toWord (x : IntInf.int) : Word.word = BigIntToWord (asBigUint32 x)
+    fun toWord8 (x : IntInf.int) : Word8.word = BigIntToWord (asBigUint8 x)
+    fun toWord16 (x : IntInf.int) : Word16.word = BigIntToWord (asBigUint16 x)
+    fun toWord32 (x : IntInf.int) : Word32.word = BigIntToWord (asBigUint32 x)
+    fun toWord64 (x : IntInf.int) : Word64.word = asBigUint64 x
+    open IntInf
+    end
     end
 in
 structure LargeWord = WordImpl.LargeWord
@@ -349,7 +391,8 @@ val fromLarge = WordImpl.wordFromLarge
 val toLargeWord = WordImpl.wordToLarge
 val toLargeWordX = WordImpl.wordToLargeX
 val fromLargeWord = WordImpl.wordFromLarge
-end;
+end
+structure IntInfImpl = WordImpl.IntInfImpl;
 _overload "Word" [Word8.word] { + = Word8.+
                               , - = Word8.-
                               , * = Word8.*
