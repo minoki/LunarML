@@ -34,8 +34,8 @@ See `--help` for more information.
 ## Features
 
 * Most of SML '97 language, including signatures and functors
-* [A subset of SML Basis Library](BasisLibrary.md)
-* [Interface to Lua](LuaInterface.md)
+* [A subset of SML Basis Library](doc/BasisLibrary.md)
+* [Interface to Lua](doc/LuaInterface.md)
 * ML Basis system like [MLton](http://mlton.org/MLBasis)
 
 Successor ML features:

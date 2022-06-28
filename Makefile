@@ -33,7 +33,7 @@ sources = \
   src/cps.sml \
   src/lua-syntax.sml \
   src/lua-transform.sml \
-  src/codegen_lua.sml \
+  src/codegen-lua.sml \
   src/js-syntax.sml \
   src/codegen-js.sml \
   src/codegen-js-cps.sml \
