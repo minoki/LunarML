@@ -203,9 +203,9 @@ fun findNextFragment [] = NONE
   | findNextFragment (_ :: fragments) = findNextFragment fragments
 fun processIndent (revAcc, indent, []) = List.rev revAcc
   | processIndent (revAcc, indent, Fragment s :: fragments) = processIndent (s :: revAcc, indent, fragments)
-  | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 4, fragments)
-  | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 4, fragments)
-  | processIndent (revAcc, indent, Indent :: fragments) = processIndent (CharVector.tabulate (indent, fn _ => #" ") :: revAcc, indent, fragments)
+  | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 1, fragments)
+  | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 1, fragments)
+  | processIndent (revAcc, indent, Indent :: fragments) = processIndent (CharVector.tabulate (indent mod 8, fn _ => #" ") :: CharVector.tabulate (indent div 8, fn _ => #"\t") :: revAcc, indent, fragments)
   | processIndent (revAcc, indent, LineTerminator :: fragments) = processIndent ("\n" :: revAcc, indent, fragments)
 fun buildProgram fragments = String.concat (processIndent ([], 0, fragments))
 
