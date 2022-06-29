@@ -1,3 +1,5 @@
+![LunarML](logo.png)
+
 # LunarML
 
 A Standard ML compiler that produces Lua/JavaScript.
