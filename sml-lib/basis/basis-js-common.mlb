@@ -24,9 +24,9 @@ mlbasis-js.sml
 scan-num-utils.sml
 js-common/int-inf.sml
 js-common/word.sml
-js-common/mono-vector.sml (* depends on Word8 *)
+mono-sequence.sml
 substring.sml
-js-common/mono-array.sml
+js-common/word-sequence.sml
 js-common/scan-num.sml (* depends on Word8, Substring *)
 large-int-is-int-inf.sml
 js-common/unsafe-extra.sml

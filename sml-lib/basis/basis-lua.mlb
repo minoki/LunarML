@@ -16,7 +16,7 @@ vector.sml (* depends on vector-prim, option *)
 bool.sml
 mlbasis.sml
 lua/word.sml
-lua/mono-vector.sml
+mono-sequence.sml
 substring.sml
 scan-bool.sml
 scan-num-utils.sml
@@ -28,7 +28,7 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 large-int-is-int-inf.sml
-lua/mono-array.sml
+lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml
 lua/text-io.sml

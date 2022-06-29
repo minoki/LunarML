@@ -437,6 +437,7 @@ structure Substring :> sig
   val concat : substring list -> string
   val concatWith : string -> substring list -> string
   val isPrefix : string -> substring -> bool
+  val isSuffix : string -> substring -> bool
   val compare : substring * substring -> order
   val splitl : (char -> bool) -> substring -> substring * substring
   val splitr : (char -> bool) -> substring -> substring * substring
@@ -613,17 +614,27 @@ signature MONO_VECTOR = sig
   val concat : vector list -> vector
   val appi : (int * elem -> unit) -> vector -> unit
   val app : (elem -> unit) -> vector -> unit
+  val mapi : (int * elem -> elem) -> vector -> vector
   val map : (elem -> elem) -> vector -> vector
   val foldli : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
   val foldri : (int * elem * 'a -> 'a) -> 'a -> vector -> 'a
   val foldl : (elem * 'a -> 'a) -> 'a -> vector -> 'a
   val foldr : (elem * 'a -> 'a) -> 'a -> vector -> 'a
+  val findi : (int * elem -> bool) -> vector -> (int * elem) option
+  val find : (elem -> bool) -> vector -> elem option
   val exists : (elem -> bool) -> vector -> bool
   val all : (elem -> bool) -> vector -> bool
+  val collate : (elem * elem -> order) -> vector * vector -> order
+
+  (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003f-MONO_VECTOR *)
+  val toList : vector -> elem list
+  val append : vector * elem -> vector
+  val prepend : elem * vector -> vector
 end
 
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
+structure Word8Vector :> MONO_VECTOR where type elem = Word8.word
 
 signature MONO_VECTOR_SLICE = sig
   type elem
@@ -636,15 +647,29 @@ signature MONO_VECTOR_SLICE = sig
   val subslice : slice * int * int option -> slice
   val base : slice -> vector * int * int
   val vector : slice -> vector
+  val concat : slice list -> vector
   val isEmpty : slice -> bool
   val getItem : slice -> (elem * slice) option
+  val appi : (int * elem -> unit) -> slice -> unit
+  val app : (elem -> unit) -> slice -> unit
+  val mapi : (int * elem -> elem) -> slice -> vector
+  val map : (elem -> elem) -> slice -> vector
+  val foldli : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldr : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val findi : (int * elem -> bool) -> slice -> (int * elem) option
+  val find : (elem -> bool) -> slice -> elem option
   val exists : (elem -> bool) -> slice -> bool
   val all : (elem -> bool) -> slice -> bool
+  val collate : (elem * elem -> order) -> slice * slice -> order
 end
 
-structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = String.string
+structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = CharVector.vector
                                                where type elem = char
                                                where type slice = Substring.substring
+structure Word8VectorSlice :> MONO_VECTOR_SLICE where type vector = Word8Vector.vector
+                                                where type elem = Word8.word
 
 signature MONO_ARRAY = sig
   eqtype array
@@ -659,11 +684,31 @@ signature MONO_ARRAY = sig
   val update : array * int * elem -> unit
   val vector : array -> vector
   val copy : { src : array, dst : array, di : int } -> unit
+  val copyVec : { src : vector, dst : array, di : int } -> unit
   val appi : (int * elem -> unit) -> array -> unit
   val app : (elem -> unit) -> array -> unit
   val modifyi : (int * elem -> elem) -> array -> unit
   val modify : (elem -> elem) -> array -> unit
+  val foldli : (int * elem * 'b -> 'b) -> 'b -> array -> 'b
+  val foldri : (int * elem * 'b -> 'b) -> 'b -> array -> 'b
+  val foldl : (elem * 'b -> 'b) -> 'b -> array -> 'b
+  val foldr : (elem * 'b -> 'b) -> 'b -> array -> 'b
+  val findi : (int * elem -> bool) -> array -> (int * elem) option
+  val find : (elem -> bool) -> array -> elem option
+  val exists : (elem -> bool) -> array -> bool
+  val all : (elem -> bool) -> array -> bool
+  val collate : (elem * elem -> order) -> array * array -> order
+
+  (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003h-MONO_ARRAY *)
+  val toList : array -> elem list
+  val fromVector : vector -> array
+  val toVector : array -> vector (* = vector *)
 end
+
+structure CharArray : MONO_ARRAY where type vector = CharVector.vector
+                                 where type elem = char
+structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
+                                  where type elem = Word8.word
 
 signature MONO_ARRAY_SLICE = sig
   type elem
@@ -677,16 +722,35 @@ signature MONO_ARRAY_SLICE = sig
   val full : array -> slice
   val slice : array * int * int option -> slice
   val subslice : slice * int * int option -> slice
+  val base : slice -> array * int * int
   val vector : slice -> vector
   val copy : { src : slice, dst : array, di : int } -> unit
+  val copyVec : { src : vector_slice, dst : array, di : int } -> unit
+  val isEmpty : slice -> bool
+  val getItem : slice -> (elem * slice) option
+  val appi : (int * elem -> unit) -> slice -> unit
+  val app : (elem -> unit) -> slice -> unit
+  val modifyi : (int * elem -> elem) -> slice -> unit
+  val modify : (elem -> elem) -> slice -> unit
+  val foldli : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldr : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val findi : (int * elem -> bool) -> slice -> (int * elem) option
+  val find : (elem -> bool) -> slice -> elem option
+  val exists : (elem -> bool) -> slice -> bool
+  val all : (elem -> bool) -> slice -> bool
+  val collate : (elem * elem -> order) -> slice * slice -> order
 end
 
-structure CharArray : MONO_ARRAY where type vector = CharVector.vector
-                                 where type elem = char
 structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vector
-                                            where type vector_slice = Substring.substring
+                                            where type vector_slice = CharVectorSlice.slice
                                             where type array = CharArray.array
                                             where type elem = char
+structure Word8ArraySlice : MONO_ARRAY_SLICE where type vector = Word8Vector.vector
+                                             where type vector_slice = Word8VectorSlice.slice
+                                             where type array = Word8Array.array
+                                             where type elem = Word8
 
 signature BYTE = sig
   val byteToChar : Word8.word -> char

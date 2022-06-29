@@ -1,6 +1,9 @@
 local
-    structure CharVectorSliceAndSubstring :> sig
-                  structure CharVectorSlice : MONO_VECTOR_SLICE where type elem = char where type vector = string
+    structure CharSequenceAndSubstring :> sig
+                  structure CharVector : MONO_VECTOR where type vector = String.string where type elem = char
+                  structure CharVectorSlice : MONO_VECTOR_SLICE where type elem = char where type vector = String.string
+                  structure CharArray : MONO_ARRAY where type elem = char where type vector = String.string
+                  structure CharArraySlice : MONO_ARRAY_SLICE where type elem = char where type vector = String.string
                   structure Substring : sig
                                 type substring
                                 type char = char
@@ -19,7 +22,7 @@ local
                                 val concat : substring list -> string
                                 val concatWith : string -> substring list -> string
                                 val isPrefix : string -> substring -> bool
-                                (* val isSuffix : string -> substring -> bool *)
+                                val isSuffix : string -> substring -> bool
                                 val compare : substring * substring -> order
                                 val splitl : (char -> bool) -> substring -> substring * substring
                                 val splitr : (char -> bool) -> substring -> substring * substring
@@ -30,60 +33,43 @@ local
                                 val foldl : (char * 'a -> 'a) -> 'a -> substring -> 'a
                                 val foldr : (char * 'a -> 'a) -> 'a -> substring -> 'a
                             end
+                  sharing type CharArraySlice.array = CharArray.array
+                  sharing type CharArraySlice.vector_slice = CharVectorSlice.slice
                   sharing type CharVectorSlice.slice = Substring.substring
               end = struct
-    structure CharVectorSlice = struct
-    type elem = char
-    type vector = string
-    type slice = { base : vector, start : int, length : int }
-    val length : slice -> int = #length
-    fun sub ({ base, start, length }, i) = if 0 <= i andalso i < length then
-                                               CharVector.sub (base, start + i)
-                                           else
-                                               raise Subscript
-    fun full a = { base = a, start = 0, length = CharVector.length a }
-    fun slice (a, i, NONE) = if 0 <= i andalso i <= CharVector.length a then
-                                 { base = a, start = i, length = CharVector.length a - i }
-                             else
-                                 raise Subscript
-      | slice (a, i, SOME n) = if 0 <= i andalso 0 <= n andalso i + n <= CharVector.length a then
-                                   { base = a, start = i, length = n }
-                               else
-                                   raise Subscript
-    fun subslice ({ base, start, length }, i, NONE) = if 0 <= i andalso i <= length then
-                                                          { base = base, start = start + i, length = length - i }
-                                                      else
-                                                          raise Subscript
-      | subslice ({ base, start, length }, i, SOME n) = if 0 <= i andalso 0 <= n andalso i + n <= length then
-                                                            { base = base, start = start + i, length = n }
-                                                        else
-                                                            raise Subscript
-    fun base { base = b, start, length } = (b, start, length)
-    fun vector { base, start, length } = String.substring (base, start, length)
-    fun isEmpty { base, start, length } = length = 0
-    fun getItem { base, start, length } = if length > 0 then
-                                              SOME (CharVector.sub (base, start), { base = base, start = start + 1, length = length - 1 })
-                                          else
-                                              NONE
-    fun exists f { base, start, length } = let fun loop i = if i >= length then
-                                                                false
-                                                            else
-                                                                if f (CharVector.sub (base, start + i)) then
-                                                                    true
-                                                                else
-                                                                    loop (i + 1)
-                                           in loop start
-                                           end
-    fun all f { base, start, length } = let fun loop i = if i >= length then
-                                                             true
-                                                         else
-                                                             if not (f (CharVector.sub (base, start + i))) then
-                                                                 false
-                                                             else
-                                                                 loop (i + 1)
-                                        in loop start
-                                        end
-    end
+    local
+        structure Prim : MONO_SEQUENCE_PRIM = struct
+        type elem = char
+        type vector = String.string
+        type array = char Array.array
+        structure MonoVector = struct
+        val maxLen = String.maxSize
+        val length = String.size
+        val unsafeSub = String.sub (* TODO *)
+        val fromList = String.implode
+        fun unsafeFromListN (n, xs) = String.implode xs (* TODO *)
+        fun unsafeFromListRevN (n, xs) = String.implodeRev xs (* TODO *)
+        val concat = String.concat
+        fun sliceToVector { base, start, length } = String.substring (base, start, length)
+        val shallowSliceToVector = sliceToVector
+        end
+        structure MonoArray = struct
+        val maxLen = Array.maxLen
+        val eq = op = : array * array -> bool
+        val length = Array.length
+        val unsafeCreate = Array.array (* TODO *)
+        val fromList = Array.fromList
+        fun unsafeFromListN (n, xs) = fromList xs (* TODO *)
+        val unsafeSub = Unsafe.Array.sub
+        val unsafeUpdate = Unsafe.Array.update
+        end
+        end
+        structure Base = MonoSequence (Prim)
+    in
+    structure CharVector = Base.MonoVector
+    structure CharVectorSlice = Base.MonoVectorSlice
+    structure CharArray = Base.MonoArray
+    structure CharArraySlice = Base.MonoArraySlice
     structure Substring = struct
     type char = char
     type string = string
@@ -114,10 +100,10 @@ local
                                                     else
                                                         { base = base, start = start, length = 0 }
     val slice = CharVectorSlice.subslice
-    fun concat xs = String.concat (List.map string xs)
+    val concat = CharVectorSlice.concat
     fun concatWith s xs = String.concatWith s (List.map string xs)
     fun isPrefix s ss = String.isPrefix s (string ss)
-    (* fun isSuffix s ss = String.isSuffix s (string ss) *)
+    fun isSuffix s ss = String.isSuffix s (string ss)
     fun compare (s, t) = String.compare (string s, string t)
     fun splitl f (s as { base, start, length }) = let fun loop j = if j >= length then
                                                                        (s, { base = base, start = start + j, length = 0 })
@@ -141,21 +127,11 @@ local
     fun dropr p s = #1 (splitr p s)
     fun takel p s = #1 (splitl p s)
     fun taker p s = #2 (splitr p s)
-    fun foldl f init { base, start, length } = let val z = start + length
-                                                   fun loop (j, acc) = if j >= z then
-                                                                           acc
-                                                                       else
-                                                                           loop (j + 1, f (String.sub (base, j), acc))
-                                               in loop (start, init)
-                                               end
-    fun foldr f init { base, start, length } = let fun loop (j, acc) = if j < start then
-                                                                           acc
-                                                                       else
-                                                                           loop (j - 1, f (String.sub (base, j), acc))
-                                               in loop (start + length - 1, init)
-                                               end
+    val foldl = CharVectorSlice.foldl
+    val foldr = CharVectorSlice.foldr
     end (* structure Substring *)
-    end
+    end (* local *)
+    end (* structure CharSequenceAndSubstring *)
 in
-open CharVectorSliceAndSubstring
+open CharSequenceAndSubstring
 end;

@@ -97,12 +97,15 @@ fun exists f [] = false
   | exists f (x :: xs) = f x orelse exists f xs
 fun all f [] = true
   | all f (x :: xs) = f x andalso all f xs
-fun tabulate (n, f) = let fun go i = if i >= n then
-                                         []
-                                     else
-                                         f i :: go (i + 1)
-                      in go 0
-                      end
+fun tabulate (n, f) = if n < 0 then
+                          raise Size
+                      else
+                          let fun go i = if i >= n then
+                                             []
+                                         else
+                                             f i :: go (i + 1)
+                          in go 0
+                          end
 fun collate compare ([], []) = EQUAL
   | collate compare (_ :: _, []) = GREATER
   | collate compare ([], _ :: _) = LESS
