@@ -1353,8 +1353,11 @@ structure Array : sig
               val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldl : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
               val foldr : ('a * 'b -> 'b) -> 'b -> 'a array -> 'b
+              val findi : (int * 'a -> bool) -> 'a array -> (int * 'a) option
+              val find : ('a -> bool) -> 'a array -> 'a option
               val exists : ('a -> bool) -> 'a array -> bool
               val all : ('a -> bool) -> 'a array -> bool
+              val collate : ('a * 'a -> order) -> 'a array * 'a array -> order
               val toList : 'a array -> 'a list
               val fromVector : 'a vector -> 'a array
               val toVector : 'a array -> 'a vector
@@ -1464,6 +1467,30 @@ fun foldr f init arr = let fun loop (i, acc) = if i < 0 then
                                                    loop (i - 1, f (Unsafe.Array.sub (arr, i), acc))
                        in loop (length arr - 1, init)
                        end
+fun findi f v = let val n = length v
+                    fun loop i = if i >= n then
+                                     NONE
+                                 else
+                                     let val x = Unsafe.Array.sub (v, i)
+                                     in if f (i, x) then
+                                            SOME (i, x)
+                                        else
+                                            loop (i + 1)
+                                     end
+                in loop 0
+                end
+fun find f v = let val n = length v
+                   fun loop i = if i >= n then
+                                    NONE
+                                else
+                                    let val x = Unsafe.Array.sub (v, i)
+                                    in if f x then
+                                           SOME x
+                                       else
+                                           loop (i + 1)
+                                    end
+               in loop 0
+               end
 fun exists f arr = let val n = length arr
                        fun loop i = if i >= n then
                                         false
@@ -1478,6 +1505,17 @@ fun all f arr = let val n = length arr
                                      f (Unsafe.Array.sub (arr, i)) andalso loop (i + 1)
                 in loop 0
                 end
+fun collate compare (xs, ys) = let val xl = length xs
+                                   val yl = length ys
+                                   fun loop i = case (xl <= i, yl <= i) of
+                                                    (true, true) => EQUAL
+                                                  | (true, false) => LESS
+                                                  | (false, true) => GREATER
+                                                  | (false, false) => case compare (Unsafe.Array.sub (xs, i), Unsafe.Array.sub (ys, i)) of
+                                                                          EQUAL => loop (i + 1)
+                                                                        | t => t
+                               in loop 0
+                               end
 val array = _Prim.Array.array
 val fromList = _Prim.Array.fromList
 val tabulate = _Prim.Array.tabulate
