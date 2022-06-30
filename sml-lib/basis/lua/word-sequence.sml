@@ -12,6 +12,7 @@ local
                   structure Word8Array : MONO_ARRAY where type elem = Word8.word
                   structure Word8ArraySlice : MONO_ARRAY_SLICE where type elem = Word8.word
                   sharing type Word8VectorExtra.vector = Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector
+                  sharing type Word8Array.array = Word8ArraySlice.array
                   sharing type Word8VectorSlice.slice = Word8ArraySlice.vector_slice
               end = struct
     local
