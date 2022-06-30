@@ -28,7 +28,8 @@ local
     fun rawRead (stream : JavaScript.value) : vector list
         = DelimCont.withSubCont
               (DelimCont.topLevel, fn cont : (vector list, unit) DelimCont.subcont =>
-                                      let val readableHandler = JavaScript.callback (fn _ =>
+                                      let val handled = ref false
+                                          val readableHandler = JavaScript.callback (fn _ =>
                                                                                         let fun doRead () : string list
                                                                                                 = let val chunk = JavaScript.method (stream, "read") #[]
                                                                                                   in if JavaScript.=== (chunk, JavaScript.null) then
@@ -42,10 +43,20 @@ local
                                                                                                          end
                                                                                                   end
                                                                                             val chunks = doRead ()
+                                                                                            val () = handled := true
                                                                                         in DelimCont.pushSubCont (cont, fn () => chunks)
                                                                                         end
                                                                                     )
+                                          val endHandler = JavaScript.callback (fn _ =>
+                                                                                   if not (!handled) then
+                                                                                       ( handled := true
+                                                                                       ; DelimCont.pushSubCont (cont, fn () => [])
+                                                                                       )
+                                                                                   else
+                                                                                       ()
+                                                                               )
                                       in JavaScript.method (stream, "once") #[JavaScript.fromWideString "readable", readableHandler]
+                                       ; JavaScript.method (stream, "once") #[JavaScript.fromWideString "end", endHandler]
                                        ; ()
                                       end
               )
