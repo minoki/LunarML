@@ -1,0 +1,43 @@
+(* Assume Unix paths *)
+fun printString s = print ("\"" ^ String.toString s ^ "\"\n")
+fun printPath { isAbs, vol, arcs } = print ("{ isAbs = " ^ Bool.toString isAbs ^ ", vol = \"" ^ String.toString vol ^ "\", arcs = [" ^ String.concatWith "," (List.map (fn s => "\"" ^ String.toString s ^ "\"") arcs) ^ "] }\n");
+printPath (OS.Path.fromString "");
+printPath (OS.Path.fromString "/");
+printPath (OS.Path.fromString "//");
+printPath (OS.Path.fromString "a");
+printPath (OS.Path.fromString "/a");
+printPath (OS.Path.fromString "//a");
+printPath (OS.Path.fromString "a/");
+printPath (OS.Path.fromString "a//");
+printPath (OS.Path.fromString "a/b");
+printString (OS.Path.toString { isAbs = false, vol = "", arcs = [] });
+fun printDirFile { dir, file } = print ("{ dir = \"" ^ String.toString dir ^ "\", file = \"" ^ String.toString file ^ "\" }\n");
+printDirFile (OS.Path.splitDirFile "");
+printDirFile (OS.Path.splitDirFile ".");
+printDirFile (OS.Path.splitDirFile "b");
+printDirFile (OS.Path.splitDirFile "b/");
+printDirFile (OS.Path.splitDirFile "a/b");
+printDirFile (OS.Path.splitDirFile "/a");
+fun printBaseExt { base, ext = NONE } = print ("{ base = \"" ^ String.toString base ^ "\", ext = NONE }\n")
+  | printBaseExt { base, ext = SOME ext } = print ("{ base = \"" ^ String.toString base ^ "\", ext = SOME \"" ^ String.toString ext ^ "\" }\n");
+printBaseExt (OS.Path.splitBaseExt "");
+printBaseExt (OS.Path.splitBaseExt ".login");
+printBaseExt (OS.Path.splitBaseExt "/.login");
+printBaseExt (OS.Path.splitBaseExt "a");
+printBaseExt (OS.Path.splitBaseExt "a.");
+printBaseExt (OS.Path.splitBaseExt "a.b");
+printBaseExt (OS.Path.splitBaseExt "a.b.c");
+printBaseExt (OS.Path.splitBaseExt ".news/comp");
+printString (OS.Path.mkRelative { path = "a/b", relativeTo = "/c/d" });
+printString (OS.Path.mkRelative { path = "/", relativeTo = "/a/b/c" });
+printString (OS.Path.mkRelative { path = "/a/b/", relativeTo = "/a/c" });
+printString (OS.Path.mkRelative { path = "/a/b", relativeTo = "/a/c" });
+printString (OS.Path.mkRelative { path = "/a/b/", relativeTo = "/a/c/" });
+printString (OS.Path.mkRelative { path = "/a/b", relativeTo = "/a/c/" });
+printString (OS.Path.mkRelative { path = "/", relativeTo = "/" });
+printString (OS.Path.mkRelative { path = "/", relativeTo = "/." });
+printString (OS.Path.mkRelative { path = "/", relativeTo = "/.." });
+printString (OS.Path.mkRelative { path = "/a/b/../c", relativeTo = "/a/d" });
+printString (OS.Path.mkRelative { path = "/a/b", relativeTo = "/c/d" });
+printString (OS.Path.mkRelative { path = "/c/a/b", relativeTo = "/c/d" });
+printString (OS.Path.mkRelative { path = "/c/d/a/b", relativeTo = "/c/d" });
