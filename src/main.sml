@@ -222,7 +222,7 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit.js" }
           val mlinit = readFile mlinit_js
-          val jsctx = { nextJsId = ref 0 }
+          val jsctx = { nextJsId = nextId }
           val js = CodeGenJs.doProgram jsctx CodeGenJs.initialEnv decs
           val js = JsWriter.doProgram js
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
@@ -245,8 +245,9 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
-          val jsctx = { nextJsId = ref 0 }
+          val jsctx = { nextJsId = nextId }
           val js = CodeGenJsCps.doProgram jsctx cont exnCont cexp
+          val js = JsTransform.doProgram { nextVId = nextId } js
           val js = JsWriter.doProgram js
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)

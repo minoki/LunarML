@@ -3,6 +3,15 @@ datatype ObjectKey = IntKey of int
                    | StringKey of string
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
+structure IdKey = struct
+type ord_key = Id
+fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
+  | compare (PredefinedId _, UserDefinedId _) = LESS
+  | compare (UserDefinedId _, PredefinedId _) = GREATER
+  | compare (UserDefinedId x, UserDefinedId y) = TypedSyntax.VIdKey.compare (x, y)
+end : ORD_KEY
+structure IdSet = RedBlackSetFn (IdKey)
+structure IdMap = RedBlackMapFn (IdKey)
 datatype JsConst = Null
                  | False
                  | True

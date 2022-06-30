@@ -35,6 +35,7 @@ sources = \
   src/lua-transform.sml \
   src/codegen-lua.sml \
   src/js-syntax.sml \
+  src/js-transform.sml \
   src/codegen-js.sml \
   src/codegen-js-cps.sml \
   src/mlb-syntax.sml \
