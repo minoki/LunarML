@@ -65,6 +65,9 @@ src/primitives.sml: src/primitives.lua
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)
 
+test-stackless-handle: lunarml
+	$(LUA) test/run.lua ./lunarml $(LUA) stackless-handle
+
 test-nodejs: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
 

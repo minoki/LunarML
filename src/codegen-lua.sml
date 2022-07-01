@@ -791,5 +791,8 @@ and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
   | doDecs ctx env [] = []
 
 fun doProgram ctx env decs = vector (doDecs ctx env decs)
+fun doProgramWithStacklessHandle ctx env decs = let val func = L.FunctionExp (vector [], vector (doDecs ctx env decs))
+                                                in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
+                                                end
 
 end (* structure CodeGenLua *)

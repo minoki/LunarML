@@ -26,7 +26,8 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -O,--optimize          Try to optimize hard.\n\
                                                 \")
 datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-datatype Backend = BACKEND_LUA | BACKEND_JS | BACKEND_JS_CPS
+datatype LuaCodegen = LUA_PLAIN | LUA_STACKLESS_HANDLE
+datatype Backend = BACKEND_LUA of LuaCodegen | BACKEND_JS | BACKEND_JS_CPS
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
                , dump : DumpMode
@@ -68,6 +69,8 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS } args
          else if arg = "--js-cps" then
              parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS_CPS } args
+         else if arg = "--lua-stackless-handle" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_STACKLESS_HANDLE } args
          else if arg = "-h" orelse arg = "--help" then
              ( showHelp (); OS.Process.exit OS.Process.success )
          else if arg = "-v" orelse arg = "--version" then
@@ -94,9 +97,9 @@ and handleInputFile opts [file] = if String.isSuffix ".sml" file then
   | handleInputFile opts [] = showMessageAndFail "No input given.\n"
   | handleInputFile opts _ = showMessageAndFail "Multiple input is not supported.\n"
 and getTargetInfo opts = (case #backend opts of
-                              BACKEND_LUA => { wideChar = TargetInfo.CHAR8
-                                             , nativeString = TargetInfo.NARROW_STRING
-                                             }
+                              BACKEND_LUA _ => { wideChar = TargetInfo.CHAR8
+                                               , nativeString = TargetInfo.NARROW_STRING
+                                               }
                             | BACKEND_JS => { wideChar = TargetInfo.CHAR16
                                             , nativeString = TargetInfo.WIDE_STRING
                                             }
@@ -115,7 +118,7 @@ and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.joinDirFile { dir = progDir, file = "sml-lib" })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -162,7 +165,7 @@ and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = progDir, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -202,13 +205,18 @@ and doMLB opts mlbfilename
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJsCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
-and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
+and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
     = let val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit.lua" }
+          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = case cg of
+                                                                           LUA_PLAIN => "mlinit.lua"
+                                                                         | LUA_STACKLESS_HANDLE => "mlinit-stackless.lua"
+                                               }
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = ref 0 }
-          val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+          val lua = case cg of
+                        LUA_PLAIN => CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+                      | LUA_STACKLESS_HANDLE => CodeGenLua.doProgramWithStacklessHandle luactx CodeGenLua.initialEnv decs
           val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
           val lua = LuaWriter.doChunk lua
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
@@ -255,6 +263,6 @@ and emit (opts as { backend = BACKEND_LUA, ... }) fileName nextId decs
           val () = TextIO.closeOut outs
       in ()
       end
-val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA } (CommandLine.arguments ())
+val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA LUA_PLAIN } (CommandLine.arguments ())
         handle Fail msg => TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n")
              | IO.Io { name, function, cause } => TextIO.output (TextIO.stdErr, "io error: " ^ name ^ ", " ^ function ^ ", " ^ (case cause of Fail msg => msg | _ => exnName cause) ^ "\n");

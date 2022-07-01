@@ -9,6 +9,7 @@ You need a recent version of MLton to build the executable, and Lua 5.3+ or rece
 ```
 $ make
 $ make test
+$ make test-stackless-handle
 $ make test-nodejs
 $ make test-nodejs-cps
 $ ./lunarml example/hello.sml
@@ -28,6 +29,7 @@ Modes of operation:
 * `-mlib`: Produce a Lua module.
 * `--js`: Produce a JavaScript program.
 * `--js-cps`: Produce a JavaScript program (CPS mode; supports delimited continuations).
+* `--lua-stackless-mode`: Allow deeply nested `handle`.
 
 See `--help` for more information.
 

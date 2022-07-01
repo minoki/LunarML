@@ -8,8 +8,15 @@ else
 end
 local compiler = arg[1] or "../lunarml"
 local lua_interpreter = arg[2] or "lua"
-function compile(file)
-  local h = io.popen(string.format("\"%s\" \"%s\" 2>&1", compiler, file), "r")
+local stackless_mode = arg[3] == "stackless-handle"
+local outext = stackless_mode and ".stackless.lua" or ".lua"
+function compile(file, outfile)
+  local h
+  if stackless_mode then
+    h = io.popen(string.format("\"%s\" --lua-stackless-handle --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  else
+    h = io.popen(string.format("\"%s\" --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  end
   local output = h:read("a")
   local succ = h:close()
   assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
@@ -21,11 +28,11 @@ function normalize_line_ending(s)
 end
 assert(normalize_line_ending("foo\r\nbar\r\n") == "foo\nbar\n")
 function compile_and_run(file)
-  local compile_succ, output = compile(file)
+  local luafile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
+  local compile_succ, output = compile(file, luafile)
   if not compile_succ then
     return false, output
   end
-  local luafile = file:gsub("%.sml$", ".lua"):gsub("%.mlb$", ".lua")
   local h = assert(io.popen(string.format("\"%s\" \"%s\"", lua_interpreter, luafile), "r"))
   local actual_output = normalize_line_ending(h:read("a"))
   h:close()
