@@ -1,3 +1,4 @@
+"use strict";
 function _id(k, h, x) { return [false, k, [x]]; }
 function _ref(k, h, x) { return [false, k, [{ tag: "ref", payload: x }]]; }
 const _nil = { tag: "nil" };

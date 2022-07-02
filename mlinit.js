@@ -1,3 +1,4 @@
+"use strict";
 function _id(x) { return x; }
 function _ref(x) { return { tag: "ref", payload: x }; }
 const _nil = { tag: "nil" };
