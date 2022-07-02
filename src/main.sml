@@ -264,5 +264,5 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
       in ()
       end
 val _ = parseArgs { output = NONE, outputMode = NONE, dump = NO_DUMP, optimizationLevel = 0, backend = BACKEND_LUA LUA_PLAIN } (CommandLine.arguments ())
-        handle Fail msg => TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n")
-             | IO.Io { name, function, cause } => TextIO.output (TextIO.stdErr, "io error: " ^ name ^ ", " ^ function ^ ", " ^ (case cause of Fail msg => msg | _ => exnName cause) ^ "\n");
+        handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)
+             | IO.Io { name, function, cause } => (TextIO.output (TextIO.stdErr, "io error: " ^ name ^ ", " ^ function ^ ", " ^ (case cause of Fail msg => msg | _ => exnName cause) ^ "\n"); OS.Process.exit OS.Process.failure);
