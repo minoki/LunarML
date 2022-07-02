@@ -11,6 +11,12 @@ fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
   | compare (UserDefinedId x, UserDefinedId y) = TypedSyntax.VIdKey.compare (x, y)
 end : ORD_KEY
 structure IdSet = RedBlackSetFn (IdKey)
+structure IdSet = struct
+(* compatibility with older smlnj-lib *)
+open IdSet
+val toList = foldr (op ::) []
+open IdSet
+end
 structure IdMap = RedBlackMapFn (IdKey)
 datatype JsConst = Null
                  | False

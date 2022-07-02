@@ -87,6 +87,12 @@ fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
 end
 structure LabelSet = RedBlackSetFn(LabelKey)
 structure LabelMap = RedBlackMapFn(LabelKey)
+structure LabelSet = struct
+(* compatibility with older smlnj-lib *)
+open LabelSet
+val toList = foldr (op ::) []
+open LabelSet
+end
 fun LabelMapFromList (xs : (Label * 'a) list) : 'a LabelMap.map = List.foldl LabelMap.insert' LabelMap.empty xs
 
 structure TyConKey = struct
