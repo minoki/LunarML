@@ -9,10 +9,8 @@ test/*/*.js
 test/*/*/*.js
 lunarml
 thirdparty/smlnj-lib/
-thirdparty/smlnj-lib.tgz
 thirdparty/smlnj-lib-original/
 thirdparty/smlnj-lib-lunarml/
 thirdparty/ml-yacc/
-thirdparty/ml-yacc.tgz
 sml-lib/mlyacc-lib/
 sml-lib/smlnj-lib/
