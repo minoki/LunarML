@@ -224,9 +224,8 @@ fun processIndent (revAcc, indent, []) = List.rev revAcc
   | processIndent (revAcc, indent, LineTerminator :: fragments) = processIndent ("\n" :: revAcc, indent, fragments)
 fun buildProgram fragments = String.concat (processIndent ([], 0, fragments))
 
-type Exp = Fragment list
-fun paren true exp = Fragment "(" :: exp @ [ Fragment ")" ]
-  | paren false exp = exp
+fun paren true exp rest = Fragment "(" :: exp (Fragment ")" :: rest)
+  | paren false exp rest = exp rest
 
 structure S = JsSyntax
 
@@ -240,18 +239,19 @@ fun doKey (S.IntKey n) = toWideStringLit (JsSyntax.asciiStringAsIntVector (intTo
                                 s
                             else
                                 toWideStringLit (JsSyntax.asciiStringAsIntVector s)
-fun commaSep ([] : (Fragment list) list) : Fragment list = []
-  | commaSep (x :: xs) = x @ commaSep1 xs
-and commaSep1 [] = []
-  | commaSep1 (x :: xs) = Fragment ", " :: x @ commaSep1 xs
-fun commaSepV (v : (Fragment list) vector) : Fragment list = (case VectorSlice.getItem (VectorSlice.full v) of
-                                                                  NONE => []
-                                                                | SOME (x, xs) => x @ commaSepV1 xs
-                                                             )
-and commaSepV1 xs = (case VectorSlice.getItem xs of
-                         NONE => []
-                       | SOME (x, xss) => Fragment ", " :: x @ commaSepV1 xss
-                    )
+fun commaSep ([] : (Fragment list -> Fragment list) list) rest : Fragment list = rest
+  | commaSep (x :: xs) rest = x (commaSep1 xs rest)
+and commaSep1 [] rest = rest
+  | commaSep1 (x :: xs) rest = Fragment ", " :: x (commaSep1 xs rest)
+fun commaSepV (v : (Fragment list -> Fragment list ) vector) rest : Fragment list
+    = (case VectorSlice.getItem (VectorSlice.full v) of
+           NONE => rest
+         | SOME (x, xs) => x (commaSepV1 xs rest)
+      )
+and commaSepV1 xs rest = (case VectorSlice.getItem xs of
+                              NONE => rest
+                            | SOME (x, xss) => Fragment ", " :: x (commaSepV1 xss rest)
+                         )
 
 datatype BinaryOp = InfixOp of (* prec *) int * string
                   | InfixOpR of (* prec *) int * string
@@ -282,25 +282,26 @@ fun binOpInfo S.PLUS = InfixOp (7, "+")
   | binOpInfo S.IN = InfixOp (9, "in")
   | binOpInfo S.EXP = ExponentiationOp
 
-fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
-                                             S.Null => [ Fragment "null" ]
-                                           | S.False => [ Fragment "false" ]
-                                           | S.True => [ Fragment "true" ]
-                                           | S.Numeral s => [ Fragment s ] (* TODO: hexadecimal floating-point *)
-                                           | S.WideString s => [ Fragment (toWideStringLit s) ]
-                                        )
-  | doExp (prec, S.ThisExp) = [ Fragment "this" ]
-  | doExp (prec, S.VarExp id) = [ Fragment (idToJs id) ]
-  | doExp (prec, S.ObjectExp fields) = Fragment "{" :: commaSepV (Vector.map (fn (key, value) => Fragment (doKey key) :: Fragment ": " :: doExp (Precedence.AssignmentExpression, value)) fields) @ [ Fragment "}" ]
-  | doExp (prec, S.ArrayExp elements) = Fragment "[" :: doCommaSepExp elements @ [ Fragment "]" ]
-  | doExp (prec, S.CallExp (fnExp, arguments)) = paren (prec < Precedence.CallExpression) (doExp (Precedence.CallExpression, fnExp) @ Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
-  | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) = paren (prec < Precedence.CallExpression) (doExp (Precedence.MemberExpression, objectExp) @ Fragment "." :: Fragment methodName :: Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
-  | doExp (prec, S.NewExp (constructorExp, arguments)) = paren (prec < Precedence.MemberExpression) (Fragment "new " :: doExp (Precedence.MemberExpression, constructorExp) @ Fragment "(" :: doCommaSepExp arguments @ [ Fragment ")" ])
-  | doExp (prec, S.FunctionExp (parameters, body)) = Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => [ Fragment (idToJs id) ]) parameters) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body @ [ DecreaseIndent, Indent, Fragment "}" ]
+fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list
+    = (fn rest => case ct of
+                      S.Null => Fragment "null" :: rest
+                    | S.False => Fragment "false" :: rest
+                    | S.True => Fragment "true" :: rest
+                    | S.Numeral s => Fragment s :: rest (* TODO: hexadecimal floating-point *)
+                    | S.WideString s => Fragment (toWideStringLit s) :: rest
+      )
+  | doExp (prec, S.ThisExp) = (fn rest => Fragment "this" :: rest)
+  | doExp (prec, S.VarExp id) = (fn rest => Fragment (idToJs id) :: rest)
+  | doExp (prec, S.ObjectExp fields) = (fn rest => Fragment "{" :: commaSepV (Vector.map (fn (key, value) => fn rest => Fragment (doKey key) :: Fragment ": " :: doExp (Precedence.AssignmentExpression, value) rest) fields) (Fragment "}" :: rest))
+  | doExp (prec, S.ArrayExp elements) = (fn rest => Fragment "[" :: doCommaSepExp elements (Fragment "]" :: rest))
+  | doExp (prec, S.CallExp (fnExp, arguments)) = paren (prec < Precedence.CallExpression) (fn rest => doExp (Precedence.CallExpression, fnExp) (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
+  | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) = paren (prec < Precedence.CallExpression) (fn rest => doExp (Precedence.MemberExpression, objectExp) (Fragment "." :: Fragment methodName :: Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
+  | doExp (prec, S.NewExp (constructorExp, arguments)) = paren (prec < Precedence.MemberExpression) (fn rest => Fragment "new " :: doExp (Precedence.MemberExpression, constructorExp) (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
+  | doExp (prec, S.FunctionExp (parameters, body)) = (fn rest => Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => fn rest => Fragment (idToJs id) :: rest) parameters) (Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body (DecreaseIndent :: Indent :: Fragment "}" :: rest)))
   | doExp (prec, S.BinExp (binOp, x, y)) = (case binOpInfo binOp of
-                                                InfixOp (prec', symbol) => paren (prec < prec') (doExp (prec', x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec' - 1, y))
-                                              | InfixOpR (prec', symbol) => paren (prec < prec') (doExp (prec' - 1, x) @ Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec', y))
-                                              | ExponentiationOp => paren (prec < 5) (doExp (3, x) @ Fragment " ** " :: doExp (5, y))
+                                                InfixOp (prec', symbol) => paren (prec < prec') (fn rest => doExp (prec', x) (Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec' - 1, y) rest))
+                                              | InfixOpR (prec', symbol) => paren (prec < prec') (fn rest => doExp (prec' - 1, x) (Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec', y) rest))
+                                              | ExponentiationOp => paren (prec < 5) (fn rest => doExp (3, x) (Fragment " ** " :: doExp (5, y) rest))
                                            )
   | doExp (prec, S.UnaryExp (unOp, x)) = let val symbol = case unOp of
                                                               S.VOID => "void"
@@ -309,7 +310,7 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
                                                             | S.NEGATE => "-"
                                                             | S.BITNOT => "~"
                                                             | S.NOT => "!"
-                                         in paren (prec < Precedence.UnaryExpression) (Fragment symbol :: Fragment " " :: doExp (Precedence.UnaryExpression, x))
+                                         in paren (prec < Precedence.UnaryExpression) (fn rest => Fragment symbol :: Fragment " " :: doExp (Precedence.UnaryExpression, x) rest)
                                          end
   | doExp (prec, S.IndexExp (objectExp, indexExp))
     = let val tryIdentifierName = case indexExp of
@@ -331,42 +332,44 @@ fun doExp (prec, S.ConstExp ct) : Exp = (case ct of
                                       end
                                     | _ => NONE
           val indexPart = case tryIdentifierName of
-                              SOME name => [ Fragment ".", Fragment name ]
-                            | _ => Fragment "[" :: doExp (Precedence.Expression, indexExp) @ [ Fragment "]" ]
-      in paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) @ indexPart)
+                              SOME name => (fn rest => Fragment "." :: Fragment name :: rest)
+                            | _ => (fn rest => Fragment "[" :: doExp (Precedence.Expression, indexExp) (Fragment "]" :: rest))
+      in paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) o indexPart)
       end
-  | doExp (prec, S.CondExp (exp1, exp2, exp3)) = paren (prec < Precedence.ConditionalExpression) (doExp (Precedence.LogicalORExpression, exp1) @ Fragment " ? " :: doExp (Precedence.AssignmentExpression, exp2) @ Fragment " : " :: doExp (Precedence.AssignmentExpression, exp3))
+  | doExp (prec, S.CondExp (exp1, exp2, exp3)) = paren (prec < Precedence.ConditionalExpression) (fn rest => doExp (Precedence.LogicalORExpression, exp1) (Fragment " ? " :: doExp (Precedence.AssignmentExpression, exp2) (Fragment " : " :: doExp (Precedence.AssignmentExpression, exp3) rest)))
 and doCommaSepExp elements = commaSepV (Vector.map (fn value => doExp (Precedence.AssignmentExpression, value)) elements)
-and doStat (S.VarStat variables) = Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => [ Fragment (idToJs (S.UserDefinedId id)) ]
-                                                                                      | (id, SOME init) => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init)
-                                                                                      ) variables) @ [ Fragment ";", LineTerminator ]
-  | doStat (S.ExpStat exp) = let val fragments = doExp (Precedence.Expression, exp)
-                                 val needParen = case fragments of
-                                                     Fragment "{" :: _ => true
-                                                   | Fragment "function" :: _ => true
-                                                   | _ => false
-                             in Indent :: paren needParen fragments @ [ Fragment ";", LineTerminator ]
-                             end
+and doStat (S.VarStat variables) = (fn rest => Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
+                                                                                                  | (id, SOME init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)
+                                                                                                  ) variables) (Fragment ";" :: LineTerminator :: rest))
+  | doStat (S.ExpStat exp) = (fn rest => let val rest' = Fragment ";" :: LineTerminator :: rest
+                                             val fragments = doExp (Precedence.Expression, exp) rest'
+                                             val needParen = case fragments of
+                                                                 Fragment "{" :: _ => true
+                                                               | Fragment "function" :: _ => true
+                                                               | _ => false
+                                         in Indent :: (if needParen then paren true (doExp (Precedence.Expression, exp)) rest' else fragments)
+                                         end)
   | doStat (S.IfStat (cond, thenBlock, elseBlock))
-    = let fun processElseIfs (elseIfsRev, elseBlock) = if Vector.length elseBlock = 1 then
-                                                           case Vector.sub (elseBlock, 0) of
-                                                               S.IfStat (cond', thenBlock, elseBlock) => processElseIfs ((cond', thenBlock) :: elseIfsRev, elseBlock)
-                                                             | _ => (elseIfsRev, elseBlock)
-                                                       else
-                                                           (elseIfsRev, elseBlock)
-          val (elseIfsRev, elseBlock) = processElseIfs ([], elseBlock)
-          val elsePart = if Vector.length elseBlock = 0 then
-                             [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
-                         else
-                             DecreaseIndent :: Indent :: Fragment "} else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
-          val elseIfsAndElsePart = List.foldl (fn ((cond, elseIfBlock), acc) => DecreaseIndent :: Indent :: Fragment "} else if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock elseIfBlock @ acc) elsePart elseIfsRev
-      in Indent :: Fragment "if (" :: doExp (Precedence.Expression, cond) @ Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock thenBlock @ elseIfsAndElsePart
-      end
-  | doStat (S.ReturnStat NONE) = [ Indent, Fragment "return;", LineTerminator ]
-  | doStat (S.ReturnStat (SOME exp)) = Indent :: Fragment "return " :: doExp (Precedence.Expression, exp) @ [ Fragment ";", LineTerminator ]
-  | doStat (S.TryCatchStat (body, exnName, catch)) = Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator :: doBlock body @ DecreaseIndent :: Indent :: Fragment "} catch (" :: Fragment (idToJs (S.UserDefinedId exnName)) :: Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock catch @ [ DecreaseIndent, Indent, Fragment "}", LineTerminator ]
-  | doStat (S.ThrowStat exp) = Indent :: Fragment "throw " :: doExp (Precedence.Expression, exp) @ [ Fragment ";", LineTerminator ]
-and doBlock stats = Vector.foldr (fn (stat, acc) => doStat stat @ acc) [] stats
+    = (fn rest => let fun processElseIfs (elseIfsRev, elseBlock) = if Vector.length elseBlock = 1 then
+                                                                       case Vector.sub (elseBlock, 0) of
+                                                                           S.IfStat (cond', thenBlock, elseBlock) => processElseIfs ((cond', thenBlock) :: elseIfsRev, elseBlock)
+                                                                         | _ => (elseIfsRev, elseBlock)
+                                                                   else
+                                                                       (elseIfsRev, elseBlock)
+                      val (elseIfsRev, elseBlock) = processElseIfs ([], elseBlock)
+                      val elsePart = if Vector.length elseBlock = 0 then
+                                         DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest
+                                     else
+                                         DecreaseIndent :: Indent :: Fragment "} else {" :: IncreaseIndent :: LineTerminator :: doBlock elseBlock (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest)
+                      val elseIfsAndElsePart = List.foldl (fn ((cond, elseIfBlock), acc) => DecreaseIndent :: Indent :: Fragment "} else if (" :: doExp (Precedence.Expression, cond) (Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock elseIfBlock acc)) elsePart elseIfsRev
+                  in Indent :: Fragment "if (" :: doExp (Precedence.Expression, cond) (Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock thenBlock elseIfsAndElsePart)
+                  end
+      )
+  | doStat (S.ReturnStat NONE) = (fn rest => Indent :: Fragment "return;" :: LineTerminator :: rest)
+  | doStat (S.ReturnStat (SOME exp)) = (fn rest => Indent :: Fragment "return " :: doExp (Precedence.Expression, exp) (Fragment ";" :: LineTerminator :: rest))
+  | doStat (S.TryCatchStat (body, exnName, catch)) = (fn rest => Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator :: doBlock body (DecreaseIndent :: Indent :: Fragment "} catch (" :: Fragment (idToJs (S.UserDefinedId exnName)) :: Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock catch (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest)))
+  | doStat (S.ThrowStat exp) = (fn rest => Indent :: Fragment "throw " :: doExp (Precedence.Expression, exp) (Fragment ";" :: LineTerminator :: rest))
+and doBlock stats = (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
 
-fun doProgram stats = buildProgram (doBlock stats)
+fun doProgram stats = buildProgram (doBlock stats [])
 end;
