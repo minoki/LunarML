@@ -1,43 +1,43 @@
 structure JsTransform = struct
 structure J = JsSyntax
 
-fun collectVarsStat (J.VarStat vars) = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) J.IdSet.empty vars
-  | collectVarsStat (J.ExpStat _) = J.IdSet.empty
-  | collectVarsStat (J.IfStat (_, then', else')) = J.IdSet.union (collectVarsBlock then', collectVarsBlock else')
-  | collectVarsStat (J.ReturnStat _) = J.IdSet.empty
-  | collectVarsStat (J.TryCatchStat (try, vid, catch)) = J.IdSet.union (collectVarsBlock try, J.IdSet.subtract (collectVarsBlock catch, J.UserDefinedId vid))
-  | collectVarsStat (J.ThrowStat _) = J.IdSet.empty
-and collectVarsBlock stats = Vector.foldl (fn (stat, acc) => J.IdSet.union (collectVarsStat stat, acc)) J.IdSet.empty stats
+fun collectVarsStat (J.VarStat vars) acc = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) acc vars
+  | collectVarsStat (J.ExpStat _) acc = acc
+  | collectVarsStat (J.IfStat (_, then', else')) acc = collectVarsBlock then' (collectVarsBlock else' acc)
+  | collectVarsStat (J.ReturnStat _) acc = acc
+  | collectVarsStat (J.TryCatchStat (try, vid, catch)) acc = collectVarsBlock try (J.IdSet.union (J.IdSet.subtract (collectVarsBlock catch J.IdSet.empty, J.UserDefinedId vid), acc))
+  | collectVarsStat (J.ThrowStat _) acc = acc
+and collectVarsBlock stats acc = Vector.foldl (fn (stat, acc) => collectVarsStat stat acc) acc stats
 
-fun freeVarsExp (_, J.ConstExp _) = J.IdSet.empty
-  | freeVarsExp (_, J.ThisExp) = J.IdSet.empty
-  | freeVarsExp (bound, J.VarExp x) = if J.IdSet.member (bound, x) then
-                                          J.IdSet.empty
-                                      else
-                                          J.IdSet.singleton x
-  | freeVarsExp (bound, J.ObjectExp fields) = Vector.foldl (fn ((key, exp), acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)) J.IdSet.empty fields
-  | freeVarsExp (bound, J.ArrayExp elems) = Vector.foldl (fn (exp, acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)) J.IdSet.empty elems
-  | freeVarsExp (bound, J.CallExp (x, ys)) = Vector.foldl (fn (exp, acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)) (freeVarsExp (bound, x)) ys
-  | freeVarsExp (bound, J.MethodExp (x, _, ys)) = Vector.foldl (fn (exp, acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)) (freeVarsExp (bound, x)) ys
-  | freeVarsExp (bound, J.NewExp (x, ys)) = Vector.foldl (fn (exp, acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)) (freeVarsExp (bound, x)) ys
-  | freeVarsExp (bound, J.FunctionExp (params, body)) = let val bound' = Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound params
-                                                            val bound'' = J.IdSet.union (collectVarsBlock body, bound')
-                                                        in freeVarsBlock (bound'', body)
-                                                        end
-  | freeVarsExp (bound, J.BinExp (_, x, y)) = J.IdSet.union (freeVarsExp (bound, x), freeVarsExp (bound, y))
-  | freeVarsExp (bound, J.UnaryExp (_, x)) = freeVarsExp (bound, x)
-  | freeVarsExp (bound, J.IndexExp (x, y)) = J.IdSet.union (freeVarsExp (bound, x), freeVarsExp (bound, y))
-  | freeVarsExp (bound, J.CondExp (x, y, z)) = J.IdSet.union (freeVarsExp (bound, x), J.IdSet.union (freeVarsExp (bound, y), freeVarsExp (bound, z)))
-and freeVarsStat (bound, J.VarStat vars) = Vector.foldl (fn ((vid, NONE), acc) => acc
-                                                        | ((vid, SOME exp), acc) => J.IdSet.union (freeVarsExp (bound, exp), acc)
-                                                        ) J.IdSet.empty vars
-  | freeVarsStat (bound, J.ExpStat exp) = freeVarsExp (bound, exp)
-  | freeVarsStat (bound, J.IfStat (cond, then', else')) = J.IdSet.union (freeVarsExp (bound, cond), J.IdSet.union (freeVarsBlock (bound, then'), freeVarsBlock (bound, else')))
-  | freeVarsStat (bound, J.ReturnStat NONE) = J.IdSet.empty
-  | freeVarsStat (bound, J.ReturnStat (SOME exp)) = freeVarsExp (bound, exp)
-  | freeVarsStat (bound, J.TryCatchStat (try, vid, catch)) = J.IdSet.union (freeVarsBlock (bound, try), freeVarsBlock (J.IdSet.add (bound, J.UserDefinedId vid), catch))
-  | freeVarsStat (bound, J.ThrowStat exp) = freeVarsExp (bound, exp)
-and freeVarsBlock (bound, stats) = Vector.foldl (fn (stat, acc) => J.IdSet.union (freeVarsStat (bound, stat), acc)) J.IdSet.empty stats
+fun freeVarsExp (_, J.ConstExp _) acc = acc
+  | freeVarsExp (_, J.ThisExp) acc = acc
+  | freeVarsExp (bound, J.VarExp x) acc = if J.IdSet.member (bound, x) then
+                                              acc
+                                          else
+                                              J.IdSet.add (acc, x)
+  | freeVarsExp (bound, J.ObjectExp fields) acc = Vector.foldl (fn ((key, exp), acc) => freeVarsExp (bound, exp) acc) acc fields
+  | freeVarsExp (bound, J.ArrayExp elems) acc = Vector.foldl (fn (exp, acc) => freeVarsExp (bound, exp) acc) acc elems
+  | freeVarsExp (bound, J.CallExp (x, ys)) acc = Vector.foldl (fn (exp, acc) => freeVarsExp (bound, exp) acc) (freeVarsExp (bound, x) acc) ys
+  | freeVarsExp (bound, J.MethodExp (x, _, ys)) acc = Vector.foldl (fn (exp, acc) => freeVarsExp (bound, exp) acc) (freeVarsExp (bound, x) acc) ys
+  | freeVarsExp (bound, J.NewExp (x, ys)) acc = Vector.foldl (fn (exp, acc) => freeVarsExp (bound, exp) acc) (freeVarsExp (bound, x) acc) ys
+  | freeVarsExp (bound, J.FunctionExp (params, body)) acc = let val bound' = Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound params
+                                                                val bound'' = collectVarsBlock body bound'
+                                                            in freeVarsBlock (bound'', body) acc
+                                                            end
+  | freeVarsExp (bound, J.BinExp (_, x, y)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
+  | freeVarsExp (bound, J.UnaryExp (_, x)) acc = freeVarsExp (bound, x) acc
+  | freeVarsExp (bound, J.IndexExp (x, y)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
+  | freeVarsExp (bound, J.CondExp (x, y, z)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) (freeVarsExp (bound, z) acc))
+and freeVarsStat (bound, J.VarStat vars) acc = Vector.foldl (fn ((vid, NONE), acc) => acc
+                                                            | ((vid, SOME exp), acc) => freeVarsExp (bound, exp) acc
+                                                            ) acc vars
+  | freeVarsStat (bound, J.ExpStat exp) acc = freeVarsExp (bound, exp) acc
+  | freeVarsStat (bound, J.IfStat (cond, then', else')) acc = freeVarsExp (bound, cond) (freeVarsBlock (bound, then') (freeVarsBlock (bound, else') acc))
+  | freeVarsStat (bound, J.ReturnStat NONE) acc = acc
+  | freeVarsStat (bound, J.ReturnStat (SOME exp)) acc = freeVarsExp (bound, exp) acc
+  | freeVarsStat (bound, J.TryCatchStat (try, vid, catch)) acc = freeVarsBlock (bound, try) (freeVarsBlock (J.IdSet.add (bound, J.UserDefinedId vid), catch) acc)
+  | freeVarsStat (bound, J.ThrowStat exp) acc = freeVarsExp (bound, exp) acc
+and freeVarsBlock (bound, stats) acc = Vector.foldl (fn (stat, acc) => freeVarsStat (bound, stat) acc) acc stats
 
 type Context = { nextVId : int ref }
 
@@ -73,10 +73,10 @@ fun goExp (ctx, bound, depth, e as J.ConstExp _) = ([], e)
                                                   end
   | goExp (ctx, bound, depth, f as J.FunctionExp (params, body))
     = if depth > 200 then
-          let val fv = freeVarsExp (J.IdSet.empty, f)
+          let val fv = freeVarsExp (J.IdSet.empty, f) J.IdSet.empty
               val captures = J.IdSet.toList (J.IdSet.intersection (bound, fv))
               val bound' = Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound params
-              val bound'' = J.IdSet.union (collectVarsBlock body, bound')
+              val bound'' = collectVarsBlock body bound'
               val (decs, body') = goBlock (ctx, bound'', 0, body)
               val name = freshVId (ctx, "f")
               val params' = Vector.foldr (op ::) [] params
@@ -87,7 +87,7 @@ fun goExp (ctx, bound, depth, e as J.ConstExp _) = ([], e)
           end
       else
           let val bound' = Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound params
-              val bound'' = J.IdSet.union (collectVarsBlock body, bound')
+              val bound'' = collectVarsBlock body bound'
               val (decs, body') = goBlock (ctx, bound'', depth + 1, body)
           in (decs, J.FunctionExp (params, body'))
           end
