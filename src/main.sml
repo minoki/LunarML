@@ -19,6 +19,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -mlib                  Produce a Lua module.\n\
                                                 \  --js                   Produce JavaScript code.\n\
                                                 \  --js-cps               Produce JavaScript code (CPS mode).\n\
+                                                \  --lua-stackless-handle Produce JavaScript code (stackless 'handle' mode).\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
                                                 \  --dump                 Dump intermediate code.\n\

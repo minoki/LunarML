@@ -29,7 +29,7 @@ Modes of operation:
 * `-mlib`: Produce a Lua module.
 * `--js`: Produce a JavaScript program.
 * `--js-cps`: Produce a JavaScript program (CPS mode; supports delimited continuations).
-* `--lua-stackless-mode`: Allow deeply nested `handle`.
+* `--lua-stackless-handle`: Allow deeply nested `handle`.
 
 See `--help` for more information.
 
