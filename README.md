@@ -16,6 +16,8 @@
 
 </div>
 
+<br>
+<br>
 
 ## Features
 
@@ -24,10 +26,12 @@
 -   An **[Interface to Lua]**
 -   ML Basis system like **[MLton]**
 
+<br>
+
 ### Successor ML Features
 
 -   [x] Monomorphic non-exhaustive bindings
--   [x] Simplified recursive value bindings
+-   [x] <details><summary>Simplified recursive value bindings</summary>
 
     SML '97-compatible ordering for <br>
     type variables is also supported: 
@@ -35,13 +39,15 @@
     ```sml
     val <tyvarseq> rec <valbind>
     ```
+    
+    </details>
 
 
 -   [x] Abstype as derived form
 -   [x] Fixed manifest type specifications
 -   [ ] Abolish sequenced type realizations
 -   [ ] Line comments
--   [x] Extended literal syntax
+-   [x] <details><summary>Extended literal syntax</summary>
     -   [x] Underscores 
         - `3.1415_9265`
         - `0xffff_ffff`
@@ -51,6 +57,8 @@
     -   [x] Eight hex digits in text
         - `\Uxxxxxxxx`
 
+    </details>
+    
         
 -   [ ] Record punning
 -   [x] Record extension
@@ -67,12 +75,14 @@
 ### Planned Extensions
 
 -   [x] Vector expressions and patterns
--   [ ] Packaged modules
+-   [ ] <details><summary>Packaged modules</summary>
     - `Alice ML`
     - `HaMLet S`
     
+    </details>
     
--   [x] Hexadecimal floating-point constants
+    
+-   [x] <details><summary>Hexadecimal floating-point constants</summary>
     - `0x1.ffff_ffff_ffff_f`
     - `0x1p1024`
     
@@ -102,10 +112,11 @@
     
     The ( binary ) exponent part is optional and <br>
     tilde ( `~` ) is used for the negation symbol.
-
+    
+    </details>
     
     
--   [x] Variably-encoded Unicode escape sequence in string literals
+-   [x] <details><summary>Variably-encoded Unicode escape sequence in string literals</summary>
     - `\u{3042}`
     
     ### Details
@@ -115,6 +126,8 @@
     
     The compiler encodes the character in <br>
     UTF-8,16,32 depending on the string type.
+    
+    </details>
 
 <br>
 
