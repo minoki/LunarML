@@ -215,7 +215,7 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
     = let val bound = List.foldl (fn ((vid, ty, exp), set) => TypedSyntax.VIdSet.add (set, vid)) TypedSyntax.VIdSet.empty valbinds
           val map : (F.Ty * F.Exp * (* refs *) TypedSyntax.VIdSet.set * (* invref *) TypedSyntax.VId list ref * (* seen1 *) bool ref * (* seen2 *) bool ref) TypedSyntax.VIdMap.map
               = List.foldl (fn ((vid, ty, exp), map) => let val exp = doExp exp
-                                                        in TypedSyntax.VIdMap.insert (map, vid, (ty, exp, TypedSyntax.VIdSet.intersection (F.freeVarsInExp (TypedSyntax.VIdSet.empty, exp), bound), ref [], ref false, ref false))
+                                                        in TypedSyntax.VIdMap.insert (map, vid, (ty, exp, TypedSyntax.VIdSet.intersection (F.freeVarsInExp (TypedSyntax.VIdSet.empty, exp) TypedSyntax.VIdSet.empty, bound), ref [], ref false, ref false))
                                                         end) TypedSyntax.VIdMap.empty valbinds
           fun dfs1 (from : TypedSyntax.VId option, vid) : TypedSyntax.VId list
               = let val (ty, exp, refs, invref, seen1, _) = TypedSyntax.VIdMap.lookup (map, vid)
@@ -551,15 +551,15 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                      | doInlineExp (PrimExp (primOp, tys, exps)) = PrimExp (primOp, Vector.map doTy tys, Vector.map doInlineExp exps)
                                in doInlineExp
                                end
-fun freeTyVarsInInlineExp (bound, VarExp _) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInInlineExp (bound, RecordExp map) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) = freeTyVarsInInlineExp (bound, record)
-  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) = freeTyVarsInInlineExp (bound, exp)
-  | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) = TypedSyntax.TyVarSet.union (F.freeTyVarsInTy (bound, ty), F.freeTyVarsInExp (bound, exp))
-  | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp)
-  | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) = TypedSyntax.TyVarSet.union (freeTyVarsInInlineExp (bound, exp), F.freeTyVarsInTy (bound, ty))
-  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) = Vector.foldl (fn (ty, acc) => TypedSyntax.TyVarSet.union (acc, F.freeTyVarsInTy (bound, ty))) (Vector.foldl (fn (exp, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInInlineExp (bound, exp))) TypedSyntax.TyVarSet.empty exps) tys
+fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
+  | freeTyVarsInInlineExp (bound, RecordExp map) acc = acc
+  | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) acc = freeTyVarsInInlineExp (bound, record) acc
+  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) acc = acc
+  | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) acc = freeTyVarsInInlineExp (bound, exp) acc
+  | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) acc = F.freeTyVarsInTy (bound, ty) (F.freeTyVarsInExp (bound, exp) acc)
+  | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
+  | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInInlineExp (bound, exp) (F.freeTyVarsInTy (bound, ty) acc)
+  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) acc = Vector.foldl (fn (ty, acc) => F.freeTyVarsInTy (bound, ty) acc) (Vector.foldl (fn (exp, acc) => freeTyVarsInInlineExp (bound, exp) acc) acc exps) tys
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, F.PathToExp path) :: xs) [] map)
   | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
@@ -718,7 +718,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                    | F.TyAbsExp (tv, kind, exp) => let val (exp, iexp) = doExp' env exp
                                                        val tryEtaReductionI = case iexp of
                                                                                   SOME (TyAppExp (exp', F.TyVar tv')) => if tv = tv' then
-                                                                                                                             let val fv = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.empty, exp')
+                                                                                                                             let val fv = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.empty, exp') TypedSyntax.TyVarSet.empty
                                                                                                                              in if TypedSyntax.TyVarSet.member (fv, tv) then
                                                                                                                                     NONE
                                                                                                                                 else
@@ -731,7 +731,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                  SOME result => tryEtaReductionI
                                                                                | NONE => case exp of
                                                                                              F.TyAppExp(exp', F.TyVar tv') => if tv = tv' then
-                                                                                                                                  let val fv = F.freeTyVarsInExp (TypedSyntax.TyVarSet.empty, exp')
+                                                                                                                                  let val fv = F.freeTyVarsInExp (TypedSyntax.TyVarSet.empty, exp') TypedSyntax.TyVarSet.empty
                                                                                                                                   in if TypedSyntax.TyVarSet.member (fv, tv) then
                                                                                                                                          NONE
                                                                                                                                      else
