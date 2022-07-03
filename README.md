@@ -31,7 +31,9 @@
 ### Successor ML Features
 
 -   [x] Monomorphic non-exhaustive bindings
--   [x] <details><summary>Simplified recursive value bindings</summary>
+-   [x] Simplified recursive value bindings
+
+    <details><summary></summary>
 
     SML '97-compatible ordering for <br>
     type variables is also supported: 
@@ -47,7 +49,10 @@
 -   [x] Fixed manifest type specifications
 -   [ ] Abolish sequenced type realizations
 -   [ ] Line comments
--   [x] <details><summary>Extended literal syntax</summary>
+-   [x] Extended literal syntax
+
+    <details><summary></summary>
+    
     -   [x] Underscores 
         - `3.1415_9265`
         - `0xffff_ffff`
@@ -72,17 +77,25 @@
 -   [ ] Do declarations
 -   [x] With type in signatures
 
+<br>
+
 ### Planned Extensions
 
 -   [x] Vector expressions and patterns
--   [ ] <details><summary>Packaged modules</summary>
+-   [ ] Packaged modules
+
+    <details><summary></summary>
+    
     - `Alice ML`
     - `HaMLet S`
     
     </details>
     
     
--   [x] <details><summary>Hexadecimal floating-point constants</summary>
+-   [x] Hexadecimal floating-point constants
+
+    <details><summary></summary>
+    
     - `0x1.ffff_ffff_ffff_f`
     - `0x1p1024`
     
@@ -116,7 +129,10 @@
     </details>
     
     
--   [x] <details><summary>Variably-encoded Unicode escape sequence in string literals</summary>
+-   [x] Variably-encoded Unicode escape sequence in string literals 
+
+    <details><summary></summary>
+    
     - `\u{3042}`
     
     ### Details
