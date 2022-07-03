@@ -96,8 +96,12 @@
 
     <details><summary></summary>
     
+    ### Examples
+    
     - `0x1.ffff_ffff_ffff_f`
     - `0x1p1024`
+    
+    <br>
     
     ### Syntax
 
@@ -121,6 +125,8 @@
     <binary-exponent-part> ::= [pP] '~'? <digit> ('_'* <digit>)?
     ```
     
+    <br>
+    
     ### In Short
     
     The ( binary ) exponent part is optional and <br>
@@ -133,7 +139,11 @@
 
     <details><summary></summary>
     
+    ### Examples
+    
     - `\u{3042}`
+    
+    <br>
     
     ### Details
     
