@@ -282,135 +282,128 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
        }
     end
 
-fun freeTyVarsInTy (bound : TypedSyntax.TyVarSet.set, TyVar tv) = if TypedSyntax.TyVarSet.member (bound, tv) then
-                                                                      TypedSyntax.TyVarSet.empty
-                                                                  else
-                                                                      TypedSyntax.TyVarSet.singleton tv
-  | freeTyVarsInTy (bound, RecordType fields) = Syntax.LabelMap.foldl (fn (ty, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) TypedSyntax.TyVarSet.empty fields
-  | freeTyVarsInTy (bound, AppType { applied, arg }) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, applied), freeTyVarsInTy (bound, arg))
-  | freeTyVarsInTy (bound, FnType (ty1, ty2)) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, ty1), freeTyVarsInTy (bound, ty2))
-  | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty)
-  | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty)
-  | freeTyVarsInTy (bound, TypeFn (tv, kind, ty)) = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty)
-  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags }) = let val acc = Syntax.VIdMap.foldl (fn ((ty, ids), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) TypedSyntax.TyVarSet.empty valMap
-                                                                  in Syntax.StrIdMap.foldl (fn (ty, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) acc strMap
-                                                                  end
-fun freeTyVarsInPat (bound, WildcardPat _) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInPat (bound, SConPat _) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInPat (bound, VarPat (_, vid, ty)) = freeTyVarsInTy (bound, ty)
-  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat))) TypedSyntax.TyVarSet.empty fields
-  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat))) (freeTyVarsInPat (bound, basePat)) fields
-  | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = NONE }) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInPat (bound, payloadPat))
-  | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath = _, payload = NONE }) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath = _, payload = SOME (payloadTy, payloadPat) }) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInPat (bound, payloadPat))
-  | freeTyVarsInPat (bound, LayeredPat (_, _, ty, innerPat)) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInPat (bound, innerPat))
-  | freeTyVarsInPat (bound, VectorPat (_, pats, ellipsis, elemTy)) = Vector.foldr (fn (pat, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat))) (freeTyVarsInTy (bound, elemTy)) pats
-fun freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, args)) = let val acc = Vector.foldl (fn (ty, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))) TypedSyntax.TyVarSet.empty tyargs
-                                                                                         in Vector.foldl (fn (exp, acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) acc args
-                                                                                         end
-  | freeTyVarsInExp (bound, VarExp _) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) TypedSyntax.TyVarSet.empty fields
-  | freeTyVarsInExp (bound, LetExp (dec, exp)) = let val (bound, set) = freeTyVarsInDec (bound, dec)
-                                                 in TypedSyntax.TyVarSet.union (set, freeTyVarsInExp (bound, exp))
-                                                 end
-  | freeTyVarsInExp (bound, AppExp (exp1, exp2)) = TypedSyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), freeTyVarsInExp (bound, exp2))
-  | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) = TypedSyntax.TyVarSet.union (freeTyVarsInExp (bound, body), freeTyVarsInExp (bound, handler))
-  | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = TypedSyntax.TyVarSet.union (freeTyVarsInExp (bound, exp1), TypedSyntax.TyVarSet.union (freeTyVarsInExp (bound, exp2), freeTyVarsInExp (bound, exp3)))
-  | freeTyVarsInExp (bound, CaseExp (span, exp, ty, matches)) = let val acc = freeTyVarsInExp (bound, exp)
-                                                                    val acc = TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
-                                                                in List.foldl (fn ((pat, exp), acc) => TypedSyntax.TyVarSet.union (TypedSyntax.TyVarSet.union (acc, freeTyVarsInPat (bound, pat)), freeTyVarsInExp (bound, exp))) acc matches
-                                                                end
-  | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) = TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
-  | freeTyVarsInExp (bound, ProjectionExp { label, record }) = freeTyVarsInExp (bound, record)
-  | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeTyVarsInExp (TypedSyntax.TyVarSet.add (bound, tv), exp)
-  | freeTyVarsInExp (bound, TyAppExp (exp, ty)) = TypedSyntax.TyVarSet.union (freeTyVarsInExp (bound, exp), freeTyVarsInTy (bound, ty))
-  | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = TypedSyntax.TyVarSet.empty
-  | freeTyVarsInExp (bound, SProjectionExp (exp, label)) = freeTyVarsInExp (bound, exp)
-  | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = TypedSyntax.TyVarSet.union (TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, payloadTy), freeTyVarsInTy (bound, packageTy)), freeTyVarsInExp (bound, exp))
-and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) = (bound, (case optTy of
-                                                                     NONE => freeTyVarsInExp (bound, exp)
-                                                                   | SOME ty => TypedSyntax.TyVarSet.union (freeTyVarsInTy (bound, ty), freeTyVarsInExp (bound, exp))
-                                                                )
-                                                        )
-  | freeTyVarsInDec (bound, RecValDec valbinds) = (bound, List.foldl (fn ((vid, ty, exp), acc) => TypedSyntax.TyVarSet.union (TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty)), freeTyVarsInExp (bound, exp))) TypedSyntax.TyVarSet.empty valbinds)
-  | freeTyVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = let val set1 = freeTyVarsInExp (bound, exp)
-                                                                      val bound = TypedSyntax.TyVarSet.add (bound, tv)
-                                                                  in (bound, TypedSyntax.TyVarSet.union (set1, freeTyVarsInTy (bound, ty)))
-                                                                  end
-  | freeTyVarsInDec (bound, IgnoreDec exp) = (bound, freeTyVarsInExp (bound, exp))
-  | freeTyVarsInDec (bound, DatatypeDec datbinds) = let val bound = List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => TypedSyntax.TyVarSet.add (bound, tyname)) bound datbinds
-                                                    in (bound, List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
-                                                                              let val bound = TypedSyntax.TyVarSet.addList (bound, tyvars)
-                                                                              in List.foldl (fn (ConBind (vid, NONE), acc) => acc
-                                                                                            | (ConBind (vid, SOME ty), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInTy (bound, ty))
-                                                                                            ) acc conbinds
-                                                                              end
-                                                                          ) TypedSyntax.TyVarSet.empty datbinds)
+fun freeTyVarsInTy (bound : TypedSyntax.TyVarSet.set, TyVar tv) acc = if TypedSyntax.TyVarSet.member (bound, tv) then
+                                                                          acc
+                                                                      else
+                                                                          TypedSyntax.TyVarSet.add (acc, tv)
+  | freeTyVarsInTy (bound, RecordType fields) acc = Syntax.LabelMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc fields
+  | freeTyVarsInTy (bound, AppType { applied, arg }) acc = freeTyVarsInTy (bound, applied) (freeTyVarsInTy (bound, arg) acc)
+  | freeTyVarsInTy (bound, FnType (ty1, ty2)) acc = freeTyVarsInTy (bound, ty1) (freeTyVarsInTy (bound, ty2) acc)
+  | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
+  | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
+  | freeTyVarsInTy (bound, TypeFn (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
+  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags }) acc = let val acc = Syntax.VIdMap.foldl (fn ((ty, ids), acc) => freeTyVarsInTy (bound, ty) acc) acc valMap
+                                                                      in Syntax.StrIdMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc strMap
+                                                                      end
+fun freeTyVarsInPat (bound, WildcardPat _) acc = acc
+  | freeTyVarsInPat (bound, SConPat _) acc = acc
+  | freeTyVarsInPat (bound, VarPat (_, vid, ty)) acc = freeTyVarsInTy (bound, ty) acc
+  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = NONE }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) acc fields
+  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) (freeTyVarsInPat (bound, basePat) acc) fields
+  | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = NONE }) acc = acc
+  | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInPat (bound, payloadPat) acc)
+  | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath = _, payload = NONE }) acc = acc
+  | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath = _, payload = SOME (payloadTy, payloadPat) }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInPat (bound, payloadPat) acc)
+  | freeTyVarsInPat (bound, LayeredPat (_, _, ty, innerPat)) acc = freeTyVarsInTy (bound, ty) (freeTyVarsInPat (bound, innerPat) acc)
+  | freeTyVarsInPat (bound, VectorPat (_, pats, ellipsis, elemTy)) acc = Vector.foldr (fn (pat, acc) => freeTyVarsInPat (bound, pat) acc) (freeTyVarsInTy (bound, elemTy) acc) pats
+fun freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, args)) acc = let val acc = Vector.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc tyargs
+                                                                                             in Vector.foldl (fn (exp, acc) => freeTyVarsInExp (bound, exp) acc) acc args
+                                                                                             end
+  | freeTyVarsInExp (bound, VarExp _) acc = acc
+  | freeTyVarsInExp (bound, RecordExp fields) acc = List.foldl (fn ((label, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc fields
+  | freeTyVarsInExp (bound, LetExp (dec, exp)) acc = let val (bound, acc) = freeTyVarsInDec (bound, dec) acc
+                                                     in freeTyVarsInExp (bound, exp) acc
+                                                     end
+  | freeTyVarsInExp (bound, AppExp (exp1, exp2)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) acc)
+  | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler) acc)
+  | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) (freeTyVarsInExp (bound, exp3) acc))
+  | freeTyVarsInExp (bound, CaseExp (span, exp, ty, matches)) acc = let val acc = freeTyVarsInExp (bound, exp) acc
+                                                                        val acc = freeTyVarsInTy (bound, ty) acc
+                                                                    in List.foldl (fn ((pat, exp), acc) => freeTyVarsInPat (bound, pat) (freeTyVarsInExp (bound, exp) acc)) acc matches
+                                                                    end
+  | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
+  | freeTyVarsInExp (bound, ProjectionExp { label, record }) acc = freeTyVarsInExp (bound, record) acc
+  | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
+  | freeTyVarsInExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInExp (bound, exp) (freeTyVarsInTy (bound, ty) acc)
+  | freeTyVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) acc = acc
+  | freeTyVarsInExp (bound, SProjectionExp (exp, label)) acc = freeTyVarsInExp (bound, exp) acc
+  | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInTy (bound, packageTy) (freeTyVarsInExp (bound, exp) acc))
+and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) acc = (bound, (case optTy of
+                                                                         NONE => freeTyVarsInExp (bound, exp) acc
+                                                                       | SOME ty => freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
+                                                                    )
+                                                            )
+  | freeTyVarsInDec (bound, RecValDec valbinds) acc = (bound, List.foldl (fn ((vid, ty, exp), acc) => freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)) acc valbinds)
+  | freeTyVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) acc = let val acc = freeTyVarsInExp (bound, exp) acc
+                                                                          val bound = TypedSyntax.TyVarSet.add (bound, tv)
+                                                                      in (bound, freeTyVarsInTy (bound, ty) acc)
+                                                                      end
+  | freeTyVarsInDec (bound, IgnoreDec exp) acc = (bound, freeTyVarsInExp (bound, exp) acc)
+  | freeTyVarsInDec (bound, DatatypeDec datbinds) acc = let val bound = List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => TypedSyntax.TyVarSet.add (bound, tyname)) bound datbinds
+                                                        in (bound, List.foldl (fn (DatBind (tyvars, tyname, conbinds), acc) =>
+                                                                                  let val bound = TypedSyntax.TyVarSet.addList (bound, tyvars)
+                                                                                  in List.foldl (fn (ConBind (vid, NONE), acc) => acc
+                                                                                                | (ConBind (vid, SOME ty), acc) => freeTyVarsInTy (bound, ty) acc
+                                                                                                ) acc conbinds
+                                                                                  end
+                                                                              ) acc datbinds)
+                                                        end
+  | freeTyVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) acc = (bound, case payloadTy of
+                                                                                         NONE => acc
+                                                                                       | SOME payloadTy => freeTyVarsInTy (bound, payloadTy) acc
+                                                                             )
+  | freeTyVarsInDec (bound, ExportValue exp) acc = (bound, freeTyVarsInExp (bound, exp) acc)
+  | freeTyVarsInDec (bound, ExportModule exports) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc exports)
+  | freeTyVarsInDec (bound, GroupDec (v, decs)) acc = freeTyVarsInDecs (bound, decs) acc
+and freeTyVarsInDecs (bound, decs) acc = List.foldl (fn (dec, (bound, acc)) => freeTyVarsInDec (bound, dec) acc) (bound, acc) decs
+
+fun varsInPat (WildcardPat _) acc = acc
+  | varsInPat (SConPat _) acc = acc
+  | varsInPat (VarPat (_, vid, ty)) acc = TypedSyntax.VIdSet.add (acc, vid)
+  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) acc fields
+  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) (varsInPat basePat acc) fields
+  | varsInPat (ValConPat { sourceSpan = _, info = _, payload = SOME (_, payloadPat) }) acc = varsInPat payloadPat acc
+  | varsInPat (ValConPat { sourceSpan = _, info = _, payload = NONE }) acc = acc
+  | varsInPat (ExnConPat { sourceSpan = _, tagPath = _, payload = SOME (_, payloadPat) }) acc = varsInPat payloadPat acc
+  | varsInPat (ExnConPat { sourceSpan = _, tagPath = _, payload = NONE }) acc = acc
+  | varsInPat (LayeredPat (_, vid, ty, innerPat)) acc = varsInPat innerPat (TypedSyntax.VIdSet.add (acc, vid))
+  | varsInPat (VectorPat (_, pats, wildcard, ty)) acc = Vector.foldl (fn (pat, acc) => varsInPat pat acc) acc pats
+
+fun freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) acc = Vector.foldl (fn (exp, acc) => freeVarsInExp (bound, exp) acc) acc args
+  | freeVarsInExp (bound, VarExp vid) acc = if TypedSyntax.VIdSet.member (bound, vid) then
+                                                acc
+                                            else
+                                                TypedSyntax.VIdSet.add (acc, vid)
+  | freeVarsInExp (bound, RecordExp fields) acc = List.foldl (fn ((label, exp), acc) => freeVarsInExp (bound, exp) acc) acc fields
+  | freeVarsInExp (bound, LetExp (dec, exp)) acc = let val (bound, acc) = freeVarsInDec (bound, dec) acc
+                                                   in freeVarsInExp (bound, exp) acc
+                                                   end
+  | freeVarsInExp (bound, AppExp (exp1, exp2)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) acc)
+  | freeVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeVarsInExp (bound, body) (freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler) acc)
+  | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) (freeVarsInExp (bound, exp3) acc))
+  | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) acc = List.foldl (fn ((pat, exp), acc) => freeVarsInExp (varsInPat pat bound, exp) acc) (freeVarsInExp (bound, exp) acc) matches
+  | freeVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeVarsInExp (TypedSyntax.VIdSet.add (bound, vid), exp) acc
+  | freeVarsInExp (bound, ProjectionExp { label, record }) acc = freeVarsInExp (bound, record) acc
+  | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeVarsInExp (bound, exp) acc
+  | freeVarsInExp (bound, TyAppExp (exp, ty)) acc = freeVarsInExp (bound, exp) acc
+  | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) acc = let fun addPath (path, set) = TypedSyntax.VIdSet.add (set, rootOfPath path)
+                                                                             val acc = Syntax.VIdMap.foldl addPath acc valMap
+                                                                             val acc = Syntax.StrIdMap.foldl addPath acc strMap
+                                                                         in Syntax.VIdMap.foldl addPath acc exnTagMap
+                                                                         end
+  | freeVarsInExp (bound, SProjectionExp (exp, label)) acc = freeVarsInExp (bound, exp) acc
+  | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeVarsInExp (bound, exp) acc
+and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp) acc)
+  | freeVarsInDec (bound, RecValDec valbinds) acc = let val bound = List.foldl (fn ((vid, _, _), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound valbinds
+                                                    in (bound, List.foldl (fn ((_, _, exp), acc) => freeVarsInExp (bound, exp) acc) acc valbinds)
                                                     end
-  | freeTyVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) = (bound, case payloadTy of
-                                                                                     NONE => TypedSyntax.TyVarSet.empty
-                                                                                   | SOME payloadTy => freeTyVarsInTy (bound, payloadTy)
-                                                                         )
-  | freeTyVarsInDec (bound, ExportValue exp) = (bound, freeTyVarsInExp (bound, exp))
-  | freeTyVarsInDec (bound, ExportModule exports) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.TyVarSet.union (acc, freeTyVarsInExp (bound, exp))) TypedSyntax.TyVarSet.empty exports)
-  | freeTyVarsInDec (bound, GroupDec (v, decs)) = freeTyVarsInDecs (bound, decs)
-and freeTyVarsInDecs (bound, decs) = List.foldl (fn (dec, (bound, acc)) => let val (bound, vars) = freeTyVarsInDec (bound, dec)
-                                                                           in (bound, TypedSyntax.TyVarSet.union (acc, vars))
-                                                                           end
-                                                ) (bound, TypedSyntax.TyVarSet.empty) decs
-
-fun varsInPat (WildcardPat _) = TypedSyntax.VIdSet.empty
-  | varsInPat (SConPat _) = TypedSyntax.VIdSet.empty
-  | varsInPat (VarPat (_, vid, ty)) = TypedSyntax.VIdSet.singleton vid
-  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.VIdSet.union (acc, varsInPat pat)) TypedSyntax.VIdSet.empty fields
-  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) = List.foldl (fn ((label, pat), acc) => TypedSyntax.VIdSet.union (acc, varsInPat pat)) (varsInPat basePat) fields
-  | varsInPat (ValConPat { sourceSpan = _, info = _, payload = SOME (_, payloadPat) }) = varsInPat payloadPat
-  | varsInPat (ValConPat { sourceSpan = _, info = _, payload = NONE }) = TypedSyntax.VIdSet.empty
-  | varsInPat (ExnConPat { sourceSpan = _, tagPath = _, payload = SOME (_, payloadPat) }) = varsInPat payloadPat
-  | varsInPat (ExnConPat { sourceSpan = _, tagPath = _, payload = NONE }) = TypedSyntax.VIdSet.empty
-  | varsInPat (LayeredPat (_, vid, ty, innerPat)) = TypedSyntax.VIdSet.add (varsInPat innerPat, vid)
-  | varsInPat (VectorPat (_, pats, wildcard, ty)) = Vector.foldl (fn (pat, acc) => TypedSyntax.VIdSet.union (acc, varsInPat pat)) TypedSyntax.VIdSet.empty pats
-
-fun freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) = Vector.foldl (fn (exp, acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty args
-  | freeVarsInExp (bound, VarExp vid) = if TypedSyntax.VIdSet.member (bound, vid) then
-                                            TypedSyntax.VIdSet.empty
-                                        else
-                                            TypedSyntax.VIdSet.singleton vid
-  | freeVarsInExp (bound, RecordExp fields) = List.foldl (fn ((label, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty fields
-  | freeVarsInExp (bound, LetExp (dec, exp)) = let val (bound, set) = freeVarsInDec (bound, dec)
-                                               in TypedSyntax.VIdSet.union (set, freeVarsInExp (bound, exp))
-                                               end
-  | freeVarsInExp (bound, AppExp (exp1, exp2)) = TypedSyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2))
-  | freeVarsInExp (bound, HandleExp { body, exnName, handler }) = TypedSyntax.VIdSet.union (freeVarsInExp (bound, body), freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler))
-  | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) = TypedSyntax.VIdSet.union (TypedSyntax.VIdSet.union (freeVarsInExp (bound, exp1), freeVarsInExp (bound, exp2)), freeVarsInExp (bound, exp3))
-  | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (TypedSyntax.VIdSet.union (bound, varsInPat pat), exp))) (freeVarsInExp (bound, exp)) matches
-  | freeVarsInExp (bound, FnExp (vid, ty, exp)) = freeVarsInExp (TypedSyntax.VIdSet.add (bound, vid), exp)
-  | freeVarsInExp (bound, ProjectionExp { label, record }) = freeVarsInExp (bound, record)
-  | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, TyAppExp (exp, ty)) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, StructExp { valMap, strMap, exnTagMap }) = let fun addPath (path, set) = TypedSyntax.VIdSet.add (set, rootOfPath path)
-                                                                     in List.foldl TypedSyntax.VIdSet.union TypedSyntax.VIdSet.empty
-                                                                                   [Syntax.VIdMap.foldl addPath TypedSyntax.VIdSet.empty valMap
-                                                                                   ,Syntax.StrIdMap.foldl addPath TypedSyntax.VIdSet.empty strMap
-                                                                                   ,Syntax.VIdMap.foldl addPath TypedSyntax.VIdSet.empty exnTagMap
-                                                                                   ]
-                                                                     end
-  | freeVarsInExp (bound, SProjectionExp (exp, label)) = freeVarsInExp (bound, exp)
-  | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) = freeVarsInExp (bound, exp)
-and freeVarsInDec (bound, ValDec (vid, ty, exp)) = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
-  | freeVarsInDec (bound, RecValDec valbinds) = let val bound = List.foldl (fn ((vid, _, _), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound valbinds
-                                                in (bound, List.foldl (fn ((_, _, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty valbinds)
-                                                end
-  | freeVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp))
-  | freeVarsInDec (bound, IgnoreDec exp) = (bound, freeVarsInExp (bound, exp))
-  | freeVarsInDec (bound, DatatypeDec datbinds) = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, TypedSyntax.VIdSet.empty)
-  | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) = (TypedSyntax.VIdSet.add (bound, tagName), TypedSyntax.VIdSet.empty)
-  | freeVarsInDec (bound, ExportValue exp) = (bound, freeVarsInExp (bound, exp))
-  | freeVarsInDec (bound, ExportModule exps) = (bound, Vector.foldl (fn ((name, exp), acc) => TypedSyntax.VIdSet.union (acc, freeVarsInExp (bound, exp))) TypedSyntax.VIdSet.empty exps)
-  | freeVarsInDec (bound, GroupDec (_, decs)) = List.foldl (fn (dec, (bound, acc)) => let val (bound, set) = freeVarsInDec (bound, dec)
-                                                                                      in (bound, TypedSyntax.VIdSet.union (acc, set))
-                                                                                      end) (bound, TypedSyntax.VIdSet.empty) decs
+  | freeVarsInDec (bound, UnpackDec (tv, kind, vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp) acc)
+  | freeVarsInDec (bound, IgnoreDec exp) acc = (bound, freeVarsInExp (bound, exp) acc)
+  | freeVarsInDec (bound, DatatypeDec datbinds) acc = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, acc)
+  | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) acc = (TypedSyntax.VIdSet.add (bound, tagName), acc)
+  | freeVarsInDec (bound, ExportValue exp) acc = (bound, freeVarsInExp (bound, exp) acc)
+  | freeVarsInDec (bound, ExportModule exps) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc exps)
+  | freeVarsInDec (bound, GroupDec (_, decs)) acc = List.foldl (fn (dec, (bound, acc)) => freeVarsInDec (bound, dec) acc) (bound, acc) decs
 
 local
     fun isLongStrId (VarExp (TypedSyntax.MkVId (name, n)), TypedSyntax.MkStrId (name', n'), []) = n = n' andalso name = name'
