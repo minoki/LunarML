@@ -29,7 +29,7 @@ make test-nodejs-cps
 ```
 
 ```console
-user@system~#: lua example/hello.lua
+user@system:~$ lua example/hello.lua
 Hello world!
 ```
 
