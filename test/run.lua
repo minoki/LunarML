@@ -9,11 +9,14 @@ end
 local compiler = arg[1] or "../lunarml"
 local lua_interpreter = arg[2] or "lua"
 local stackless_mode = arg[3] == "stackless-handle"
-local outext = stackless_mode and ".stackless.lua" or ".lua"
+local luajit_mode = arg[3] == "luajit"
+local outext = stackless_mode and ".stackless.lua" or (luajit_mode and ".luajit.lua" or ".lua")
 function compile(file, outfile)
   local h
   if stackless_mode then
     h = io.popen(string.format("\"%s\" --lua-stackless-handle --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  elseif luajit_mode then
+    h = io.popen(string.format("\"%s\" --luajit --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   else
     h = io.popen(string.format("\"%s\" --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   end
@@ -107,7 +110,6 @@ should_run "should_run/" {
   "local_exception.sml",
   "local_datatype.sml",
   "equality.sml",
-  "xorshift64.sml",
   "signature1.sml",
   "signature2.sml",
   "signature3.sml",
@@ -126,6 +128,11 @@ should_run "should_run/" {
   "val-rec.sml",
   "datatype-equality.sml",
 }
+if not luajit_mode then
+  should_run "should_run/" {
+    "xorshift64.sml",
+  }
+end
 should_compile "should_compile/" {
   "signature_sharing1.sml",
   "signature_sharing2.sml",

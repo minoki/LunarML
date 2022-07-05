@@ -17,9 +17,11 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -o,--output=file.ext   File name to output.\n\
                                                 \  -mexe                  Produce a standalone script.\n\
                                                 \  -mlib                  Produce a Lua module.\n\
+                                                \  --lua                  Produce Lua code (targets Lua 5.3+).\n\
+                                                \  --lua-stackless-handle Produce Lua code (targets Lua 5.3+ / stackless 'handle' mode).\n\
+                                                \  --luajit               Produce Lua code (targets LuaJIT).\n\
                                                 \  --js                   Produce JavaScript code.\n\
                                                 \  --js-cps               Produce JavaScript code (CPS mode).\n\
-                                                \  --lua-stackless-handle Produce JavaScript code (stackless 'handle' mode).\n\
                                                 \  -h,--help              Show this message.\n\
                                                 \  -v,--version           Show version information.\n\
                                                 \  --dump                 Dump intermediate code.\n\
@@ -28,7 +30,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \")
 datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
 datatype LuaCodegen = LUA_PLAIN | LUA_STACKLESS_HANDLE
-datatype Backend = BACKEND_LUA of LuaCodegen | BACKEND_JS | BACKEND_JS_CPS
+datatype Backend = BACKEND_LUA of LuaCodegen | BACKEND_LUAJIT | BACKEND_JS | BACKEND_JS_CPS
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
                , dump : DumpMode
@@ -66,12 +68,16 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
                  NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
                | SOME Driver.LibraryMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
+         else if arg = "--lua" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_PLAIN } args
+         else if arg = "--lua-stackless-handle" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_STACKLESS_HANDLE } args
+         else if arg = "--luajit" then
+             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUAJIT } args
          else if arg = "--js" then
              parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS } args
          else if arg = "--js-cps" then
              parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS_CPS } args
-         else if arg = "--lua-stackless-handle" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_STACKLESS_HANDLE } args
          else if arg = "-h" orelse arg = "--help" then
              ( showHelp (); OS.Process.exit OS.Process.success )
          else if arg = "-v" orelse arg = "--version" then
@@ -101,6 +107,9 @@ and getTargetInfo opts = (case #backend opts of
                               BACKEND_LUA _ => { wideChar = TargetInfo.CHAR8
                                                , nativeString = TargetInfo.NARROW_STRING
                                                }
+                            | BACKEND_LUAJIT => { wideChar = TargetInfo.CHAR8
+                                                , nativeString = TargetInfo.NARROW_STRING
+                                                }
                             | BACKEND_JS => { wideChar = TargetInfo.CHAR16
                                             , nativeString = TargetInfo.WIDE_STRING
                                             }
@@ -119,7 +128,7 @@ and doCompile opts fileName
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.joinDirFile { dir = progDir, file = "sml-lib" })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -166,7 +175,7 @@ and doMLB opts mlbfilename
     = let val progDir = OS.Path.dir progName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = progDir, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -214,10 +223,25 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
                                                                          | LUA_STACKLESS_HANDLE => "mlinit-stackless.lua"
                                                }
           val mlinit = readFile mlinit_lua
-          val luactx = { nextLuaId = ref 0 }
+          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3 }
           val lua = case cg of
                         LUA_PLAIN => CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
                       | LUA_STACKLESS_HANDLE => CodeGenLua.doProgramWithStacklessHandle luactx CodeGenLua.initialEnv decs
+          val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
+          val lua = LuaWriter.doChunk lua
+          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
+          val () = TextIO.output (outs, mlinit)
+          val () = TextIO.output (outs, lua)
+          val () = TextIO.closeOut outs
+      in ()
+      end
+  | emit (opts as { backend = BACKEND_LUAJIT, ... }) fileName nextId decs
+    = let val progDir = OS.Path.dir progName
+          val base = OS.Path.base fileName
+          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit-luajit.lua" }
+          val mlinit = readFile mlinit_lua
+          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT }
+          val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
           val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
           val lua = LuaWriter.doChunk lua
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)

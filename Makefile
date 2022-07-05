@@ -68,6 +68,9 @@ test: lunarml
 test-stackless-handle: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA) stackless-handle
 
+test-luajit: lunarml
+	$(LUA) test/run.lua ./lunarml luajit luajit
+
 test-nodejs: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
 

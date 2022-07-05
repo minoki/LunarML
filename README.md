@@ -10,6 +10,7 @@ You need a recent version of MLton to build the executable, and Lua 5.3+ or rece
 $ make
 $ make test
 $ make test-stackless-handle
+$ make test-luajit
 $ make test-nodejs
 $ make test-nodejs-cps
 $ ./lunarml example/hello.sml
@@ -27,9 +28,11 @@ Modes of operation:
 
 * `-mexe` (default): Produce Lua program.
 * `-mlib`: Produce a Lua module.
+* `--lua`: Produce Lua code (targets Lua 5.3; default).
+* `--lua-stackless-handle`: Produce Lua code (targets Lua 5.3). Allow deeply nested `handle`.
+* `--luajit`: Produce Lua code (targets LuaJIT).
 * `--js`: Produce a JavaScript program.
 * `--js-cps`: Produce a JavaScript program (CPS mode; supports delimited continuations).
-* `--lua-stackless-handle`: Allow deeply nested `handle`.
 
 See `--help` for more information.
 

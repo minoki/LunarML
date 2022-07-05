@@ -1,0 +1,92 @@
+infixes.sml
+_prim
+_primOverloads
+ann "allowPrim true" "allowBindEqual true" "allowOverload true" in
+equal.sml
+end
+local
+ann "allowPrim true" "allowOverload true" in
+general.sml
+option.sml (* depends on unit (general.sml) *)
+lua/int-prim.sml
+list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
+unsafe.sml
+lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
+vector.sml (* depends on vector-prim, option *)
+bool.sml
+mlbasis-luajit.sml
+luajit/word.sml
+mono-sequence.sml
+substring.sml
+scan-bool.sml
+scan-num-utils.sml
+lua/scan-num.sml
+scan-text.sml
+io.sml
+vector-slice.sml
+array-slice.sml
+list-pair.sml
+int-inf.sml
+large-int-is-int-inf.sml
+lua/word-sequence.sml
+lua/unsafe-extra.sml
+byte.sml
+lua/text-io.sml
+lua/os.sml
+lua/command-line.sml
+end
+in
+signature BOOL
+signature INTEGER
+signature WORD
+signature REAL
+signature CHAR
+signature STRING
+signature MONO_VECTOR
+signature MONO_VECTOR_SLICE
+signature MONO_ARRAY
+signature MONO_ARRAY_SLICE
+structure Unsafe (* extension; to be moved... *)
+structure Lua (* extension; to be moved... *)
+structure Int
+structure Word
+structure Real
+structure Char
+structure String
+structure Vector
+structure General
+structure List
+structure Option
+structure Bool
+structure IEEEReal
+structure Math
+structure StringCvt
+structure Substring
+structure Array
+structure IO
+structure TextIO
+structure OS
+structure CommandLine
+structure VectorSlice
+structure ArraySlice
+structure ListPair
+structure Word8
+structure Word16
+structure Word32
+structure Word64
+structure LargeWord
+structure IntInf
+structure LargeInt
+structure CharVector
+structure CharVectorSlice
+structure CharArray
+structure CharArraySlice
+structure Word8Vector
+structure Word8VectorSlice
+structure Word8Array
+structure Word8ArraySlice
+signature BYTE
+structure Byte
+structure LargeReal = Real
+top-level.sml
+end

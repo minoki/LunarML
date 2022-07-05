@@ -18,6 +18,10 @@ exception CodeGenError of string
  * record { label1 = ..., label2 = ... } -> table
  * function -> function
  *)
+
+datatype target_lua_version = LUA5_3 | LUAJIT
+type Context = { nextLuaId : int ref, targetLuaVersion : target_lua_version }
+
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
@@ -97,12 +101,100 @@ val builtins
                     ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
-fun VIdToLua (vid as TypedSyntax.MkVId (name, n)) = if n < 0 then
-                                                        case TypedSyntax.VIdMap.find (builtins, vid) of
-                                                            NONE => raise Fail ("the built-in symbol " ^ name ^ "@" ^ Int.toString n ^ " is not supported by Lua backend")
-                                                          | SOME luaName => LuaSyntax.PredefinedId luaName
-                                                    else
-                                                        LuaSyntax.UserDefinedId vid
+val builtinsLuaJIT
+    = let open InitialEnv
+      in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
+                    [(* ref *)
+                     (VId_ref, "_ref")
+                    (* boolean *)
+                    ,(VId_true, "true") (* boolean literal *)
+                    ,(VId_false, "false") (* boolean literal *)
+                    (* list *)
+                    ,(VId_nil, "_nil")
+                    ,(VId_DCOLON, "_cons")
+                    (* exn *)
+                    ,(VId_Match, "_Match")
+                    ,(VId_Bind, "_Bind")
+                    ,(VId_Div, "_Div")
+                    ,(VId_Overflow, "_Overflow")
+                    ,(VId_Size, "_Size")
+                    ,(VId_Subscript, "_Subscript")
+                    ,(VId_Fail, "_Fail")
+                    ,(VId_Match_tag, "_Match_tag")
+                    ,(VId_Bind_tag, "_Bind_tag")
+                    ,(VId_Div_tag, "_Div_tag")
+                    ,(VId_Overflow_tag, "_Overflow_tag")
+                    ,(VId_Size_tag, "_Size_tag")
+                    ,(VId_Subscript_tag, "_Subscript_tag")
+                    ,(VId_Fail_tag, "_Fail_tag")
+                    ,(VId_exnName, "_exnName")
+                    (* Overloaded: VId_abs, VId_TILDE, VId_div, VId_mod, VId_TIMES, VId_DIVIDE, VId_PLUS, VId_MINUS, VId_LT, VId_GT, VId_LE, VId_GE *)
+                    (* int *)
+                    ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
+                    ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
+                    ,(VId_Int_add_bin, "__Int_add")
+                    ,(VId_Int_sub_bin, "__Int_sub")
+                    ,(VId_Int_mul_bin, "__Int_mul")
+                    ,(VId_Int_div_bin, "__Int_div")
+                    ,(VId_Int_mod_bin, "__Int_mod")
+                    ,(VId_Int_quot_bin, "__Int_div")
+                    (* word *)
+                    ,(VId_Word_add_bin, "__Word_add")
+                    ,(VId_Word_sub_bin, "__Word_sub")
+                    ,(VId_Word_mul_bin, "__Word_mul")
+                    ,(VId_Word_div_bin, "__Word_div")
+                    ,(VId_Word_mod_bin, "__Word_mod")
+                    ,(VId_Word_TILDE, "_Word_negate")
+                    ,(VId_Word_LT_bin, "__Word_LT")
+                    (* real *)
+                    ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
+                    (* Vector and Array *)
+                    ,(VId_Vector_tabulate, "_VectorOrArray_tabulate")
+                    ,(VId_Vector_concat, "_Vector_concat")
+                    ,(VId_Vector_fromList, "_VectorOrArray_fromList")
+                    ,(VId_Array_array, "_Array_array")
+                    ,(VId_Array_fromList, "_VectorOrArray_fromList")
+                    ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
+                    (* Lua interface *)
+                    ,(VId_Lua_LuaError, "_LuaError")
+                    ,(VId_Lua_LuaError_tag, "_LuaError_tag")
+                    ,(VId_Lua_global, "_Lua_global")
+                    ,(VId_Lua_call, "_Lua_call")
+                    ,(VId_Lua_method, "_Lua_method")
+                    ,(VId_Lua_NIL, "nil") (* literal *)
+                    ,(VId_Lua_newTable, "_Lua_newTable")
+                    ,(VId_Lua_function, "_Lua_function")
+                    ,(VId_Lua_Lib_assert, "assert")
+                    ,(VId_Lua_Lib_error, "error")
+                    ,(VId_Lua_Lib_getmetatable, "getmetatable")
+                    ,(VId_Lua_Lib_pairs, "pairs")
+                    ,(VId_Lua_Lib_pcall, "pcall")
+                    ,(VId_Lua_Lib_setmetatable, "setmetatable")
+                    ,(VId_Lua_Lib_math, "math")
+                    ,(VId_Lua_Lib_math_abs, "math_abs")
+                    ,(VId_Lua_Lib_string, "string")
+                    ,(VId_Lua_Lib_string_format, "string_format")
+                    ,(VId_Lua_Lib_table, "table")
+                    ,(VId_Lua_Lib_table_pack, "table_pack")
+                    ,(VId_Lua_Lib_table_unpack, "table_unpack")
+                    (* extra *)
+                    ,(VId_assumePure, "_id") (* no-op *)
+                    ,(VId_assumeDiscardable, "_id") (* no-op *)
+                    ]
+      end
+fun VIdToLua (ctx : Context, vid as TypedSyntax.MkVId (name, n))
+    = if n < 0 then
+          case #targetLuaVersion ctx of
+              LUA5_3 => (case TypedSyntax.VIdMap.find (builtins, vid) of
+                             NONE => raise Fail ("the built-in symbol " ^ name ^ "@" ^ Int.toString n ^ " is not supported by Lua backend")
+                           | SOME luaName => LuaSyntax.PredefinedId luaName
+                        )
+            | LUAJIT => (case TypedSyntax.VIdMap.find (builtinsLuaJIT, vid) of
+                             NONE => raise Fail ("the built-in symbol " ^ name ^ "@" ^ Int.toString n ^ " is not supported by LuaJIT backend")
+                           | SOME luaName => LuaSyntax.PredefinedId luaName
+                        )
+      else
+          LuaSyntax.UserDefinedId vid
 
 structure StringSet = RedBlackSetFn(struct open String; type ord_key = string end)
 val LuaKeywords = StringSet.fromList
@@ -118,7 +210,6 @@ fun isLuaIdentifier name = case String.explode name of
 fun LabelToTableKey (Syntax.NumericLabel n) = LuaSyntax.IntKey n
   | LabelToTableKey (Syntax.IdentifierLabel s) = LuaSyntax.StringKey s
 
-type Context = { nextLuaId : int ref }
 type Env = { hoistedSymbols : TypedSyntax.VIdSet.set
            , level : int
            }
@@ -236,7 +327,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
           end
       else
           raise CodeGenError "PrimExp.CharConstOp: non-empty argument"
-  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua vid of
+  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua (ctx, vid) of
                                                                           L.PredefinedId "nil" => L.ConstExp L.Nil
                                                                         | L.PredefinedId "false" => L.ConstExp L.False
                                                                         | L.PredefinedId "true" => L.ConstExp L.True
@@ -426,7 +517,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                     end
                 )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], L.FunctionExp (vector [VIdToLua vid], vector (doExpTo ctx (increaseLevel env) exp Return))) (* TODO: update environment *)
+  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], L.FunctionExp (vector [VIdToLua (ctx, vid)], vector (doExpTo ctx (increaseLevel env) exp Return))) (* TODO: update environment *)
   | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
                                                                                             let val label = case label of
                                                                                                                 Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
