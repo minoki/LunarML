@@ -2629,7 +2629,7 @@ and matchSignature (ctx, env, span, expected : T.Signature, longstrid : T.LongSt
                                        case Syntax.VIdMap.find (#valMap actual, vid) of
                                            SOME (tyscA, idsA) => let val longvid = case longstrid of
                                                                                        T.MkLongStrId (strid0, strids0) => T.MkLongVId (strid0, strids0, vid)
-                                                                     val (tysc, decs, longvid') = matchValDesc(ctx, env, span, tyscE, longvid, tyscA, idsA)
+                                                                     val (tysc, decs, longvid') = matchValDesc(ctx, env, span, tyscE, longvid, tyscA, idsA) handle TypeError (spans, msg) => raise TypeError (spans, msg ^ " during matching " ^ Syntax.print_VId vid)
                                                                      val () = if (case idsE of Syntax.ExceptionConstructor => true | _ => false) andalso (case idsA of Syntax.ExceptionConstructor => false | _ => true) then
                                                                                   emitError(ctx, [span], "signature matching: id status mismatch: " ^ Syntax.getVIdName vid)
                                                                               else if Syntax.isValueConstructor idsE andalso not (Syntax.isValueConstructor idsA) then
