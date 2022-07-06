@@ -46,13 +46,13 @@ end
 structure ErrorRep = Represent (ErrorMonad);
 
 local open ErrorMonad ErrorRep in
-fun myraise = e = reflect (ERR e)
+fun myraise e = reflect (ERR e)
 fun myhandle t h = case reify t of
                        SUC a => a
                      | ERR s => h s
 end
-fun show t = myhandle (fn () => print ("OK: " ^ Int.toString (t ())))
-                      (fn s => print ("Error: " ^ s));
+fun show t = myhandle (fn () => print ("OK: " ^ Int.toString (t ()) ^ "\n"))
+                      (fn s => print ("Error: " ^ s ^ "\n"));
 show (fn () => 1 + 2);
 show (fn () => 1 + myraise "oops");
 
