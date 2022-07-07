@@ -187,6 +187,23 @@ fun mul2 (0w0, _) = { lo = 0w0, hi = 0w0 }
       in { lo = lo, hi = hi }
       end
 
+(* x * y + z *)
+fun mulAdd (x : Word.word, y : Word.word, z : Word.word) : { lo : Word.word, hi : Word.word }
+    = let val x_hi = Word.>> (x, wordSize_2)
+          val x_lo = Word.andb (x, word_lo_mask)
+          val y_hi = Word.>> (y, wordSize_2)
+          val y_lo = Word.andb (y, word_lo_mask)
+          val z_hi = Word.>> (z, wordSize_2)
+          val z_lo = Word.andb (z, word_lo_mask)
+          val lo = x_lo * y_lo + z_lo
+          val mid1 = x_hi * y_lo + z_hi
+          val lo' = Word.andb (lo, word_lo_mask)
+          val mid2 = x_lo * y_hi + Word.>> (lo, wordSize_2)
+          val hi1 = x_hi * y_hi
+          val { lo = mid', hi = hi2 } = add2 (mid1, mid2)
+      in { lo = lo' + Word.<< (mid', wordSize_2), hi = hi1 + Word.>> (mid', wordSize_2) + Word.<< (hi2, wordSize_2) }
+      end
+
 fun compareAbs (words, words') = let val m = Vector.length words
                                      val n = Vector.length words'
                                  in case Int.compare (m, n) of
@@ -594,6 +611,35 @@ fun clzWord (x : Word.word) = let fun loop (x, n) = if x = 0w0 then
                               end
 
 (* Compute (u1 * base + u0) div v *)
+(* precondition: u1 < v *)
+fun quot2' (u1, u0, v) = if u1 = 0w0 then
+                             u0 div v
+                         else
+                             let val (b', b'') = let val s = Word.~ 0w1 div v
+                                                     val t = Word.~ (s * v)
+                                                 in if t < v then
+                                                        (s, t)
+                                                    else
+                                                        (s + 0w1, t - v)
+                                                 end (* Word.<< (1, wordSize) divMod v *)
+                                 (* loop (acc, w1, w0) = acc + ((w1 << wordSize) + w0) div v *)
+                                 fun loop (acc, w1, w0) = if w1 = 0w0 then
+                                                              acc + w0 div v
+                                                          else
+                                                              let val w0' = w0 div v
+                                                                  val w0'' = w0 mod v
+                                                                  val { hi = z1, lo = z0 } = mulAdd (w1, b'', w0'')
+                                                              in loop (acc + w1 * b' + w0', z1, z0)
+                                                              end
+                             in loop (0w0, u1, u0)
+                             end
+(* Compute ((u1 * base + u0) div v, (u1 * base + u0) mod v) *)
+(* precondition: u1 < v *)
+fun quotRem2' (u1, u0, v) = let val q = quot2' (u1, u0, v)
+                            in (q, u0 - q * v)
+                            end
+
+(* Compute (u1 * base + u0) div v *)
 (* precondition: u1 < base div 2 *)
 fun quot2 (u1, u0, v) = let val v_hi = Word.>> (v, wordSize_2)
                             val q1 = u1 div v_hi
@@ -622,6 +668,20 @@ fun quotRem2 (u1, u0, v) = let val q = quot2 (u1, u0, v)
                            in (q, u0 - q * v)
                            end
 
+fun quotRemAbsSingle (words : word vector, v : word) : word vector * word
+    = let val n = Vector.length words
+          val quotient = Array.array (n, 0w0)
+          fun loop (r, j) = if j < 0 then
+                                r
+                            else
+                                let val (w, r') = quotRem2' (r, Vector.sub (words, j), v)
+                                in Array.update (quotient, j, w)
+                                 ; loop (r', j - 1)
+                                end
+          val r = loop (0w0, n - 1)
+      in (normalize quotient, r)
+      end
+
 (* precondition: words' <> 0 *)
 fun quotRemAbs (words, words') : word vector * word vector
     = let val n = Vector.length words'
@@ -630,6 +690,10 @@ fun quotRemAbs (words, words') : word vector * word vector
       in if m < 0 then
              (* words < words' *)
              (#[], words)
+         else if n = 1 then
+             let val (q, r) = quotRemAbsSingle (words, Vector.sub (words', 0))
+             in (q, if r = 0w0 then #[] else #[r])
+             end
          else
              let val offset = Word.fromInt (clzWord (Vector.sub (words', n - 1))) (* <= Word.wordSize - 1 *)
                  val words = LShiftAbs (words, offset)
@@ -803,19 +867,20 @@ fun notb x = negate (add (x, fromInt 1))
 
 local
     fun stringFmt (f, x) : string = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x], 0))
-    val ten_to_9 = POSITIVE (#[0w1000000000])
+    val ten_to_9 = 0w1000000000
 in
-fun toStringAbs ZERO = ""
-  | toStringAbs x = if LT (x, ten_to_9) then
-                        stringFmt ("%u", Word.fromInt (toInt x))
-                    else
-                        let val (q, r) = quotRem (x, ten_to_9)
-                        in toStringAbs q ^ stringFmt ("%09u", Word.fromInt (toInt r))
-                        end
+fun toStringAbs words = if Vector.length words = 0 then
+                            ""
+                        else if Vector.length words = 1 andalso Vector.sub (words, 0) < ten_to_9 then
+                            stringFmt ("%u", Vector.sub (words, 0))
+                        else
+                            let val (q, r) = quotRemAbsSingle (words, ten_to_9)
+                            in toStringAbs q ^ stringFmt ("%09u", r)
+                            end
 
 fun toString ZERO = "0"
-  | toString (x as POSITIVE _) = toStringAbs x
-  | toString (NEGATIVE words) = "~" ^ toStringAbs (POSITIVE words)
+  | toString (POSITIVE words) = toStringAbs words
+  | toString (NEGATIVE words) = "~" ^ toStringAbs words
 
 (* precondition: Vector.length words > 0 *)
 fun fmtHexAbs words = let val n = Vector.length words
