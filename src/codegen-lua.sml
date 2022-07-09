@@ -230,10 +230,10 @@ fun declareIfNotHoisted (env : Env, vars : TypedSyntax.VId list) : Env * LuaSynt
     = let val (env, vars) = List.foldr (fn (v, (env, xs)) => if isHoisted (env, v) then
                                                                  (env, xs)
                                                              else
-                                                                 (addHoistedSymbol (env, v), v :: xs)) (env, []) vars
+                                                                 (addHoistedSymbol (env, v), (v, LuaSyntax.LATE_INIT) :: xs)) (env, []) vars
       in (env, case vars of
                    [] => []
-                 | _ => [ LuaSyntax.LocalStat (vector vars, vector []) ]
+                 | _ => [ LuaSyntax.LocalStat (vars, []) ]
          )
       end
 fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoistedSymbols, level = level + 1 }
@@ -258,17 +258,17 @@ fun mapCont f [] cont = cont []
 
 (* doExpTo : Context -> Env -> F.Exp -> Destination -> L.Stat list *)
 fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
-  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
+  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                     stmts @ [ L.LocalStat (vector [destination], vector [exp]) ]
+                                                                                     stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
                                                                                  else
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
 and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
-  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat (vector [L.VarExp (L.UserDefinedId v)], vector [exp]) ]
+  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ [ L.LocalStat (vector [destination], vector [exp]) ]
+                                                                                       stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
                                                                                    else
                                                                                        raise CodeGenError "invalid DeclareAndAssignTo"
   | putImpureTo ctx env Discard (stmts, exp) = stmts @ [ case exp of
@@ -278,7 +278,7 @@ and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (ve
                                                        ]
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
                                                            val env = addSymbol (env, dest)
-                                                       in cont (stmts @ [ L.LocalStat (vector [dest], vector [exp]) ], env, L.VarExp (L.UserDefinedId dest))
+                                                       in cont (stmts @ [ L.LocalStat ([(dest, L.CONST)], [exp]) ], env, L.VarExp (L.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
@@ -420,9 +420,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
           val exnName = exnName
           val env' = addSymbol (addSymbol (env, status), result)
           val env'' = addSymbol (env', exnName)
-          val stmts = [ L.LocalStat (vector [status, result], vector [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
+          val stmts = [ L.LocalStat ([(status, L.CONST), (result, L.CONST)], [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
                       , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
-                                 , vector ( L.LocalStat (vector [exnName], vector [L.VarExp (L.UserDefinedId result)])
+                                 , vector ( L.LocalStat ([(exnName, L.CONST)], [L.VarExp (L.UserDefinedId result)])
                                             :: doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
                                           )
                                  , vector []
@@ -457,19 +457,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                           | tryCondExp (exp1', exp2'', L.ConstExp L.True) = SOME (L.BinExp (L.OR, L.UnaryExp (L.NOT, exp1'), exp2''))
                           | tryCondExp (exp1', exp2'', L.ConstExp L.False) = SOME (L.BinExp (L.AND, exp1', exp2''))
                           | tryCondExp (exp1', exp2'', exp3'') = NONE
-                        fun tryAssignToCondExp (destination, exp2', exp3') = case (exp2', exp3') of
-                                                                                 ([L.AssignStat (vars2, exps2)], [L.AssignStat (vars3, exps3)]) =>
-                                                                                 if Vector.length vars2 = 1 andalso Vector.length exps2 = 1 andalso Vector.length vars3 = 1 andalso Vector.length exps3 = 1 then
-                                                                                     case (Vector.sub (vars2, 0), Vector.sub (vars3, 0)) of
-                                                                                         (L.VarExp (L.UserDefinedId id2), L.VarExp (L.UserDefinedId id3)) =>
-                                                                                         if id2 = destination andalso id3 = destination then
-                                                                                             tryCondExp (exp1', Vector.sub (exps2, 0), Vector.sub (exps3, 0))
-                                                                                         else
-                                                                                             NONE
-                                                                                       | _ => NONE
-                                                                                 else
-                                                                                     NONE
-                                                                               | _ => NONE
+                        fun tryAssignToCondExp (destination, [L.AssignStat ([L.VarExp (L.UserDefinedId id2)], [exp2])], [L.AssignStat ([L.VarExp (L.UserDefinedId id3)], [exp3])])
+                            = if id2 = destination andalso id3 = destination then
+                                  tryCondExp (exp1', exp2, exp3)
+                              else
+                                  NONE
+                          | tryAssignToCondExp _ = NONE
                     in case dest of
                            Continue cont => let val result = genSym ctx
                                                 val env' = addSymbol (env, result)
@@ -477,8 +470,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                 val exp3' = doExpTo ctx (increaseLevel env') exp3 (AssignTo result)
                                             in cont ( stmts1
                                                       @ (case tryAssignToCondExp (result, exp2', exp3') of
-                                                             SOME condExp => [ L.LocalStat (vector [result], vector [condExp]) ]
-                                                           | NONE => [ L.LocalStat (vector [result], vector [])
+                                                             SOME condExp => [ L.LocalStat ([(result, L.CONST)], [condExp]) ]
+                                                           | NONE => [ L.LocalStat ([(result, L.LATE_INIT)], [])
                                                                      , L.IfStat (exp1', vector exp2', vector exp3')
                                                                      ]
                                                         )
@@ -490,8 +483,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                                             val exp3' = doExpTo ctx (increaseLevel env) exp3 (AssignTo destination)
                                                                         in stmts1
                                                                            @ (case tryAssignToCondExp (destination, exp2', exp3') of
-                                                                                  SOME condExp => [ L.LocalStat (vector [destination], vector [condExp]) ]
-                                                                                | NONE => [ L.LocalStat (vector [destination], vector [])
+                                                                                  SOME condExp => [ L.LocalStat ([(destination, L.CONST)], [condExp]) ]
+                                                                                | NONE => [ L.LocalStat ([(destination, L.LATE_INIT)], [])
                                                                                           , L.IfStat (exp1', vector exp2', vector exp3')
                                                                                           ]
                                                                              )
@@ -500,7 +493,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                                val exp3' = doExpTo ctx (increaseLevel env) exp3 dest
                                                            in stmts1
                                                               @ (case tryAssignToCondExp (destination, exp2', exp3') of
-                                                                     SOME condExp => [ L.AssignStat (vector [L.VarExp (L.UserDefinedId destination)], vector [condExp]) ]
+                                                                     SOME condExp => [ L.AssignStat ([L.VarExp (L.UserDefinedId destination)], [condExp]) ]
                                                                    | NONE => [ L.IfStat (exp1', vector exp2', vector exp3') ]
                                                                 )
                                                            end
@@ -681,7 +674,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                 (* REPRESENTATION_OF_REF *)
-                                                let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], vector [b]) ]
+                                                let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], [b]) ]
                                                 in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                 end
                                             )
@@ -759,7 +752,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                          putImpureTo ctx env dest (stmts, L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
                                                      )
            | Primitives.Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                             let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], vector [v]) ]
+                                                             let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]) ]
                                                              in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                              end
                                                          )
@@ -770,7 +763,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                 putImpureTo ctx env dest (stmts, L.IndexExp (a, b))
                                             )
            | Primitives.Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
-                                                 let val stmts = stmts @ [ L.AssignStat (vector [L.IndexExp (a, b)], vector [c]) ]
+                                                 let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, b)], [c]) ]
                                                  in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                  end
                                              )
@@ -867,9 +860,9 @@ and doDec ctx env (F.ValDec (vid, _, exp)) : L.Stat list
   | doDec ctx env (F.DatatypeDec datbinds) = [] (* no runtime counterpart *)
   | doDec ctx env (F.ExceptionDec { name, tagName, payloadTy })
     = [ if isHoisted (env, tagName) then
-            L.AssignStat (vector [L.VarExp (L.UserDefinedId tagName)], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
+            L.AssignStat ([L.VarExp (L.UserDefinedId tagName)], [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
         else
-            L.LocalStat (vector [tagName], vector [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
+            L.LocalStat ([(tagName, L.CONST)], [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
       ]
   | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
   | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"

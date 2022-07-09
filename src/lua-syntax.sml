@@ -7,6 +7,22 @@ datatype TableKey = IntKey of int
                   | StringKey of string
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
+structure IdKey = struct
+type ord_key = Id
+fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
+  | compare (PredefinedId _, UserDefinedId _) = LESS
+  | compare (UserDefinedId _, PredefinedId _) = GREATER
+  | compare (UserDefinedId x, UserDefinedId y) = TypedSyntax.VIdKey.compare (x, y)
+end : ORD_KEY
+structure IdSet = RedBlackSetFn (IdKey)
+structure IdSet = struct
+(* compatibility with older smlnj-lib *)
+open IdSet
+val toList = foldr (op ::) []
+open IdSet
+end
+structure IdMap = RedBlackMapFn (IdKey)
+datatype VarAttr = CONST | LATE_INIT | MUTABLE
 datatype LuaConst = Nil
                   | False
                   | True
@@ -42,16 +58,16 @@ datatype Exp = ConstExp of LuaConst
              | TableExp of (TableKey * Exp) vector
              | CallExp of Exp * Exp vector
              | MethodExp of Exp * string * Exp vector
-             | FunctionExp of Id vector * Block
+             | FunctionExp of Id vector * Block (* function parameters are implicitly const *)
              | BinExp of BinaryOp * Exp * Exp
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
-     and Stat = LocalStat of TypedSyntax.VId vector * Exp vector (* vars must not be empty *)
-              | AssignStat of Exp vector * Exp vector (* LHS must be non-empty prefixexps and RHS must not be empty*)
+     and Stat = LocalStat of (TypedSyntax.VId * VarAttr) list * Exp list (* vars must not be empty *)
+              | AssignStat of Exp list * Exp list (* LHS must be non-empty prefixexps and RHS must not be empty*)
               | CallStat of Exp * Exp vector
               | MethodStat of Exp * string * Exp vector (* name must be a valid Lua identifier *)
               | IfStat of Exp * Block * Block (* 'elseif' will be synthesized by writer *)
-              | LocalFunctionStat of TypedSyntax.VId * Id vector * Block
+              | LocalFunctionStat of TypedSyntax.VId * Id vector * Block (* function and function parameters are implicitly const *)
               | ReturnStat of Exp vector (* must be the last statement in a block *)
               | DoStat of Block
 withtype Block = Stat vector
@@ -266,11 +282,9 @@ fun doExp (LuaSyntax.ConstExp ct) : Exp = (case ct of
                                                                                                            { prec = ~1, exp = paren ~1 (doExp exp1) @ Fragment "[" :: #exp (doExp exp2) @ [ Fragment "]" ] }
                                                  | _ => { prec = ~1, exp = paren ~1 (doExp exp1) @ Fragment "[" :: #exp (doExp exp2) @ [ Fragment "]" ] }
                                               )
-and doStat (LuaSyntax.LocalStat (vars, exps)) = if Vector.length exps = 0 then
-                                                    Indent :: Fragment "local " :: commaSepV (Vector.map vidToFragment vars) @ [ LineTerminator ]
-                                                else
-                                                    Indent :: Fragment "local " :: commaSepV (Vector.map vidToFragment vars) @ Fragment " = " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
-  | doStat (LuaSyntax.AssignStat (vars, exps)) = Indent :: commaSepV (Vector.map (#exp o doExp) vars) @ Fragment " = " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
+and doStat (LuaSyntax.LocalStat (vars, [])) = Indent :: Fragment "local " :: commaSep (List.map (vidToFragment o #1) vars) @ [ LineTerminator ]
+  | doStat (LuaSyntax.LocalStat (vars, exps)) = Indent :: Fragment "local " :: commaSep (List.map (vidToFragment o #1) vars) @ Fragment " = " :: commaSep (List.map (#exp o doExp) exps) @ [ OptSemicolon ]
+  | doStat (LuaSyntax.AssignStat (vars, exps)) = Indent :: commaSep (List.map (#exp o doExp) vars) @ Fragment " = " :: commaSep (List.map (#exp o doExp) exps) @ [ OptSemicolon ]
   | doStat (LuaSyntax.CallStat (fnExp, args)) = Indent :: paren ~1 (doExp fnExp) @ Fragment "(" :: commaSepV (Vector.map (#exp o doExp) args) @ [ Fragment ")", OptSemicolon ]
   | doStat (LuaSyntax.MethodStat (self, name, args)) = Indent :: paren ~1 (doExp self) @ Fragment (":" ^ name ^ "(") :: commaSepV (Vector.map (#exp o doExp) args) @ [ Fragment ")", OptSemicolon ]
   | doStat (LuaSyntax.IfStat (cond, thenPart, elsePart))
@@ -290,7 +304,7 @@ and doStat (LuaSyntax.LocalStat (vars, exps)) = if Vector.length exps = 0 then
                                     end
       in thenPart' @ doElse elsePart @ [ Indent, Fragment "end", LineTerminator ]
       end
-  | doStat (LuaSyntax.LocalFunctionStat (name, args, body)) = Indent :: Fragment "local function " :: vidToFragment name @ Fragment "(" :: commaSepV (Vector.map idToFragment args) @ Fragment ")" :: LineTerminator :: IncreaseIndent :: doBlock body @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
+  | doStat (LuaSyntax.LocalFunctionStat (name, params, body)) = Indent :: Fragment "local function " :: vidToFragment name @ Fragment "(" :: commaSepV (Vector.map idToFragment params) @ Fragment ")" :: LineTerminator :: IncreaseIndent :: doBlock body @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
   | doStat (LuaSyntax.ReturnStat exps) = if Vector.length exps = 0 then
                                              [ Indent, Fragment "return", LineTerminator ]
                                          else

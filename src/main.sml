@@ -227,7 +227,8 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
           val lua = case cg of
                         LUA_PLAIN => CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
                       | LUA_STACKLESS_HANDLE => CodeGenLua.doProgramWithStacklessHandle luactx CodeGenLua.initialEnv decs
-          val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
+          val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
+          val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
           val lua = LuaWriter.doChunk lua
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
@@ -242,7 +243,8 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT }
           val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
-          val lua = LuaTransform.doBlock { nextId = nextId } LuaTransform.initialEnv lua
+          val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)
+          val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
           val lua = LuaWriter.doChunk lua
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
