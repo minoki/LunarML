@@ -1,4 +1,5 @@
 LUA = lua
+LUAJIT = luajit
 NODE = node
 
 all: lunarml
@@ -69,7 +70,7 @@ test-stackless-handle: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA) stackless-handle
 
 test-luajit: lunarml
-	$(LUA) test/run.lua ./lunarml luajit luajit
+	$(LUA) test/run.lua ./lunarml $(LUAJIT) luajit
 
 test-nodejs: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
