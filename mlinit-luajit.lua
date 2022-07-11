@@ -209,6 +209,25 @@ local function __Word_LT(x, y)
   return x < y
 end
 
+-- Real
+local NEGATIVE_ZERO = tonumber("-0")
+--[[
+local function _Real_TILDE(x)
+  return NEGATIVE_ZERO - x
+end
+]]
+local function __Real_mul(x, y)
+  local z = x * y
+  if z == 0 then
+    if x < 0 then
+      return NEGATIVE_ZERO * y
+    elseif y < 0 then
+      return NEGATIVE_ZERO * x
+    end
+  end
+  return z
+end
+
 -- List
 local _nil = { tag = "nil" }
 local function _cons(t)

@@ -304,7 +304,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
   | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, xs)) dest
     = if Vector.length xs = 0 then
           let val exp = if Numeric.Notation.isNegative x then
-                            L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
+                            case (#targetLuaVersion ctx, Numeric.Notation.isNegativeZero x) of
+                                (LUAJIT, true) => L.VarExp (L.PredefinedId "NEGATIVE_ZERO")
+                              | _ => L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
                         else
                             L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
           in putPureTo ctx env dest ([], exp)
@@ -705,10 +707,17 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                               )
            | Primitives.Real_PLUS => doBinaryOp (L.PLUS, true)
            | Primitives.Real_MINUS => doBinaryOp (L.MINUS, true)
-           | Primitives.Real_TIMES => doBinaryOp (L.TIMES, true)
+           | Primitives.Real_TIMES => (case #targetLuaVersion ctx of
+                                           LUA5_3 => doBinaryOp (L.TIMES, true)
+                                         | LUAJIT => doBinary (fn (stmts, env, (a, b)) =>
+                                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "__Real_mul"), vector [a, b]))
+                                                              )
+                                      )
            | Primitives.Real_DIVIDE => doBinaryOp (L.DIV, true)
            | Primitives.Real_TILDE => doUnary (fn (stmts, env, a) =>
-                                                  putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
+                                                  case #targetLuaVersion ctx of
+                                                      LUA5_3 => putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
+                                                    | LUAJIT => putPureTo ctx env dest (stmts, L.BinExp (L.MINUS, L.VarExp (L.PredefinedId "NEGATIVE_ZERO"),  a))
                                               )
            | Primitives.Real_LT => doBinaryOp (L.LT, true)
            | Primitives.Real_GT => doBinaryOp (L.GT, true)

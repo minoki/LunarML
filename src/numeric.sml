@@ -227,6 +227,9 @@ fun intToString negativeSign n = if n < 0 then
                                      Int.toString n;
 fun isNegative (DecimalNotation { sign, ... }) = sign
   | isNegative (HexadecimalNotation { sign, ... }) = sign
+fun isNegativeZero (DecimalNotation { sign = true, intPart = 0, fracPart, exponent = _ }) = Vector.all (fn x => x = 0) fracPart
+  | isNegativeZero (HexadecimalNotation { sign = true, intPart = 0, fracPart, exponent = _ }) = Vector.all (fn x => x = 0) fracPart
+  | isNegativeZero _ = false
 fun toString negativeSign (DecimalNotation { sign, intPart, fracPart, exponent })
     = let val s = if sign then negativeSign else ""
           val ip = IntInf.toString intPart
