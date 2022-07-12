@@ -497,12 +497,26 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                                    | NONE => [ L.IfStat (exp1', vector exp2', vector exp3') ]
                                                                 )
                                                            end
-                         | Return => stmts1
-                                      @ [ L.IfStat ( exp1'
-                                                   , vector (doExpTo ctx (increaseLevel env) exp2 Return)
-                                                   , vector []
-                                                   )
-                                        ] @ doExpTo ctx (increaseLevel env) exp3 dest
+                         | Return => let fun containsLocalStat (L.LocalStat _ :: _) = true
+                                           | containsLocalStat (_ :: xs) = containsLocalStat xs
+                                           | containsLocalStat [] = false
+                                     in if containsLocalStat stmts1 then
+                                            L.DoStat (vector (stmts1
+                                                              @ [ L.IfStat ( exp1'
+                                                                           , vector (doExpTo ctx (increaseLevel env) exp2 Return)
+                                                                           , vector []
+                                                                           )
+                                                                ]
+                                                             )
+                                                     ) :: doExpTo ctx (increaseLevel env) exp3 dest
+                                        else
+                                            stmts1
+                                            @ [ L.IfStat ( exp1'
+                                                         , vector (doExpTo ctx (increaseLevel env) exp2 Return)
+                                                         , vector []
+                                                         )
+                                              ] @ doExpTo ctx (increaseLevel env) exp3 dest
+                                     end
                          | Discard => stmts1
                                       @ [ L.IfStat ( exp1'
                                                    , vector (doExpTo ctx (increaseLevel env) exp2 dest)
