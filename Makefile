@@ -78,4 +78,19 @@ test-nodejs: lunarml
 test-nodejs-cps: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE) cps
 
-.PHONY: all test test-nodejs
+validate-lua: lunarml
+	./lunarml -o lunarml.gen2.lua LunarML.mlb
+	lua lunarml.gen2.lua -o lunarml.gen3.lua LunarML.mlb
+	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
+
+validate-luajit: lunarml
+	./lunarml -o lunarml.gen2-luajit.lua LunarML.mlb
+	luajit lunarml.gen2-luajit.lua -o lunarml.gen3-luajit.lua LunarML.mlb
+	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
+
+validate-js: lunarml
+	./lunarml -o lunarml.gen2.js --js-cps LunarML.mlb
+	node lunarml.gen2.js -o lunarml.gen3.js --js-cps LunarML.mlb
+	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
+
+.PHONY: all test test-stackless-handle test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
