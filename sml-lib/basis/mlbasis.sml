@@ -1110,35 +1110,27 @@ fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.L
                                                  in Lua.isNil (Vector.sub (result, 0))
                                                  end
 fun contains s c = not (notContains s c)
-local
-    fun charClass pattern (c : char) : bool = not (Lua.isNil (Vector.sub (Lua.call Lua.Lib.string.match #[Lua.fromChar c, Lua.fromString pattern], 0)))
-in
-val isAscii = LunarML.assumeDiscardable (charClass "^[\000-\127]$")
-val isAlpha = LunarML.assumeDiscardable (charClass "^[A-Za-z]$")
-val isAlphaNum = LunarML.assumeDiscardable (charClass "^[A-Za-z0-9]$")
-val isCntrl = LunarML.assumeDiscardable (charClass "^%c$") (* TODO: locale *)
-val isDigit = LunarML.assumeDiscardable (charClass "^[0-9]$")
-val isGraph = LunarML.assumeDiscardable (charClass "^%g$") (* TODO: locale *)
-val isHexDigit = LunarML.assumeDiscardable (charClass "^[A-Fa-f0-9]$")
-val isLower = LunarML.assumeDiscardable (charClass "^[a-z]$")
-val isPrint = LunarML.assumeDiscardable (charClass "^[^%c]$") (* TODO: locale *)
-val isSpace = LunarML.assumeDiscardable (charClass "^[ \n\t\r\v\f]$")
-val isPunct = LunarML.assumeDiscardable (charClass "^%p$") (* TODO: locale *)
-val isUpper = LunarML.assumeDiscardable (charClass "^[A-Z]$")
-end
+fun isAscii (c : char) = c <= #"\127"
+fun isUpper (c : char) = #"A" <= c andalso c <= #"Z"
+fun isLower (c : char) = #"a" <= c andalso c <= #"z"
+fun isDigit (c : char) = #"0" <= c andalso c <= #"9"
+fun isAlpha (c : char) = isUpper c orelse isLower c
+fun isAlphaNum (c : char) = isAlpha c orelse isDigit c
+fun isHexDigit (c : char) = isDigit c orelse (#"a" <= c andalso c <= #"f") orelse (#"A" <= c andalso c <= #"Z")
+fun isGraph (c : char) = #"!" <= c andalso c <= #"~"
+fun isPrint (c : char) = isGraph c orelse c = #" "
+fun isPunct (c : char) = isGraph c andalso not (isAlphaNum c)
+fun isCntrl (c : char) = isAscii c andalso not (isPrint c)
+fun isSpace (c : char) = (#"\t" <= c andalso c <= #"\r") orelse c = #" "
 (* string.lower and string.upper depends on the locale *)
-val toLower = fn (c : char) => let val x = ord c
-                               in if ord #"A" <= x andalso x <= ord #"Z" then
-                                      chr (x - ord #"A" + ord #"a")
-                                  else
-                                      c
-                               end
-val toUpper = fn (c : char) => let val x = ord c
-                               in if ord #"a" <= x andalso x <= ord #"z" then
-                                      chr (x - ord #"a" + ord #"A")
-                                  else
-                                      c
-                               end
+fun toLower (c : char) = if isUpper c then
+                             chr (ord c - (ord #"A" - ord #"a"))
+                         else
+                             c
+fun toUpper (c : char) = if isLower c then
+                             chr (ord c - (ord #"a" - ord #"A"))
+                         else
+                             c
 fun toString #"\\" = "\\\\"
   | toString #"\"" = "\\\""
   | toString c = if isPrint c then
