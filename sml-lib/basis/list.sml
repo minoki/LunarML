@@ -99,12 +99,19 @@ fun all f [] = true
   | all f (x :: xs) = f x andalso all f xs
 fun tabulate (n, f) = if n < 0 then
                           raise Size
-                      else
+                      else if n < 10 then
                           let fun go i = if i >= n then
                                              []
                                          else
                                              f i :: go (i + 1)
                           in go 0
+                          end
+                      else (* tail-recursive implementation *)
+                          let fun go (i, acc) = if i >= n then
+                                                    rev acc
+                                                else
+                                                    go (i + 1, f i :: acc)
+                          in go (0, [])
                           end
 fun collate compare ([], []) = EQUAL
   | collate compare (_ :: _, []) = GREATER
