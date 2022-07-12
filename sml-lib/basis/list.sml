@@ -38,8 +38,6 @@ local
 in
 fun length xs = doLength (0, xs)
 end
-fun [] @ ys = ys
-  | (x :: xs) @ ys = x :: (xs @ ys)
 fun hd [] = raise Empty
   | hd (x :: _) = x
 fun tl [] = raise Empty
@@ -61,6 +59,7 @@ fun drop (xs, 0) = xs
 fun revAppend ([], ys) = ys
   | revAppend (x :: xs, ys) = revAppend (xs, x :: ys)
 fun rev xs = revAppend (xs, [])
+fun xs @ ys = revAppend (rev xs, ys)
 fun app f [] = ()
   | app f (x :: xs) = (f x; app f xs)
 fun map f [] = []
