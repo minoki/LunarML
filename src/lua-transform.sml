@@ -5,6 +5,35 @@
 structure LuaTransform = struct
 structure L = LuaSyntax
 
+fun hasInnerFunction (L.ConstExp _) = false
+  | hasInnerFunction (L.VarExp _) = false
+  | hasInnerFunction (L.TableExp fields) = Vector.exists (fn (key, value) => hasInnerFunction value) fields
+  | hasInnerFunction (L.CallExp (x, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
+  | hasInnerFunction (L.MethodExp (x, _, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
+  | hasInnerFunction (L.FunctionExp _) = true
+  | hasInnerFunction (L.BinExp (_, x, y)) = hasInnerFunction x orelse hasInnerFunction y
+  | hasInnerFunction (L.UnaryExp (_, x)) = hasInnerFunction x
+  | hasInnerFunction (L.IndexExp (x, y)) = hasInnerFunction x orelse hasInnerFunction y
+fun hasInnerFunctionStat (L.LocalStat (_, xs)) = List.exists hasInnerFunction xs
+  | hasInnerFunctionStat (L.AssignStat (xs, ys)) = List.exists hasInnerFunction xs orelse List.exists hasInnerFunction ys
+  | hasInnerFunctionStat (L.CallStat (x, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
+  | hasInnerFunctionStat (L.MethodStat (x, _, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
+  | hasInnerFunctionStat (L.IfStat (x, then', else')) = hasInnerFunction x orelse hasInnerFunctionBlock then' orelse hasInnerFunctionBlock else'
+  | hasInnerFunctionStat (L.LocalFunctionStat _) = true
+  | hasInnerFunctionStat (L.ReturnStat xs) = Vector.exists hasInnerFunction xs
+  | hasInnerFunctionStat (L.DoStat block) = hasInnerFunctionBlock block
+and hasInnerFunctionBlock block = Vector.exists hasInnerFunctionStat block
+
+fun sizeOfStat (L.LocalStat (_, xs), acc) = acc + List.length xs
+  | sizeOfStat (L.AssignStat (xs, ys), acc) = acc + List.length xs + List.length ys
+  | sizeOfStat (L.CallStat _, acc) = acc + 1
+  | sizeOfStat (L.MethodStat _, acc) = acc + 1
+  | sizeOfStat (L.IfStat (_, then', else'), acc) = sizeOfBlock (then', sizeOfBlock (else', acc + 1))
+  | sizeOfStat (L.LocalFunctionStat _, acc) = acc + 1
+  | sizeOfStat (L.ReturnStat xs, acc) = acc + Vector.length xs
+  | sizeOfStat (L.DoStat xs, acc) = sizeOfBlock (xs, acc)
+and sizeOfBlock (xs, acc) = Vector.foldl sizeOfStat acc xs
+
 fun freeVarsExp (_, L.ConstExp _) acc = acc
   | freeVarsExp (bound, L.VarExp x) acc = if L.IdSet.member (bound, x) then
                                               acc
@@ -116,6 +145,49 @@ fun genSym (ctx : Context, name) = let val n = !(#nextId ctx)
                                        val _ = #nextId ctx := n + 1
                                    in TypedSyntax.MkVId (name, n)
                                    end
+structure LuaJITFixup = struct
+val BODY_SIZE_THRESHOLD = 1000
+fun doExp ctx (x as L.ConstExp _) = x
+  | doExp ctx (x as L.VarExp _) = x
+  | doExp ctx (L.TableExp fields) = L.TableExp (Vector.map (fn (key, value) => (key, doExp ctx value)) fields)
+  | doExp ctx (L.CallExp (x, ys)) = L.CallExp (doExp ctx x, Vector.map (doExp ctx) ys)
+  | doExp ctx (L.MethodExp (x, name, ys)) = L.MethodExp (doExp ctx x, name, Vector.map (doExp ctx) ys)
+  | doExp ctx (x as L.FunctionExp (params, body))
+    = if hasInnerFunctionBlock body then
+          if sizeOfBlock (body, 0) >= BODY_SIZE_THRESHOLD then
+              let val body = Vector.foldr (op ::) [] (doBlock ctx body)
+                  val dummy = genSym (ctx, "DUMMY")
+                  val body = L.IfStat (L.ConstExp L.True, vector [], vector [L.LocalStat ([(dummy, L.CONST)], [L.FunctionExp (vector [], vector [])])]) :: body
+              in L.FunctionExp (params, Vector.fromList body)
+              end
+          else
+              L.FunctionExp (params, doBlock ctx body)
+      else
+          x
+  | doExp ctx (L.BinExp (binOp, x, y)) = L.BinExp (binOp, doExp ctx x, doExp ctx y)
+  | doExp ctx (L.UnaryExp (unOp, x)) = L.UnaryExp (unOp, doExp ctx x)
+  | doExp ctx (L.IndexExp (x, y)) = L.IndexExp (doExp ctx x, doExp ctx y)
+and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx) xs)
+  | doStat ctx (L.AssignStat (xs, ys)) = L.AssignStat (List.map (doExp ctx) xs, List.map (doExp ctx) ys)
+  | doStat ctx (L.CallStat (x, ys)) = L.CallStat (doExp ctx x, Vector.map (doExp ctx) ys)
+  | doStat ctx (L.MethodStat (x, name, ys)) = L.MethodStat (doExp ctx x, name, Vector.map (doExp ctx) ys)
+  | doStat ctx (L.IfStat (x, then', else')) = L.IfStat (doExp ctx x, doBlock ctx then', doBlock ctx else')
+  | doStat ctx (f as L.LocalFunctionStat (name, params, body))
+    = if hasInnerFunctionBlock body then
+          if sizeOfBlock (body, 0) >= BODY_SIZE_THRESHOLD then
+              let val body = Vector.foldr (op ::) [] (doBlock ctx body)
+                  val dummy = genSym (ctx, "DUMMY")
+                  val body = L.IfStat (L.ConstExp L.True, vector [], vector [L.LocalStat ([(dummy, L.CONST)], [L.FunctionExp (vector [], vector [])])]) :: body
+              in L.LocalFunctionStat (name, params, Vector.fromList body)
+              end
+          else
+              L.LocalFunctionStat (name, params, doBlock ctx body)
+      else
+          f
+  | doStat ctx (L.ReturnStat xs) = L.ReturnStat (Vector.map (doExp ctx) xs)
+  | doStat ctx (L.DoStat block) = L.DoStat (doBlock ctx block)
+and doBlock ctx block = Vector.map (doStat ctx) block
+end
 structure ProcessUpvalue = struct
 type Env = { valMap : Variable TypedSyntax.VIdMap.map
            , bound : L.VarAttr L.IdMap.map

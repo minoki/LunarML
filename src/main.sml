@@ -243,6 +243,7 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT }
           val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+          val lua = LuaTransform.LuaJITFixup.doBlock { nextId = nextId, maxUpvalue = 60 } lua
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
           val lua = LuaWriter.doChunk lua
