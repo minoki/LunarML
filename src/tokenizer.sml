@@ -26,10 +26,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                          in errorsAndWarnings := TokError ({ file = name, line = l, column = c }, message) :: e
                                          end
             fun isBinDigit c = c = #"0" orelse c = #"1"
-            fun tokenizeAll (l, c, xs) = case tokenizeOne (l, c, xs) of
-                                             NONE => nil
-                                           | SOME (t, l', c', rest) => t :: tokenizeAll (l', c', rest)
-            and tokenizeOne (l, c, nil) = NONE (* end of input *)
+            fun tokenizeOne (l, c, nil) = NONE (* end of input *)
               | tokenizeOne (l, c, #"(" :: #"*" :: xs) = skipComment (l, c, l, c+2, 0, xs) (* beginning of comment *)
               | tokenizeOne (l, c, #"(" :: xs) = SOME (Tokens.LPAREN (pos(l,c),pos(l,c)), l, c+1, xs)
               | tokenizeOne (l, c, #")" :: xs) = SOME (Tokens.RPAREN (pos(l,c),pos(l,c)), l, c+1, xs)
@@ -663,7 +660,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                               ( emitError (l, c, "invalid formatting character in string literal")
                                                                               ; skipFormattingCharacters (l0, c0, l, c+1, accum, xs)
                                                                               )
-            val result = tokenizeAll (1, 1, String.explode s)
+            fun tokenizeAll (l, c, xs, revAcc) = case tokenizeOne (l, c, xs) of
+                                                     NONE => List.rev revAcc
+                                                   | SOME (t, l', c', rest) => tokenizeAll (l', c', rest, t :: revAcc)
+            val result = tokenizeAll (1, 1, String.explode s, [])
         in (result, rev (!errorsAndWarnings))
         end
         fun readAll input = let val x = input 1024
