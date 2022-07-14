@@ -21,6 +21,7 @@ js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 mlbasis-js.sml
+array.sml
 scan-num-utils.sml
 js-common/int-inf.sml
 js-common/word.sml
@@ -39,6 +40,7 @@ array-slice.sml
 list-pair.sml
 end
 in
+signature ARRAY
 signature BOOL
 signature BYTE
 signature INTEGER

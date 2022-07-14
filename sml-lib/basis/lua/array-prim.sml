@@ -11,5 +11,6 @@ fun update (arr, i, value) = if i < 0 orelse length arr <= i then
                                  Unsafe.Array.update (arr, i, value)
 val array = _Prim.Array.array
 val fromList = _Prim.Array.fromList
+val tabulate = _Prim.Array.tabulate
 end;
 (* equality is defined in equal.sml *)

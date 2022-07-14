@@ -14,7 +14,9 @@ unsafe.sml
 lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
+$(TARGET_LANG)/array-prim.sml
 mlbasis-luajit.sml
+array.sml
 luajit/word.sml
 mono-sequence.sml
 substring.sml
@@ -36,6 +38,7 @@ lua/os.sml
 lua/command-line.sml
 end
 in
+signature ARRAY
 signature BOOL
 signature INTEGER
 signature WORD

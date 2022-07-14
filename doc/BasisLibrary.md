@@ -548,7 +548,7 @@ structure VectorSlice :> sig
   val exists : ('a -> bool) -> 'a slice -> bool
 end
 
-structure Array : sig
+signature ARRAY = sig
   datatype array = datatype array
   datatype vector = datatype vector
   val maxLen : int
@@ -558,6 +558,8 @@ structure Array : sig
   val length : 'a array -> int
   val sub : 'a array * int -> 'a
   val update : 'a array * int * 'a -> unit
+  val vector : 'a array -> 'a vector
+  val copy : { src : 'a array, dst : 'a array, di : int } -> unit
   val copyVec : { src : 'a vector, dst : 'a array, di : int } -> unit
   val appi : (int * 'a -> unit) -> 'a array -> unit
   val app : ('a -> unit) -> 'a array -> unit
@@ -572,10 +574,14 @@ structure Array : sig
   val exists : ('a -> bool) -> 'a array -> bool
   val all : ('a -> bool) -> 'a array -> bool
   val collate : ('a * 'a -> order) -> 'a array * 'a array -> order
+
+  (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003g-Array *)
   val toList : 'a array -> 'a list
   val fromVector : 'a vector -> 'a array
   val toVector : 'a array -> 'a vector
 end
+
+structure Array :> ARRAY
 
 structure ArraySlice :> sig
   type 'a slice
