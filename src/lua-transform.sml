@@ -14,6 +14,7 @@ fun hasInnerFunction (L.ConstExp _) = false
   | hasInnerFunction (L.BinExp (_, x, y)) = hasInnerFunction x orelse hasInnerFunction y
   | hasInnerFunction (L.UnaryExp (_, x)) = hasInnerFunction x
   | hasInnerFunction (L.IndexExp (x, y)) = hasInnerFunction x orelse hasInnerFunction y
+  | hasInnerFunction (L.SingleValueExp x) = hasInnerFunction x
 fun hasInnerFunctionStat (L.LocalStat (_, xs)) = List.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.AssignStat (xs, ys)) = List.exists hasInnerFunction xs orelse List.exists hasInnerFunction ys
   | hasInnerFunctionStat (L.CallStat (x, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
@@ -48,6 +49,7 @@ fun freeVarsExp (_, L.ConstExp _) acc = acc
   | freeVarsExp (bound, L.BinExp (_, x, y)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
   | freeVarsExp (bound, L.UnaryExp (_, x)) acc = freeVarsExp (bound, x) acc
   | freeVarsExp (bound, L.IndexExp (x, y)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
+  | freeVarsExp (bound, L.SingleValueExp x) acc = freeVarsExp (bound, x) acc
 and freeVarsStat (bound, L.LocalStat (vids, exps)) acc = let val acc = List.foldl (fn (x, acc) => freeVarsExp (bound, x) acc) acc exps
                                                          in (List.foldl (fn ((vid, _), bound) => L.IdSet.add (bound, L.UserDefinedId vid)) bound vids, acc)
                                                          end
@@ -98,6 +100,7 @@ fun substExp map (x as L.ConstExp _) = x
   | substExp map (L.BinExp (binOp, x, y)) = L.BinExp (binOp, substExp map x, substExp map y)
   | substExp map (L.UnaryExp (unOp, x)) = L.UnaryExp (unOp, substExp map x)
   | substExp map (L.IndexExp (x, y)) = L.IndexExp (substExp map x, substExp map y)
+  | substExp map (L.SingleValueExp x) = L.SingleValueExp (substExp map x)
 and substStat map (L.LocalStat (lhs, rhs)) = let val rhs = List.map (substExp map) rhs
                                                  val map' = List.foldl (fn ((id, _), map) => let val id = L.UserDefinedId id
                                                                                              in if L.IdMap.inDomain (map, id) then
@@ -167,6 +170,7 @@ fun doExp ctx (x as L.ConstExp _) = x
   | doExp ctx (L.BinExp (binOp, x, y)) = L.BinExp (binOp, doExp ctx x, doExp ctx y)
   | doExp ctx (L.UnaryExp (unOp, x)) = L.UnaryExp (unOp, doExp ctx x)
   | doExp ctx (L.IndexExp (x, y)) = L.IndexExp (doExp ctx x, doExp ctx y)
+  | doExp ctx (L.SingleValueExp x) = L.SingleValueExp (doExp ctx x)
 and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx) xs)
   | doStat ctx (L.AssignStat (xs, ys)) = L.AssignStat (List.map (doExp ctx) xs, List.map (doExp ctx) ys)
   | doStat ctx (L.CallStat (x, ys)) = L.CallStat (doExp ctx x, Vector.map (doExp ctx) ys)
@@ -265,6 +269,9 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = ([], exp)
                                             val (decs', b) = doExp ctx env b
                                         in (decs @ decs', L.IndexExp (a, b))
                                         end
+  | doExp ctx env (L.SingleValueExp a) = let val (decs, a) = doExp ctx env a
+                                         in (decs, L.SingleValueExp a)
+                                         end
 and doStat ctx env (L.LocalStat (vars, exps))
     = let val newEnv = { valMap = #valMap env
                        , bound = List.foldl (fn ((vid, attr), m) => L.IdMap.insert (m, L.UserDefinedId vid, attr)) (#bound env) vars
@@ -420,6 +427,7 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = exp
   | doExp ctx env (L.BinExp (binOp, a, b)) = L.BinExp (binOp, doExp ctx env a, doExp ctx env b)
   | doExp ctx env (L.UnaryExp (unOp, a)) = L.UnaryExp (unOp, doExp ctx env a)
   | doExp ctx env (L.IndexExp (a, b)) = L.IndexExp (doExp ctx env a, doExp ctx env b)
+  | doExp ctx env (L.SingleValueExp a) = L.SingleValueExp (doExp ctx env a)
 and doStat ctx env (L.LocalStat (vars, exps))
     = let val newLocals = #currentLocals env + List.length vars
       in if newLocals > LOCAL_LIMIT then

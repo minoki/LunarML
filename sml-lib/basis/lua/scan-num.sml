@@ -373,8 +373,8 @@ fun scanOptExpPart (getc, strm, revAcc) = case getc strm of
                                                                  else
                                                                      (revAcc, strm)
                                             | NONE => (revAcc, strm)
-fun toNumber s = let val results = Lua.call Lua.Lib.tonumber #[Lua.fromString s]
-                 in Lua.unsafeFromValue (Lua.* (Vector.sub (results, 0), Lua.fromReal 1.0))
+fun toNumber s = let val result = Lua.call1 Lua.Lib.tonumber #[Lua.fromString s]
+                 in Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0))
                  end
 (* [+~-]? ([0-9]+(.[0-9]+?)?|.[0-9]+)([eE][+~-]?[0-9]+?)? / [+~-]?(inf|infinity|nan) *)
 fun scan getc strm = let val strm = skipInitialWhitespace (getc, strm)

@@ -866,7 +866,7 @@ fun sameSign (ZERO, ZERO) = true
 fun notb x = negate (add (x, fromInt 1))
 
 local
-    fun stringFmt (f, x) : string = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x], 0))
+    fun stringFmt (f, x) : string = Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString f, Lua.fromWord x])
     val ten_to_9 = 0w1000000000
 in
 fun toStringAbs words = if Vector.length words = 0 then

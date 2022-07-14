@@ -291,6 +291,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                fun vectorOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_vector)
                                                fun arrayOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
                                                fun pairOf (ty1, ty2) = TypedSyntax.PairType (SourcePos.nullSpan, ty1, ty2)
+                                               fun tupleOf types = TypedSyntax.TupleType (SourcePos.nullSpan, types)
                                                fun function1Of (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, b, a)
                                                fun function2Of (a, b, c) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)

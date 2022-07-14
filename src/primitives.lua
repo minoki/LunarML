@@ -26,6 +26,13 @@ do
   local vector = function(elemTy) return {string_format("vectorOf (%s)", elemTy[1])} end
   local array = function(elemTy) return {string_format("arrayOf (%s)", elemTy[1])} end
   local pair = function(ty1, ty2) return {string_format("pairOf (%s, %s)", ty1[1], ty2[1])} end
+  local tuple = function(types)
+    local t = {}
+    for _, v in pairs(types) do
+      table.insert(t, v[1])
+    end
+    return {string_format("tupleOf [%s]", table.concat(t, ", "))}
+  end
   local function1 = function(resultTy, arg1Ty) return {string_format("function1Of (%s, %s)", resultTy[1], arg1Ty[1])} end
   local function2 = function(resultTy, arg1Ty, arg2Ty) return {string_format("function2Of (%s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1])} end
   local function3 = function(resultTy, arg1Ty, arg2Ty, arg3Ty) return {string_format("function3Of (%s, %s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1], arg3Ty[1])} end
@@ -612,6 +619,26 @@ do
       srcname = "Lua_isFalsy",
       type = { vars = {}, args = {LuaValue}, result = bool },
     },
+    {
+      name = "Lua.call0",
+      srcname = "Lua_call0",
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = unit },
+    },
+    {
+      name = "Lua.call1",
+      srcname = "Lua_call1",
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = LuaValue },
+    },
+    {
+      name = "Lua.call2",
+      srcname = "Lua_call2",
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = pair(LuaValue, LuaValue) },
+    },
+    {
+      name = "Lua.call3",
+      srcname = "Lua_call3",
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = tuple{LuaValue, LuaValue, LuaValue} },
+    },
 
     --
     -- JavaScript backend
@@ -816,6 +843,7 @@ functor TypeOfPrimitives (type ty
                           val vectorOf : ty -> ty
                           val arrayOf : ty -> ty
                           val pairOf : ty * ty -> ty
+                          val tupleOf : ty list -> ty
                           val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty

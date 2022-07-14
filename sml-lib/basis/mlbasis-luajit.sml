@@ -102,6 +102,10 @@ structure Lua : sig
               val set : value * value * value -> unit  (* t[k] = v *)
               val global : string -> value  (* _ENV[name] *)
               val call : value -> value vector -> value vector  (* f(args) *)
+              val call0 : value -> value vector -> unit  (* f(args) *)
+              val call1 : value -> value vector -> value  (* f(args) *)
+              val call2 : value -> value vector -> value * value  (* f(args) *)
+              val call3 : value -> value vector -> value * value * value  (* f(args) *)
               val method : value * string -> value vector -> value vector  (* f:name(args) *)
               val NIL : value  (* Lua nil *)
               val isNil : value -> bool  (* x == nil *)
@@ -204,6 +208,10 @@ type value = _Prim.Lua.value
 exception LuaError = _Prim.Lua.LuaError
 val global = _Prim.Lua.global
 val call = _Prim.Lua.call
+fun call0 f args = _primCall "Lua.call0" (f, args)
+fun call1 f args = _primCall "Lua.call1" (f, args)
+fun call2 f args = _primCall "Lua.call2" (f, args)
+fun call3 f args = _primCall "Lua.call3" (f, args)
 val method = _Prim.Lua.method
 val NIL = _Prim.Lua.NIL
 val newTable = _Prim.Lua.newTable
@@ -230,19 +238,19 @@ fun % (x, y) = _primCall "Lua.%" (x, y)
 fun pow (x, y) = _primCall "Lua.pow" (x, y)
 fun unm x = _primCall "Lua.unm" (x)
 val require = LunarML.assumeDiscardable (global "require")
-val bit = LunarML.assumeDiscardable (Vector.sub (call require #[fromString "bit"], 0))
+val bit = LunarML.assumeDiscardable (call1 require #[fromString "bit"])
 val band = LunarML.assumeDiscardable (field (bit, "band"))
 val bor = LunarML.assumeDiscardable (field (bit, "bor"))
 val bxor = LunarML.assumeDiscardable (field (bit, "bxor"))
 val bnot = LunarML.assumeDiscardable (field (bit, "bnot"))
 val lshift = LunarML.assumeDiscardable (field (bit, "lshift"))
 val rshift = LunarML.assumeDiscardable (field (bit, "rshift"))
-fun andb (x, y) = Vector.sub (call band #[x, y], 0)
-fun orb (x, y) = Vector.sub (call bor #[x, y], 0)
-fun xorb (x, y) = Vector.sub (call bxor #[x, y], 0)
-fun notb x = Vector.sub (call bnot #[x], 0)
-fun << (x, y) = Vector.sub (call lshift #[x, y], 0)
-fun >> (x, y) = Vector.sub (call rshift #[x, y], 0)
+fun andb (x, y) = call1 band #[x, y]
+fun orb (x, y) = call1 bor #[x, y]
+fun xorb (x, y) = call1 bxor #[x, y]
+fun notb x = call1 bnot #[x]
+fun << (x, y) = call1 lshift #[x, y]
+fun >> (x, y) = call1 rshift #[x, y]
 fun == (x, y) = _primCall "Lua.==" (x, y)
 fun ~= (x, y) = _primCall "Lua.~=" (x, y)
 fun x < y = _primCall "Lua.<" (x, y)
@@ -303,17 +311,17 @@ val rol = LunarML.assumeDiscardable (field (bit, "rol"))
 val ror = LunarML.assumeDiscardable (field (bit, "ror"))
 val bswap = LunarML.assumeDiscardable (field (bit, "bswap"))
 end
-val lfs = LunarML.assumeDiscardable (let val results = call pcall #[require, fromString "lfs"]
-                                         val ok = unsafeFromValue (Vector.sub (results, 0)) : bool
+val lfs = LunarML.assumeDiscardable (let val (ok, module) = call2 pcall #[require, fromString "lfs"]
+                                         val ok = unsafeFromValue ok : bool
                                      in if ok then
-                                            SOME (Vector.sub (results, 1))
+                                            SOME module
                                         else
                                             NONE
                                      end
                                     )
 end
-fun typeof x : string = let val results = call Lib.type' #[x]
-                        in unsafeFromValue (Vector.sub (results, 0))
+fun typeof x : string = let val result = call1 Lib.type' #[x]
+                        in unsafeFromValue result
                         end
 exception TypeError of string
 fun checkString x : string = let val t = typeof x
@@ -329,7 +337,7 @@ fun checkBoolean x : bool = let val t = typeof x
                                    raise TypeError (String.^ ("expected a boolean, but got ", t))
                             end
 fun checkInt x : int = let val t = typeof x
-                       in if t = "number" andalso == (Vector.sub (call Lib.bit.tobit #[x], 0), x) then
+                       in if t = "number" andalso == (call1 Lib.bit.tobit #[x], x) then
                               unsafeFromValue x
                           else
                               raise TypeError (String.^ ("expected an integer, but got ", typeof x))
@@ -440,45 +448,45 @@ val sign : int -> int = fn x => if x > 0 then
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
 fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
   | fmt StringCvt.OCT x = if x >= 0 then
-                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
+                              in Lua.unsafeFromValue result
                               end
                           else
-                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
+                              in Lua.unsafeFromValue result
                               end
-  | fmt StringCvt.DEC x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
-                              val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
-                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+  | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
+                              val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                          in Lua.unsafeFromValue result
                           end
   | fmt StringCvt.HEX x = if x >= 0 then
-                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
+                              in Lua.unsafeFromValue result
                               end
                           else
-                              let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
+                              in Lua.unsafeFromValue result
                               end
 fun toString (x : int) : string = if x = 0 then
                                       "0" (* x might be negative zero *)
                                   else
-                                      let val result = Lua.call Lua.Lib.tostring #[Lua.fromInt x]
-                                          val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
-                                      in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                      let val result = Lua.call1 Lua.Lib.tostring #[Lua.fromInt x]
+                                          val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                      in Lua.unsafeFromValue result
                                       end
 (* scan *)
 (*
-fun fromString (s : string) : int option = let val result = Lua.call Lua.Lib.string.match #[Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"]
-                                           in if Lua.isNil (Vector.sub (result, 0)) then
+fun fromString (s : string) : int option = let val (r0, r1) = Lua.call2 Lua.Lib.string.match #[Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"]
+                                           in if Lua.isNil r0 then
                                                   NONE
                                               else
-                                                  let val sign = Lua.unsafeFromValue (Vector.sub (result, 0)) : string
-                                                      val digits = Lua.unsafeFromValue (Vector.sub (result, 1)) : string
+                                                  let val sign = Lua.unsafeFromValue r0 : string
+                                                      val digits = Lua.unsafeFromValue r1 : string
                                                       val result' = if sign = "~" orelse sign = "-" then
-                                                                        Lua.call Lua.Lib.tonumber #[Lua.fromString (String.^ ("-", digits))]
+                                                                        Lua.call1 Lua.Lib.tonumber #[Lua.fromString (String.^ ("-", digits))]
                                                                     else
-                                                                        Lua.call Lua.Lib.tonumber #[Lua.fromString digits]
-                                                  in SOME (Lua.unsafeFromValue (Vector.sub (result', 0)))
+                                                                        Lua.call1 Lua.Lib.tonumber #[Lua.fromString digits]
+                                                  in SOME (Lua.unsafeFromValue result')
                                                   end
                                            end
 *)
@@ -554,7 +562,7 @@ val ~>> : word * word -> word = fn (x, y) => if y >= fromInt (Int.- (wordSize, 1
                                                  else
                                                      0w0
                                              else
-                                                 coerceWord (Vector.sub (Lua.call Lua.Lib.bit.arshift #[Lua.fromWord x, Lua.fromWord y], 0))
+                                                 coerceWord (Lua.call1 Lua.Lib.bit.arshift #[Lua.fromWord x, Lua.fromWord y])
 val compare : word * word -> order = fn (x, y) => if x = y then
                                                       EQUAL
                                                   else if x < y then
@@ -570,16 +578,16 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                              else
                                                  x
 fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-  | fmt StringCvt.OCT x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
-                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+  | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
+                          in Lua.unsafeFromValue result
                           end
-  | fmt StringCvt.DEC x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord x]
-                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+  | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord x]
+                          in Lua.unsafeFromValue result
                           end
-  | fmt StringCvt.HEX x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x]
-                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+  | fmt StringCvt.HEX x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x]
+                          in Lua.unsafeFromValue result
                           end
-val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x], 0))
+val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord x])
 (* scan, fromString *)
 end; (* structure Word *)
 
@@ -742,14 +750,13 @@ fun checkFloat x = if isNan x then
                        x
 val realFloor : real -> real = Lua.unsafeFromValue Lua.Lib.math.floor
 val realCeil : real -> real = Lua.unsafeFromValue Lua.Lib.math.ceil
-fun realTrunc x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
-                  in Lua.unsafeFromValue (Vector.sub (results, 0)) : real
+fun realTrunc x = let val result = Lua.call1 Lua.Lib.math.modf #[Lua.fromReal x]
+                  in Lua.unsafeFromValue result : real
                   end
-fun realRound x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
-                      val intPartRaw = Vector.sub (results, 0)
+fun realRound x = let val (intPartRaw, fracPart) = Lua.call2 Lua.Lib.math.modf #[Lua.fromReal x]
                       val intPartIsEven = Lua.== (Lua.% (intPartRaw, Lua.fromInt 2), Lua.fromInt 0)
                       val intPart = Lua.unsafeFromValue intPartRaw : real
-                      val fracPart = Lua.unsafeFromValue (Vector.sub (results, 1)) : real
+                      val fracPart = Lua.unsafeFromValue fracPart : real
                       val absFracPart = abs fracPart
                   in if ~0.5 < fracPart andalso fracPart < 0.5 then
                          if intPart == 0.0 andalso 1.0 / x < 0.0 then
@@ -764,9 +771,8 @@ fun realRound x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
                      else (* ((fracPart == 0.5 orelse fracPart == ~0.5) andalso intPartIsEven) orelse isNan x *)
                          intPart
                   end
-fun isInt x = Lua.== (Vector.sub (Lua.call Lua.Lib.bit.tobit #[x], 0), x)
-fun floor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
-                  val result = Vector.sub (results, 0)
+fun isInt x = Lua.== (Lua.call1 Lua.Lib.bit.tobit #[x], x)
+fun floor x = let val result = Lua.call1 Lua.Lib.math.floor #[Lua.fromReal x]
               in if isInt result then
                      Lua.unsafeFromValue result : int
                  else
@@ -775,8 +781,7 @@ fun floor x = let val results = Lua.call Lua.Lib.math.floor #[Lua.fromReal x]
                      else
                          raise Overflow
               end
-fun ceil x = let val results = Lua.call Lua.Lib.math.ceil #[Lua.fromReal x]
-                 val result = Vector.sub (results, 0)
+fun ceil x = let val result = Lua.call1 Lua.Lib.math.ceil #[Lua.fromReal x]
              in if isInt result then
                     Lua.unsafeFromValue result : int
                 else
@@ -785,8 +790,7 @@ fun ceil x = let val results = Lua.call Lua.Lib.math.ceil #[Lua.fromReal x]
                     else
                         raise Overflow
              end
-fun trunc x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
-                  val result = Vector.sub (results, 0)
+fun trunc x = let val result = Lua.call1 Lua.Lib.math.modf #[Lua.fromReal x]
               in if isInt result then
                      Lua.unsafeFromValue result : int
                  else
@@ -795,12 +799,11 @@ fun trunc x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
                      else
                          raise Overflow
               end
-fun round x = let val results = Lua.call Lua.Lib.math.modf #[Lua.fromReal x]
-                  val intPartRaw = Vector.sub (results, 0)
+fun round x = let val (intPartRaw, fracPart) = Lua.call2 Lua.Lib.math.modf #[Lua.fromReal x]
               in if isInt intPartRaw then
                      let val intPartIsEven = Lua.== (Lua.% (intPartRaw, Lua.fromInt 2), Lua.fromInt 0)
                          val intPart = Lua.unsafeFromValue intPartRaw : int
-                         val fracPart = Lua.unsafeFromValue (Vector.sub (results, 1)) : real
+                         val fracPart = Lua.unsafeFromValue fracPart : real
                          val absFracPart = abs fracPart
                      in if ~0.5 < fracPart andalso fracPart < 0.5 then
                             intPart
@@ -828,30 +831,30 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%dE", Lua.fromInt prec], 0)
-                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dE", Lua.fromInt prec]
+                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue result : string
                                  end
   | fmt (StringCvt.FIX prec) r = let val prec = Option.getOpt (prec, 6)
                                      val () = if prec < 0 then
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%df", Lua.fromInt prec], 0)
-                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%df", Lua.fromInt prec]
+                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue result : string
                                  end
   | fmt (StringCvt.GEN prec) r = let val prec = Option.getOpt (prec, 12)
                                      val () = if prec < 1 then
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%%.%dG", Lua.fromInt prec], 0) (* TODO *)
-                                     val result = Lua.call Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call Lua.Lib.string.gsub #[Vector.sub (result, 0), Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue (Vector.sub (result, 0)) : string
+                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dG", Lua.fromInt prec] (* TODO *)
+                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                 in Lua.unsafeFromValue result : string
                                  end
   | fmt StringCvt.EXACT r = raise Fail "Real.fmt StringCvt.EXACT: not implemented yet"
 val toString = fmt (StringCvt.GEN NONE)
@@ -887,12 +890,12 @@ val tan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.fie
 val asin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "asin")))
 val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "acos")))
 val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.atan)
-val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.atan #[Lua.fromReal y, Lua.fromReal x], 0))
+val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.atan #[Lua.fromReal y, Lua.fromReal x])
 val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "exp")))
 val e = LunarML.assumeDiscardable (exp 1.0)
 val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
 val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.log)
-val log10 : real -> real = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.math.log #[Lua.fromReal x, Lua.fromInt 10], 0))
+val log10 : real -> real = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.log #[Lua.fromReal x, Lua.fromInt 10])
 val sinh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "sinh")
                                                      in if Lua.isNil raw then
                                                             fn x => (exp x - exp (~ x)) / 2.0
@@ -954,40 +957,40 @@ fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
                                            let val i' = i + 1
-                                               val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt i', Lua.fromInt i']
-                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                               val result = Lua.call1 Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt i', Lua.fromInt i']
+                                           in Lua.unsafeFromValue result
                                            end
 fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
                                                           raise Subscript
                                                       else
-                                                          let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)]
-                                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                          let val result = Lua.call1 Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1), Lua.fromInt (i + j)]
+                                                          in Lua.unsafeFromValue result
                                                           end
 fun extract (s : string, i : int, NONE : int option) : string = if i < 0 orelse size s < i then
                                                                     raise Subscript
                                                                 else
-                                                                    let val result = Lua.call Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1)]
-                                                                    in Lua.unsafeFromValue (Vector.sub (result, 0))
+                                                                    let val result = Lua.call1 Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt (i + 1)]
+                                                                    in Lua.unsafeFromValue result
                                                                     end
   | extract (s, i, SOME j) = substring (s, i, j)
-fun concat (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
-                                        in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun concat (l : string list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+                                        in Lua.unsafeFromValue result
                                         end
-fun concatWith (s : string) (l : string list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.fromString s]
-                                                         in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun concatWith (s : string) (l : string list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.fromString s]
+                                                         in Lua.unsafeFromValue result
                                                          end
-fun implode (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
-                                       in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun implode (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+                                       in Lua.unsafeFromValue result
                                        end
-fun implodeRev (l : char list) : string = let val result = Lua.call Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList (List.rev l))]
-                                          in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun implodeRev (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList (List.rev l))]
+                                          in Lua.unsafeFromValue result
                                           end
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
-fun map (f : char -> char) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
-                                                   in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun map (f : char -> char) (s : string) : string = let val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+                                                   in Lua.unsafeFromValue result
                                                    end
-fun translate (f : char -> string) (s : string) : string = let val result = Lua.call Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
-                                                           in Lua.unsafeFromValue (Vector.sub (result, 0))
+fun translate (f : char -> string) (s : string) : string = let val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+                                                           in Lua.unsafeFromValue result
                                                            end
 fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
                        | go (revTokens, acc, x :: xs) = if f x then
@@ -1078,7 +1081,7 @@ val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.s
 val chr : int -> char = fn x => if x < 0 orelse x > 255 then
                                     raise Chr
                                 else
-                                    Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.char #[Lua.fromInt x], 0))
+                                    Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.char #[Lua.fromInt x])
 fun succ c = chr (ord c + 1)
 fun pred c = chr (ord c - 1)
 fun compare (x : char, y : char) = if x = y then
@@ -1087,8 +1090,8 @@ fun compare (x : char, y : char) = if x = y then
                                        LESS
                                    else
                                        GREATER
-fun notContains (s : string) (c : char) : bool = let val result = Lua.call Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
-                                                 in Lua.isNil (Vector.sub (result, 0))
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call1 Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
+                                                 in Lua.isNil result
                                                  end
 fun contains s c = not (notContains s c)
 fun isAscii (c : char) = c <= #"\127"

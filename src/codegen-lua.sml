@@ -815,6 +815,53 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Primitives.Lua_isFalsy => doUnary (fn (stmts, env, a) =>
                                                    putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
                                                )
+           | Primitives.Lua_call0 => doBinary (fn (stmts, env, (f, args)) =>
+                                                  let val (v, stmts') = case args of
+                                                                            L.VarExp _ => (args, stmts)
+                                                                          | _ => let val v = genSym ctx
+                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
+                                                                                 end
+                                                      val stmts'' = stmts'
+                                                                    @ [ L.CallStat (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])]) ]
+                                                  in putPureTo ctx env dest (stmts'', L.ConstExp L.Nil)
+                                                  end
+                                              )
+           | Primitives.Lua_call1 => doBinary (fn (stmts, env, (f, args)) =>
+                                                  let val (v, stmts') = case args of
+                                                                            L.VarExp _ => (args, stmts)
+                                                                          | _ => let val v = genSym ctx
+                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
+                                                                                 end
+                                                  in putImpureTo ctx env dest (stmts', L.SingleValueExp (L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])))
+                                                  end
+                                              )
+           | Primitives.Lua_call2 => doBinary (fn (stmts, env, (f, args)) =>
+                                                  let val (v, stmts') = case args of
+                                                                            L.VarExp _ => (args, stmts)
+                                                                          | _ => let val v = genSym ctx
+                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
+                                                                                 end
+                                                      val r0 = genSym ctx
+                                                      val r1 = genSym ctx
+                                                      val stmts'' = stmts'
+                                                                    @ [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])]) ]
+                                                  in putPureTo ctx env dest (stmts'', L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
+                                                  end
+                                              )
+           | Primitives.Lua_call3 => doBinary (fn (stmts, env, (f, args)) =>
+                                                  let val (v, stmts') = case args of
+                                                                            L.VarExp _ => (args, stmts)
+                                                                          | _ => let val v = genSym ctx
+                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
+                                                                                 end
+                                                      val r0 = genSym ctx
+                                                      val r1 = genSym ctx
+                                                      val r2 = genSym ctx
+                                                      val stmts'' = stmts'
+                                                                    @ [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])]) ]
+                                                  in putPureTo ctx env dest (stmts'', L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
+                                                  end
+                                              )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest

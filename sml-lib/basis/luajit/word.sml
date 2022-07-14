@@ -1,8 +1,8 @@
 local
-    val ffi = LunarML.assumeDiscardable (Vector.sub (Lua.call Lua.Lib.require #[Lua.fromString "ffi"], 0))
-    val uint64_t = LunarML.assumeDiscardable (Vector.sub (Lua.call (Lua.field (ffi, "typeof")) #[Lua.fromString "uint64_t"], 0)) (* ffi.typeof("uint64_t") *)
-    fun WordToUint64 (x : word) : Lua.value = Vector.sub (Lua.call uint64_t #[Lua.fromWord x], 0)
-    fun Uint64ToWord (x : Lua.value) : word = Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.tonumber #[x], 0))
+    val ffi = LunarML.assumeDiscardable (Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"])
+    val uint64_t = LunarML.assumeDiscardable (Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "uint64_t"]) (* ffi.typeof("uint64_t") *)
+    fun WordToUint64 (x : word) : Lua.value = Lua.call1 uint64_t #[Lua.fromWord x]
+    fun Uint64ToWord (x : Lua.value) : word = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x])
     structure WordImpl :> sig
                   structure LargeWord : sig
                                 (*eq*)type word
@@ -201,9 +201,9 @@ local
     fun toInt x = if Lua.>= (x, WordToUint64 0wx80000000) then
                       raise Overflow
                   else
-                      Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.tonumber #[x], 0)) : int
+                      Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x]) : int
     val toIntX = toInt
-    fun fromInt (x : int) = Vector.sub (Lua.call uint64_t #[Lua.fromInt x], 0)
+    fun fromInt (x : int) = Lua.call1 uint64_t #[Lua.fromInt x]
     val andb = Lua.andb
     val orb = Lua.orb
     val xorb = Lua.xorb
@@ -217,7 +217,7 @@ local
                     else
                         Lua.>> (x, Lua.fromWord y)
     fun ~>> (x, y) = let val y = Word.min (y, 0w63)
-                     in Vector.sub (Lua.call Lua.Lib.bit.arshift #[x, Lua.fromWord y], 0)
+                     in Lua.call1 Lua.Lib.bit.arshift #[x, Lua.fromWord y]
                      end
     val op + = Lua.+
     val op - = Lua.-
@@ -250,16 +250,16 @@ local
                      else
                          x
     fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-      | fmt StringCvt.OCT x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%o", x]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+      | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", x]
+                              in Lua.unsafeFromValue result
                               end
-      | fmt StringCvt.DEC x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%u", x]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+      | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", x]
+                              in Lua.unsafeFromValue result
                               end
-      | fmt StringCvt.HEX x = let val result = Lua.call Lua.Lib.string.format #[Lua.fromString "%X", x]
-                              in Lua.unsafeFromValue (Vector.sub (result, 0))
+      | fmt StringCvt.HEX x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x]
+                              in Lua.unsafeFromValue result
                               end
-    val toString : word -> string = fn x => Lua.unsafeFromValue (Vector.sub (Lua.call Lua.Lib.string.format #[Lua.fromString "%X", x], 0))
+    val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x])
     end
     val Word64_eq = Lua.==
     fun wordToWord64 x = WordToUint64 x

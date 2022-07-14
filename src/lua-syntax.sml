@@ -62,6 +62,7 @@ datatype Exp = ConstExp of LuaConst
              | BinExp of BinaryOp * Exp * Exp
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
+             | SingleValueExp of Exp (* (f(...)) *)
      and Stat = LocalStat of (TypedSyntax.VId * VarAttr) list * Exp list (* vars must not be empty *)
               | AssignStat of Exp list * Exp list (* LHS must be non-empty prefixexps and RHS must not be empty*)
               | CallStat of Exp * Exp vector
@@ -282,6 +283,7 @@ fun doExp (LuaSyntax.ConstExp ct) : Exp = (case ct of
                                                                                                            { prec = ~1, exp = paren ~1 (doExp exp1) @ Fragment "[" :: #exp (doExp exp2) @ [ Fragment "]" ] }
                                                  | _ => { prec = ~1, exp = paren ~1 (doExp exp1) @ Fragment "[" :: #exp (doExp exp2) @ [ Fragment "]" ] }
                                               )
+  | doExp (LuaSyntax.SingleValueExp exp) = { prec = ~1, exp = Fragment "(" :: #exp (doExp exp) @ [ Fragment ")" ] }
 and doStat (LuaSyntax.LocalStat (vars, [])) = Indent :: Fragment "local " :: commaSep (List.map (vidToFragment o #1) vars) @ [ LineTerminator ]
   | doStat (LuaSyntax.LocalStat (vars, exps)) = Indent :: Fragment "local " :: commaSep (List.map (vidToFragment o #1) vars) @ Fragment " = " :: commaSep (List.map (#exp o doExp) exps) @ [ OptSemicolon ]
   | doStat (LuaSyntax.AssignStat (vars, exps)) = Indent :: commaSep (List.map (#exp o doExp) vars) @ Fragment " = " :: commaSep (List.map (#exp o doExp) exps) @ [ OptSemicolon ]
