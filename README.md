@@ -26,13 +26,18 @@ Hello world!
 
 Modes of operation:
 
-* `-mexe` (default): Produce Lua program.
-* `-mlib`: Produce a Lua module.
-* `--lua`: Produce Lua code (targets Lua 5.3; default).
-* `--lua-stackless-handle`: Produce Lua code (targets Lua 5.3). Allow deeply nested `handle`.
-* `--luajit`: Produce Lua code (targets LuaJIT).
-* `--js`: Produce a JavaScript program.
-* `--js-cps`: Produce a JavaScript program (CPS mode; supports delimited continuations).
+* `-mexe` (default): Produces Lua/JavaScript program.
+* `-mlib`: Produces a Lua module.
+
+Targets:
+
+* Lua
+    * `--lua` (default): Targets Lua 5.3+.
+    * `--lua-stackless-handle`: Targets Lua 5.3+. Allow deeply nested `handle`.
+    * `--luajit`: Targets LuaJIT.
+* JavaScript (ES2020+)
+    * `--js`: Produces a JavaScript program.
+    * `--js-cps`: Produces a JavaScript program (CPS mode; supports delimited continuations).
 
 See `--help` for more information.
 
@@ -41,6 +46,7 @@ See `--help` for more information.
 * Most of SML '97 language, including signatures and functors
 * [A subset of SML Basis Library](doc/BasisLibrary.md)
 * [Interface to Lua](doc/LuaInterface.md)
+* [Interface to JavaScript](doc/JavaScriptInterface.md)
 * ML Basis system like [MLton](http://mlton.org/MLBasis)
 
 Successor ML features:
