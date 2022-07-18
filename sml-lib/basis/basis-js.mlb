@@ -7,17 +7,20 @@ nodejs/os.sml
 nodejs/command-line.sml
 end
 in
+signature ARRAY
 signature BOOL
 signature BYTE
-signature INTEGER
-signature WORD
-signature REAL
 signature CHAR
-signature STRING
-signature MONO_VECTOR
+signature INTEGER
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
+signature MONO_VECTOR
+signature MONO_VECTOR_SLICE
+signature REAL
+signature STRING
+signature SUBSTRING
 signature VECTOR_SLICE
+signature WORD
 structure Unsafe (* extension; to be moved... *)
 structure JavaScript (* extension; to be moved... *)
 structure LunarML (* extension; to be moved... *)

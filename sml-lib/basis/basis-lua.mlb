@@ -40,16 +40,17 @@ end
 in
 signature ARRAY
 signature BOOL
-signature INTEGER
-signature WORD
-signature REAL
 signature CHAR
-signature STRING
-signature MONO_VECTOR
-signature MONO_VECTOR_SLICE
+signature INTEGER
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
+signature MONO_VECTOR
+signature MONO_VECTOR_SLICE
+signature REAL
+signature STRING
+signature SUBSTRING
 signature VECTOR_SLICE
+signature WORD
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure Int
