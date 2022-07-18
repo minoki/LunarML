@@ -112,6 +112,7 @@ structure General : sig
   exception Span
   exception Subscript
   val exnName : exn -> string
+  (* val exnMessage : exn -> string *)
   datatype order = LESS | EQUAL | GREATER
   val ! : 'a ref -> 'a
   val := : 'a ref * 'a -> unit
@@ -247,7 +248,12 @@ structure IEEEReal : sig
   datatype real_order = LESS | EQUAL | GREATER | UNORDERED
   datatype float_class = NAN | INF | ZERO | NORMAL | SUBNORMAL
   datatype rounding_mode = TO_NEAREST | TO_NEGINF | TO_POSINF | TO_ZERO
+  (* val setRoundingMode : rounding_mode -> unit *)
+  (* val getRoundingMode : unit -> rounding_mode *)
   type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
+  (* val toString : decimal_approx -> string *)
+  (* val scan : (char, 'a) StringCvt.reader -> (decimal_approx, 'a) StringCvt.reader *)
+  (* val fromString : string -> decimal_approx option *)
 end
 
 signature REAL = sig
@@ -378,7 +384,8 @@ signature CHAR = sig
   (* val fromCString : String.string -> char option *)
 end
 
-structure Char :> CHAR where type char = char
+structure Char :> CHAR where type char = char where type string = String.string
+structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
 
 signature STRING = sig
   eqtype string
@@ -418,6 +425,7 @@ signature STRING = sig
 end
 
 structure String :> STRING where type string = string
+structure WideString (* :> STRING; currently JavaScript backend only *)
 
 structure Substring :> sig
   type substring
@@ -426,6 +434,8 @@ structure Substring :> sig
   val sub : substring * int -> char
   val size : substring -> int
   val base : substring -> string * int * int
+  (* val extract : string * int * int option -> substring *)
+  (* val substring : string * int * int -> substring *)
   val full : string -> substring
   val string : substring -> string
   val isEmpty : substring -> bool
@@ -436,15 +446,24 @@ structure Substring :> sig
   val slice : substring * int * int option -> substring
   val concat : substring list -> string
   val concatWith : string -> substring list -> string
+  (* val explode : substring -> char list *)
   val isPrefix : string -> substring -> bool
+  (* val isSubstring : string -> substring -> bool *)
   val isSuffix : string -> substring -> bool
   val compare : substring * substring -> order
   val splitl : (char -> bool) -> substring -> substring * substring
   val splitr : (char -> bool) -> substring -> substring * substring
+  (* val splitAt : substring * int -> substring * substring *)
   val dropl : (char -> bool) -> substring -> substring
   val dropr : (char -> bool) -> substring -> substring
   val takel : (char -> bool) -> substring -> substring
   val taker : (char -> bool) -> substring -> substring
+  (* val position : string -> substring -> substring * substring *)
+  (* val span : substring * substring -> substring *)
+  (* val translate : (char -> string) -> substring -> string *)
+  (* val tokens : (char -> bool) -> substring -> substring list *)
+  (* val fields : (char -> bool) -> substring -> substring list *)
+  (* val app : (char -> unit) -> substring -> unit *)
   val foldl : (char * 'a -> 'a) -> 'a -> substring -> 'a
   val foldr : (char * 'a -> 'a) -> 'a -> substring -> 'a
 end
@@ -543,9 +562,24 @@ structure VectorSlice :> sig
   val full : 'a Vector.vector -> 'a slice
   val slice : 'a Vector.vector * int * int option -> 'a slice
   val subslice : 'a slice * int * int option -> 'a slice
+  (* val base : 'a slice -> 'a Vector.vector * int * int *)
   val vector : 'a slice -> 'a Vector.vector
+  (* val concat : 'a slice list -> 'a Vector.vector *)
+  (* val isEmpty : 'a slice -> bool *)
   val getItem : 'a slice -> ('a * 'a slice) option
+  (* val appi : (int * 'a -> unit) -> 'a slice -> unit *)
+  (* val app : ('a -> unit) -> 'a slice -> unit *)
+  (* val mapi : (int * 'a -> 'b) -> 'a slice -> 'b Vector.vector *)
+  (* val map : ('a -> 'b) -> 'a slice -> 'b Vector.vector *)
+  (* val foldli : (int * 'a * 'b -> 'b) -> 'b -> 'a slice -> 'b *)
+  (* val foldri : (int * 'a * 'b -> 'b) -> 'b -> 'a slice -> 'b *)
+  (* val foldl : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b *)
+  (* val foldr : ('a * 'b -> 'b) -> 'b -> 'a slice -> 'b *)
+  (* val findi : (int * 'a -> bool) -> 'a slice -> (int * 'a) option *)
+  (* val find : ('a -> bool) -> 'a slice -> 'a option *)
   val exists : ('a -> bool) -> 'a slice -> bool
+  (* val all : ('a -> bool) -> 'a slice -> bool *)
+  (* val collate : ('a * 'a -> order) -> 'a slice * 'a slice -> order *)
 end
 
 signature ARRAY = sig
@@ -591,6 +625,7 @@ structure ArraySlice :> sig
   val full : 'a Array.array -> 'a slice
   val slice : 'a Array.array * int * int option -> 'a slice
   val subslice : 'a slice * int * int option -> 'a slice
+  (* val base : 'a slice -> 'a Array.array * int * int *)
   val vector : 'a slice -> 'a Vector.vector
   val copy : { src : 'a slice, dst : 'a Array.array, di : int } -> unit
   val copyVec : { src : 'a VectorSlice.slice, dst : 'a Array.array, di : int } -> unit
@@ -614,7 +649,7 @@ end
 signature MONO_VECTOR = sig
   type vector
   type elem
-  val maxLen
+  val maxLen : int
   val fromList : elem list -> vector
   val tabulate : int * (int -> elem) -> vector
   val length : vector -> int
@@ -664,9 +699,9 @@ signature MONO_VECTOR_SLICE = sig
   val mapi : (int * elem -> elem) -> slice -> vector
   val map : (elem -> elem) -> slice -> vector
   val foldli : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
-  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
-  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
   val foldr : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
   val findi : (int * elem -> bool) -> slice -> (int * elem) option
   val find : (elem -> bool) -> slice -> elem option
   val exists : (elem -> bool) -> slice -> bool
@@ -742,9 +777,9 @@ signature MONO_ARRAY_SLICE = sig
   val modifyi : (int * elem -> elem) -> slice -> unit
   val modify : (elem -> elem) -> slice -> unit
   val foldli : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
-  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
-  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
   val foldr : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldl : (elem * 'b -> 'b) -> 'b -> slice -> 'b
+  val foldri : (int * elem * 'b -> 'b) -> 'b -> slice -> 'b
   val findi : (int * elem -> bool) -> slice -> (int * elem) option
   val find : (elem -> bool) -> slice -> elem option
   val exists : (elem -> bool) -> slice -> bool
@@ -766,6 +801,9 @@ signature BYTE = sig
   val charToByte : char -> Word8.word
   val bytesToString : Word8Vector.vector -> string
   val stringToBytes : string -> Word8Vector.vector
+  (* val unpackStringVec : Word8VectorSlice.slice -> string *)
+  (* val unpackString : Word8ArraySlice.slice -> string *)
+  (* val packString : Word8Array.array * int * substring -> unit *)
 end
 
 structure Byte :> BYTE
@@ -775,24 +813,45 @@ structure IO : sig
                   , function : string
                   , cause : exn
                   }
+  (* exception BlockingNotSupported *)
+  (* exception NonblockingNotSupported *)
+  (* exception RandomAccessNotSupported *)
+  (* exception ClosedStream *)
+  (* datatype buffer_mode = NO_BUF | LINE_BUF | BLOCK_BUF *)
 end
 
 structure TextIO : sig
-  type instream
-  type outstream
+  (* IMPERATIVE_IO *)
+  (* structure StreamIO : STREAM_IO *)
   type vector = string
   type elem = char
+  type instream
+  type outstream
   val input : instream -> vector
   val input1 : instream -> elem option
   val inputN : instream * int -> vector
   val inputAll : instream -> vector
+  (* val canInput : instream * int -> int option *)
+  (* val lookahead : instream -> elem option *)
   val closeIn : instream -> unit
   val endOfStream : instream -> bool
   val output : outstream * vector -> unit
   val output1 : outstream * elem -> unit
   val flushOut : outstream -> unit
   val closeOut : outstream -> unit
+  (* val mkInstream : StreamIO.instream -> instream *)
+  (* val getInstream : instream -> StreamIO.instream *)
+  (* val setInstream : instream * StreamIO.instream -> unit *)
+  (* val mkOutstream : StreamIO.outstream -> outstream *)
+  (* val getOutstream : outstream -> StreamIO.outstream *)
+  (* val setOutstream : outstream * StreamIO.outstream -> unit *)
+  (* val getPosOut : outstream -> StreamIO.out_pos *)
+  (* val setPosOut : outstream * StreamIO.out_pos -> unit *)
+
+  (* TEXT_IO *)
+  (* structure StreamIO : TEXT_STREAM_IO where ... *)
   val inputLine : instream -> string option
+  (* val outputSubstr : outstream * substring -> unit *)
   val openIn : string -> instream
   val openOut : string -> outstream
   val openAppend : string -> outstream
@@ -800,10 +859,16 @@ structure TextIO : sig
   val stdOut : outstream
   val stdErr : outstream
   val print : string -> unit
+  (* val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option *)
 end
 
 structure OS : sig
   structure FileSys : sig
+    (* type dirstream *)
+    (* val openDir : string -> dirstream *)
+    (* val readDir : dirstream -> string option *)
+    (* val rewindDir : dirstream -> unit *)
+    (* val closeDir : dirstream -> unit *)
     val chDir : string -> unit (* requires LuaFileSystem *)
     val getDir : unit -> string (* requires LuaFileSystem *)
     val mkDir : string -> unit (* requires LuaFileSystem *)
@@ -811,10 +876,41 @@ structure OS : sig
     val isDir : string -> bool (* requires LuaFileSystem *)
     val isLink : string -> bool (* requires LuaFileSystem *)
     val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
+    (* val fullPath : string -> string *)
+    (* val realPath : string -> string *)
+    (* val modTime : string -> Time.time *)
+    (* val fileSize : string -> Position.int *)
+    (* val setTime : string * Time.time option -> unit *)
     val remove : string -> unit
     val rename : { old : string, new : string } -> unit
+    (* datatype access_mode = A_READ | A_WRITE | A_EXEC *)
+    (* val access : string * access_mode list -> bool *)
+    (* val tmpName : unit -> string *)
+    (* eqtype file_id *)
+    (* val fileId : string -> file_id *)
+    (* val hash : file_id -> word *)
+    (* val compare : file_id * file_id -> order *)
   end
   structure IO : sig
+    (* eqtype iodesc *)
+    (* val hash : iodesc -> word *)
+    (* val compare : iodesc * iodesc -> order *)
+    (* eqtype iodesc_kind *)
+    (* val kind : iodesc -> iodesc_kind *)
+    (* structure Kind *)
+    (* eqtype poll_desc *)
+    (* type poll_info *)
+    (* val pollDesc : iodesc -> poll_desc option *)
+    (* val pollToIODesc : poll_desc -> iodesc *)
+    (* exception Poll *)
+    (* val pollIn : poll_desc -> poll_desc *)
+    (* val pollOut : poll_desc -> poll_desc *)
+    (* val pollPri : polldesc -> poll_desc *)
+    (* val poll : poll_desc list * Time.time option -> poll_info list *)
+    (* val isIn : poll_info -> bool *)
+    (* val isOut : poll_info -> bool *)
+    (* val isPri : poll_info -> bool *)
+    (* val infoToPollDesc : poll_info -> poll_desc *)
   end
   structure Path : sig
     (* currently Unix-style only *)
@@ -824,6 +920,9 @@ structure OS : sig
     val currentArc : string
     val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
     val toString : { isAbs : bool, vol : string, arcs : string list } -> string
+    (* val validVolume : { isAbs : bool, vol : string } -> bool *)
+    (* val getVolume : string -> string *)
+    (* val getParent : string -> string *)
     val splitDirFile : string -> { dir : string, file : string }
     val joinDirFile : { dir : string, file : string } -> string
     val dir : string -> string
@@ -833,11 +932,15 @@ structure OS : sig
     val base : string -> string
     val ext : string -> string option
     val mkCanonical : string -> string
+    (* val isCanonical : string -> bool *)
     val mkAbsolute : { path : string, relativeTo : string } -> string
     val mkRelative : { path : string, relativeTo : string } -> string
     val isAbsolute : string -> bool
     val isRelative : string -> bool
+    (* val isRoot : string -> bool *)
     val concat : string * string -> string
+    (* val fromUnixPath : string -> string *)
+    (* val toUnixPath : string -> string *)
   end
   structure Process : sig
     type status
@@ -845,16 +948,48 @@ structure OS : sig
     val failure : status
     val isSuccess : status -> bool
     val system : string -> status
+    (* val atExit : (unit -> unit) -> unit *)
     val exit : status -> 'a
     val terminate : status -> 'a
     val getEnv : string -> string option
+    (* val sleep : Time.time -> unit *)
   end
   eqtype syserror
   exception SysErr of string * syserror option
+  (* val errorMsg : syserror -> string *)
+  (* val errorName : syserror -> string *)
+  (* val syserror : string -> syserror option *)
 end
 
 structure CommandLine : sig
   val name : unit -> string
   val arguments : unit -> string list
 end
+
+(*
+signature BIN_IO
+structure BinIO :> BIN_IO
+signature DATE
+structure Date :> DATE
+signature IMPERATIVE_IO
+structure Position :> INTEGER
+structure WideCharArray :> MONO_ARRAY where ...
+structure WideCharArraySlice :> MONO_ARRAY_SLICE where ...
+structure WideCharVector :> MONO_VECTOR where ...
+structure WideCharVectorSlice :> MONO_VECTOR_SLICE where ...
+signature PRIM_IO
+structure BinPrimIO :> PRIM_IO where ...
+structure TextPrimIO :> PRIM_IO where ...
+signature STREAM_IO
+signature TEXT
+structure Text :> TEXT where ...
+structure WideText :> TEXT where ...
+signature TEXT_IO
+structure WideTextIO :> TEXT_IO
+signature TEXT_STREAM_IO
+signature Time
+structure Time :> TIME
+signature TIMER
+structure Timer :> TIMER
+*)
 ```
