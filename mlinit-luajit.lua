@@ -246,7 +246,7 @@ local function _ref(x)
   return { tag = "ref", payload = x }
 end
 
--- Array
+-- Vector/Array
 local function _Array_array(t)
   local n, init = t[1], t[2]
   if n < 0 then -- or maxLen < n
@@ -267,6 +267,16 @@ local function _VectorOrArray_fromList(xs)
     xs = xs.payload[2]
   end
   t.n = n
+  return t
+end
+local function _Vector_unsafeFromListRevN(n, xs)
+  local t = { n = n }
+  while xs.tag == "::" do
+    t[n] = xs.payload[1]
+    xs = xs.payload[2]
+    n = n - 1
+  end
+  -- n must be 0
   return t
 end
 local function _VectorOrArray_tabulate(t)

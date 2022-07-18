@@ -267,6 +267,17 @@ function _VectorOrArray_fromList(k, h, xs) {
     }
     return [false, k, [a]];
 }
+function _Vector_unsafeFromListRevN(n, xs) {
+    var a = new Array(n);
+    var i = n - 1;
+    while (xs.tag === "::") {
+        a[i] = xs.payload[0];
+        xs = xs.payload[1];
+        --i;
+    }
+    // i should be -1 here
+    return a;
+}
 function _Vector_concat(k, h, xs) {
     var n = 0;
     var xs0 = xs;

@@ -279,6 +279,17 @@ function _VectorOrArray_fromList(xs) {
     }
     return a;
 }
+function _Vector_unsafeFromListRevN(n, xs) {
+    var a = new Array(n);
+    var i = n - 1;
+    while (xs.tag === "::") {
+        a[i] = xs.payload[0];
+        xs = xs.payload[1];
+        --i;
+    }
+    // i should be -1 here
+    return a;
+}
 function _VectorOrArray_tabulate(t) {
     var n = t[0], f = t[1];
     if (n < 0) {

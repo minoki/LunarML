@@ -673,6 +673,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.IntInf_quot_unchecked => doBinaryOp (J.DIV, true)
            | Primitives.IntInf_rem_unchecked => doBinaryOp (J.MOD, true)
            | Primitives.Vector_length => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
+           | Primitives.Vector_unsafeFromListRevN => doBinaryExp (fn (n, xs) => J.CallExp (J.VarExp (J.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), true)
            | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Array_length => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
            | Primitives.Unsafe_cast => if Vector.length args = 1 then

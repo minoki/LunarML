@@ -23,6 +23,7 @@ do
   local LuaValue = {"LuaValue"}
   local JSValue = {"JavaScriptValue"}
   local ref = function(payloadTy) return {string_format("refOf (%s)", payloadTy[1])} end
+  local list = function(elemTy) return {string_format("listOf (%s)", elemTy[1])} end
   local vector = function(elemTy) return {string_format("vectorOf (%s)", elemTy[1])} end
   local array = function(elemTy) return {string_format("arrayOf (%s)", elemTy[1])} end
   local pair = function(ty1, ty2) return {string_format("pairOf (%s, %s)", ty1[1], ty2[1])} end
@@ -419,6 +420,11 @@ do
       name = "Vector.length",
       srcname = "Vector_length",
       type = { vars = {TV.a}, args = {vector(TV.a)}, result = int },
+    },
+    {
+      name = "Vector.unsafeFromListRevN",
+      srcname = "Vector_unsafeFromListRevN",
+      type = { vars = {TV.a}, args = {int, list(TV.a)}, result = vector(TV.a) },
     },
     {
       name = "Array.=",
@@ -840,6 +846,7 @@ functor TypeOfPrimitives (type ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
                           val refOf : ty -> ty
+                          val listOf : ty -> ty
                           val vectorOf : ty -> ty
                           val arrayOf : ty -> ty
                           val pairOf : ty * ty -> ty

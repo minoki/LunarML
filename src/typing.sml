@@ -288,6 +288,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                val LuaValue = primTy_Lua_value
                                                val JavaScriptValue = primTy_JavaScript_value
                                                fun refOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_ref)
+                                               fun listOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_list)
                                                fun vectorOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_vector)
                                                fun arrayOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_array)
                                                fun pairOf (ty1, ty2) = TypedSyntax.PairType (SourcePos.nullSpan, ty1, ty2)

@@ -52,6 +52,7 @@ signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
+signature VECTOR_SLICE
 structure Unsafe (* extension; to be moved... *)
 structure JavaScript (* extension; to be moved... *)
 structure LunarML (* extension; to be moved... *)

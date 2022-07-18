@@ -751,6 +751,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
            | Primitives.Vector_length => doUnary (fn (stmts, env, a) =>
                                                      putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                  )
+           | Primitives.Vector_unsafeFromListRevN => doBinary (fn (stmts, env, (n, xs)) =>
+                                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]))
+                                                              )
            | Primitives.Array_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.Array_length => doUnary (fn (stmts, env, a) =>
                                                     putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))

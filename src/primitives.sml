@@ -73,6 +73,7 @@ datatype PrimOp = EQUAL (* = *)
                 | IntInf_quot_unchecked (* IntInf.quot.unchecked *)
                 | IntInf_rem_unchecked (* IntInf.rem.unchecked *)
                 | Vector_length (* Vector.length *)
+                | Vector_unsafeFromListRevN (* Vector.unsafeFromListRevN *)
                 | Array_EQUAL (* Array.= *)
                 | Array_length (* Array.length *)
                 | Unsafe_cast (* Unsafe.cast *)
@@ -214,6 +215,7 @@ fun toString EQUAL = "="
   | toString IntInf_quot_unchecked = "IntInf.quot.unchecked"
   | toString IntInf_rem_unchecked = "IntInf.rem.unchecked"
   | toString Vector_length = "Vector.length"
+  | toString Vector_unsafeFromListRevN = "Vector.unsafeFromListRevN"
   | toString Array_EQUAL = "Array.="
   | toString Array_length = "Array.length"
   | toString Unsafe_cast = "Unsafe.cast"
@@ -355,6 +357,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "IntInf.quot.unchecked" = SOME IntInf_quot_unchecked
   | fromString "IntInf.rem.unchecked" = SOME IntInf_rem_unchecked
   | fromString "Vector.length" = SOME Vector_length
+  | fromString "Vector.unsafeFromListRevN" = SOME Vector_unsafeFromListRevN
   | fromString "Array.=" = SOME Array_EQUAL
   | fromString "Array.length" = SOME Array_length
   | fromString "Unsafe.cast" = SOME Unsafe_cast
@@ -454,6 +457,7 @@ functor TypeOfPrimitives (type ty
                           val LuaValue : ty
                           val JavaScriptValue : ty
                           val refOf : ty -> ty
+                          val listOf : ty -> ty
                           val vectorOf : ty -> ty
                           val arrayOf : ty -> ty
                           val pairOf : ty * ty -> ty
@@ -541,6 +545,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.IntInf_quot_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.IntInf_rem_unchecked = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.Vector_length = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int }
+  | typeOf Primitives.Vector_unsafeFromListRevN = { vars = [(tyVarA, [])], args = vector [int, listOf (tyA)], result = vectorOf (tyA) }
   | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
   | typeOf Primitives.Array_length = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int }
   | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [tyA], result = tyB }
