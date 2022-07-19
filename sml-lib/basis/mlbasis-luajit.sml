@@ -861,26 +861,7 @@ val toString = fmt (StringCvt.GEN NONE)
 open Real (* +, -, *, /, ~, abs, <, <=, >, >= *)
 end; (* structure Real *)
 
-structure Math : sig
-              type real = real
-              val pi : real
-              val e : real
-              val sqrt : real -> real
-              val sin : real -> real
-              val cos : real -> real
-              val tan : real -> real
-              val asin : real -> real
-              val acos : real -> real
-              val atan : real -> real
-              val atan2 : real * real -> real
-              val exp : real -> real
-              val pow : real * real -> real
-              val ln : real -> real
-              val log10 : real -> real
-              val sinh : real -> real
-              val cosh : real -> real
-              val tanh : real -> real
-          end = struct
+structure Math :> MATH where type real = Real.real = struct
 type real = real
 val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "pi")))
 val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sqrt")))
@@ -1168,23 +1149,8 @@ end (* structure Char *)
 val chr = Char.chr
 val ord = Char.ord;
 
-structure StringCvt :> sig
-              datatype radix = BIN | OCT | DEC | HEX
-              datatype realfmt = SCI of int option
-                               | FIX of int option
-                               | GEN of int option
-                               | EXACT
-              type ('a, 'b) reader = 'b -> ('a * 'b) option
-              val padLeft : char -> int -> string -> string
-              val padRight : char -> int -> string -> string
-              val splitl : (char -> bool) -> (char, 'a) reader -> 'a -> string * 'a
-              val takel : (char -> bool) -> (char, 'a) reader -> 'a -> string
-              val dropl : (char -> bool) -> (char, 'a) reader -> 'a -> 'a
-              val skipWS : (char, 'a) reader -> 'a -> 'a
-              type cs
-              val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
-          end where type radix = StringCvt.radix
-              where type realfmt = StringCvt.realfmt = struct
+structure StringCvt :> STRING_CVT where type radix = StringCvt.radix
+                                  where type realfmt = StringCvt.realfmt = struct
 open StringCvt
 fun padLeft c i s = if String.size s >= i orelse i <= 0 then
                         s
@@ -1290,19 +1256,8 @@ structure Vector : sig
               val find : ('a -> bool) -> 'a vector -> 'a option
               val exists : ('a -> bool) -> 'a vector -> bool
               val all : ('a -> bool) -> 'a vector -> bool
-              val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order
+              (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 open Vector
 val maxLen = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
-fun collate compare (xs, ys) = let val xl = length xs
-                                   val yl = length ys
-                                   fun go i = case (xl = i, yl = i) of
-                                                  (true, true) => EQUAL
-                                                | (true, false) => LESS
-                                                | (false, true) => GREATER
-                                                | (false, false) => case compare (Unsafe.Vector.sub (xs, i), Unsafe.Vector.sub (ys, i)) of
-                                                                        EQUAL => go (i + 1)
-                                                                      | t => t
-                               in go 0
-                               end
 end;

@@ -121,7 +121,7 @@ structure General : sig
   val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
 end
 
-structure StringCvt :> sig
+signature STRING_CVT = sig
   datatype radix = BIN | OCT | DEC | HEX
   datatype realfmt = SCI of int option
                    | FIX of int option
@@ -137,14 +137,16 @@ structure StringCvt :> sig
   type cs
   val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
 end
+structure StringCvt :> STRING_CVT
 
-structure Bool : sig
+signature BOOL = sig
   datatype bool = datatype bool
   val not : bool -> bool
   val toString : bool -> string
   val scan : (char, 'a) StringCvt.reader -> (bool, 'a) StringCvt.reader
   val fromString : string -> bool option
 end
+structure Bool :> BOOL
 
 signature INTEGER = sig
   eqtype int
@@ -178,9 +180,7 @@ signature INTEGER = sig
   val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
   val fromString : string -> int option
 end
-
-structure Int :> INTEGER where type int = int
-structure IntInf :> sig
+signature INT_INF = sig
   include INTEGER
   val divMod : int * int -> int * int
   val quotRem : int * int -> int * int
@@ -193,6 +193,8 @@ structure IntInf :> sig
   val << : int * Word.word -> int
   val ~>> : int * Word.word -> int
 end
+structure Int :> INTEGER where type int = int
+structure IntInf :> INT_INF
 structure LargeInt : INTEGER = IntInf
 
 signature WORD = sig
@@ -235,7 +237,6 @@ signature WORD = sig
   val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (word, 'a) StringCvt.reader
   val fromString : string -> word option
 end
-
 structure Word :> WORD where type word = word
 structure Word8 :> WORD
 structure Word16 :> WORD
@@ -322,11 +323,10 @@ signature REAL = sig
   (* val toDecimal : real -> IEEEReal.decimal_approx *)
   (* val fromDecimal : IEEEReal.decimal_approx -> real option *)
 end
-
 structure Real : REAL where type real = real
 
-structure Math : sig
-  type real = real
+signature MATH = sig
+  type real
   val pi : real
   val e : real
   val sqrt : real -> real
@@ -345,6 +345,7 @@ structure Math : sig
   val cosh : real -> real
   val tanh : real -> real
 end
+structure Math :> MATH where type real = Real.real
 
 signature CHAR = sig
   eqtype char
@@ -383,7 +384,6 @@ signature CHAR = sig
   val toCString : char -> String.string
   (* val fromCString : String.string -> char option *)
 end
-
 structure Char :> CHAR where type char = char where type string = String.string
 structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
 
@@ -423,14 +423,13 @@ signature STRING = sig
   (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING *)
   val implodeRev : char list -> string
 end
-
 structure String :> STRING where type string = string
 structure WideString (* :> STRING; currently JavaScript backend only *)
 
-structure Substring :> sig
+signature SUBSTRING = sig
   type substring
-  type char = char
-  type string = string
+  type char
+  type string
   val sub : substring * int -> char
   val size : substring -> int
   val base : substring -> string * int * int
@@ -468,8 +467,11 @@ structure Substring :> sig
   val foldl : (char * 'a -> 'a) -> 'a -> substring -> 'a
   val foldr : (char * 'a -> 'a) -> 'a -> substring -> 'a
 end
+structure Substring :> SUBSTRING where type substring = CharVectorSlice.slice
+                                 where type string = String.string
+                                 where type char = Char.char
 
-structure List : sig
+signature LIST = sig
   datatype list = datatype list
   exception Empty
   val null : 'a list -> bool
@@ -498,8 +500,9 @@ structure List : sig
   val tabulate : int * (int -> 'a) -> 'a list
   val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
 end
+structure List :> LIST
 
-structure ListPair : sig
+signature LIST_PAIR = sig
   exception UnequalLengths
   val zip : 'a list * 'b list -> ('a * 'b) list
   val zipEq : 'a list * 'b list -> ('a * 'b) list
@@ -516,8 +519,9 @@ structure ListPair : sig
   val exists : ('a * 'b -> bool) -> 'a list * 'b list -> bool
   val allEq : ('a * 'b -> bool) -> 'a list * 'b list -> bool
 end
+structure ListPair :> LIST_PAIR
 
-structure Option : sig
+signature OPTION = sig
   datatype 'a option = NONE | SOME of 'a
   exception Option
   val getOpt : 'a option * 'a -> 'a
@@ -531,8 +535,9 @@ structure Option : sig
   val compose : ('a -> 'b) * ('c -> 'a option) -> 'c -> 'b option
   val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
 end
+structure Option :> OPTION
 
-structure Vector : sig
+signature VECTOR = sig
   datatype vector = datatype vector
   val maxLen : int
   val fromList : 'a list -> 'a vector
@@ -555,6 +560,7 @@ structure Vector : sig
   val all : ('a -> bool) -> 'a vector -> bool
   val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order
 end
+structure Vector :> VECTOR
 
 signature VECTOR_SLICE = sig
   type 'a slice
@@ -616,10 +622,9 @@ signature ARRAY = sig
   val fromVector : 'a vector -> 'a array
   val toVector : 'a array -> 'a vector
 end
-
 structure Array :> ARRAY
 
-structure ArraySlice :> sig
+signature ARRAY_SLICE = sig
   type 'a slice
   val length : 'a slice -> int
   val sub : 'a slice * int -> 'a
@@ -627,7 +632,7 @@ structure ArraySlice :> sig
   val full : 'a Array.array -> 'a slice
   val slice : 'a Array.array * int * int option -> 'a slice
   val subslice : 'a slice * int * int option -> 'a slice
-  (* val base : 'a slice -> 'a Array.array * int * int *)
+  val base : 'a slice -> 'a Array.array * int * int
   val vector : 'a slice -> 'a Vector.vector
   val copy : { src : 'a slice, dst : 'a Array.array, di : int } -> unit
   val copyVec : { src : 'a VectorSlice.slice, dst : 'a Array.array, di : int } -> unit
@@ -647,6 +652,7 @@ structure ArraySlice :> sig
   val all : ('a -> bool) -> 'a slice -> bool
   val collate : ('a * 'a -> order) -> 'a slice * 'a slice -> order
 end
+structure ArraySlice :> ARRAY_SLICE
 
 signature MONO_VECTOR = sig
   type vector
@@ -677,7 +683,6 @@ signature MONO_VECTOR = sig
   val append : vector * elem -> vector
   val prepend : elem * vector -> vector
 end
-
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
 structure Word8Vector :> MONO_VECTOR where type elem = Word8.word
@@ -710,7 +715,6 @@ signature MONO_VECTOR_SLICE = sig
   val all : (elem -> bool) -> slice -> bool
   val collate : (elem * elem -> order) -> slice * slice -> order
 end
-
 structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = CharVector.vector
                                                where type elem = char
                                                where type slice = Substring.substring
@@ -750,7 +754,6 @@ signature MONO_ARRAY = sig
   val fromVector : vector -> array
   val toVector : array -> vector (* = vector *)
 end
-
 structure CharArray : MONO_ARRAY where type vector = CharVector.vector
                                  where type elem = char
 structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
@@ -788,7 +791,6 @@ signature MONO_ARRAY_SLICE = sig
   val all : (elem -> bool) -> slice -> bool
   val collate : (elem * elem -> order) -> slice * slice -> order
 end
-
 structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vector
                                             where type vector_slice = CharVectorSlice.slice
                                             where type array = CharArray.array
@@ -807,7 +809,6 @@ signature BYTE = sig
   (* val unpackString : Word8ArraySlice.slice -> string *)
   (* val packString : Word8Array.array * int * substring -> unit *)
 end
-
 structure Byte :> BYTE
 
 structure IO : sig

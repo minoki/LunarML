@@ -20,7 +20,10 @@ lunarml.sml
 js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
+math-sig.sml
+string-cvt-sig.sml
 mlbasis-js.sml
+vector-sig.sml
 array.sml
 scan-num-utils.sml
 js-common/int-inf.sml
@@ -41,17 +44,25 @@ list-pair.sml
 end
 in
 signature ARRAY
+signature ARRAY_SLICE
 signature BOOL
 signature BYTE
 signature CHAR
 signature INTEGER
+signature INT_INF
+signature LIST
+signature LIST_PAIR
+signature MATH
 signature MONO_ARRAY
 signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
+signature OPTION
 signature REAL
 signature STRING
+signature STRING_CVT
 signature SUBSTRING
+signature VECTOR
 signature VECTOR_SLICE
 signature WORD
 structure Unsafe (* extension; to be moved... *)
