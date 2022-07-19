@@ -1,6 +1,6 @@
 # SML Basis Library
 
-## Top-level
+## Top-level - partial
 
 ```sml
 infix  7  * / div mod
@@ -95,7 +95,7 @@ val valOf : 'a option -> 'a = Option.valOf
 val vector : 'a list -> 'a vector = Vector.fromList;
 ```
 
-## Signatures and structures
+## structure General - partial
 
 ```sml
 structure General : sig
@@ -120,7 +120,11 @@ structure General : sig
   val ignore : 'a -> unit
   val o : ('b -> 'c) * ('a -> 'b) -> 'a -> 'c
 end
+```
 
+## structure StringCvt - complete
+
+```sml
 signature STRING_CVT = sig
   datatype radix = BIN | OCT | DEC | HEX
   datatype realfmt = SCI of int option
@@ -138,7 +142,11 @@ signature STRING_CVT = sig
   val scanString : ((char, cs) reader -> ('a, cs) reader) -> string -> 'a option
 end
 structure StringCvt :> STRING_CVT
+```
 
+## structure Bool - complete
+
+```sml
 signature BOOL = sig
   datatype bool = datatype bool
   val not : bool -> bool
@@ -147,7 +155,11 @@ signature BOOL = sig
   val fromString : string -> bool option
 end
 structure Bool :> BOOL
+```
 
+## signature INTEGER (structure Int, LargeInt) / structure IntInf - complete
+
+```sml
 signature INTEGER = sig
   eqtype int
   val toLarge : int -> LargeInt.int
@@ -196,7 +208,11 @@ end
 structure Int :> INTEGER where type int = int
 structure IntInf :> INT_INF
 structure LargeInt : INTEGER = IntInf
+```
 
+## signature WORD (structure Word, Word8, Word16, Word32, Word64, LargeWord) - complete
+
+```sml
 signature WORD = sig
   eqtype word
   val wordSize : int
@@ -243,7 +259,11 @@ structure Word16 :> WORD
 structure Word32 :> WORD
 structure Word64 :> WORD
 structure LargeWord = Word64
+```
 
+## structure IEEEReal - partial
+
+```sml
 structure IEEEReal : sig
   exception Unordered
   datatype real_order = LESS | EQUAL | GREATER | UNORDERED
@@ -256,7 +276,11 @@ structure IEEEReal : sig
   (* val scan : (char, 'a) StringCvt.reader -> (decimal_approx, 'a) StringCvt.reader *)
   (* val fromString : string -> decimal_approx option *)
 end
+```
 
+## signature REAL (structure Real, structure LargeReal) - partial
+
+```sml
 signature REAL = sig
   type real
   (* structure Math *)
@@ -324,7 +348,12 @@ signature REAL = sig
   (* val fromDecimal : IEEEReal.decimal_approx -> real option *)
 end
 structure Real : REAL where type real = real
+structure LargeReal = Real
+```
 
+## structure Math - complete
+
+```sml
 signature MATH = sig
   type real
   val pi : real
@@ -346,7 +375,11 @@ signature MATH = sig
   val tanh : real -> real
 end
 structure Math :> MATH where type real = Real.real
+```
 
+## signature CHAR (structure Char, WideChar) - partial
+
+```sml
 signature CHAR = sig
   eqtype char
   eqtype string
@@ -386,7 +419,11 @@ signature CHAR = sig
 end
 structure Char :> CHAR where type char = char where type string = String.string
 structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
+```
 
+## signature STRING (structure String, WideString) - partial
+
+```sml
 signature STRING = sig
   eqtype string
   eqtype char
@@ -425,7 +462,11 @@ signature STRING = sig
 end
 structure String :> STRING where type string = string
 structure WideString (* :> STRING; currently JavaScript backend only *)
+```
 
+## structure Substring - partial
+
+```sml
 signature SUBSTRING = sig
   type substring
   type char
@@ -470,7 +511,11 @@ end
 structure Substring :> SUBSTRING where type substring = CharVectorSlice.slice
                                  where type string = String.string
                                  where type char = Char.char
+```
 
+## structure List - complete
+
+```sml
 signature LIST = sig
   datatype list = datatype list
   exception Empty
@@ -501,7 +546,11 @@ signature LIST = sig
   val collate : ('a * 'a -> order) -> 'a list * 'a list -> order
 end
 structure List :> LIST
+```
 
+## structure ListPair - complete
+
+```sml
 signature LIST_PAIR = sig
   exception UnequalLengths
   val zip : 'a list * 'b list -> ('a * 'b) list
@@ -520,7 +569,11 @@ signature LIST_PAIR = sig
   val allEq : ('a * 'b -> bool) -> 'a list * 'b list -> bool
 end
 structure ListPair :> LIST_PAIR
+```
 
+## structure Option - complete
+
+```sml
 signature OPTION = sig
   datatype 'a option = NONE | SOME of 'a
   exception Option
@@ -536,7 +589,11 @@ signature OPTION = sig
   val composePartial : ('a -> 'b option) * ('c -> 'a option) -> 'c -> 'b option
 end
 structure Option :> OPTION
+```
 
+## structure Vector - complete
+
+```sml
 signature VECTOR = sig
   datatype vector = datatype vector
   val maxLen : int
@@ -561,7 +618,11 @@ signature VECTOR = sig
   val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order
 end
 structure Vector :> VECTOR
+```
 
+## structure VectorSlice - complete
+
+```sml
 signature VECTOR_SLICE = sig
   type 'a slice
   val length : 'a slice -> int
@@ -589,7 +650,11 @@ signature VECTOR_SLICE = sig
   val collate : ('a * 'a -> order) -> 'a slice * 'a slice -> order
 end
 structure VectorSlice :> VECTOR_SLICE
+```
 
+## structure Array - complete
+
+```sml
 signature ARRAY = sig
   datatype array = datatype array
   datatype vector = datatype vector
@@ -623,7 +688,11 @@ signature ARRAY = sig
   val toVector : 'a array -> 'a vector
 end
 structure Array :> ARRAY
+```
 
+## structure ArraySlice - complete
+
+```sml
 signature ARRAY_SLICE = sig
   type 'a slice
   val length : 'a slice -> int
@@ -653,7 +722,11 @@ signature ARRAY_SLICE = sig
   val collate : ('a * 'a -> order) -> 'a slice * 'a slice -> order
 end
 structure ArraySlice :> ARRAY_SLICE
+```
 
+## signature MONO_VECTOR (structure CharVector, Word8Vector) - complete
+
+```sml
 signature MONO_VECTOR = sig
   type vector
   type elem
@@ -686,7 +759,11 @@ end
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
 structure Word8Vector :> MONO_VECTOR where type elem = Word8.word
+```
 
+## signature MONO_VECTOR_SLICE (structure CharVectorSlice, Word8VectorSlice) - complete
+
+```sml
 signature MONO_VECTOR_SLICE = sig
   type elem
   type vector
@@ -720,7 +797,11 @@ structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = CharVector.ve
                                                where type slice = Substring.substring
 structure Word8VectorSlice :> MONO_VECTOR_SLICE where type vector = Word8Vector.vector
                                                 where type elem = Word8.word
+```
 
+## signature MONO_ARRAY (structure CharArray, Word8Array) - complete
+
+```sml
 signature MONO_ARRAY = sig
   eqtype array
   type elem
@@ -758,7 +839,11 @@ structure CharArray : MONO_ARRAY where type vector = CharVector.vector
                                  where type elem = char
 structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
                                   where type elem = Word8.word
+```
 
+## signature MONO_ARRAY_SLICE (structure CharArraySlice, Word8ArraySlice) - complete
+
+```sml
 signature MONO_ARRAY_SLICE = sig
   type elem
   type array
@@ -799,7 +884,11 @@ structure Word8ArraySlice : MONO_ARRAY_SLICE where type vector = Word8Vector.vec
                                              where type vector_slice = Word8VectorSlice.slice
                                              where type array = Word8Array.array
                                              where type elem = Word8
+```
 
+## structure Byte - partial
+
+```sml
 signature BYTE = sig
   val byteToChar : Word8.word -> char
   val charToByte : char -> Word8.word
@@ -810,7 +899,11 @@ signature BYTE = sig
   (* val packString : Word8Array.array * int * substring -> unit *)
 end
 structure Byte :> BYTE
+```
 
+## structure IO - partial
+
+```sml
 structure IO : sig
   exception Io of { name : string
                   , function : string
@@ -822,7 +915,11 @@ structure IO : sig
   (* exception ClosedStream *)
   (* datatype buffer_mode = NO_BUF | LINE_BUF | BLOCK_BUF *)
 end
+```
 
+## structure TextIO - partial
+
+```sml
 structure TextIO : sig
   (* IMPERATIVE_IO *)
   (* structure StreamIO : STREAM_IO *)
@@ -864,7 +961,11 @@ structure TextIO : sig
   val print : string -> unit
   (* val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option *)
 end
+```
 
+## structure OS - partial
+
+```sml
 structure OS : sig
   structure FileSys : sig
     (* type dirstream *)
@@ -963,13 +1064,20 @@ structure OS : sig
   (* val errorName : syserror -> string *)
   (* val syserror : string -> syserror option *)
 end
+```
 
+## structure CommandLine - complete
+
+```sml
 structure CommandLine : sig
   val name : unit -> string
   val arguments : unit -> string list
 end
+```
 
-(*
+## Not implemented yet
+
+```sml
 signature BIN_IO
 structure BinIO :> BIN_IO
 signature DATE
@@ -994,5 +1102,4 @@ signature Time
 structure Time :> TIME
 signature TIMER
 structure Timer :> TIMER
-*)
 ```
