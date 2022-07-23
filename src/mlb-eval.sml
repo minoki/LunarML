@@ -32,8 +32,41 @@ val initialCode = { tynameset = InitialEnv.initialTyNameSet
                   , fdecs = []
                   , cache = M.StringMap.empty
                   }
+(* MLton annotations:
+ * allowFFI {false|true}
+ * allowSuccessorML {false|true}
+ *   allowDoDecs {false|true}
+ *   allowExtendedConsts {false|true}
+ *     allowExtendedNumConsts {false|true}
+ *     allowExtendedTextConsts {false|true}
+ *   allowLineComments {false|true}
+ *   allowOptBar {false|true}
+ *   allowOptSemicolon {false|true}
+ *   allowOrPats {false|true}
+ *   allowRecordPunExps {false|true}
+ *   allowSigWithtype {false|true}
+ *   allowVectorExpsAndPats {false|true}
+ *     allowVectorExps {false|true}
+ *     allowVectorPats {false|true}
+ * forceUsed
+ * nonexhaustiveBind {warn|error|ignore}
+ * nonexhaustiveExnBind {default|ignore}
+ * nonexhaustiveExnMatch {default|ignore}
+ * nonexhaustiveExnRaise {ignore|default}
+ * nonexhaustiveMatch {warn|error|ignore}
+ * nonexhaustiveRaise {ignore|warn|error}
+ * redundantBind {warn|error|ignore}
+ * redundantMatch {warn|error|ignore}
+ * redundantRaise {warn|error|ignore}
+ * resolveScope {strdec|dec|topdec|program}
+ * sequenceNonUnit {ignore|error|warn}
+ * valrecConstr {warn|error|ignore}
+ * warnUnused {false|true}
+ *)
 fun applyAnnotation (ann, langopt) = case String.tokens Char.isSpace ann of
-                                         [name, value] => (case LanguageOptions.setByName name of
+                                         ["nonexhaustiveMatch", _] => langopt (* not implemented yet *)
+                                       | ["nonexhaustiveBind", _] => langopt (* not implemented yet *)
+                                       | [name, value] => (case LanguageOptions.setByName name of
                                                               SOME setter => (case value of
                                                                                   "true" => setter true langopt
                                                                                 | "false" => setter false langopt
