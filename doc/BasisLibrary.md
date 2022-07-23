@@ -415,7 +415,7 @@ signature CHAR = sig
   val scan : (Char.char, 'a) StringCvt.reader -> (char, 'a) StringCvt.reader
   val fromString : String.string -> char option
   val toCString : char -> String.string
-  (* val fromCString : String.string -> char option *)
+  val fromCString : String.string -> char option
 end
 structure Char :> CHAR where type char = char where type string = String.string
 structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
@@ -455,7 +455,7 @@ signature STRING = sig
   val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
   val fromString : String.string -> string option
   val toCString : string -> String.string
-  (* val fromCString : String.string -> string option *)
+  val fromCString : String.string -> string option
 
   (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING *)
   val implodeRev : char list -> string

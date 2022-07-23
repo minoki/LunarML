@@ -1234,7 +1234,7 @@ signature STRING = sig
     (* val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader; implemented in scan-text.sml *)
     (* val fromString : String.string -> string option; implemented in scan-text.sml *)
     val toCString : string -> String.string
-    (* val fromCString : String.string -> string option *)
+    (* val fromCString : String.string -> string option; implemented in scan-text.sml *)
     (* from https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING: *)
     (* val rev : string -> string *)
     val implodeRev : char list -> string
