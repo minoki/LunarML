@@ -1,0 +1,93 @@
+%%
+
+%pos int
+
+%term INT of Int64.int
+    | WORD of Word64.word
+    | ID of string
+    | VID of string
+    | STRING of string
+    | LPAREN
+    | RPAREN
+    | UNDERSCORE
+    | ABORT
+    | CONSTRUCT_DATA_WITH_PAYLOAD
+    | CONSTRUCT_DATA_WITHOUT_PAYLOAD
+    | FALSE
+    | GET_DATA_PAYLOAD
+    | GET_DATA_TAG
+    | HANDLE
+    | IF
+    | LAMBDA
+    | LET
+    | NIL
+    | PRIM0
+    | PRIM1
+    | PRIM2
+    | PRIM3
+    | PUSH_PROMPT
+    | PUSH_SUBCONT
+    | RAISE
+    | REC
+    | TRUE
+    | TUPLE
+    | UNIT
+    | WITH_SUBCONT
+    | EOF
+%nonterm exp of USyntax.exp
+       | exps of USyntax.exp list
+       | stmt of USyntax.stmt
+       | stmts of USyntax.stmt list
+       | bindings of (string * USyntax.exp) list
+       | start of USyntax.stmt list
+
+%name IR
+
+%eop EOF
+%noshift EOF
+%start start
+
+%%
+
+start : stmts (stmts)
+
+exp : UNIT (USyntax.UNIT)
+    | NIL (USyntax.NIL)
+    | FALSE (USyntax.BOOL false)
+    | TRUE (USyntax.BOOL true)
+    | INT (USyntax.INT INT)
+    | WORD (USyntax.WORD WORD)
+    | STRING (USyntax.STRING STRING)
+    | VID (USyntax.VAR VID)
+    | LPAREN TUPLE exps RPAREN (USyntax.TUPLE exps)
+    | LPAREN LAMBDA VID exp RPAREN (USyntax.LAMBDA (VID, exp))
+    | LPAREN exp exp RPAREN (USyntax.APP (exp1, exp2))
+    | LPAREN LET LPAREN stmts RPAREN exp RPAREN (USyntax.LET (stmts, exp))
+    | LPAREN IF exp exp exp RPAREN (USyntax.IF (exp1, exp2, exp3))
+    | LPAREN RAISE exp RPAREN (USyntax.RAISE exp)
+    | LPAREN HANDLE exp VID exp RPAREN (USyntax.HANDLE (exp1, VID, exp2))
+    | LPAREN PUSH_PROMPT exp exp RPAREN (USyntax.PUSH_PROMPT (exp1, exp2))
+    | LPAREN WITH_SUBCONT exp exp RPAREN (USyntax.WITH_SUBCONT (exp1, exp2))
+    | LPAREN PUSH_SUBCONT exp exp RPAREN (USyntax.PUSH_SUBCONT (exp1, exp2))
+    | LPAREN ABORT exp exp RPAREN (USyntax.ABORT (exp1, exp2))
+    | LPAREN GET_DATA_TAG exp RPAREN (USyntax.GET_DATA_TAG exp)
+    | LPAREN GET_DATA_PAYLOAD exp RPAREN (USyntax.GET_DATA_PAYLOAD exp)
+    | LPAREN CONSTRUCT_DATA_WITHOUT_PAYLOAD INT RPAREN (USyntax.CONSTRUCT_DATA_WITHOUT_PAYLOAD (Int64.toInt INT))
+    | LPAREN CONSTRUCT_DATA_WITH_PAYLOAD INT exp RPAREN (USyntax.CONSTRUCT_DATA_WITH_PAYLOAD (Int64.toInt INT, exp))
+    | LPAREN PRIM0 ID RPAREN (USyntax.PRIMCALL0 (Option.valOf (Prim0.fromString ID)))
+    | LPAREN PRIM1 ID exp RPAREN (USyntax.PRIMCALL1 (Option.valOf (Prim1.fromString ID), exp))
+    | LPAREN PRIM2 ID exp exp RPAREN (USyntax.PRIMCALL2 (Option.valOf (Prim2.fromString ID), exp1, exp2))
+    | LPAREN PRIM3 ID exp exp exp RPAREN (USyntax.PRIMCALL3 (Option.valOf (Prim3.fromString ID), exp1, exp2, exp3))
+
+exps : ([])
+     | exp exps (exp :: exps)
+
+stmt : LPAREN VID exp RPAREN (USyntax.VAL (VID, exp))
+     | LPAREN REC bindings RPAREN (USyntax.VALREC bindings)
+     | LPAREN UNDERSCORE exp RPAREN (USyntax.DO exp)
+
+stmts : ([])
+      | stmt stmts (stmt :: stmts)
+
+bindings : ([])
+         | LPAREN VID exp RPAREN bindings ((VID, exp) :: bindings)

@@ -1,0 +1,244 @@
+structure Compile = struct
+structure StringMap = RedBlackMapFn (type ord_key = string; val compare = String.compare)
+datatype location = LOCAL of int
+                  | FREE of int
+                  | UNINITIALIZED
+type env = location StringMap.map
+type tables = { constantTable : (Value.value list * int) ref
+              , functionTable : (Word8Vector.vector list * int) ref
+              }
+local open USyntax Value
+in
+fun pushVar (env, name) = case StringMap.find (env, name) of
+                              SOME (LOCAL i) => if 0 <= i andalso i <= 255 then
+                                                    [OPCODE.PUSH_LOCAL, Word8.fromInt i]
+                                                else
+                                                    raise Fail "too many local variables"
+                            | SOME (FREE i) => if 0 <= i andalso i <= 255 then
+                                                   [OPCODE.PUSH_FREE, Word8.fromInt i]
+                                               else
+                                                   raise Fail "too many free variables"
+                            | SOME UNINITIALIZED => [OPCODE.PUSH_UNIT] (* dummy *)
+                            | NONE => raise Fail ("undefined variable: " ^ name)
+fun pushConstant ({ constantTable, functionTable } : tables, v)
+    = let val (constantsRev, n) = !constantTable
+      in constantTable := (v :: constantsRev, n + 1) (* TODO: Avoid duplicates *)
+       ; if 0 <= n andalso n <= 0xffff then
+             let val n = Word16.fromInt n
+             in [OPCODE.PUSH_CONST, Word8.fromLarge (Word16.toLarge (Word16.>> (n, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (n, 0wxff)))]
+             end
+         else
+             raise Fail "too many constants"
+      end
+fun newFunction ({ constantTable, functionTable } : tables, insns)
+    = let val insns = Word8Vector.fromList insns
+          val (functionsRev, n) = !functionTable
+      in functionTable := (insns :: functionsRev, n + 1)
+       ; n
+      end
+fun compileExp (t : tables, env : env, top : int, UNIT) : Word8.word list = [OPCODE.PUSH_UNIT]
+  | compileExp (t, env, top, NIL) = [OPCODE.PUSH_NIL]
+  | compileExp (t, env, top, BOOL b) = [if b then OPCODE.PUSH_TRUE else OPCODE.PUSH_FALSE]
+  | compileExp (t, env, top, INT i) = if ~128 <= i andalso i <= 127 then
+                                          [OPCODE.PUSH_SMALL_INT, Word8.fromLargeInt (Int64.toLarge i)]
+                                      else
+                                          pushConstant (t, V_INT i)
+  | compileExp (t, env, top, WORD w) = if w <= 0w255 then
+                                           [OPCODE.PUSH_SMALL_WORD, Word8.fromLarge (Word64.toLarge w)]
+                                       else
+                                           pushConstant (t, V_WORD w)
+  | compileExp (t, env, top, REAL64 x) = pushConstant (t, V_REAL64 x)
+  | compileExp (t, env, top, STRING s) = pushConstant (t, V_STRING s)
+  | compileExp (t, env, top, VAR name) = pushVar (env, name)
+  | compileExp (t, env, top, TUPLE xs)
+    = let val (top', insns) = List.foldl (fn (x, (top, acc)) => (top + 1, acc @ compileExp (t, env, top, x))) (top, []) xs
+          val n = top' - top
+          val n = if 0 <= n andalso n <= 255 then
+                      Word8.fromInt n
+                  else
+                      raise Fail "tuple too large"
+      in insns @ [OPCODE.PACK_TUPLE, n]
+      end
+  | compileExp (t, env, top, f as LAMBDA (_, _)) = #2 (compileLambda (t, env, f))
+  | compileExp (t, env, top, APP (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.CALL] (* non-tail call *)
+  | compileExp (t, env, top, LET (stmts, body))
+    = let val (env', top', insns) = List.foldl (fn (stmt, (env, top, insns)) => compileStmt (t, env, top, stmt, insns)) (env, top, []) stmts
+          val n = top' - top
+          val q = n div 255
+          val r = n mod 255
+          val pop = List.concat (List.tabulate (q, fn _ => [OPCODE.POP_EXCEPT_TOP, 0w255])) @ [OPCODE.POP_EXCEPT_TOP, Word8.fromInt r]
+      in insns @ compileExp (t, env, top', body) @ pop (* non-tail position *)
+      end
+  | compileExp (t, env, top, IF (x, y, z))
+    = let val y' = compileExp (t, env, top, y) (* non-tail position *)
+          val z' = compileExp (t, env, top, z) (* non-tail position *)
+          val offset2 = List.length z'
+          val jump2 = if offset2 <= 127 then
+                          [OPCODE.JUMP_NEAR, Word8.fromInt offset2]
+                      else if offset2 <= 0x7fff then
+                          let val offset2 = Word16.fromInt offset2
+                          in [OPCODE.JUMP_FAR, Word8.fromLarge (Word16.toLarge (Word16.>> (offset2, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (offset2, 0wxff)))]
+                          end
+                      else
+                          raise Fail "if: offset too large (else)"
+          val offset1 = List.length y' + List.length jump2
+          val jump1 = if offset1 <= 255 then
+                          [OPCODE.JUMP_IF_FALSE_NEAR, Word8.fromInt offset1]
+                      else if offset1 <= 0xffff then
+                          let val offset1 = Word16.fromInt offset1
+                          in [OPCODE.JUMP_IF_FALSE_FAR, Word8.fromLarge (Word16.toLarge (Word16.>> (offset1, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (offset1, 0wxff)))]
+                          end
+                      else
+                          raise Fail "if: offset too large (then)"
+      in compileExp (t, env, top, x) @ jump1 @ y' @ jump2 @ z'
+      end
+    | compileExp (t, env, top, RAISE x) = compileExp (t, env, top, x) @ [OPCODE.RAISE]
+    | compileExp (t, env, top, HANDLE (x, name, handler))
+      = let val handler = compileExp (t, StringMap.insert (env, name, LOCAL top), top + 1, handler) @ [OPCODE.POP_EXCEPT_TOP, 0w1] (* non-tail *)
+            val handlerLength = List.length handler
+            val (hi, lo) = if handlerLength <= 0xffff then
+                               let val l = Word16.fromInt handlerLength
+                               in (Word8.fromLarge (Word16.toLarge (Word16.>> (l, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (l, 0wxff))))
+                               end
+                           else
+                               raise Fail "handle: handler too large"
+            val body = compileExp (t, env, top, x) @ [OPCODE.LEAVE_HANDLE, hi, lo]
+            val bodyLength = List.length body
+            val (hi, lo) = if bodyLength <= 0xffff then
+                               let val l = Word16.fromInt bodyLength
+                               in (Word8.fromLarge (Word16.toLarge (Word16.>> (l, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (l, 0wxff))))
+                               end
+                           else
+                               raise Fail "handle: body too large"
+        in OPCODE.ENTER_HANDLE :: hi :: lo :: body @ handler
+        end
+      | compileExp (t, env, top, PUSH_PROMPT (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.PUSH_PROMPT]
+      | compileExp (t, env, top, WITH_SUBCONT (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.WITH_SUBCONT]
+      | compileExp (t, env, top, PUSH_SUBCONT (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.PUSH_SUBCONT]
+      | compileExp (t, env, top, ABORT (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.ABORT]
+      | compileExp (t, env, top, GET_DATA_TAG x) = compileExp (t, env, top, x) @ [OPCODE.GET_DATA_TAG]
+      | compileExp (t, env, top, GET_DATA_PAYLOAD x) = compileExp (t, env, top, x) @ [OPCODE.GET_DATA_PAYLOAD]
+      | compileExp (t, env, top, CONSTRUCT_DATA_WITHOUT_PAYLOAD n)
+        = let val n = if 0 <= n andalso n <= 255 then
+                          Word8.fromInt n
+                      else
+                          raise Fail "too many data constructors"
+          in [OPCODE.CONSTRUCT_DATA_WITHOUT_PAYLOAD, n]
+          end
+      | compileExp (t, env, top, CONSTRUCT_DATA_WITH_PAYLOAD (n, x))
+        = let val n = if 0 <= n andalso n <= 255 then
+                          Word8.fromInt n
+                      else
+                          raise Fail "too many data constructors"
+          in compileExp (t, env, top, x) @ [OPCODE.CONSTRUCT_DATA_WITH_PAYLOAD, n]
+          end
+      | compileExp (t, env, top, PRIMCALL0 c) = [OPCODE.PRIMCALL0, Prim0.toByte c]
+      | compileExp (t, env, top, PRIMCALL1 (c, x)) = compileExp (t, env, top, x) @ [OPCODE.PRIMCALL1, Prim1.toByte c]
+      | compileExp (t, env, top, PRIMCALL2 (c, x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.PRIMCALL2, Prim2.toByte c]
+      | compileExp (t, env, top, PRIMCALL3 (c, x, y, z)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ compileExp (t, env, top + 2, z) @ [OPCODE.PRIMCALL3, Prim3.toByte c]
+and compileTailExp (t, env, top, APP (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.TAILCALL] (* tail call *)
+  | compileTailExp (t, env, top, LET (stmts, body))
+    = let val (env', top', insns) = List.foldl (fn (stmt, (env, top, insns)) => compileStmt (t, env, top, stmt, insns)) (env, top, []) stmts
+      in insns @ compileTailExp (t, env, top', body) (* tail position *)
+      end
+  | compileTailExp (t, env, top, IF (x, y, z))
+    = let val y' = compileTailExp (t, env, top, y)
+          val z' = compileTailExp (t, env, top, z)
+          val offset1 = List.length y'
+          val jump1 = if offset1 <= 255 then
+                          [OPCODE.JUMP_IF_FALSE_NEAR, Word8.fromInt offset1]
+                      else if offset1 <= 0xffff then
+                          let val offset1 = Word16.fromInt offset1
+                          in [OPCODE.JUMP_IF_FALSE_FAR, Word8.fromLarge (Word16.toLarge (Word16.>> (offset1, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (offset1, 0wxff)))]
+                          end
+                      else
+                          raise Fail "if: offset too large (then)"
+      in compileExp (t, env, top, x) @ jump1 @ y' @ z'
+      end
+  | compileTailExp (t, env, top, RAISE x) = compileExp (t, env, top, x) @ [OPCODE.RAISE]
+  | compileTailExp (t, env, top, HANDLE (x, name, handler))
+      = let val handler = compileTailExp (t, StringMap.insert (env, name, LOCAL top), top + 1, handler)
+            val body = compileExp (t, env, top, x) @ [OPCODE.LEAVE_HANDLE, 0w0, 0w0, OPCODE.RETURN]
+            val bodyLength = List.length body
+            val (hi, lo) = if bodyLength <= 0xffff then
+                               let val l = Word16.fromInt bodyLength
+                               in (Word8.fromLarge (Word16.toLarge (Word16.>> (l, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (l, 0wxff))))
+                               end
+                           else
+                               raise Fail "handle: body too large"
+        in OPCODE.ENTER_HANDLE :: hi :: lo :: body @ handler
+        end
+  | compileTailExp (t, env, top, ABORT (x, y)) = compileExp (t, env, top, x) @ compileExp (t, env, top + 1, y) @ [OPCODE.ABORT]
+  | compileTailExp (t, env, top, x) = compileExp (t, env, top, x) @ [OPCODE.RETURN]
+and compileLambda (t, env, f as LAMBDA (name, body))
+    = let val (innerEnv, prepare, n) = StringSet.foldr (fn (name, (innerEnv, prepare, i)) =>
+                                                           (StringMap.insert (innerEnv, name, FREE i), prepare @ pushVar (env, name), i + 1)
+                                                       ) (StringMap.empty, [], 0) (USyntax.freeVarsExp (USyntax.StringSet.empty, f, USyntax.StringSet.empty))
+          val n = if 0 <= n andalso n <= 255 then
+                      Word8.fromInt n
+                  else
+                      raise Fail "too many free variables in a closure"
+          val body = compileTailExp (t, StringMap.insert (innerEnv, name, LOCAL 1), 2, body)
+          val codeIndex = newFunction (t, body)
+          val (codeIndexHi, codeIndexLo) = if codeIndex <= 0xffff then
+                                               let val i = Word16.fromInt codeIndex
+                                               in (Word8.fromLarge (Word16.toLarge (Word16.>> (i, 0w8))), Word8.fromLarge (Word16.toLarge (Word16.andb (i, 0wxff))))
+                                               end
+                                           else
+                                               raise Fail "too many functions"
+      in (innerEnv, prepare @ [OPCODE.CLOSURE, n, codeIndexHi, codeIndexLo])
+      end
+    | compileLambda (t, env, _) = raise Fail "compile: expected lambda"
+and compileStmt (t, env, top, VAL (name, x), insns) = (StringMap.insert (env, name, LOCAL top), top + 1, insns @ compileExp (t, env, top, x))
+  | compileStmt (t, env, top, VALREC bindings, insns)
+    = let val uninitEnv = List.foldl (fn ((name, _), env) => StringMap.insert (env, name, UNINITIALIZED)) env bindings
+          val bound = StringMap.foldli (fn (name, _, bound) => StringSet.add (bound, name)) StringSet.empty env
+          val (top, innerEnv, _, insns', fixups) = List.foldl (fn ((name, x), (top, innerEnv, bound, insns, fixups)) =>
+                                                                  let val (innerEnv', insns') = compileLambda (t, innerEnv, x)
+                                                                  in ( top + 1
+                                                                     , StringMap.insert (innerEnv, name, LOCAL top)
+                                                                     , StringSet.add (bound, name)
+                                                                     , insns @ insns'
+                                                                     , StringSet.foldl (fn (freeName, acc) =>
+                                                                                           case StringMap.find (innerEnv', freeName) of
+                                                                                               SOME (FREE i) => { target = top, freeIndex = i, real = freeName } :: acc
+                                                                                             | _ => acc
+                                                                                       ) fixups (freeVarsExp (bound, x, USyntax.StringSet.empty))
+                                                                     )
+                                                                  end
+                                                              ) (top, uninitEnv, bound, [], []) bindings
+          val fixups = List.foldl (fn ({ target, freeIndex, real }, fixups) =>
+                                      case StringMap.find (innerEnv, real) of
+                                          SOME (LOCAL i) =>
+                                          let val target = if 0 <= target andalso target <= 255 then
+                                                               Word8.fromInt target
+                                                           else
+                                                               raise Fail "rec: too many local variables"
+                                              val freeIndex = if 0 <= freeIndex andalso freeIndex <= 255 then
+                                                                  Word8.fromInt freeIndex
+                                                              else
+                                                                  raise Fail "rec: too many free variables"
+                                              val i = if 0 <= i andalso i <= 255 then
+                                                          Word8.fromInt i
+                                                      else
+                                                          raise Fail "rec: too many local variables"
+                                          in OPCODE.UPDATE_CLOSURE :: target :: freeIndex :: i :: fixups
+                                          end
+                                        | _ => raise Fail "compile: rec"
+                                  ) [] fixups
+      in (innerEnv, top, insns @ insns' @ fixups)
+      end
+  | compileStmt (t, env, top, DO x, insns) = (env, top, insns @ compileExp (t, env, top, x) @ [OPCODE.POP])
+
+fun compileProgram (env, top, stmts)
+    = let val t = { constantTable = ref ([], 0)
+                  , functionTable = ref ([], 0)
+                  }
+          val (env', top', insns) = List.foldl (fn (stmt, (env, top, insns)) => compileStmt (t, env, top, stmt, insns)) (env, top, []) stmts
+      in { instructions = Word8Vector.fromList (insns @ [OPCODE.HALT])
+         , constants = Vector.fromList (List.rev (#1 (!(#constantTable t))))
+         , functions = Vector.fromList (List.rev (#1 (!(#functionTable t))))
+         }
+      end
+end
+end;

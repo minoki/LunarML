@@ -1,0 +1,371 @@
+(*
+ * Copyright (c) 2022 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure VM = struct
+open Value
+datatype prim_result = PRIM_OK of value
+                     | PRIM_EXN of value
+fun runPrim0 (PRIM0 "DelimCont.newPromptTag") = raise Fail "DelimCont.newPromptTag: not implemented yet"
+  | runPrim0 c = raise Fail ("invalid primitive/0: " ^ Word8.fmt StringCvt.DEC c)
+fun runPrim1 (PRIM1 "Exception.newTag", _) = raise Fail "Exception.newTag: not implemented yet"
+  | runPrim1 (PRIM1 "Int.fmt.DEC", V_INT x) = PRIM_OK (V_STRING (Int64.fmt StringCvt.DEC x))
+  | runPrim1 (PRIM1 "Int.fmt.DEC", x) = raise Fail ("Int.fmt.DEC: type error (got " ^ Value.toString x ^ ")")
+  | runPrim1 (PRIM1 "TextIO.print", V_STRING x) = (TextIO.print x; PRIM_OK V_UNIT)
+  | runPrim1 (PRIM1 "TextIO.print", x) = raise Fail ("TextIO.print: type error (got " ^ Value.toString x ^ ")")
+  | runPrim1 (c, _) = raise Fail ("invalid primitive/1: " ^ Word8.fmt StringCvt.DEC c)
+fun runPrim2 (PRIM2 "Exception.instanceof", _, _) = raise Fail "Exception.instanceof: not implemented yet"
+  | runPrim2 (PRIM2 "Int32.+", V_INT x, V_INT y) = let val z = x + y
+                                                   in if ~0x80000000 <= z andalso z <= 0x7fffffff then
+                                                          PRIM_OK (V_INT z)
+                                                      else
+                                                          PRIM_EXN (V_EXN { tag = Overflow_tag, payload = V_BOGUS })
+                                                   end
+  | runPrim2 (PRIM2 "Int32.+", x, y) = raise Fail ("Int32.+: type error (got " ^ Value.toString x ^ " and " ^ Value.toString y ^ ")")
+  | runPrim2 (c, _, _) = raise Fail ("invalid primitive/2: " ^ Word8.fmt StringCvt.DEC c)
+fun runPrim3 (c, _, _, _) = raise Fail ("invalid primitive/3: " ^ Word8.fmt StringCvt.DEC c)
+fun newFrames n = Array.array (n, BOGUS_FRAME)
+fun newStack n = Array.array (n, V_BOGUS)
+fun run { frames, framesTop, stack, stackTop, base, instructions : Word8Vector.vector, ip, free, constants, functions } : unit
+    = let fun push (stackTop, v) = let val stackTop' = stackTop + 1
+                                   in if stackTop' >= Array.length stack then
+                                          raise Fail "stack overflow"
+                                      else
+                                          ()
+                                    ; Array.update (stack, stackTop, v)
+                                    ; stackTop'
+                                   end
+          fun pop stackTop = let val stackTop = stackTop - 1
+                             in if stackTop < 0 then
+                                    raise Fail "stack underflow"
+                                else
+                                    (stackTop, Array.sub (stack, stackTop))
+                             end
+          fun decodeWord16BE ip = (ip + 2, 0w256 * Word16.fromLarge (Word8.toLarge (Word8Vector.sub (instructions, ip))) + Word16.fromLarge (Word8.toLarge (Word8Vector.sub (instructions, ip + 1))))
+          fun decodeWord16BEAsInt ip = (ip + 2, 256 * Word8.toInt (Word8Vector.sub (instructions, ip)) + Word8.toInt (Word8Vector.sub (instructions, ip + 1)))
+          fun decodeInt16BE ip = let val (ip, x) = decodeWord16BE ip
+                                 in (ip, Word16.toIntX x)
+                                 end
+          fun raise_ (stackTop, e)
+              = let fun lookup i = if i < 0 then
+                                       NONE
+                                   else (* TODO: This is slow *)
+                                       case Array.sub (frames, i) of
+                                           EXN_FRAME f => SOME (i, f)
+                                         | _ => lookup (i - 1)
+                in case lookup (framesTop - 1) of
+                       SOME (i, { base, stackTop = stackTop', handler }) =>
+                       let val () = ArraySlice.modify (fn _ => BOGUS_FRAME) (ArraySlice.slice (frames, i, SOME (framesTop - i)))
+                           val () = ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, stackTop', SOME (stackTop - stackTop')))
+                           val stackTop = push (stackTop', e)
+                           val closure = Array.sub (stack, base)
+                       in case closure of
+                              V_CLOSURE { code = { instructions, constants, functions }, free } => run { frames = frames, framesTop = i, stack = stack, stackTop = stackTop, base = base, instructions = instructions, ip = handler, free = free, constants = constants, functions = functions }
+                            | _ => raise Fail "type error: RAISE"
+                       end
+                     | NONE => print "Unhandled exception\n"
+                end
+          fun loop (ip, stackTop)
+              = let val opcode = Word8Vector.sub (instructions, ip)
+                    val ip = ip + 1
+                in case opcode of
+                       OPCODE.HALT => ()
+                     | OPCODE.RETURN => let val (stackTop, result) = pop stackTop
+                                            val () = ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, base, SOME (stackTop - base)))
+                                            fun loop i = case Array.sub (frames, i) before Array.update (frames, i, BOGUS_FRAME) of
+                                                             CALL_FRAME { base = base', return = ip } =>
+                                                             let val caller = Array.sub (stack, base')
+                                                             in case caller of
+                                                                    V_CLOSURE { code = { instructions, constants, functions }, free } => run { frames = frames, framesTop = i, stack = stack, stackTop = base + 1, base = base', instructions = instructions, ip = ip, free = free, constants = constants, functions = functions }
+                                                                  | _ => raise Fail "type error: return"
+                                                             end
+                                                           | CONT_PROMPT _ => loop (i - 1)
+                                                           | _ => raise Fail "return: invalid frame"
+                                        in Array.update (stack, base, result)
+                                         ; loop (framesTop - 1)
+                                        end
+                     | OPCODE.CALL => let val newFrame = CALL_FRAME { base = base, return = ip }
+                                      in Array.update (frames, framesTop, newFrame)
+                                       ; case Array.sub (stack, stackTop - 2) of
+                                             V_CLOSURE { code = { instructions, constants, functions }, free } => run { frames = frames, framesTop = framesTop + 1, stack = stack, stackTop = stackTop, base = stackTop - 2, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+                                           | _ => raise Fail "type error: call"
+                                      end
+                     | OPCODE.TAILCALL => let val arg = Array.sub (stack, stackTop - 1)
+                                              val func = Array.sub (stack, stackTop - 2)
+                                          in Array.update (stack, base + 1, arg)
+                                           ; Array.update (stack, base, func)
+                                           ; ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, base + 2, SOME (stackTop - (base + 2))))
+                                           ; case func of
+                                                 V_CLOSURE { code = { instructions, constants, functions }, free } => run { frames = frames, framesTop = framesTop, stack = stack, stackTop = base + 2, base = base, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+                                               | _ => raise Fail "type error: tailcall"
+                                          end
+                     | OPCODE.JUMP_IF_FALSE_NEAR => let val (stackTop, value) = pop stackTop
+                                                    in case value of
+                                                           V_FALSE => let val offset = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                                          val ip = ip + 1 + offset
+                                                                      in loop (ip, stackTop)
+                                                                      end
+                                                         | V_TRUE => loop (ip + 1, stackTop)
+                                                         | _ => raise Fail "type error: jump-if-false-near"
+                                                    end
+                     | OPCODE.JUMP_IF_FALSE_FAR => let val (stackTop, value) = pop stackTop
+                                                   in case value of
+                                                          V_FALSE => let val (ip, offset) = decodeWord16BEAsInt ip
+                                                                         val ip = ip + offset
+                                                                     in loop (ip, stackTop)
+                                                                     end
+                                                        | V_TRUE => loop (ip + 2, stackTop)
+                                                        | _ => raise Fail "type error: jump-if-false-far"
+                                                   end
+                     | OPCODE.JUMP_NEAR => let val offset = Word8.toIntX (Word8Vector.sub (instructions, ip))
+                                               val ip = ip + 1 + offset
+                                           in loop (ip, stackTop)
+                                           end
+                     | OPCODE.JUMP_FAR => let val (ip, offset) = decodeInt16BE ip
+                                              val ip = ip + offset
+                                          in loop (ip, stackTop)
+                                          end
+                     | OPCODE.CLOSURE => let val nFreeVars = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                             val (ip, codeIndex) = decodeWord16BEAsInt (ip + 1)
+                                             val freeVars = Array.tabulate (nFreeVars, fn i => Array.sub (stack, stackTop - nFreeVars + i))
+                                             val () = ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, stackTop - nFreeVars, SOME nFreeVars))
+                                             val stackTop = push (stackTop - nFreeVars, V_CLOSURE { code = { instructions = Vector.sub (functions, codeIndex), constants = constants, functions = functions }, free = freeVars })
+                                         in loop (ip, stackTop)
+                                         end
+                     | OPCODE.UPDATE_CLOSURE => let val target = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                    val freeIndex = Word8.toInt (Word8Vector.sub (instructions, ip + 1))
+                                                    val actualValueIndex = Word8.toInt (Word8Vector.sub (instructions, ip + 2))
+                                                    val ip = ip + 3
+                                                in case Array.sub (stack, target) of
+                                                       V_CLOSURE { free, ... } => Array.update (free, freeIndex, Array.sub (stack, actualValueIndex))
+                                                     | _ => raise Fail "type error: UPDATE_CLOSURE"
+                                                 ; loop (ip, stackTop)
+                                                end
+                     | OPCODE.RAISE => let val (stackTop, e) = pop stackTop
+                                       in raise_ (stackTop, e)
+                                       end
+                     | OPCODE.ENTER_HANDLE => let val (ip, offset) = decodeWord16BEAsInt ip
+                                              in Array.update (frames, framesTop, EXN_FRAME { base = base, stackTop = stackTop, handler = ip + offset })
+                                               ; run { frames = frames, framesTop = framesTop + 1, stack = stack, stackTop = stackTop, base = base, instructions = instructions, ip = ip, free = free, constants = constants, functions = functions }
+                                              end
+                     | OPCODE.LEAVE_HANDLE => let val (ip, offset) = decodeWord16BEAsInt ip
+                                              in Array.update (frames, framesTop - 1, BOGUS_FRAME)
+                                               ; run { frames = frames, framesTop = framesTop - 1, stack = stack, stackTop = stackTop, base = base, instructions = instructions, ip = ip + offset, free = free, constants = constants, functions = functions }
+                                              end
+                     | OPCODE.POP => let val (stackTop, _) = pop stackTop
+                                     in loop (ip, stackTop)
+                                     end
+                     | OPCODE.POP_EXCEPT_TOP => let val n = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                    val ip = ip + 1
+                                                    val (stackTop, top) = pop stackTop
+                                                in ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, stackTop - n, SOME n))
+                                                 ; Array.update (stack, stackTop - n, top)
+                                                 ; loop (ip, stackTop - n + 1)
+                                                end
+                     | OPCODE.PUSH_LOCAL => let val i = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                val ip = ip + 1
+                                            in loop (ip, push (stackTop, Array.sub (stack, base + i)))
+                                            end
+                     | OPCODE.PUSH_FREE => let val i = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                               val ip = ip + 1
+                                           in loop (ip, push (stackTop, Array.sub (free, i)))
+                                           end
+                     | OPCODE.PUSH_UNIT => loop (ip, push (stackTop, V_UNIT))
+                     | OPCODE.PUSH_FALSE => loop (ip, push (stackTop, V_FALSE))
+                     | OPCODE.PUSH_TRUE => loop (ip, push (stackTop, V_TRUE))
+                     | OPCODE.PUSH_NIL => loop (ip, push (stackTop, V_NIL))
+                     | OPCODE.PUSH_SMALL_INT => let val x = Int64.fromInt (Word8.toInt (Word8Vector.sub (instructions, ip)))
+                                                    val ip = ip + 1
+                                                in loop (ip, push (stackTop, V_INT x))
+                                                end
+                     | OPCODE.PUSH_SMALL_WORD => let val x = Word64.fromLarge (Word8.toLarge (Word8Vector.sub (instructions, ip)))
+                                                     val ip = ip + 1
+                                                 in loop (ip, push (stackTop, V_WORD x))
+                                                 end
+                     | OPCODE.PUSH_CONST => let val (ip, index) = decodeWord16BEAsInt ip
+                                                val v = Vector.sub (constants, index)
+                                            in loop (ip, push (stackTop, v))
+                                            end
+                     | OPCODE.PACK_TUPLE => let val n = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                val values = let val slice = ArraySlice.slice (stack, stackTop - n, SOME n)
+                                                             in ArraySlice.vector slice before ArraySlice.modify (fn _ => V_BOGUS) slice
+                                                             end
+                                            in loop (ip + 1, push (stackTop - n, if n = 0 then V_UNIT else V_TUPLE values))
+                                            end
+                     | OPCODE.UNPACK_TUPLE => let val n = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                  val (stackTop, t) = pop stackTop
+                                              in case t of
+                                                     V_TUPLE values => if Vector.length values = n then
+                                                                           ( Array.copyVec { src = values, dst = stack, di = stackTop }
+                                                                           ; loop (ip + 1, stackTop + n)
+                                                                           )
+                                                                       else
+                                                                           raise Fail "UNPACK_TUPLE"
+                                                   | V_UNIT => loop (ip + 1, stackTop)
+                                                   | _ => raise Fail "type error: UNPACK_TUPLE"
+                                              end
+                     | OPCODE.GET_DATA_TAG => let val (stackTop, x) = pop stackTop
+                                              in case x of
+                                                     V_DATA { tag, payload = _ } => loop (ip, push (stackTop, V_INT (Int64.fromInt tag)))
+                                                   | _ => raise Fail "type error: GET_DATA_TAG"
+                                              end
+                     | OPCODE.GET_DATA_PAYLOAD => let val (stackTop, x) = pop stackTop
+                                                  in case x of
+                                                         V_DATA { tag = _, payload = V_BOGUS } => raise Fail "GET_DATA_TAG: invalid payload"
+                                                       | V_DATA { tag = _, payload } => loop (ip, push (stackTop, payload))
+                                                       | _ => raise Fail "type error: GET_DATA_TAG"
+                                                  end
+                     | OPCODE.CONSTRUCT_DATA_WITHOUT_PAYLOAD => let val tag = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                                in loop (ip + 1, push (stackTop, V_DATA { tag = tag, payload = V_BOGUS }))
+                                                                end
+                     | OPCODE.CONSTRUCT_DATA_WITH_PAYLOAD => let val tag = Word8.toInt (Word8Vector.sub (instructions, ip))
+                                                                 val (stackTop, payload) = pop stackTop
+                                                             in loop (ip + 1, push (stackTop, V_DATA { tag = tag, payload = payload }))
+                                                             end
+                     | OPCODE.PUSH_PROMPT => let val (stackTop, action) = pop stackTop
+                                                 val (stackTop, tag) = pop stackTop
+                                             in case (tag, action) of
+                                                    (V_PROMPT_TAG t, V_CLOSURE { code = { instructions, constants, functions }, free }) =>
+                                                    ( Array.update (frames, framesTop, CALL_FRAME { base = base, return = ip })
+                                                    ; Array.update (frames, framesTop + 1, CONT_PROMPT { tag = t, stack = stackTop })
+                                                    ; let val stackTop = push (stackTop, action)
+                                                          val stackTop = push (stackTop, V_UNIT)
+                                                      in run { frames = frames, framesTop = framesTop + 2, stack = stack, stackTop = stackTop, base = stackTop - 2, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+                                                      end
+                                                    )
+                                                  | _ => raise Fail "type error: PUSH_PROMPT"
+                                             end
+                     | OPCODE.WITH_SUBCONT => let val (stackTop, action) = pop stackTop
+                                                  val (stackTop, tag) = pop stackTop
+                                              in case (tag, action) of
+                                                     (V_PROMPT_TAG t, V_CLOSURE { code = { instructions, constants, functions }, free }) =>
+                                                     let fun lookup i = if i < 0 then
+                                                                            NONE
+                                                                        else (* TODO: This is slow *)
+                                                                            case Array.sub (frames, i) of
+                                                                                CONT_PROMPT { tag = u, stack = s } =>
+                                                                                if t = u then
+                                                                                    SOME (i, s)
+                                                                                else
+                                                                                    lookup (i - 1)
+                                                                              | _ => lookup (i - 1)
+                                                     in case lookup (framesTop - 1) of
+                                                            SOME (i, s) => let val () = Array.update (frames, framesTop, CALL_FRAME { base = base, return = ip })
+                                                                               val frameSlice = let val slice = ArraySlice.slice (frames, i, SOME (framesTop + 1 - i))
+                                                                                                in ArraySlice.vector slice before ArraySlice.modify (fn _ => BOGUS_FRAME) slice
+                                                                                                end
+                                                                               val frameSlice = Vector.map (fn CALL_FRAME { base, return } => CALL_FRAME { base = base - s, return = return }
+                                                                                                           | EXN_FRAME { base, stackTop, handler } => EXN_FRAME { base = base - s, stackTop = stackTop - s, handler = handler }
+                                                                                                           | CONT_PROMPT { tag, stack } => CONT_PROMPT { tag = tag, stack = stack - s }
+                                                                                                           | BOGUS_FRAME => BOGUS_FRAME (* should not occur *)
+                                                                                                           ) frameSlice
+                                                                               val stackSlice = let val slice = ArraySlice.slice (stack, s, SOME (stackTop - s))
+                                                                                                in ArraySlice.vector slice before ArraySlice.modify (fn _ => V_BOGUS) slice
+                                                                                                end
+                                                                               val stackTop = push (s, action)
+                                                                               val stackTop = push (stackTop, V_SUBCONT { stackSlice = stackSlice, frameSlice = frameSlice })
+                                                                           in run { frames = frames, framesTop = i, stack = stack, stackTop = stackTop, base = stackTop - 2, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+                                                                           end
+                                                          | NONE => raise Fail "WITH_SUBCONT: prompt not found"
+                                                     end
+                                                   | _ => raise Fail "type error: WITH_SUBCONT"
+                                              end
+                     | OPCODE.PUSH_SUBCONT => let val (stackTop, action) = pop stackTop
+                                                  val (stackTop, sk) = pop stackTop
+                                              in case (sk, action) of
+                                                     (V_SUBCONT { stackSlice, frameSlice }, V_CLOSURE { code = { instructions, constants, functions }, free }) =>
+                                                     let val () = Array.update (frames, framesTop, CALL_FRAME { base = base, return = ip })
+                                                         val framesTop = framesTop + 1
+                                                         val frameSlice = Vector.map (fn CALL_FRAME { base, return } => CALL_FRAME { base = base + stackTop, return = return }
+                                                                                     | EXN_FRAME { base, stackTop, handler } => EXN_FRAME { base = base + stackTop, stackTop = stackTop + stackTop, handler = handler }
+                                                                                     | CONT_PROMPT { tag, stack } => CONT_PROMPT { tag = tag, stack = stack + stackTop }
+                                                                                     | BOGUS_FRAME => BOGUS_FRAME (* should not occur *)
+                                                                                     ) frameSlice
+                                                         val () = Array.copyVec { src = frameSlice, dst = frames, di = framesTop }
+                                                         val framesTop = framesTop + Vector.length frameSlice
+                                                         val () = Array.copyVec { src = stackSlice, dst = stack, di = stackTop }
+                                                         val stackTop = stackTop + Vector.length stackSlice
+                                                         val stackTop = push (stackTop, action)
+                                                         val stackTop = push (stackTop, V_UNIT)
+                                                     in run { frames = frames, framesTop = framesTop, stack = stack, stackTop = stackTop, base = stackTop - 2, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+                                                     end
+                                                   | _ => raise Fail "type error: PUSH_SUBCONT"
+                                              end
+                     | OPCODE.ABORT => let val (stackTop, result) = pop stackTop
+                                           val (stackTop, tag) = pop stackTop
+                                       in case tag of
+                                              V_PROMPT_TAG t =>
+                                              let fun lookup i = if i < 0 then
+                                                                     NONE
+                                                                 else (* TODO: This is slow *)
+                                                                     case Array.sub (frames, i) of
+                                                                         CONT_PROMPT { tag = u, stack = s } =>
+                                                                         if t = u then
+                                                                             SOME (i, s)
+                                                                         else
+                                                                             lookup (i - 1)
+                                                                       | _ => lookup (i - 1)
+                                              in case lookup (framesTop - 1) of
+                                                     SOME (i, s) => let val () = ArraySlice.modify (fn _ => BOGUS_FRAME) (ArraySlice.slice (frames, i, SOME (framesTop - i)))
+                                                                        val () = ArraySlice.modify (fn _ => V_BOGUS) (ArraySlice.slice (stack, s, SOME (stackTop - s)))
+                                                                        val stackTop = push (s, result)
+                                                                        fun loop i = case Array.sub (frames, i) before Array.update (frames, i, BOGUS_FRAME) of
+                                                                                         CALL_FRAME { base = base', return = ip } =>
+                                                                                         let val caller = Array.sub (stack, base')
+                                                                                         in case caller of
+                                                                                                V_CLOSURE { code = { instructions, constants, functions }, free } => run { frames = frames, framesTop = i, stack = stack, stackTop = stackTop, base = base', instructions = instructions, ip = ip, free = free, constants = constants, functions = functions }
+                                                                                              | _ => raise Fail "type error: ABORT"
+                                                                                         end
+                                                                                       | CONT_PROMPT _ => loop (i - 1)
+                                                                                       | _ => raise Fail "ABORT: invalid frame"
+                                                                    in loop (i - 1)
+                                                                    end
+                                                   | NONE => raise Fail "ABORT: prompt not found"
+                                              end
+                                            | _ => raise Fail "type error: ABORT"
+                                       end
+                     | OPCODE.PRIMCALL0 => let val c = Word8Vector.sub (instructions, ip)
+                                           in case runPrim0 c of
+                                                  PRIM_OK result => loop (ip + 1, push (stackTop, result))
+                                                | PRIM_EXN e => raise_ (stackTop, e)
+                                           end
+                     | OPCODE.PRIMCALL1 => let val c = Word8Vector.sub (instructions, ip)
+                                               val (stackTop, a0) = pop stackTop
+                                           in case runPrim1 (c, a0) of
+                                                  PRIM_OK result => loop (ip + 1, push (stackTop, result))
+                                                | PRIM_EXN e => raise_ (stackTop, e)
+                                           end
+                     | OPCODE.PRIMCALL2 => let val c = Word8Vector.sub (instructions, ip)
+                                               val (stackTop, a1) = pop stackTop
+                                               val (stackTop, a0) = pop stackTop
+                                           in case runPrim2 (c, a0, a1) of
+                                                  PRIM_OK result => loop (ip + 1, push (stackTop, result))
+                                                | PRIM_EXN e => raise_ (stackTop, e)
+                                           end
+                     | OPCODE.PRIMCALL3 => let val c = Word8Vector.sub (instructions, ip)
+                                               val (stackTop, a2) = pop stackTop
+                                               val (stackTop, a1) = pop stackTop
+                                               val (stackTop, a0) = pop stackTop
+                                           in case runPrim3 (c, a0, a1, a2) of
+                                                  PRIM_OK result => loop (ip + 1, push (stackTop, result))
+                                                | PRIM_EXN e => raise_ (stackTop, e)
+                                           end
+                     | _ => raise Fail ("invalid opcode: " ^ Word8.fmt StringCvt.DEC opcode)
+                end
+      in loop (ip, stackTop)
+      end
+
+fun runProgram { instructions, constants, functions }
+    = let val frames = newFrames 1000
+          val stack = newStack 1000
+          val free = Array.array (0, V_BOGUS)
+      in Array.update (stack, 0, V_CLOSURE { code = { instructions = instructions
+                                                    , constants = constants
+                                                    , functions = functions
+                                                    }
+                                           , free = free
+                                           }
+                      )
+       ; run { frames = frames, framesTop = 0, stack = stack, stackTop = 1, base = 0, instructions = instructions, ip = 0, free = free, constants = constants, functions = functions }
+      end
+end;
