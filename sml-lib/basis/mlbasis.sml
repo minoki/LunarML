@@ -775,13 +775,6 @@ fun realRound x = let val (intPartRaw, fracPart) = Lua.call2 Lua.Lib.math.modf #
                          else
                              intPart
                   end
-fun realFloor x = let val result = Lua.call1 Lua.Lib.math.floor #[Lua.fromReal x]
-                      val result = Lua.unsafeFromValue (Lua.* (result, Lua.fromReal 1.0)) : real
-                  in if result == 0.0 andalso 1.0 / x < 0.0 then
-                         x (* negative zero *)
-                     else
-                         result
-                  end
 fun floor x = let val result = Lua.call1 Lua.Lib.math.floor #[Lua.fromReal x]
                   val isInteger = Lua.== (Lua.call1 Lua.Lib.math.type' #[result], Lua.fromString "integer")
               in if isInteger then
