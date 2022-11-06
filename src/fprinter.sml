@@ -24,16 +24,6 @@ fun doSLabel (F.ValueLabel vid) = P.Fragment "v:" :: doVId vid
 fun doPath (F.Root vid) = [P.Fragment (TypedSyntax.print_VId vid)]
   | doPath (F.Child (parent, label)) = doPath parent @ P.Fragment "." :: doSLabel label
   | doPath (F.Field (parent, label)) = doPath parent @ P.Fragment "." :: doLabel label
-fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
-  | doPat prec (F.SConPat { scon, ... }) = [P.Fragment (Syntax.print_SCon scon)]
-  | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
-  | doPat prec (F.RecordPat { sourceSpan, fields, ellipsis }) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (case ellipsis of SOME basePat => [P.Fragment "...=" :: doPat 0 basePat] | NONE => []) fields) @ [P.Fragment "}"]
-  | doPat prec (F.ValConPat { sourceSpan = _, info, payload = NONE }) = showParen (prec >= 1) [P.Fragment (#tag info)]
-  | doPat prec (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) = showParen (prec >= 1) (P.Fragment (#tag info) :: P.Fragment " " :: doPat 1 payloadPat)
-  | doPat prec (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = showParen (prec >= 1) (doPath tagPath)
-  | doPat prec (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = showParen (prec >= 1) (doPath tagPath @ P.Fragment " " :: doPat 1 payloadPat)
-  | doPat prec (F.LayeredPat (_, vid, ty, pat)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 1 ty @ P.Fragment " as " :: doPat 1 pat)
-  | doPat prec (F.VectorPat (_, pats, wildcard, elemTy)) = P.Fragment "#[" :: P.commaSep (Vector.foldr (fn (pat, xs) => doPat 0 pat :: xs) (if wildcard then [[P.Fragment "..."]] else []) pats) @ [P.Fragment "]"] (* elemTy? *)
 fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp (F.WordConstOp x) = [P.Fragment ("word " ^ IntInf.toString x)]
   | doPrimOp (F.RealConstOp x) = [P.Fragment ("real " ^ Numeric.Notation.toString "~" x)]
@@ -51,6 +41,16 @@ fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp F.ConstructExnOp = [P.Fragment "ConstructExn"]
   | doPrimOp F.ConstructExnWithPayloadOp = [P.Fragment "ConstructExnWithPayload"]
   | doPrimOp (F.PrimFnOp primOp) = [P.Fragment (Primitives.toString primOp)]
+fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
+  | doPat prec (F.SConPat { scon, ... }) = [P.Fragment (Syntax.print_SCon scon)]
+  | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
+  | doPat prec (F.RecordPat { sourceSpan, fields, ellipsis }) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (case ellipsis of SOME basePat => [P.Fragment "...=" :: doPat 0 basePat] | NONE => []) fields) @ [P.Fragment "}"]
+  | doPat prec (F.ValConPat { sourceSpan = _, info, payload = NONE }) = showParen (prec >= 1) [P.Fragment (#tag info)]
+  | doPat prec (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) = showParen (prec >= 1) (P.Fragment (#tag info) :: P.Fragment " " :: doPat 1 payloadPat)
+  | doPat prec (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = showParen (prec >= 1) (doExp 0 tagPath)
+  | doPat prec (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = showParen (prec >= 1) (doExp 0 tagPath @ P.Fragment " " :: doPat 1 payloadPat)
+  | doPat prec (F.LayeredPat (_, vid, ty, pat)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 1 ty @ P.Fragment " as " :: doPat 1 pat)
+  | doPat prec (F.VectorPat (_, pats, wildcard, elemTy)) = P.Fragment "#[" :: P.commaSep (Vector.foldr (fn (pat, xs) => doPat 0 pat :: xs) (if wildcard then [[P.Fragment "..."]] else []) pats) @ [P.Fragment "]"] (* elemTy? *)
 (* precedence
  * atomexp ::= PrimExp | VarExp | RecordExp | ProjectionExp | StructExp | '(' exp ')' (* prec: 2 *)
  * appexp ::= atomexp
@@ -65,7 +65,7 @@ fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
          | "fn type" tv ":" kind "=>" exp
          | "case" exp "of" matches (* prec: 0 *)
  *)
-fun doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrimOp primOp @ P.Fragment " [" :: P.commaSepV (Vector.map (doTy 0) types) @ (P.Fragment "] (" :: P.commaSepV (Vector.map (doExp 0) exps) @ [P.Fragment ")"])
+and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrimOp primOp @ P.Fragment " [" :: P.commaSepV (Vector.map (doTy 0) types) @ (P.Fragment "] (" :: P.commaSepV (Vector.map (doExp 0) exps) @ [P.Fragment ")"])
   | doExp prec (F.VarExp vid) = [P.Fragment (TypedSyntax.print_VId vid)]
   | doExp prec (F.RecordExp fields) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, exp), xs) => (doLabel label @ P.Fragment " = " :: doExp 0 exp) :: xs) [] fields) @ [P.Fragment "}"]
   | doExp prec (F.LetExp (dec, exp)) = showParen (prec >= 1) (P.Fragment "let " :: doDec dec @ P.Fragment " in " :: doExp 0 exp @ [P.Fragment " end"])

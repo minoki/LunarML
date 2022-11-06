@@ -125,15 +125,12 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      in F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsNativeString (#targetInfo ctx, tag)])
                      end
                 )
-            | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) })
-              = let val tag = F.PathToExp tagPath
-                    val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
+            | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = SOME (payloadTy, payloadPat) })
+              = let val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
                 in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag]), payload)
                 end
-            | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE })
-              = let val tag = F.PathToExp tagPath
-                in F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag])
-                end
+            | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = NONE })
+              = F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag])
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
               = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.Vector_length, vector [elemTy], vector [exp])
@@ -332,7 +329,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doPath env (F.Child (parent, label)) = F.Child (doPath env parent, label)
             | doPath env (F.Field (parent, label)) = F.Field (doPath env parent, label)
           fun doPat env (pat as F.WildcardPat _) = (emptyEnv, pat)
-            | doPat env (pat as F.SConPat _) = (emptyEnv, pat)
+            | doPat env (F.SConPat { sourceSpan, scon, equality, cookedValue }) = (emptyEnv, F.SConPat { sourceSpan = sourceSpan, scon = scon, equality = doExp env equality, cookedValue = doExp env cookedValue })
             | doPat env (F.VarPat (span, vid, ty)) = let val vid' = refreshVId vid
                                                      in (insertVId (emptyEnv, vid, vid'), F.VarPat (span, vid', doTy env ty))
                                                      end
@@ -352,9 +349,9 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doPat env (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) }) = let val (env', payloadPat) = doPat env payloadPat
                                                                                                      in (env', F.ValConPat { sourceSpan = sourceSpan, info = info, payload = SOME (doTy env payloadTy, payloadPat) })
                                                                                                      end
-            | doPat env (F.ExnConPat { sourceSpan, tagPath, payload = NONE }) = (emptyEnv, F.ExnConPat { sourceSpan = sourceSpan, tagPath = doPath env tagPath, payload = NONE })
+            | doPat env (F.ExnConPat { sourceSpan, tagPath, payload = NONE }) = (emptyEnv, F.ExnConPat { sourceSpan = sourceSpan, tagPath = doExp env tagPath, payload = NONE })
             | doPat env (F.ExnConPat { sourceSpan, tagPath, payload = SOME (payloadTy, payloadPat) }) = let val (env', payloadPat) = doPat env payloadPat
-                                                                                                        in (env', F.ExnConPat { sourceSpan = sourceSpan, tagPath = doPath env tagPath, payload = SOME (doTy env payloadTy, payloadPat) })
+                                                                                                        in (env', F.ExnConPat { sourceSpan = sourceSpan, tagPath = doExp env tagPath, payload = SOME (doTy env payloadTy, payloadPat) })
                                                                                                         end
             | doPat env (F.LayeredPat (span, vid, ty, pat)) = let val vid' = refreshVId vid
                                                                   val (env', pat) = doPat env pat
@@ -367,7 +364,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                     ) (emptyEnv, []) pats
                 in (env', F.VectorPat (span, Vector.fromList pats, ellipsis, doTy env ty))
                 end
-          fun doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, Vector.map (doTy env) tyargs, Vector.map (doExp env) args)
+          and doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, Vector.map (doTy env) tyargs, Vector.map (doExp env) args)
             | doExp env (exp as F.VarExp vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                      SOME vid => F.VarExp vid
                                                    | NONE => exp
@@ -940,14 +937,12 @@ fun doPat (F.WildcardPat _) acc = acc
   | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) acc = List.foldl (fn ((label, pat), acc) => doPat pat acc) (case ellipsis of NONE => acc | SOME basePat => doPat basePat acc) fields
   | doPat (F.ValConPat { sourceSpan = _, info, payload = NONE }) acc = acc
   | doPat (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) acc = doPat payloadPat acc
-  | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Root vid, payload = NONE }) acc = TypedSyntax.VIdSet.add (acc, vid)
-  | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Root vid, payload = SOME (payloadTy, payloadPat) }) acc = doPat payloadPat (TypedSyntax.VIdSet.add (acc, vid))
-  | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Child _, payload = _ }) acc = raise Fail "not implemented yet"
-  | doPat (F.ExnConPat { sourceSpan = _, tagPath = F.Field _, payload = _ }) acc = raise Fail "not implemented yet"
+  | doPat (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) acc = #1 (doExp tagPath acc)
+  | doPat (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) acc = doPat payloadPat (#1 (doExp tagPath acc))
   | doPat (F.LayeredPat (_, vid, ty, innerPat)) acc = doPat innerPat acc
   | doPat (F.VectorPat (_, pats, ellipsis, elemTy)) acc = Vector.foldl (fn (pat, acc) => doPat pat acc) acc pats
 (* doExp : F.Exp -> TypedSyntax.VIdSet.set * F.Exp *)
-fun doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.set * F.Exp
+and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.set * F.Exp
     = let val (acc, args') = Vector.foldr (fn (x, (acc, xs)) => let val (acc, x) = doExp x acc in (acc, x :: xs) end) (acc, []) args
       in (acc, F.PrimExp (primOp, tyargs, Vector.fromList args'))
       end
