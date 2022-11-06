@@ -496,15 +496,15 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
     = let val valMap' = Syntax.VIdMap.listItemsi valMap
           val strMap' = Syntax.StrIdMap.listItemsi strMap
           val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
-      in mapCont (fn ((label, path), cont) => doExpCont ctx env (F.PathToExp path) (fn (stmts, env, e) => cont (stmts, (label, e))))
+      in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                  valMap'
                  (fn valMap' =>
                      let val (stmts, valFields) = ListPair.unzip valMap'
-                     in mapCont (fn ((label, path), cont) => doExpCont ctx env (F.PathToExp path) (fn (stmts, env, e) => cont (stmts, (label, e))))
+                     in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                 strMap'
                                 (fn strMap' =>
                                     let val (stmts', strFields) = ListPair.unzip strMap'
-                                    in mapCont (fn ((label, path), cont) => doExpCont ctx env (F.PathToExp path) (fn (stmts, env, e) => cont (stmts, (label, e))))
+                                    in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
                                                exnTagMap'
                                                (fn exnTagMap' =>
                                                    let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'

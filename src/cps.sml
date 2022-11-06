@@ -63,9 +63,9 @@ fun mapCont f [] cont = cont []
 fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
   | stripTyAbs e = e
 
-fun StructToRecord { valMap, strMap, exnTagMap } = let val entries = Syntax.VIdMap.foldri (fn (vid, path, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag"), F.PathToExp path) :: xs) [] exnTagMap
-                                                       val entries = Syntax.StrIdMap.foldri (fn (Syntax.MkStrId name, path, xs) => (Syntax.IdentifierLabel ("_" ^ name), F.PathToExp path) :: xs) entries strMap
-                                                       val entries = Syntax.VIdMap.foldri (fn (vid, path, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid), F.PathToExp path) :: xs) entries valMap
+fun StructToRecord { valMap, strMap, exnTagMap } = let val entries = Syntax.VIdMap.foldri (fn (vid, exp, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag"), exp) :: xs) [] exnTagMap
+                                                       val entries = Syntax.StrIdMap.foldri (fn (Syntax.MkStrId name, exp, xs) => (Syntax.IdentifierLabel ("_" ^ name), exp) :: xs) entries strMap
+                                                       val entries = Syntax.VIdMap.foldri (fn (vid, exp, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid), exp) :: xs) entries valMap
                                                    in F.RecordExp entries
                                                    end
 fun SLabelToLabel (F.ValueLabel vid) = Syntax.IdentifierLabel (Syntax.getVIdName vid)
