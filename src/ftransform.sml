@@ -318,7 +318,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doTy env (F.TypeFn (tv, kind, ty)) = let val tv' = refreshTyVar tv
                                                    in F.TypeFn (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
                                                    end
-            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (fn (ty, ids) => (doTy env ty, ids)) valMap
+            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
                                                                            , strMap = Syntax.StrIdMap.map (doTy env) strMap
                                                                            , exnTags = exnTags
                                                                            }

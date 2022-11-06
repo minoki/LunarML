@@ -16,7 +16,7 @@ datatype Ty = TyVar of TyVar
             | ForallType of TyVar * Kind * Ty
             | ExistsType of TyVar * Kind * Ty
             | TypeFn of TyVar * Kind * Ty (* type-level function *)
-            | SigType of { valMap : (Ty * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+            | SigType of { valMap : Ty Syntax.VIdMap.map
                          , strMap : Ty Syntax.StrIdMap.map
                          , exnTags : Syntax.VIdSet.set
                          }
@@ -147,7 +147,7 @@ fun occurCheck tv =
                                                  false
                                              else
                                                  check ty
-          | check (SigType { valMap, strMap, exnTags }) = Syntax.VIdMap.exists (check o #1) valMap orelse Syntax.StrIdMap.exists check strMap
+          | check (SigType { valMap, strMap, exnTags }) = Syntax.VIdMap.exists check valMap orelse Syntax.StrIdMap.exists check strMap
     in check
     end
 
@@ -187,7 +187,7 @@ fun substituteTy (tv, replacement) =
                                                      end
                                                  else
                                                      TypeFn (tv', kind, go ty')
-          | go (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map (fn (ty, ids) => (go ty, ids)) valMap
+          | go (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map go valMap
                                                                , strMap = Syntax.StrIdMap.map go strMap
                                                                , exnTags = exnTags
                                                                }
@@ -215,7 +215,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
                                                TypeFn (tv, kind, #doTy (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv)))) ty)
                                            else
                                                TypeFn (tv, kind, doTy ty)
-          | doTy (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map (fn (ty, ids) => (doTy ty, ids)) valMap
+          | doTy (SigType { valMap, strMap, exnTags }) = SigType { valMap = Syntax.VIdMap.map doTy valMap
                                                                  , strMap = Syntax.StrIdMap.map doTy strMap
                                                                  , exnTags = exnTags
                                                                  }
@@ -283,7 +283,7 @@ fun freeTyVarsInTy (bound : TypedSyntax.TyVarSet.set, TyVar tv) acc = if TypedSy
   | freeTyVarsInTy (bound, ForallType (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
   | freeTyVarsInTy (bound, ExistsType (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
   | freeTyVarsInTy (bound, TypeFn (tv, kind, ty)) acc = freeTyVarsInTy (TypedSyntax.TyVarSet.add (bound, tv), ty) acc
-  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags }) acc = let val acc = Syntax.VIdMap.foldl (fn ((ty, ids), acc) => freeTyVarsInTy (bound, ty) acc) acc valMap
+  | freeTyVarsInTy (bound, SigType { valMap, strMap, exnTags }) acc = let val acc = Syntax.VIdMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc valMap
                                                                       in Syntax.StrIdMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc strMap
                                                                       end
 fun freeTyVarsInPat (bound, WildcardPat _) acc = acc
@@ -1126,7 +1126,7 @@ fun signatureToTy (ctx, env, { valMap, tyConMap, strMap } : T.Signature)
     = let val exnTags = Syntax.VIdMap.foldli (fn (vid, (tysc, Syntax.ExceptionConstructor), set) => Syntax.VIdSet.add(set, vid)
                                              | (vid, (tysc, _), set) => set
                                              ) Syntax.VIdSet.empty valMap
-      in F.SigType { valMap = Syntax.VIdMap.map (fn (tysc, ids) => (typeSchemeToTy (ctx, env, tysc), ids)) valMap
+      in F.SigType { valMap = Syntax.VIdMap.map (fn (tysc, ids) => typeSchemeToTy (ctx, env, tysc)) valMap
                    , strMap = Syntax.StrIdMap.map (fn T.MkSignature s => signatureToTy (ctx, env, s)) strMap
                    , exnTags = exnTags
                    }
