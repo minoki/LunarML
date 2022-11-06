@@ -45,6 +45,9 @@ sources = \
   src/mlb-eval.sml \
   src/main.sml
 
+typecheck:
+	mlton -stop tc LunarML.mlb
+
 lunarml: LunarML.mlb $(sources)
 	mlton -output $@ LunarML.mlb
 
@@ -93,4 +96,4 @@ validate-js: lunarml
 	node lunarml.gen2.js -o lunarml.gen3.js --js-cps LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 
-.PHONY: all test test-stackless-handle test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
+.PHONY: all typecheck test test-stackless-handle test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
