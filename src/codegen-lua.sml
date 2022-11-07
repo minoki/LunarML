@@ -590,41 +590,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
           end
       else
           raise CodeGenError "PrimExp.ExnPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.StructExp { valMap, strMap, exnTagMap }) dest
-    = let val valMap' = Syntax.VIdMap.listItemsi valMap
-          val strMap' = Syntax.StrIdMap.listItemsi strMap
-          val exnTagMap' = Syntax.VIdMap.listItemsi exnTagMap
-      in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                 valMap'
-                 (fn valMap' =>
-                     let val (stmts, valFields) = ListPair.unzip valMap'
-                     in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                strMap'
-                                (fn strMap' =>
-                                    let val (stmts', strFields) = ListPair.unzip strMap'
-                                    in mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                               exnTagMap'
-                                               (fn exnTagMap' =>
-                                                   let val (stmts'', exnTagFields) = ListPair.unzip exnTagMap'
-                                                       val valFields = List.map (fn (vid, e) => (L.StringKey (Syntax.getVIdName vid), e)) valFields
-                                                       val strFields = List.map (fn (Syntax.MkStrId name, e) => (L.StringKey ("_" ^ name), e)) strFields
-                                                       val exnTagFields = List.map (fn (vid, e) => (L.StringKey (Syntax.getVIdName vid ^ ".tag"), e)) exnTagFields
-                                                   in putPureTo ctx env dest ( List.concat stmts @ List.concat stmts' @ List.concat stmts''
-                                                                             , L.TableExp (vector (valFields @ strFields @ exnTagFields))
-                                                                             )
-                                                   end
-                                               )
-                                    end
-                                )
-                     end
-                 )
-      end
-  | doExpTo ctx env (exp as F.SProjectionExp (exp', label)) dest = let val field = case label of
-                                                                                       F.ValueLabel vid => Syntax.getVIdName vid
-                                                                                     | F.StructLabel (Syntax.MkStrId name) => "_" ^ name
-                                                                                     | F.ExnTagLabel vid => Syntax.getVIdName vid ^ ".tag"
-                                                                   in doExpCont ctx env exp' (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString field))))
-                                                                   end
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.PrimExp (F.PrimFnOp primOp, _, args)) dest
     = let fun doUnary cont = if Vector.length args = 1 then

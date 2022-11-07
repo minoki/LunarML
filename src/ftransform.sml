@@ -37,8 +37,6 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                    | F.ProjectionExp { label, record } => F.ProjectionExp { label = label, record = doExp record }
                    | F.TyAbsExp (tv, kind, exp) => F.TyAbsExp (tv, kind, doExp exp)
                    | F.TyAppExp (exp, ty) => F.TyAppExp (doExp exp, ty)
-                   | F.StructExp { valMap, strMap, exnTagMap } => F.StructExp { valMap = valMap, strMap = strMap, exnTagMap = exnTagMap }
-                   | F.SProjectionExp (exp, label) => F.SProjectionExp (doExp exp, label)
                    | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
                    | F.CaseExp (span, exp, ty, [(F.VarPat (span2, vid, ty'), exp2 as F.VarExp vid')]) =>
                      if TypedSyntax.eqVId (vid, vid') then
@@ -204,8 +202,6 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector
   | doExp (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp record }
   | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
-  | doExp (F.StructExp maps) = F.StructExp maps
-  | doExp (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp exp, label)
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
 and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.RecValDec valbinds)
@@ -318,10 +314,6 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doTy env (F.TypeFn (tv, kind, ty)) = let val tv' = refreshTyVar tv
                                                    in F.TypeFn (tv', kind, doTy (insertTyVar (env, tv, tv')) ty)
                                                    end
-            | doTy env (F.SigType { valMap, strMap, exnTags }) = F.SigType { valMap = Syntax.VIdMap.map (doTy env) valMap
-                                                                           , strMap = Syntax.StrIdMap.map (doTy env) strMap
-                                                                           , exnTags = exnTags
-                                                                           }
           fun doPat env (pat as F.WildcardPat _) = (emptyEnv, pat)
             | doPat env (F.SConPat { sourceSpan, scon, equality, cookedValue }) = (emptyEnv, F.SConPat { sourceSpan = sourceSpan, scon = scon, equality = doExp env equality, cookedValue = doExp env cookedValue })
             | doPat env (F.VarPat (span, vid, ty)) = let val vid' = refreshVId vid
@@ -387,11 +379,6 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                        in F.TyAbsExp (tv', kind, doExp (insertTyVar (env, tv, tv')) exp)
                                                        end
             | doExp env (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp env exp, doTy env ty)
-            | doExp env (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = Syntax.VIdMap.map (doExp env) valMap
-                                                                                  , strMap = Syntax.StrIdMap.map (doExp env) strMap
-                                                                                  , exnTagMap = Syntax.VIdMap.map (doExp env) exnTagMap
-                                                                                  }
-            | doExp env (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp env exp, label)
             | doExp env (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = doTy env payloadTy
                                                                               , exp = doExp env exp
                                                                               , packageTy = doTy env packageTy
@@ -463,19 +450,10 @@ type Context = { nextVId : int ref, nextTyVar : int ref }
 datatype InlineExp = VarExp of TypedSyntax.VId
                    | RecordExp of InlineExp Syntax.LabelMap.map
                    | ProjectionExp of { label : Syntax.Label, record : InlineExp }
-                   | StructExp of { valMap : InlineExp Syntax.VIdMap.map
-                                  , strMap : InlineExp Syntax.StrIdMap.map
-                                  , exnTagMap : InlineExp Syntax.VIdMap.map
-                                  }
-                   | SProjectionExp of InlineExp * F.SLabel
                    | FnExp of TypedSyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
                    | PrimExp of F.PrimOp * F.Ty vector * InlineExp vector
-fun lookupSLabel ({ valMap, strMap, exnTagMap }, label) = case label of
-                                                              F.ValueLabel vid => Syntax.VIdMap.find(valMap, vid)
-                                                            | F.StructLabel strid => Syntax.StrIdMap.find(strMap, strid)
-                                                            | F.ExnTagLabel vid => Syntax.VIdMap.find(exnTagMap, vid)
 type Env = { valMap : InlineExp TypedSyntax.VIdMap.map }
 val emptyEnv : Env = { valMap = TypedSyntax.VIdMap.empty }
 fun freeVarsInPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
@@ -514,8 +492,6 @@ fun costOfExp (F.PrimExp (primOp, tyargs, args)) = (case primOp of
   | costOfExp (F.ProjectionExp { label, record }) = costOfExp record
   | costOfExp (F.TyAbsExp (tv, kind, exp)) = costOfExp exp
   | costOfExp (F.TyAppExp (exp, ty)) = costOfExp exp
-  | costOfExp (F.StructExp { valMap, strMap, exnTagMap }) = 1
-  | costOfExp (F.SProjectionExp (exp, _)) = costOfExp exp
   | costOfExp (F.PackExp { payloadTy, exp, packageTy }) = costOfExp exp
 and costOfDec (F.ValDec (vid, optTy, exp)) = costOfExp exp
   | costOfDec (F.RecValDec valbinds) = List.foldl (fn ((vid, ty, exp), acc) => acc + costOfExp exp) 0 valbinds
@@ -531,8 +507,6 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                    fun doInlineExp (iexp as VarExp vid) = iexp
                                      | doInlineExp (iexp as RecordExp _) = iexp
                                      | doInlineExp (ProjectionExp { label, record }) = ProjectionExp { label = label, record = doInlineExp record }
-                                     | doInlineExp (iexp as StructExp _) = iexp
-                                     | doInlineExp (SProjectionExp (exp, label)) = SProjectionExp (doInlineExp exp, label)
                                      | doInlineExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
                                      | doInlineExp (TyAbsExp (tv, kind, iexp)) = if TypedSyntax.TyVarMap.inDomain (subst, tv) then
                                                                                      TyAbsExp (tv, kind, substTyInInlineExp (#1 (TypedSyntax.TyVarMap.remove (subst, tv))) iexp) (* TODO: use fresh tyvar if necessary *)
@@ -545,8 +519,6 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
 fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
   | freeTyVarsInInlineExp (bound, RecordExp map) acc = acc
   | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) acc = freeTyVarsInInlineExp (bound, record) acc
-  | freeTyVarsInInlineExp (bound, StructExp { valMap, strMap, exnTagMap }) acc = acc
-  | freeTyVarsInInlineExp (bound, SProjectionExp (exp, label)) acc = freeTyVarsInInlineExp (bound, exp) acc
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) acc = F.freeTyVarsInTy (bound, ty) (F.freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInInlineExp (bound, exp) (F.freeTyVarsInTy (bound, ty) acc)
@@ -554,8 +526,6 @@ fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, uninlineExp path) :: xs) [] map)
   | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
-  | uninlineExp (StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = Syntax.VIdMap.map uninlineExp valMap, strMap = Syntax.StrIdMap.map uninlineExp strMap, exnTagMap = Syntax.VIdMap.map uninlineExp exnTagMap }
-  | uninlineExp (SProjectionExp (exp, label)) = F.SProjectionExp (uninlineExp exp, label)
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
@@ -689,40 +659,6 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                                 end
                                                                | _ => F.TyAppExp (exp, ty), NONE)
                                              end
-                   | F.StructExp { valMap, strMap, exnTagMap } => let val valMap' = Syntax.VIdMap.map (doExp' env) valMap
-                                                                      val strMap' = Syntax.StrIdMap.map (doExp' env) strMap
-                                                                      val exnTagMap' = Syntax.VIdMap.map (doExp' env) exnTagMap
-                                                                  in ( F.StructExp { valMap = Syntax.VIdMap.map #1 valMap'
-                                                                                   , strMap = Syntax.StrIdMap.map #1 strMap'
-                                                                                   , exnTagMap = Syntax.VIdMap.map #1 exnTagMap'
-                                                                                   }
-                                                                     , case Syntax.VIdMap.foldli (fn (label, (_, SOME iexp), SOME acc) => SOME (Syntax.VIdMap.insert (acc, label, iexp))
-                                                                                                 | (label, (_, _), _) => NONE) (SOME Syntax.VIdMap.empty) valMap' of
-                                                                           NONE => NONE
-                                                                         | SOME valMap'' =>
-                                                                           case Syntax.StrIdMap.foldli (fn (label, (_, SOME iexp), SOME acc) => SOME (Syntax.StrIdMap.insert (acc, label, iexp))
-                                                                                                       | (label, (_, _), _) => NONE) (SOME Syntax.StrIdMap.empty) strMap' of
-                                                                               NONE => NONE
-                                                                             | SOME strMap'' =>
-                                                                               case Syntax.VIdMap.foldli (fn (label, (_, SOME iexp), SOME acc) => SOME (Syntax.VIdMap.insert (acc, label, iexp))
-                                                                                                         | (label, (_, _), _) => NONE) (SOME Syntax.VIdMap.empty) exnTagMap' of
-                                                                                   NONE => NONE
-                                                                                 | SOME exnTagMap'' =>
-                                                                                   SOME (StructExp { valMap = valMap''
-                                                                                                   , strMap = strMap''
-                                                                                                   , exnTagMap = exnTagMap''
-                                                                                                   }
-                                                                                        )
-                                                                     )
-                                                                  end
-                   | F.SProjectionExp (exp, label) => (case doExp' env exp of
-                                                           (exp, SOME (StructExp m)) => (case lookupSLabel(m, label) of
-                                                                                             SOME iexp => (uninlineExp iexp, SOME iexp)
-                                                                                           | NONE => (F.SProjectionExp (exp, label), NONE) (* should be an error *)
-                                                                                        )
-                                                         | (exp, SOME iexp) => (F.SProjectionExp (exp, label), SOME (SProjectionExp (iexp, label)))
-                                                         | (exp, NONE) => (F.SProjectionExp (exp, label), NONE)
-                                                      )
                    | F.PackExp { payloadTy, exp, packageTy } => (F.PackExp { payloadTy = payloadTy, exp = doExp env exp, packageTy = packageTy }, NONE)
                 )
           and doDec (env : Env) (F.ValDec (vid, optTy, exp)) = let val (exp, iexpOpt) = doExp' env exp
@@ -799,11 +735,6 @@ fun doExp ctx (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Ve
   | doExp ctx (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp ctx record }
   | doExp ctx (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp ctx exp)
   | doExp ctx (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp ctx exp, ty)
-  | doExp ctx (F.StructExp { valMap, strMap, exnTagMap }) = F.StructExp { valMap = valMap
-                                                                        , strMap = strMap
-                                                                        , exnTagMap = exnTagMap
-                                                                        }
-  | doExp ctx (F.SProjectionExp (exp, label)) = F.SProjectionExp (doExp ctx exp, label)
   | doExp ctx (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp ctx exp, packageTy = packageTy }
 and doDec ctx (F.ValDec (vid, optTy, exp1)) = let val (decs, exp1) = extractLet ctx (doExp ctx exp1)
                                                   val dec = F.ValDec (vid, optTy, exp1)
@@ -874,8 +805,6 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.ProjectionExp { label, record }) = isDiscardable record
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
-  | isDiscardable (F.StructExp { valMap, strMap, exnTagMap }) = true
-  | isDiscardable (F.SProjectionExp (exp, label)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
 (* doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set *)
 fun doPat (F.WildcardPat _) acc = acc
@@ -934,18 +863,6 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
   | doExp (F.TyAppExp (exp, ty)) acc = let val (used, exp) = doExp exp acc
                                        in (used, F.TyAppExp (exp, ty))
                                        end
-  | doExp (F.StructExp { valMap, strMap, exnTagMap }) acc = let val (used, valMap) = Syntax.VIdMap.foldli (fn (vid, exp, (acc, m)) => let val (acc, e) = doExp exp acc in (acc, Syntax.VIdMap.insert (m, vid, e)) end) (acc, Syntax.VIdMap.empty) valMap
-                                                                val (used, strMap) = Syntax.StrIdMap.foldli (fn (vid, exp, (acc, m)) => let val (acc, e) = doExp exp acc in (acc, Syntax.StrIdMap.insert (m, vid, e)) end) (used, Syntax.StrIdMap.empty) strMap
-                                                                val (used, exnTagMap) = Syntax.VIdMap.foldli (fn (vid, exp, (acc, m)) => let val (acc, e) = doExp exp acc in (acc, Syntax.VIdMap.insert (m, vid, e)) end) (used, Syntax.VIdMap.empty) exnTagMap
-                                                            in (used, F.StructExp { valMap = valMap
-                                                                                  , strMap = strMap
-                                                                                  , exnTagMap = exnTagMap
-                                                                                  }
-                                                               )
-                                                            end
-  | doExp (F.SProjectionExp (exp, label)) acc = let val (used, exp) = doExp exp acc
-                                                in (used, F.SProjectionExp (exp, label))
-                                                end
   | doExp (F.PackExp { payloadTy, exp, packageTy }) acc = let val (used, exp) = doExp exp acc
                                                           in (used, F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy })
                                                           end
@@ -1007,12 +924,6 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                      F.RecordExp [] => (used, [])
                                                    | exp => (used, [F.TyAppExp (exp, ty)])
                                               end
-  | doIgnoredExp (F.StructExp { valMap, strMap, exnTagMap }) acc = let val exps = Syntax.VIdMap.foldr (fn (e, xs) => e :: xs) [] exnTagMap
-                                                                       val exps = Syntax.StrIdMap.foldr (fn (e, xs) => e :: xs) exps strMap
-                                                                       val exps = Syntax.VIdMap.foldr (fn (e, xs) => e :: xs) exps valMap
-                                                                   in List.foldr (fn (exp, (acc, xs)) => let val (acc, ys) = doIgnoredExp exp acc in (acc, ys @ xs) end) (acc, []) exps
-                                                                   end
-  | doIgnoredExp (F.SProjectionExp (exp, label)) acc = doIgnoredExp exp acc
   | doIgnoredExp (F.PackExp { payloadTy, exp, packageTy }) acc = let val (used, exp) = doIgnoredExpAsExp exp acc
                                                                  in case exp of
                                                                         F.RecordExp [] => (used, [])

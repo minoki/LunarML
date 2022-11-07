@@ -63,15 +63,6 @@ fun mapCont f [] cont = cont []
 fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
   | stripTyAbs e = e
 
-fun StructToRecord { valMap, strMap, exnTagMap } = let val entries = Syntax.VIdMap.foldri (fn (vid, exp, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag"), exp) :: xs) [] exnTagMap
-                                                       val entries = Syntax.StrIdMap.foldri (fn (Syntax.MkStrId name, exp, xs) => (Syntax.IdentifierLabel ("_" ^ name), exp) :: xs) entries strMap
-                                                       val entries = Syntax.VIdMap.foldri (fn (vid, exp, xs) => (Syntax.IdentifierLabel (Syntax.getVIdName vid), exp) :: xs) entries valMap
-                                                   in F.RecordExp entries
-                                                   end
-fun SLabelToLabel (F.ValueLabel vid) = Syntax.IdentifierLabel (Syntax.getVIdName vid)
-  | SLabelToLabel (F.StructLabel (Syntax.MkStrId name)) = Syntax.IdentifierLabel ("_" ^ name)
-  | SLabelToLabel (F.ExnTagLabel vid) = Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag")
-
 (* 'a -> 'b ~~> (cont : 'b -> 'ans, exh : exn -> 'ans, param : 'a) -> 'ans *)
 (* continuation of 'a : (value : 'a) -> 'ans *)
 
@@ -250,17 +241,6 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
                                                           )
          | F.TyAbsExp (_, _, exp) => transform ctx exp { exnCont = exnCont } k
          | F.TyAppExp (exp, _) => transform ctx exp { exnCont = exnCont } k
-         | F.StructExp maps => transform ctx (StructToRecord maps) { exnCont = exnCont } k
-         | F.SProjectionExp (exp, label) => transform ctx exp { exnCont = exnCont }
-                                                      (fn exp =>
-                                                          let val x = genSym ctx
-                                                          in C.Projection { label = SLabelToLabel label
-                                                                          , record = exp
-                                                                          , result = x
-                                                                          , cont = k (C.Var x)
-                                                                          }
-                                                          end
-                                                      )
          | F.PackExp { payloadTy, exp, packageTy } => transform ctx exp { exnCont = exnCont } k
       )
 and transformT (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Var (* continuation variable *)) : C.CExp
@@ -419,17 +399,6 @@ and transformT (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Var (* c
                                                           )
          | F.TyAbsExp (_, _, exp) => transformT ctx exp { exnCont = exnCont } k
          | F.TyAppExp (exp, _) => transformT ctx exp { exnCont = exnCont } k
-         | F.StructExp maps => transformT ctx (StructToRecord maps) { exnCont = exnCont } k
-         | F.SProjectionExp (exp, label) => transform ctx exp { exnCont = exnCont }
-                                                      (fn exp =>
-                                                          let val x = genSym ctx
-                                                          in C.Projection { label = SLabelToLabel label
-                                                                          , record = exp
-                                                                          , result = x
-                                                                          , cont = C.App { applied = C.Var k, args = [C.Var x] } (* apply continuation *)
-                                                                          }
-                                                          end
-                                                      )
          | F.PackExp { payloadTy, exp, packageTy } => transformT ctx exp { exnCont = exnCont } k
       )
 fun transformDecs (ctx : Context) ([] : F.Dec list) { exnCont : C.Var } (k : C.Var) : C.CExp

@@ -17,10 +17,6 @@ fun doTy prec (F.TyVar tv) = doTyVar tv
   | doTy prec (F.ForallType (tv, kind, ty)) = showParen (prec >= 1) (P.Fragment "forall " :: doTyVar tv @ P.Fragment  " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
   | doTy prec (F.ExistsType (tv, kind, ty)) = showParen (prec >= 1) (P.Fragment "exists " :: doTyVar tv @ P.Fragment  " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
   | doTy prec (F.TypeFn (tv, kind, ty)) = showParen (prec >= 1) (P.Fragment "fn " :: doTyVar tv @ P.Fragment  " : " :: doKind 0 kind @ P.Fragment ". " :: doTy 0 ty)
-  | doTy prec (F.SigType { valMap, strMap, exnTags }) = P.spaceSep ([P.Fragment "sig"] :: Syntax.VIdMap.foldri (fn (vid, ty, xs) => (P.Fragment "val " :: doVId vid @ P.Fragment " : " :: doTy 0 ty) :: xs) (Syntax.StrIdMap.foldri (fn (strid, ty, xs) => (P.Fragment "structure " :: doStrId strid @ P.Fragment " : " :: doTy 0 ty) :: xs) (Syntax.VIdSet.foldr (fn (vid, xs) => (P.Fragment "exception " :: doVId vid) :: xs) [[P.Fragment "end"]] exnTags) strMap) valMap) (* Insert newlines? *)
-fun doSLabel (F.ValueLabel vid) = P.Fragment "v:" :: doVId vid
-  | doSLabel (F.StructLabel strid) = P.Fragment "s:" :: doStrId strid
-  | doSLabel (F.ExnTagLabel vid) = P.Fragment "e:" :: doVId vid
 fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp (F.WordConstOp x) = [P.Fragment ("word " ^ IntInf.toString x)]
   | doPrimOp (F.RealConstOp x) = [P.Fragment ("real " ^ Numeric.Notation.toString "~" x)]
@@ -74,8 +70,6 @@ and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrim
   | doExp prec (F.ProjectionExp { label, record }) = showParen (prec >= 2) (P.Fragment "#" :: doLabel label @ P.Fragment " " :: doExp 2 record)
   | doExp prec (F.TyAbsExp (tv, kind, exp)) = showParen (prec >= 1) (P.Fragment "fn type " :: doTyVar tv @ P.Fragment " : " :: doKind 0 kind @ P.Fragment " => " :: doExp 0 exp)
   | doExp prec (F.TyAppExp (exp, ty)) = showParen (prec >= 2) (doExp 1 exp @ P.Fragment " [" :: doTy 0 ty @ [P.Fragment "]"])
-  | doExp prec (F.StructExp { valMap, strMap, exnTagMap }) = P.spaceSep ([P.Fragment "struct"] :: Syntax.VIdMap.foldri (fn (vid, exp, xs) => (P.Fragment "val " :: doVId vid @ P.Fragment " = " :: doExp 0 exp) :: xs) (Syntax.StrIdMap.foldri (fn (strid, exp, xs) => (P.Fragment "structure " :: doStrId strid @ P.Fragment " = " :: doExp 0 exp) :: xs) (Syntax.VIdMap.foldri (fn (vid, exp, xs) => (P.Fragment "exception " :: doVId vid @ P.Fragment ".tag = " :: doExp 0 exp) :: xs) [[P.Fragment "end"]] exnTagMap) strMap) valMap) (* Insert newlines? *)
-  | doExp prec (F.SProjectionExp (exp, slabel)) = showParen (prec >= 2) (P.Fragment "#" :: doSLabel slabel @ P.Fragment " " :: doExp 2 exp)
   | doExp prec (F.PackExp { payloadTy, exp, packageTy }) = showParen (prec >= 1) (P.Fragment "_pack (type " :: doTy 0 payloadTy @ P.Fragment ", " :: doExp 0 exp @ P.Fragment ") : " :: doTy 0 packageTy)
 and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty @ P.Fragment " = " :: doExp 0 exp
   | doDec (F.ValDec (vid, NONE, exp)) = P.Fragment "val " :: P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : _ = " :: doExp 0 exp
