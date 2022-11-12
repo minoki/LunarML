@@ -59,7 +59,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | IfThenElseExp of Exp * Exp * Exp
              | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
              | FnExp of TypedSyntax.VId * Ty * Exp
-             | ProjectionExp of { label : Syntax.Label, record : Exp }
+             | ProjectionExp of { label : Syntax.Label, record : Exp, fieldTypes : Ty Syntax.LabelMap.map }
              | TyAbsExp of TyVar * Kind * Exp
              | TyAppExp of Exp * Ty
              | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
@@ -220,7 +220,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
           | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
           | doExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
-          | doExp (ProjectionExp { label, record }) = ProjectionExp { label = label, record = doExp record }
+          | doExp (ProjectionExp { label, record, fieldTypes }) = ProjectionExp { label = label, record = doExp record, fieldTypes = Syntax.LabelMap.map doTy fieldTypes }
           | doExp (TyAbsExp (tv, kind, exp)) = if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
                                                    TyAbsExp (tv, kind, #doExp (substTy (#1 (TypedSyntax.TyVarMap.remove (subst, tv)))) exp)
                                                else
@@ -285,7 +285,7 @@ and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, 
                                                                     in List.foldl (fn ((pat, exp), acc) => freeTyVarsInPat (bound, pat) (freeTyVarsInExp (bound, exp) acc)) acc matches
                                                                     end
   | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
-  | freeTyVarsInExp (bound, ProjectionExp { label, record }) acc = freeTyVarsInExp (bound, record) acc
+  | freeTyVarsInExp (bound, ProjectionExp { label, record, fieldTypes }) acc = freeTyVarsInExp (bound, record) (Syntax.LabelMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc fieldTypes)
   | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInExp (bound, exp) (freeTyVarsInTy (bound, ty) acc)
   | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInTy (bound, packageTy) (freeTyVarsInExp (bound, exp) acc))
@@ -355,7 +355,7 @@ and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args
   | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) (freeVarsInExp (bound, exp3) acc))
   | freeVarsInExp (bound, CaseExp (span, exp, ty, matches)) acc = List.foldl (fn ((pat, exp), acc) => freeVarsInExp (varsInPat pat bound, exp) (freeVarsInPat (bound, pat) acc)) (freeVarsInExp (bound, exp) acc) matches
   | freeVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeVarsInExp (TypedSyntax.VIdSet.add (bound, vid), exp) acc
-  | freeVarsInExp (bound, ProjectionExp { label, record }) acc = freeVarsInExp (bound, record) acc
+  | freeVarsInExp (bound, ProjectionExp { label, record, fieldTypes }) acc = freeVarsInExp (bound, record) acc
   | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeVarsInExp (bound, exp) acc
   | freeVarsInExp (bound, TyAppExp (exp, ty)) acc = freeVarsInExp (bound, exp) acc
   | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeVarsInExp (bound, exp) acc
@@ -428,7 +428,7 @@ and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
   | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
-  | print_Exp (ProjectionExp { label, record }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",record=" ^ print_Exp record ^ "}"
+  | print_Exp (ProjectionExp { label, record, fieldTypes }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",record=" ^ print_Exp record ^ "}"
   | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (PackExp { payloadTy, exp, packageTy }) = "PackExp{payloadTy=" ^ print_Ty payloadTy ^ ",exp=" ^ print_Exp exp ^ ",packageTy=" ^ print_Ty packageTy ^ "}"
@@ -474,7 +474,7 @@ fun LongVarExp (env : Env, TypedSyntax.MkShortVId vid) = (case TypedSyntax.VIdMa
           fun go ([], exp, ty) = let val label = FSyntax.ValueLabel vid
                                  in case ty of
                                         FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
-                                                                              SOME ty' => (FSyntax.ProjectionExp { label = label, record = exp }, ty')
+                                                                              SOME ty' => (FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
                                                                             | NONE => raise Fail "non-existent value"
                                                                          )
                                       | _ => raise Fail "not a record"
@@ -482,7 +482,7 @@ fun LongVarExp (env : Env, TypedSyntax.MkShortVId vid) = (case TypedSyntax.VIdMa
             | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
                                               in case ty of
                                                      FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
-                                                                                           SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp }, ty')
+                                                                                           SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
                                                                                          | NONE => raise Fail "non-existent substructure"
                                                                                       )
                                                    | _ => raise Fail "not a record"
@@ -498,7 +498,7 @@ fun LongStrIdExp (env : Env, TypedSyntax.MkLongStrId (strid0, strids)) : FSyntax
             | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
                                               in case ty of
                                                      FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
-                                                                                           SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp }, ty')
+                                                                                           SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes}, ty')
                                                                                          | NONE => raise Fail "non-existent substructure"
                                                                                       )
                                                    | _ => raise Fail "not a record"
@@ -506,10 +506,26 @@ fun LongStrIdExp (env : Env, TypedSyntax.MkLongStrId (strid0, strids)) : FSyntax
       in go (strids, FSyntax.VarExp strid0, ty0)
       end
 fun LongVIdToExnTagExp (env : Env, TypedSyntax.MkShortVId vid) = TypedSyntax.VIdMap.find (#exnTagMap env, vid)
-  | LongVIdToExnTagExp (env, TypedSyntax.MkLongVId (strid0, strids, vid)) = SOME (FSyntax.ProjectionExp { label = FSyntax.ExnTagLabel vid
-                                                                                                        , record = List.foldl (fn (strid, p) => FSyntax.ProjectionExp { label = FSyntax.StructLabel strid, record = p }) (FSyntax.VarExp (FSyntax.strIdToVId strid0)) strids
-                                                                                                        }
-                                                                                 )
+  | LongVIdToExnTagExp (env, TypedSyntax.MkLongVId (strid0, strids, vid))
+    = let val strid0 = FSyntax.strIdToVId strid0
+          val ty0 = case TypedSyntax.VIdMap.find (#valMap env, strid0) of
+                        SOME ty => ty
+                      | NONE => raise Fail ("strid not found (exn / " ^ TypedSyntax.print_VId strid0 ^ ")")
+          fun go ([], exp, ty) = let val label = FSyntax.ExnTagLabel vid
+                                 in case ty of
+                                        FSyntax.RecordType fieldTypes => SOME (FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes })
+                                      | _ => raise Fail "not a record"
+                                 end
+            | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
+                                              in case ty of
+                                                     FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
+                                                                                           SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
+                                                                                         | NONE => raise Fail "non-existent substructure"
+                                                                                      )
+                                                   | _ => raise Fail "not a record"
+                                              end
+      in go (strids, FSyntax.VarExp strid0, ty0)
+      end
 
 fun updateEqualityForTyVarMap(f, env : Env) : Env = { equalityForTyVarMap = f (#equalityForTyVarMap env)
                                                     , equalityForTyNameMap = #equalityForTyNameMap env
@@ -810,10 +826,14 @@ and toFExp (ctx, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) 
                 end
           val (decs, fields) = List.foldr doField ([], []) fields
           val baseVId = freshVId (ctx, "base")
-          val baseDec = F.ValDec (baseVId, SOME (toFTy (ctx, env, baseTy)), toFExp (ctx, env, baseExp))
+          val baseTy = toFTy (ctx, env, baseTy)
+          val baseFieldTypes = case baseTy of
+                                   F.RecordType fieldTypes => fieldTypes
+                                 | _ => raise Fail "invalid record type"
+          val baseDec = F.ValDec (baseVId, SOME baseTy, toFExp (ctx, env, baseExp))
           val baseExp = F.VarExp baseVId
           val baseFields = Syntax.LabelMap.foldri (fn (label, _, fields) =>
-                                                      (label, F.ProjectionExp { label = label, record = baseExp }) :: fields
+                                                      (label, F.ProjectionExp { label = label, record = baseExp, fieldTypes = baseFieldTypes }) :: fields
                                                   ) [] baseFields
       in List.foldr F.LetExp (F.LetExp (baseDec, F.RecordExp (fields @ baseFields))) decs
       end
@@ -822,7 +842,13 @@ and toFExp (ctx, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) 
     = let val (env, decs) = toFDecs(ctx, env, decs)
       in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
       end
-  | toFExp (ctx, env, T.AppExp (span, T.ProjectionExp { label, ... }, e2)) = F.ProjectionExp { label = label, record = toFExp (ctx, env, e2) }
+  | toFExp (ctx, env, T.AppExp (span, T.ProjectionExp { label, recordTy, ... }, e2))
+    = let val recordTy = toFTy (ctx, env, recordTy)
+          val fieldTypes = case recordTy of
+                               F.RecordType fieldTypes => fieldTypes
+                             | _ => raise Fail "invalid record type"
+      in F.ProjectionExp { label = label, record = toFExp (ctx, env, e2), fieldTypes = fieldTypes }
+      end
   | toFExp (ctx, env, T.AppExp (span, e1, e2)) = F.AppExp (toFExp (ctx, env, e1), toFExp (ctx, env, e2))
   | toFExp (ctx, env, T.TypedExp (span, exp, _)) = toFExp (ctx, env, exp)
   | toFExp (ctx, env, T.IfThenElseExp (span, e1, e2, e3)) = F.IfThenElseExp (toFExp (ctx, env, e1), toFExp (ctx, env, e2), toFExp (ctx, env, e3))
@@ -839,8 +865,12 @@ and toFExp (ctx, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) 
       in F.FnExp (vid, ty, toFExp (ctx, env', body))
       end
   | toFExp (ctx, env, T.ProjectionExp { sourceSpan = span, label, recordTy, fieldTy = _ })
-    = let val vid = freshVId(ctx, "tmp")
-      in F.FnExp(vid, toFTy(ctx, env, recordTy), F.ProjectionExp { label = label, record = F.VarExp vid })
+    = let val vid = freshVId (ctx, "tmp")
+          val recordTy = toFTy (ctx, env, recordTy)
+          val fieldTypes = case recordTy of
+                               F.RecordType fieldTypes => fieldTypes
+                             | _ => raise Fail "invalid record type"
+      in F.FnExp (vid, recordTy, F.ProjectionExp { label = label, record = F.VarExp vid, fieldTypes = fieldTypes })
       end
   | toFExp (ctx, env, T.HandleExp (span, exp, matches))
     = let val exnName = freshVId(ctx, "exn")
@@ -884,8 +914,11 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
           val exp = toFExp (ctx, env, exp)
           val vars = List.map (fn (vid, ty) => (vid, toFTy (ctx, env, ty))) vars
           val tupleTy = F.TupleType (List.map #2 vars)
+          val tupleFieldTypes = case tupleTy of
+                                    F.RecordType fieldTypes => fieldTypes
+                                  | _ => raise Fail "invalid tuple"
           val decs = let fun go (i, []) = []
-                           | go (i, (vid, ty) :: xs) = F.ValDec (vid, SOME ty, F.ProjectionExp { label = Syntax.NumericLabel i, record = F.VarExp tupleVId }) :: go (i + 1, xs)
+                           | go (i, (vid, ty) :: xs) = F.ValDec (vid, SOME ty, F.ProjectionExp { label = Syntax.NumericLabel i, record = F.VarExp tupleVId, fieldTypes = tupleFieldTypes }) :: go (i + 1, xs)
                      in go (1, vars)
                      end
           val env' = updateValMap (fn m => List.foldl (fn ((vid, ty), m) => T.VIdMap.insert (m, vid, ty)) (T.VIdMap.insert (m, tupleVId, tupleTy)) vars, env)
@@ -1275,8 +1308,8 @@ and strDecToFDecs (ctx, env : Env, T.CoreDec (span, dec)) = toFDecs (ctx, env, [
                                                                                            | NONE => raise Fail "invalid record"
                                                                         val env = updateEqualityForTyNameMap (fn m => T.TyNameMap.insert (m, tyname, T.MkShortVId equalityVId), env)
                                                                         val env = updateValMap (fn m => T.VIdMap.insert (T.VIdMap.insert (T.VIdMap.insert (m, packageVId, payloadTy), equalityVId, equalityTy), strVId, strTy), env)
-                                                                    in ( F.ValDec (equalityVId, SOME equalityTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp packageVId })
-                                                                         :: F.ValDec (strVId, SOME strTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp packageVId })
+                                                                    in ( F.ValDec (equalityVId, SOME equalityTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp packageVId, fieldTypes = fieldTypes })
+                                                                         :: F.ValDec (strVId, SOME strTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp packageVId, fieldTypes = fieldTypes })
                                                                          :: F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, packageVId, payloadTy, exp)
                                                                          :: revDecs
                                                                        , F.VarExp strVId

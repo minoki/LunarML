@@ -67,7 +67,7 @@ and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrim
   | doExp prec (F.IfThenElseExp (exp1, exp2, exp3)) = showParen (prec >= 1) (P.Fragment "if " :: doExp 0 exp1 @ P.Fragment " then " :: doExp 0 exp2 @ P.Fragment " else " :: doExp 0 exp3)
   | doExp prec (F.CaseExp (span, exp, ty, matches)) = showParen (prec >= 1) (P.Fragment "case " :: doExp 0 exp @ P.Fragment " : " :: doTy 0 ty @ P.Fragment " of" :: P.LineTerminator :: P.IncreaseIndent 2 :: List.foldr (fn ((pat, exp), rest) => P.Indent :: P.Fragment "| " :: doPat 0 pat @ P.Fragment " => " :: doExp 0 exp @ P.LineTerminator :: rest) [P.DecreaseIndent 2, P.Indent] matches)
   | doExp prec (F.FnExp (vid, ty, exp)) = showParen (prec >= 1) (P.Fragment "fn " :: P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty @ P.Fragment " => " :: doExp 0 exp)
-  | doExp prec (F.ProjectionExp { label, record }) = showParen (prec >= 2) (P.Fragment "#" :: doLabel label @ P.Fragment " " :: doExp 2 record)
+  | doExp prec (F.ProjectionExp { label, record, fieldTypes }) = showParen (prec >= 2) (P.Fragment "#" :: doLabel label @ P.Fragment " " :: doExp 2 record)
   | doExp prec (F.TyAbsExp (tv, kind, exp)) = showParen (prec >= 1) (P.Fragment "fn type " :: doTyVar tv @ P.Fragment " : " :: doKind 0 kind @ P.Fragment " => " :: doExp 0 exp)
   | doExp prec (F.TyAppExp (exp, ty)) = showParen (prec >= 2) (doExp 1 exp @ P.Fragment " [" :: doTy 0 ty @ [P.Fragment "]"])
   | doExp prec (F.PackExp { payloadTy, exp, packageTy }) = showParen (prec >= 1) (P.Fragment "_pack (type " :: doTy 0 payloadTy @ P.Fragment ", " :: doExp 0 exp @ P.Fragment ") : " :: doTy 0 packageTy)

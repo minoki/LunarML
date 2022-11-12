@@ -34,7 +34,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                    | F.HandleExp { body, exnName, handler } => F.HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
                    | F.IfThenElseExp (exp1, exp2, exp3) => F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
                    | F.FnExp (vid, ty, exp) => F.FnExp (vid, ty, doExp exp)
-                   | F.ProjectionExp { label, record } => F.ProjectionExp { label = label, record = doExp record }
+                   | F.ProjectionExp { label, record, fieldTypes } => F.ProjectionExp { label = label, record = doExp record, fieldTypes = fieldTypes }
                    | F.TyAbsExp (tv, kind, exp) => F.TyAbsExp (tv, kind, doExp exp)
                    | F.TyAppExp (exp, ty) => F.TyAppExp (doExp exp, ty)
                    | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
@@ -82,7 +82,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE })
               = List.foldr (fn ((label, pat), e) =>
                                case Syntax.LabelMap.find (fieldTypes, label) of
-                                   SOME fieldTy => let val exp = genMatcher (F.ProjectionExp { label = label, record = exp }) fieldTy pat
+                                   SOME fieldTy => let val exp = genMatcher (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) fieldTy pat
                                                    in F.SimplifyingAndalsoExp (exp, e)
                                                    end
                                  | NONE => raise DesugarError ([sourceSpan], "internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
@@ -91,11 +91,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                            fields
             | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
               = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
-                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp }) :: xs) [] restTypes)
+                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) :: xs) [] restTypes)
                     val init = genMatcher restExp (F.RecordType restTypes) basePat
                 in List.foldr (fn ((label, pat), e) =>
                                   case Syntax.LabelMap.find (fieldTypes, label) of
-                                      SOME fieldTy => let val exp = genMatcher (F.ProjectionExp { label = label, record = exp }) fieldTy pat
+                                      SOME fieldTy => let val exp = genMatcher (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) fieldTy pat
                                                       in F.SimplifyingAndalsoExp (exp, e)
                                                       end
                                     | NONE => raise DesugarError ([sourceSpan], "internal error: record field not found (fieldTypes=" ^ FSyntax.PrettyPrint.print_Ty recordTy ^ ", " ^ Syntax.PrettyPrint.print_Label label ^ ")")
@@ -146,11 +146,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
           and genBinders exp ty (F.WildcardPat _) = []
             | genBinders exp ty (F.SConPat _) = []
             | genBinders exp _ (F.VarPat (span, vid, ty)) = [(vid, SOME ty, exp)]
-            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
+            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
             | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
               = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
-                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp }) :: xs) [] restTypes)
-                in genBinders restExp (F.RecordType restTypes) basePat @ List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
+                    val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) :: xs) [] restTypes)
+                in genBinders restExp (F.RecordType restTypes) basePat @ List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
                 end
             | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
@@ -199,7 +199,7 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector
   | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
   | doExp (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp exp, ty, List.map (fn (pat, exp) => (pat, doExp exp)) matches)
   | doExp (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp exp)
-  | doExp (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp record }
+  | doExp (F.ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = doExp record, fieldTypes = fieldTypes }
   | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
@@ -374,7 +374,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
             | doExp env (F.FnExp (vid, ty, exp)) = let val vid' = refreshVId vid
                                                    in F.FnExp (vid', doTy env ty, doExp (insertVId (env, vid, vid')) exp)
                                                    end
-            | doExp env (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp env record }
+            | doExp env (F.ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = doExp env record, fieldTypes = Syntax.LabelMap.map (doTy env) fieldTypes }
             | doExp env (F.TyAbsExp (tv, kind, exp)) = let val tv' = refreshTyVar tv
                                                        in F.TyAbsExp (tv', kind, doExp (insertTyVar (env, tv, tv')) exp)
                                                        end
@@ -449,7 +449,7 @@ local structure F = FSyntax in
 type Context = { nextVId : int ref, nextTyVar : int ref }
 datatype InlineExp = VarExp of TypedSyntax.VId
                    | RecordExp of InlineExp Syntax.LabelMap.map
-                   | ProjectionExp of { label : Syntax.Label, record : InlineExp }
+                   | ProjectionExp of { label : Syntax.Label, record : InlineExp, fieldTypes : F.Ty Syntax.LabelMap.map }
                    | FnExp of TypedSyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
@@ -489,7 +489,7 @@ fun costOfExp (F.PrimExp (primOp, tyargs, args)) = (case primOp of
   | costOfExp (F.IfThenElseExp (e1, e2, e3)) = 1 + costOfExp e1 + costOfExp e2 + costOfExp e3
   | costOfExp (F.CaseExp (span, exp, ty, matches)) = List.foldl (fn ((pat, exp), acc) => acc + costOfExp exp) (costOfExp exp) matches
   | costOfExp (F.FnExp (vid, ty, exp)) = 1 + costOfExp exp
-  | costOfExp (F.ProjectionExp { label, record }) = costOfExp record
+  | costOfExp (F.ProjectionExp { label, record, fieldTypes }) = costOfExp record
   | costOfExp (F.TyAbsExp (tv, kind, exp)) = costOfExp exp
   | costOfExp (F.TyAppExp (exp, ty)) = costOfExp exp
   | costOfExp (F.PackExp { payloadTy, exp, packageTy }) = costOfExp exp
@@ -506,7 +506,7 @@ val INLINE_THRESHOLD = 10
 fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                    fun doInlineExp (iexp as VarExp vid) = iexp
                                      | doInlineExp (iexp as RecordExp _) = iexp
-                                     | doInlineExp (ProjectionExp { label, record }) = ProjectionExp { label = label, record = doInlineExp record }
+                                     | doInlineExp (ProjectionExp { label, record, fieldTypes }) = ProjectionExp { label = label, record = doInlineExp record, fieldTypes = fieldTypes }
                                      | doInlineExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
                                      | doInlineExp (TyAbsExp (tv, kind, iexp)) = if TypedSyntax.TyVarMap.inDomain (subst, tv) then
                                                                                      TyAbsExp (tv, kind, substTyInInlineExp (#1 (TypedSyntax.TyVarMap.remove (subst, tv))) iexp) (* TODO: use fresh tyvar if necessary *)
@@ -518,14 +518,14 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                end
 fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
   | freeTyVarsInInlineExp (bound, RecordExp map) acc = acc
-  | freeTyVarsInInlineExp (bound, ProjectionExp { label, record }) acc = freeTyVarsInInlineExp (bound, record) acc
+  | freeTyVarsInInlineExp (bound, ProjectionExp { label, record, fieldTypes }) acc = freeTyVarsInInlineExp (bound, record) acc
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) acc = F.freeTyVarsInTy (bound, ty) (F.freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInInlineExp (bound, exp) (F.freeTyVarsInTy (bound, ty) acc)
   | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) acc = Vector.foldl (fn (ty, acc) => F.freeTyVarsInTy (bound, ty) acc) (Vector.foldl (fn (exp, acc) => freeTyVarsInInlineExp (bound, exp) acc) acc exps) tys
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, uninlineExp path) :: xs) [] map)
-  | uninlineExp (ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = uninlineExp record }
+  | uninlineExp (ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = uninlineExp record, fieldTypes = fieldTypes }
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
@@ -607,14 +607,14 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                    val exp' = doExp env' exp
                                                in (F.FnExp (vid, ty, exp'), if costOfExp exp' <= INLINE_THRESHOLD then SOME (FnExp (vid, ty, exp')) else NONE)
                                                end
-                   | F.ProjectionExp { label, record } => (case doExp' env record of
-                                                               (exp, SOME (RecordExp m)) => (case Syntax.LabelMap.find (m, label) of
-                                                                                                 SOME iexp => (uninlineExp iexp, SOME iexp)
-                                                                                               | NONE => (F.ProjectionExp { label = label, record = exp }, NONE) (* should be an error *)
-                                                                                            )
-                                                             | (exp, SOME iexp) => (F.ProjectionExp { label = label, record = exp }, SOME (ProjectionExp { label = label, record = iexp }))
-                                                             | (exp, NONE) => (F.ProjectionExp { label = label, record = exp }, NONE)
-                                                          )
+                   | F.ProjectionExp { label, record, fieldTypes } => (case doExp' env record of
+                                                                           (exp, SOME (RecordExp m)) => (case Syntax.LabelMap.find (m, label) of
+                                                                                                             SOME iexp => (uninlineExp iexp, SOME iexp)
+                                                                                                           | NONE => (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, NONE) (* should be an error *)
+                                                                                                        )
+                                                                         | (exp, SOME iexp) => (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, SOME (ProjectionExp { label = label, record = iexp, fieldTypes = fieldTypes }))
+                                                                         | (exp, NONE) => (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, NONE)
+                                                                      )
                    | F.TyAbsExp (tv, kind, exp) => let val (exp, iexp) = doExp' env exp
                                                        val tryEtaReductionI = case iexp of
                                                                                   SOME (TyAppExp (exp', F.TyVar tv')) => if tv = tv' then
@@ -732,7 +732,7 @@ fun doExp ctx (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Ve
   | doExp ctx (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp ctx exp1, doExp ctx exp2, doExp ctx exp3)
   | doExp ctx (F.CaseExp (span, exp, ty, matches)) = F.CaseExp (span, doExp ctx exp, ty, List.map (fn (pat, exp) => (pat, doExp ctx exp)) matches)
   | doExp ctx (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp ctx exp)
-  | doExp ctx (F.ProjectionExp { label, record }) = F.ProjectionExp { label = label, record = doExp ctx record }
+  | doExp ctx (F.ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = doExp ctx record, fieldTypes = fieldTypes }
   | doExp ctx (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp ctx exp)
   | doExp ctx (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp ctx exp, ty)
   | doExp ctx (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp ctx exp, packageTy = packageTy }
@@ -802,7 +802,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3
   | isDiscardable (F.CaseExp (span, exp, ty, matches)) = false (* TODO *)
   | isDiscardable (F.FnExp (vid, ty, exp)) = true
-  | isDiscardable (F.ProjectionExp { label, record }) = isDiscardable record
+  | isDiscardable (F.ProjectionExp { label, record, fieldTypes }) = isDiscardable record
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
@@ -854,9 +854,9 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
   | doExp (F.FnExp (vid, ty, exp)) acc = let val (used, exp) = doExp exp acc
                                          in (used, F.FnExp (vid, ty, exp))
                                          end
-  | doExp (F.ProjectionExp { label, record }) acc = let val (used, exp) = doExp record acc
-                                                    in (used, F.ProjectionExp { label = label, record = exp })
-                                                    end
+  | doExp (F.ProjectionExp { label, record, fieldTypes }) acc = let val (used, exp) = doExp record acc
+                                                                in (used, F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes })
+                                                                end
   | doExp (F.TyAbsExp (tyvar, kind, exp)) acc = let val (used, exp) = doExp exp acc
                                                 in (used, F.TyAbsExp (tyvar, kind, exp))
                                                 end
@@ -913,7 +913,7 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                             in (used, [F.CaseExp (span, exp, ty, matches)])
                                                             end
   | doIgnoredExp (F.FnExp _) acc = (acc, [])
-  | doIgnoredExp (F.ProjectionExp { label, record }) acc = doIgnoredExp record acc
+  | doIgnoredExp (F.ProjectionExp { label, record, fieldTypes }) acc = doIgnoredExp record acc
   | doIgnoredExp (F.TyAbsExp (tyvar, kind, exp)) acc = let val (used, exp) = doIgnoredExpAsExp exp acc (* should be pure *)
                                                        in case exp of
                                                               F.RecordExp [] => (used, [])

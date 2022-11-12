@@ -527,13 +527,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                 )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], L.FunctionExp (vector [VIdToLua (ctx, vid)], vector (doExpTo ctx (increaseLevel env) exp Return))) (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
-                                                                                            let val label = case label of
-                                                                                                                Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
-                                                                                                              | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
-                                                                                            in putPureTo ctx env dest (stmts, L.IndexExp (record', label))
-                                                                                            end
-                                                                                        )
+  | doExpTo ctx env (F.ProjectionExp { label, record, fieldTypes }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
+                                                                                                        let val label = case label of
+                                                                                                                            Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
+                                                                                                                          | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
+                                                                                                        in putPureTo ctx env dest (stmts, L.IndexExp (record', label))
+                                                                                                        end
+                                                                                                    )
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
           putPureTo ctx env dest ([], L.VarExp (L.PredefinedId "_nil"))

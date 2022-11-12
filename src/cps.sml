@@ -229,16 +229,16 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
                                               , cont = k (C.Var f)
                                               }
                                      end
-         | F.ProjectionExp { label, record } => transform ctx record { exnCont = exnCont }
-                                                          (fn record =>
-                                                              let val x = genSym ctx
-                                                              in C.Projection { label = label
-                                                                              , record = record
-                                                                              , result = x
-                                                                              , cont = k (C.Var x)
-                                                                              }
-                                                              end
-                                                          )
+         | F.ProjectionExp { label, record, fieldTypes } => transform ctx record { exnCont = exnCont }
+                                                                      (fn record =>
+                                                                          let val x = genSym ctx
+                                                                          in C.Projection { label = label
+                                                                                          , record = record
+                                                                                          , result = x
+                                                                                          , cont = k (C.Var x)
+                                                                                          }
+                                                                          end
+                                                                      )
          | F.TyAbsExp (_, _, exp) => transform ctx exp { exnCont = exnCont } k
          | F.TyAppExp (exp, _) => transform ctx exp { exnCont = exnCont } k
          | F.PackExp { payloadTy, exp, packageTy } => transform ctx exp { exnCont = exnCont } k
@@ -387,16 +387,16 @@ and transformT (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Var (* c
                                               , cont = C.App { applied = C.Var k, args = [C.Var f] } (* apply continuation *)
                                               }
                                      end
-         | F.ProjectionExp { label, record } => transform ctx record { exnCont = exnCont }
-                                                          (fn record =>
-                                                              let val x = genSym ctx
-                                                              in C.Projection { label = label
-                                                                              , record = record
-                                                                              , result = x
-                                                                              , cont = C.App { applied = C.Var k, args = [C.Var x] } (* apply continuation *)
-                                                                              }
-                                                              end
-                                                          )
+         | F.ProjectionExp { label, record, fieldTypes } => transform ctx record { exnCont = exnCont }
+                                                                      (fn record =>
+                                                                          let val x = genSym ctx
+                                                                          in C.Projection { label = label
+                                                                                          , record = record
+                                                                                          , result = x
+                                                                                          , cont = C.App { applied = C.Var k, args = [C.Var x] } (* apply continuation *)
+                                                                                          }
+                                                                          end
+                                                                      )
          | F.TyAbsExp (_, _, exp) => transformT ctx exp { exnCont = exnCont } k
          | F.TyAppExp (exp, _) => transformT ctx exp { exnCont = exnCont } k
          | F.PackExp { payloadTy, exp, packageTy } => transformT ctx exp { exnCont = exnCont } k

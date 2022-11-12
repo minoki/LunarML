@@ -433,13 +433,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                 )
   | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
   | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (vector [VIdToJs vid], vector (doExpTo ctx (increaseLevel (addSymbol (env, vid))) exp Return))]))
-  | doExpTo ctx env (F.ProjectionExp { label, record }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
-                                                                                            let val label = case label of
-                                                                                                                Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
-                                                                                                              | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
-                                                                                            in putPureTo ctx env dest (stmts, J.IndexExp (record', label))
-                                                                                            end
-                                                                                        )
+  | doExpTo ctx env (F.ProjectionExp { label, record, fieldTypes }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
+                                                                                                        let val label = case label of
+                                                                                                                            Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
+                                                                                                                          | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
+                                                                                                        in putPureTo ctx env dest (stmts, J.IndexExp (record', label))
+                                                                                                        end
+                                                                                                    )
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = if Vector.length xs = 0 then
           putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "_nil"))
