@@ -191,71 +191,6 @@ val initialEnv : Typing.Env
           fun vectorOf(t) = mkTyCon([t], primTyName_vector)
           fun function2(resultTy, arg1Ty, arg2Ty) = mkTyCon([resultTy, arg1Ty, arg2Ty], primTyName_function2)
           fun function3(resultTy, arg1Ty, arg2Ty, arg3Ty) = mkTyCon([resultTy, arg1Ty, arg2Ty, arg3Ty], primTyName_function3)
-          val tyStr_bool = { typeFunction = TypeFunction([], primTy_bool)
-                           , valEnv = mkValConMap ([("true", TypeScheme ([], primTy_bool))
-                                                   ,("false", TypeScheme ([], primTy_bool))
-                                                   ], Syntax.REP_BOOL)
-                           }
-          val tyStr_int = { typeFunction = TypeFunction([], primTy_int)
-                          , valEnv = emptyValEnv
-                          }
-          val tyStr_word = { typeFunction = TypeFunction([], primTy_word)
-                           , valEnv = emptyValEnv
-                           }
-          val tyStr_real = { typeFunction = TypeFunction([], primTy_real)
-                           , valEnv = emptyValEnv
-                           }
-          val tyStr_char = { typeFunction = TypeFunction([], primTy_char)
-                           , valEnv = emptyValEnv
-                           }
-          val tyStr_wideChar = { typeFunction = TypeFunction([], primTy_wideChar)
-                               , valEnv = emptyValEnv
-                               }
-          val tyStr_string = { typeFunction = TypeFunction([], primTy_string)
-                             , valEnv = emptyValEnv
-                             }
-          val tyStr_wideString = { typeFunction = TypeFunction([], primTy_wideString)
-                                 , valEnv = emptyValEnv
-                                 }
-          val tyStr_intInf = { typeFunction = TypeFunction ([], primTy_intInf)
-                             , valEnv = emptyValEnv
-                             }
-          val tyStr_list = { typeFunction = TypeFunction([tyVarA], listOf tyA)
-                           , valEnv = mkValConMap ([("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
-                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType (tyA, listOf tyA) --> listOf tyA))
-                                                   ], Syntax.REP_LIST)
-                           }
-          val tyStr_ref = { typeFunction = TypeFunction([tyVarA], refOf tyA)
-                          , valEnv = mkValConMap ([("ref", TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
-                                                  ], Syntax.REP_REF)
-                          }
-          val tyStr_exn = { typeFunction = TypeFunction([], primTy_exn)
-                          , valEnv = emptyValEnv
-                          }
-          val tyStr_array = { typeFunction = TypeFunction([tyVarA], arrayOf tyA)
-                            , valEnv = emptyValEnv
-                            }
-          val tyStr_vector = { typeFunction = TypeFunction([tyVarA], vectorOf tyA)
-                             , valEnv = emptyValEnv
-                             }
-          val tyStr_Lua_value = { typeFunction = TypeFunction([], primTy_Lua_value)
-                                , valEnv = emptyValEnv
-                                }
-          val tyStr_JavaScript_value = { typeFunction = TypeFunction([], primTy_JavaScript_value)
-                                       , valEnv = emptyValEnv
-                                       }
-          val tyStr_function2 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC))
-                                , valEnv = emptyValEnv
-                                }
-          val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
-                                , valEnv = emptyValEnv
-                                }
-          val tyStr_prompt = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt))
-                             , valEnv = emptyValEnv
-                             }
-          val tyStr_subcont = { typeFunction = TypeFunction ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont))
-                              , valEnv = emptyValEnv
-                              }
       in { valMap = List.foldl (Syntax.VIdMap.unionWith #2)
                                Syntax.VIdMap.empty
                                [mkTopValConMap ([("ref", VId_ref, TypeScheme ([(tyVarA, [])], tyA --> refOf tyA)) (* forall 'a. 'a -> 'a ref *)
@@ -345,26 +280,40 @@ val initialEnv : Typing.Env
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
                                  Syntax.TyConMap.empty
-                                 [("bool", tyStr_bool)
-                                 ,("int", tyStr_int)
-                                 ,("word", tyStr_word)
-                                 ,("real", tyStr_real)
-                                 ,("string", tyStr_string)
-                                 ,("char", tyStr_char)
-                                 ,("list", tyStr_list)
-                                 ,("ref", tyStr_ref)
-                                 ,("exn", tyStr_exn)
-                                 ,("array", tyStr_array)
-                                 ,("vector", tyStr_vector)
-                                 ,("_Prim.WideChar.char", tyStr_wideChar)
-                                 ,("_Prim.WideString.string", tyStr_wideString)
-                                 ,("_Prim.IntInf.int", tyStr_intInf)
-                                 ,("_Prim.Function2.function2", tyStr_function2)
-                                 ,("_Prim.Function3.function3", tyStr_function3)
-                                 ,("_Prim.Lua.value", tyStr_Lua_value)
-                                 ,("_Prim.JavaScript.value", tyStr_JavaScript_value)
-                                 ,("_Prim.DelimCont.prompt", tyStr_prompt)
-                                 ,("_Prim.DelimCont.subcont", tyStr_subcont)
+                                 [("bool", { typeFunction = TypeFunction ([], primTy_bool)
+                                           , valEnv = mkValConMap ([("true", TypeScheme ([], primTy_bool))
+                                                                   ,("false", TypeScheme ([], primTy_bool))
+                                                                   ], Syntax.REP_BOOL)
+                                           }
+                                  )
+                                 ,("int", { typeFunction = TypeFunction ([], primTy_int), valEnv = emptyValEnv })
+                                 ,("word", { typeFunction = TypeFunction ([], primTy_word), valEnv = emptyValEnv })
+                                 ,("real", { typeFunction = TypeFunction ([], primTy_real), valEnv = emptyValEnv })
+                                 ,("string", { typeFunction = TypeFunction ([], primTy_string), valEnv = emptyValEnv })
+                                 ,("char", { typeFunction = TypeFunction ([], primTy_char), valEnv = emptyValEnv })
+                                 ,("list", { typeFunction = TypeFunction ([tyVarA], listOf tyA)
+                                           , valEnv = mkValConMap ([("nil", TypeScheme ([(tyVarA, [])], listOf tyA))
+                                                                   ,("::", TypeScheme ([(tyVarA, [])], mkPairType (tyA, listOf tyA) --> listOf tyA))
+                                                                   ], Syntax.REP_LIST)
+                                           }
+                                  )
+                                 ,("ref", { typeFunction = TypeFunction ([tyVarA], refOf tyA)
+                                          , valEnv = mkValConMap ([("ref", TypeScheme ([(tyVarA, [])], tyA --> refOf tyA))
+                                                                  ], Syntax.REP_REF)
+                                          }
+                                  )
+                                 ,("exn", { typeFunction = TypeFunction ([], primTy_exn), valEnv = emptyValEnv })
+                                 ,("array", { typeFunction = TypeFunction ([tyVarA], arrayOf tyA), valEnv = emptyValEnv })
+                                 ,("vector", { typeFunction = TypeFunction ([tyVarA], vectorOf tyA), valEnv = emptyValEnv })
+                                 ,("_Prim.WideChar.char", { typeFunction = TypeFunction ([], primTy_wideChar), valEnv = emptyValEnv })
+                                 ,("_Prim.WideString.string", { typeFunction = TypeFunction ([], primTy_wideString), valEnv = emptyValEnv })
+                                 ,("_Prim.IntInf.int", { typeFunction = TypeFunction ([], primTy_intInf), valEnv = emptyValEnv })
+                                 ,("_Prim.Function2.function2", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC)), valEnv = emptyValEnv })
+                                 ,("_Prim.Function3.function3", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD)), valEnv = emptyValEnv })
+                                 ,("_Prim.Lua.value", { typeFunction = TypeFunction ([], primTy_Lua_value), valEnv = emptyValEnv })
+                                 ,("_Prim.JavaScript.value", { typeFunction = TypeFunction ([], primTy_JavaScript_value), valEnv = emptyValEnv })
+                                 ,("_Prim.DelimCont.prompt", { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt)), valEnv = emptyValEnv })
+                                 ,("_Prim.DelimCont.subcont", { typeFunction = TypeFunction ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont)), valEnv = emptyValEnv })
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
                                   TypedSyntax.TyNameMap.empty
