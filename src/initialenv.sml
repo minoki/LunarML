@@ -250,9 +250,6 @@ val initialEnv : Typing.Env
           val tyStr_function3 = { typeFunction = TypeFunction([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD))
                                 , valEnv = emptyValEnv
                                 }
-          val tyStr_cont = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_cont))
-                           , valEnv = emptyValEnv
-                           }
           val tyStr_prompt = { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt))
                              , valEnv = emptyValEnv
                              }
@@ -366,7 +363,6 @@ val initialEnv : Typing.Env
                                  ,("_Prim.Function3.function3", tyStr_function3)
                                  ,("_Prim.Lua.value", tyStr_Lua_value)
                                  ,("_Prim.JavaScript.value", tyStr_JavaScript_value)
-                                 ,("_Prim.Cont.cont", tyStr_cont)
                                  ,("_Prim.DelimCont.prompt", tyStr_prompt)
                                  ,("_Prim.DelimCont.subcont", tyStr_subcont)
                                  ]
@@ -390,7 +386,6 @@ val initialEnv : Typing.Env
                                   ,(primTyName_JavaScript_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
-                                  ,(primTyName_cont, { arity = 1, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_prompt, { arity = 1, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_subcont, { arity = 2, admitsEquality = false, overloadClass = NONE })
                                   ]
@@ -456,7 +451,6 @@ val initialTyNameSet = let open Typing
                               ,primTyName_JavaScript_value
                               ,primTyName_function2
                               ,primTyName_function3
-                              ,primTyName_cont
                               ,primTyName_prompt
                               ,primTyName_subcont
                               ]

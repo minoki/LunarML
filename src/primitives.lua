@@ -37,7 +37,6 @@ do
   local function1 = function(resultTy, arg1Ty) return {string_format("function1Of (%s, %s)", resultTy[1], arg1Ty[1])} end
   local function2 = function(resultTy, arg1Ty, arg2Ty) return {string_format("function2Of (%s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1])} end
   local function3 = function(resultTy, arg1Ty, arg2Ty, arg3Ty) return {string_format("function3Of (%s, %s, %s, %s)", resultTy[1], arg1Ty[1], arg2Ty[1], arg3Ty[1])} end
-  local cont = function(ty) return {string_format("contOf (%s)", ty[1])} end
   local prompt = function(ty) return {string_format("promptOf (%s)", ty[1])} end
   local subcont = function(ty1, ty2) return {string_format("subcontOf (%s, %s)", ty1[1], ty2[1])} end
   local function Binary(a, b)
@@ -462,16 +461,6 @@ do
       type = { vars = {}, args = {exn, exntag}, result = bool },
     },
     {
-      name = "Cont.callcc",
-      srcname = "Cont_callcc",
-      type = { vars = {TV.a}, args = {function1(TV.a, cont(TV.a))}, result = TV.a },
-    },
-    {
-      name = "Cont.throw",
-      srcname = "Cont_throw",
-      type = { vars = {TV.a, TV.b}, args = {cont(TV.a)}, result = function1(TV.b, TV.a) },
-    },
-    {
       name = "DelimCont.newPrompt",
       srcname = "DelimCont_newPrompt",
       type = { vars = {TV.a}, args = {}, result = prompt(TV.a) },
@@ -854,7 +843,6 @@ functor TypeOfPrimitives (type ty
                           val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
-                          val contOf : ty -> ty
                           val promptOf : ty -> ty
                           val subcontOf : ty * ty -> ty
                           val IsEqType : constraint
