@@ -141,7 +141,7 @@ and doCompile opts fileName
           val (env, { tynameset, toFEnv, fdecs, cache }) = MLBEval.doDecs ctx LanguageOptions.default MLBEval.emptyEnv mlbdecs MLBEval.initialCode
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
                           Driver.ExecutableMode => fdecs
-                        | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, fdecs)
+                        | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, toFEnv, fdecs)
           val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
@@ -185,7 +185,7 @@ and doMLB opts mlbfilename
           val (env, { tynameset, toFEnv, fdecs, cache }) = MLBEval.doMlbSource ctx MLBEval.emptyEnv mlbfilename MLBEval.initialCode
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
                           Driver.ExecutableMode => fdecs
-                        | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, fdecs)
+                        | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, toFEnv, fdecs)
           val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
