@@ -42,23 +42,6 @@ function _String_EQUAL(s, t) {
     }
     return true;
 }
-function _Unit_EQUAL(k, h, a) { return [false, k, [true]]; }
-function _Record_EQUAL(fields) {
-    return function(k, h, a) {
-        var x = a[0], y = a[1];
-        var keys = Object.keys(fields);
-        var go = function(k, h, i) {
-            if (i >= keys.length) {
-                return [false, k, [true]];
-            }
-            var key = keys[i];
-            var f = fields[key];
-            var cont = (b) => (b ? [false, go, [k, h, i + 1]] : [false, k, [false]])
-            return [false, f, [cont, h, [x[key], y[key]]]];
-        };
-        return go(k, h, 0);
-    };
-}
 const MIN_INT32 = -0x80000000;
 const MAX_INT32 = 0x7fffffff;
 function _Int_abs(k, h, x) {

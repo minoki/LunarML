@@ -15,21 +15,6 @@ local select = select
 local table_pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local table_unpack = table.unpack or unpack
 
-local function _Unit_EQUAL(t)
-  return true
-end
-local function _Record_EQUAL(fields)
-  return function(t)
-    local a, b = t[1], t[2]
-    for k,eq in pairs(fields) do
-      if not eq({a[k], b[k]}) then
-        return false
-      end
-    end
-    return true
-  end
-end
-
 local function _id(x)
   return x
 end

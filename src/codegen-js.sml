@@ -459,18 +459,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
               )
   | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.RecordEqualityOp, _, xs)) dest
-    = if Vector.length xs = 1 then
-          let val exp = Vector.sub (xs, 0)
-          in case exp of
-                 F.RecordExp [] => putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "_Unit_EQUAL"))
-               | _ => doExpCont ctx env exp
-                                (fn (stmts, env, e') =>
-                                    putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_Record_EQUAL"), vector [e']))
-                                )
-          end
-      else
-          raise CodeGenError "PrimExp.RecordEqualityOp: invalid number of arguments"
   | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, xs)) dest
     = if Vector.length xs = 1 then
           let val exp = Vector.sub (xs, 0)

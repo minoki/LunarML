@@ -42,21 +42,6 @@ function _String_EQUAL(s, t) {
     }
     return true;
 }
-function _Unit_EQUAL(a) { return true; }
-function _Record_EQUAL(fields) {
-    return function(a) {
-        var x = a[0], y = a[1];
-        for (var key in fields) {
-            if (Object.prototype.hasOwnProperty.call(fields, key)) {
-                var f = fields[key];
-                if (!f([x[key], y[key]])) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    };
-}
 const MIN_INT32 = -0x80000000;
 const MAX_INT32 = 0x7fffffff;
 function _Int_abs(x) {

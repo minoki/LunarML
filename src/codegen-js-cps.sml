@@ -164,11 +164,6 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
     = VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map doValue (vector xs))])) :: doCExp ctx cont
   | doCExp ctx (C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs, result, cont, exnCont })
     = VarStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp ctx cont
-  | doCExp ctx (C.PrimOp { primOp = F.RecordEqualityOp, tyargs = _, args = [exp], result, cont, exnCont })
-    = (case exp of
-           C.Unit => VarStat (result, J.VarExp (J.PredefinedId "_Unit_EQUAL")) :: doCExp ctx cont
-         | _ => VarStat (result, J.CallExp (J.VarExp (J.PredefinedId "_Record_EQUAL"), vector [doValue exp])) :: doCExp ctx cont
-      )
   | doCExp ctx (C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp], result, cont, exnCont })
     = VarStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp ctx cont
   | doCExp ctx (C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp], result, cont, exnCont })

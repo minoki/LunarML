@@ -782,7 +782,6 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp (F.RaiseOp _) = false
   | isDiscardablePrimOp F.ListOp = true
   | isDiscardablePrimOp F.VectorOp = true
-  | isDiscardablePrimOp F.RecordEqualityOp = true
   | isDiscardablePrimOp (F.DataTagOp _) = true
   | isDiscardablePrimOp (F.DataPayloadOp _) = true
   | isDiscardablePrimOp F.ExnPayloadOp = true

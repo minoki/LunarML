@@ -23,7 +23,6 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | RaiseOp of SourcePos.span (* type argument: result type, value argument: the exception *)
                 | ListOp (* type argument: element type, value arguments: the elements *)
                 | VectorOp (* type argument: element type, value arguments: the elements *)
-                | RecordEqualityOp (* value argument: the record of equalities *)
                 | DataTagOp of Syntax.ValueConstructorInfo (* value argument: the data *)
                 | DataPayloadOp of Syntax.ValueConstructorInfo (* type argument: payload, value argument: the data *)
                 | ExnPayloadOp (* type argument: payload, value argument: the data *)
@@ -80,7 +79,6 @@ fun WordConstExp (value, ty) = PrimExp (WordConstOp value, vector [ty], vector [
 fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp span, vector [ty], vector [exp])
 fun ListExp (exps, elemTy) = PrimExp (ListOp, vector [elemTy], exps)
 fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
-fun RecordEqualityExp fields = PrimExp (RecordEqualityOp, vector [], vector [RecordExp fields])
 fun TupleType xs = let fun doFields i [] acc = acc
                          | doFields i (x :: xs) acc = doFields (i + 1) xs (Syntax.LabelMap.insert (acc, Syntax.NumericLabel i, x))
                    in RecordType (doFields 1 xs Syntax.LabelMap.empty)
@@ -394,7 +392,6 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp (RaiseOp span) = "RaiseOp"
   | print_PrimOp ListOp = "ListOp"
   | print_PrimOp VectorOp = "VectorOp"
-  | print_PrimOp RecordEqualityOp = "RecordEqualityOp"
   | print_PrimOp (DataTagOp _) = "DataTagOp"
   | print_PrimOp (DataPayloadOp _) = "DataPayloadOp"
   | print_PrimOp ExnPayloadOp = "ExnPayloadOp"
@@ -973,7 +970,36 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                                                  )
   | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = getEquality (ctx, env, ty)
   | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
-  | getEquality (ctx, env, T.RecordType (span, fields)) = F.RecordEqualityExp (Syntax.LabelMap.foldli (fn (label, ty, xs) => (label, getEquality (ctx, env, ty)) :: xs) [] fields)
+  | getEquality (ctx, env, recordTy as T.RecordType (span, fields))
+    = let val param = freshVId (ctx, "a")
+      in if Syntax.LabelMap.numItems fields = 0 then
+             let val unitTy = F.RecordType Syntax.LabelMap.empty
+             in F.FnExp (param, F.PairType (unitTy, unitTy), F.VarExp InitialEnv.VId_true)
+             end
+         else
+             let val recordTy = toFTy (ctx, env, recordTy)
+                 val fieldTypes = case recordTy of
+                                      F.RecordType fieldTypes => fieldTypes
+                                    | _ => raise Fail "invalid record type"
+                 val pairTy = F.PairType (recordTy, recordTy)
+                 val lhs = freshVId (ctx, "x")
+                 val rhs = freshVId (ctx, "y")
+                 val body = F.LetExp ( F.ValDec (lhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => raise Fail "invalid record type" })
+                                     , F.LetExp ( F.ValDec (rhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => raise Fail "invalid record type" })
+                                                , Syntax.LabelMap.foldli (fn (label, ty, rest) =>
+                                                                             F.SimplifyingAndalsoExp ( F.AppExp ( getEquality (ctx, env, ty)
+                                                                                                                , F.TupleExp [ F.ProjectionExp { label = label, record = F.VarExp lhs, fieldTypes = fieldTypes }
+                                                                                                                             , F.ProjectionExp { label = label, record = F.VarExp rhs, fieldTypes = fieldTypes }
+                                                                                                                             ]
+                                                                                                                )
+                                                                                                     , rest
+                                                                                                     )
+                                                                         ) (F.VarExp InitialEnv.VId_true) fields
+                                                )
+                                     )
+             in F.FnExp (param, pairTy, body)
+             end
+      end
   | getEquality (ctx, env, T.RecordExtType (span, fields, baseTy)) = raise Fail "unexpected record extension"
   | getEquality (ctx, env, T.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
 and toFDecs (ctx, env, []) = (env, [])
