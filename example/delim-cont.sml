@@ -1,15 +1,15 @@
 structure DelimCont : sig
-              type 'a prompt
+              type 'a prompt_tag
               type ('a,'b) subcont
-              val newPrompt : unit -> 'a prompt
-              val pushPrompt : 'a prompt * (unit -> 'a) -> 'a
-              val withSubCont : 'b prompt * (('a,'b) subcont -> 'b) -> 'a
+              val newPromptTag : unit -> 'a prompt_tag
+              val pushPrompt : 'a prompt_tag * (unit -> 'a) -> 'a
+              val withSubCont : 'b prompt_tag * (('a,'b) subcont -> 'b) -> 'a
               val pushSubCont : ('a,'b) subcont * (unit -> 'a) -> 'b
-              val abort : 'b prompt * 'b -> 'a
-              val topLevel : unit prompt
+              val abort : 'b prompt_tag * 'b -> 'a
+              val topLevel : unit prompt_tag
           end = LunarML.DelimCont
 
-fun product xs = let val p = DelimCont.newPrompt ()
+fun product xs = let val p = DelimCont.newPromptTag ()
                      fun loop [] = 1
                        | loop (0 :: _) = DelimCont.abort (p, 0)
                        | loop (x :: xs) = x * loop xs
@@ -19,7 +19,7 @@ print (Int.toString (product [1, 2, 3]) ^ "\n");
 print (Int.toString (product [0xffffffff, 0xffffffff, 0xffffffff, 0]) ^ "\n");
 print ((Int.toString (product [0xffffffff, 0xffffffff, 0xffffffff]) handle Overflow => "Overflow") ^ "\n");
 
-val toplevel : unit DelimCont.prompt = DelimCont.newPrompt ();
+val toplevel : unit DelimCont.prompt_tag = DelimCont.newPromptTag ();
 val setTimeout = JavaScript.global "setTimeout";
 fun sleep delay_ms = DelimCont.withSubCont
                          (toplevel, fn cont : (unit, unit) DelimCont.subcont =>

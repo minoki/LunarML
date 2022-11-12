@@ -26,7 +26,7 @@ end
 
 functor Represent (M : MONAD) : RMONAD = struct
 structure M = M
-val p : Universal.u M.t LunarML.DelimCont.prompt = LunarML.DelimCont.newPrompt ()
+val p : Universal.u M.t LunarML.DelimCont.prompt_tag = LunarML.DelimCont.newPromptTag ()
 fun reflect m = LunarML.DelimCont.shift (p, fn k => M.ext k m)
 fun reify t = M.ext (M.unit o Universal.from_u)
                     (LunarML.DelimCont.pushPrompt (p, fn () => M.unit (Universal.to_u (t ()))))

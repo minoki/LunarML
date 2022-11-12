@@ -238,7 +238,7 @@ val primTyName_wideString = TypedSyntax.MkTyName ("WideString.string", 15)
 val primTyName_intInf = TypedSyntax.MkTyName ("IntInf.int", 16)
 val primTyName_Lua_value = TypedSyntax.MkTyName ("Lua.value", 17)
 val primTyName_JavaScript_value = TypedSyntax.MkTyName ("JavaScript.value", 18)
-val primTyName_prompt = TypedSyntax.MkTyName ("DelimCont.prompt", 19)
+val primTyName_prompt_tag = TypedSyntax.MkTyName ("DelimCont.prompt_tag", 19)
 val primTyName_subcont = TypedSyntax.MkTyName ("DelimCont.subcont", 20)
 val primTy_unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int)
@@ -295,7 +295,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                fun function1Of (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, b, a)
                                                fun function2Of (a, b, c) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c], primTyName_function2)
                                                fun function3Of (a, b, c, d) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b, c, d], primTyName_function3)
-                                               fun promptOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_prompt)
+                                               fun promptTagOf ty = TypedSyntax.TyCon (SourcePos.nullSpan, [ty], primTyName_prompt_tag)
                                                fun subcontOf (a, b) = TypedSyntax.TyCon (SourcePos.nullSpan, [a, b], primTyName_subcont)
                                                val IsEqType = TypedSyntax.IsEqType
                                               ) : sig

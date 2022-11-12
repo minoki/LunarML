@@ -280,12 +280,12 @@ function _Vector_concat(k, h, xs) {
     }
     return [false, k, [a]];
 }
-function _Prompt() {
+function _PromptTag() {
 }
-function _newPrompt() {
-    return new _Prompt();
+function _newPromptTag() {
+    return new _PromptTag();
 }
-var _topLevel = new _Prompt();
+var _topLevel = new _PromptTag();
 const _emptySeq = { tag: "nil" };
 function _consSeq(x, xs) {
     return { tag: "::", head: x, tail: xs };
@@ -312,7 +312,7 @@ function _splitSeq(p, xs) {
 var _metaCont = _emptySeq;
 function _underflow(v) {
     while (_metaCont.tag === "::") {
-        if (!(_metaCont.head instanceof _Prompt)) {
+        if (!(_metaCont.head instanceof _PromptTag)) {
             var k = _metaCont.head;
             _metaCont = _metaCont.tail;
             return [false, k, [v]];

@@ -81,7 +81,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Unsafe_Array_sub (* Unsafe.Array.sub *)
                 | Unsafe_Array_update (* Unsafe.Array.update *)
                 | Exception_instanceof (* Exception.instanceof *)
-                | DelimCont_newPrompt (* DelimCont.newPrompt *)
+                | DelimCont_newPromptTag (* DelimCont.newPromptTag *)
                 | DelimCont_pushPrompt (* DelimCont.pushPrompt *)
                 | DelimCont_withSubCont (* DelimCont.withSubCont *)
                 | DelimCont_pushSubCont (* DelimCont.pushSubCont *)
@@ -221,7 +221,7 @@ fun toString EQUAL = "="
   | toString Unsafe_Array_sub = "Unsafe.Array.sub"
   | toString Unsafe_Array_update = "Unsafe.Array.update"
   | toString Exception_instanceof = "Exception.instanceof"
-  | toString DelimCont_newPrompt = "DelimCont.newPrompt"
+  | toString DelimCont_newPromptTag = "DelimCont.newPromptTag"
   | toString DelimCont_pushPrompt = "DelimCont.pushPrompt"
   | toString DelimCont_withSubCont = "DelimCont.withSubCont"
   | toString DelimCont_pushSubCont = "DelimCont.pushSubCont"
@@ -361,7 +361,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Unsafe.Array.sub" = SOME Unsafe_Array_sub
   | fromString "Unsafe.Array.update" = SOME Unsafe_Array_update
   | fromString "Exception.instanceof" = SOME Exception_instanceof
-  | fromString "DelimCont.newPrompt" = SOME DelimCont_newPrompt
+  | fromString "DelimCont.newPromptTag" = SOME DelimCont_newPromptTag
   | fromString "DelimCont.pushPrompt" = SOME DelimCont_pushPrompt
   | fromString "DelimCont.withSubCont" = SOME DelimCont_withSubCont
   | fromString "DelimCont.pushSubCont" = SOME DelimCont_pushSubCont
@@ -459,7 +459,7 @@ functor TypeOfPrimitives (type ty
                           val function1Of : ty * ty -> ty
                           val function2Of : ty * ty * ty -> ty
                           val function3Of : ty * ty * ty * ty -> ty
-                          val promptOf : ty -> ty
+                          val promptTagOf : ty -> ty
                           val subcontOf : ty * ty -> ty
                           val IsEqType : constraint
                          ) : sig
@@ -546,9 +546,9 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Unsafe_Array_sub = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int], result = tyA }
   | typeOf Primitives.Unsafe_Array_update = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int, tyA], result = unit }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
-  | typeOf Primitives.DelimCont_newPrompt = { vars = [(tyVarA, [])], args = vector [], result = promptOf (tyA) }
-  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, [])], args = vector [promptOf (tyA), function1Of (tyA, unit)], result = tyA }
-  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [promptOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
+  | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, [])], args = vector [], result = promptTagOf (tyA) }
+  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, [])], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], result = tyA }
+  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
   | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }

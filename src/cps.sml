@@ -29,8 +29,8 @@ datatype CExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty list, a
                       , elseCont : CExp
                       }
               | Fix of { functions : (Var * Var list * CExp) list, cont : CExp } (* function *)
-              | PushPrompt of { prompt : Value, f : Value, cont : Value, exnCont : Value }
-              | WithSubCont of { prompt : Value, f : Value, cont : Value, exnCont : Value }
+              | PushPrompt of { promptTag : Value, f : Value, cont : Value, exnCont : Value }
+              | WithSubCont of { promptTag : Value, f : Value, cont : Value, exnCont : Value }
               | PushSubCont of { subCont : Value, f : Value, cont : Value, exnCont : Value }
 end
 
@@ -72,7 +72,7 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
     = (case exp of
            F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, args) =>
            if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'a prompt *)
+               let val p = Vector.sub (args, 0) (* 'a prompt_tag *)
                    val f = Vector.sub (args, 1) (* unit -> 'a *)
                                       (* result : 'a *)
                    val kk = genContSym ctx
@@ -82,7 +82,7 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
                                            (fn p =>
                                                transform ctx f { exnCont = exnCont }
                                                          (fn f =>
-                                                             C.PushPrompt { prompt = p
+                                                             C.PushPrompt { promptTag = p
                                                                           , f = f
                                                                           , cont = C.Var kk
                                                                           , exnCont = C.Var exnCont
@@ -95,7 +95,7 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
                raise Fail "DelimCont.pushPrompt: invalid number of arguments"
          | F.PrimExp (F.PrimFnOp Primitives.DelimCont_withSubCont, tyargs, args) =>
            if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'b prompt *)
+               let val p = Vector.sub (args, 0) (* 'b prompt_tag *)
                    val f = Vector.sub (args, 1) (* ('a,'b) subcont -> 'b *)
                                       (* result : 'a *)
                    val kk = genContSym ctx
@@ -105,7 +105,7 @@ fun transform (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Value -> 
                                            (fn p =>
                                                transform ctx f { exnCont = exnCont }
                                                          (fn f =>
-                                                             C.WithSubCont { prompt = p
+                                                             C.WithSubCont { promptTag = p
                                                                            , f = f
                                                                            , cont = C.Var kk
                                                                            , exnCont = C.Var exnCont
@@ -247,14 +247,14 @@ and transformT (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Var (* c
     = (case exp of
            F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, args) =>
            if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'a prompt *)
+               let val p = Vector.sub (args, 0) (* 'a prompt_tag *)
                    val f = Vector.sub (args, 1) (* unit -> 'a *)
                                       (* result : 'a *)
                in transform ctx p { exnCont = exnCont }
                             (fn p =>
                                 transform ctx f { exnCont = exnCont }
                                           (fn f =>
-                                              C.PushPrompt { prompt = p
+                                              C.PushPrompt { promptTag = p
                                                            , f = f
                                                            , cont = C.Var k
                                                            , exnCont = C.Var exnCont
@@ -266,14 +266,14 @@ and transformT (ctx : Context) (exp : F.Exp) { exnCont : C.Var } (k : C.Var (* c
                raise Fail "DelimCont.pushPrompt: invalid number of arguments"
          | F.PrimExp (F.PrimFnOp Primitives.DelimCont_withSubCont, tyargs, args) =>
            if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'b prompt *)
+               let val p = Vector.sub (args, 0) (* 'b prompt_tag *)
                    val f = Vector.sub (args, 1) (* ('a,'b) subcont -> 'b *)
                                       (* result : 'a *)
                in transform ctx p { exnCont = exnCont }
                             (fn p =>
                                 transform ctx f { exnCont = exnCont }
                                           (fn f =>
-                                              C.WithSubCont { prompt = p
+                                              C.WithSubCont { promptTag = p
                                                             , f = f
                                                             , cont = C.Var k
                                                             , exnCont = C.Var exnCont

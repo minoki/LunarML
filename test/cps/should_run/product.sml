@@ -1,4 +1,4 @@
-fun product xs = let val p = LunarML.DelimCont.newPrompt ()
+fun product xs = let val p = LunarML.DelimCont.newPromptTag ()
                      fun loop [] = 1
                        | loop (0 :: _) = LunarML.DelimCont.abort (p, 0)
                        | loop (x :: xs) = x * loop xs

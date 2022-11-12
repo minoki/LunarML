@@ -275,7 +275,7 @@ val initialEnv : Typing.Env
                                            ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.assumePure", VId_assumePure, TypeScheme ([(tyVarA, [])], tyA --> tyA))
                                            ,("_Prim.assumeDiscardable", VId_assumeDiscardable, TypeScheme ([(tyVarA, [])], tyA --> tyA))
-                                           ,("_Prim.DelimCont.topLevel", VId_DelimCont_topLevel, TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt)))
+                                           ,("_Prim.DelimCont.topLevel", VId_DelimCont_topLevel, TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt_tag)))
                                            ]
                           ]
          , tyConMap = List.foldl (fn ((name, tystr), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon name, tystr))
@@ -312,7 +312,7 @@ val initialEnv : Typing.Env
                                  ,("_Prim.Function3.function3", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD)), valEnv = emptyValEnv })
                                  ,("_Prim.Lua.value", { typeFunction = TypeFunction ([], primTy_Lua_value), valEnv = emptyValEnv })
                                  ,("_Prim.JavaScript.value", { typeFunction = TypeFunction ([], primTy_JavaScript_value), valEnv = emptyValEnv })
-                                 ,("_Prim.DelimCont.prompt", { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt)), valEnv = emptyValEnv })
+                                 ,("_Prim.DelimCont.prompt_tag", { typeFunction = TypeFunction ([tyVarA], mkTyCon ([tyA], primTyName_prompt_tag)), valEnv = emptyValEnv })
                                  ,("_Prim.DelimCont.subcont", { typeFunction = TypeFunction ([tyVarA, tyVarB], mkTyCon ([tyA, tyB], primTyName_subcont)), valEnv = emptyValEnv })
                                  ]
          , tyNameMap = List.foldl TypedSyntax.TyNameMap.insert'
@@ -335,7 +335,7 @@ val initialEnv : Typing.Env
                                   ,(primTyName_JavaScript_value, { arity = 0, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function2, { arity = 3, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_function3, { arity = 4, admitsEquality = false, overloadClass = NONE })
-                                  ,(primTyName_prompt, { arity = 1, admitsEquality = false, overloadClass = NONE })
+                                  ,(primTyName_prompt_tag, { arity = 1, admitsEquality = false, overloadClass = NONE })
                                   ,(primTyName_subcont, { arity = 2, admitsEquality = false, overloadClass = NONE })
                                   ]
          , strMap = Syntax.StrIdMap.empty
@@ -400,7 +400,7 @@ val initialTyNameSet = let open Typing
                               ,primTyName_JavaScript_value
                               ,primTyName_function2
                               ,primTyName_function3
-                              ,primTyName_prompt
+                              ,primTyName_prompt_tag
                               ,primTyName_subcont
                               ]
                        end
