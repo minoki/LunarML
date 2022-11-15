@@ -284,8 +284,8 @@ end
 signature REAL = sig
   type real
   (* structure Math *)
-  (* val radix : int *)
-  (* val precision : int *)
+  val radix : int
+  val precision : int
   val maxFinite : real
   val minPos : real
   val minNormalPos : real
@@ -300,8 +300,8 @@ signature REAL = sig
   (* val *- : real * real * real -> real *)
   val ~ : real -> real
   val abs : real -> real
-  (* val min : real * real -> real *)
-  (* val max : real * real -> real *)
+  val min : real * real -> real
+  val max : real * real -> real
   val sign : real -> int
   val signBit : real -> bool
   val sameSign : real * real -> bool

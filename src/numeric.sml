@@ -14,7 +14,7 @@ val binary64 : float_format = { radix = BINARY, precision = 53, maxExponent = 10
 (*
 val binary128 : float_format = { radix = BINARY, precision = 113, maxExponent = 16384 }
 val bfloat16 : float_format = { radix = BINARY, precision = 8, maxExponent = 128 }
-val x87_binary80 : float_format = { radix = BINARY, precision = 80, maxExponent = 16384 }
+val x87_binary80 : float_format = { radix = BINARY, precision = 64, maxExponent = 16384 }
 val decimal32 : float_format = { radix = DECIMAL, precision = 7, maxExponent = 97 }
 val decimal64 : float_format = { radix = DECIMAL, precision = 16, maxExponent = 385 }
 val decimal128 : float_format = { radix = DECIMAL, precision = 34, maxExponent = 6144 }

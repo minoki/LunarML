@@ -125,3 +125,29 @@ List.app (fn (s, x, { round, floor, ceil, trunc, abs }) =>
           in ("NaN", NaN, { round = NaN, floor = NaN, ceil = NaN, trunc = NaN, abs = NaN })
           end
          ];
+val NaN = 0.0 / 0.0;
+val () = List.app (fn (expected, actual, s) =>
+                      if sameValue (expected, actual) then
+                          print (s ^ ": OK\n")
+                      else
+                          print (s ^ ": mismatch (" ^ Real.toString expected ^ " vs " ^ Real.toString actual ^ ")\n")
+                  )
+                  [(~1.5, Real.min (1.5, ~1.5), "min (1.5, ~1.5)")
+                  ,(~1.5, Real.min (~1.5, 1.5), "min (~1.5, 1.5)")
+                  ,(1.5, Real.min (1.5, NaN), "min (1.5, NaN)")
+                  ,(~2.5, Real.min (NaN, ~2.5), "min (NaN, ~2.5)")
+                  ,(NaN, Real.min (NaN, NaN), "min (NaN, NaN)")
+                  ,(0.0, Real.min (0.0, 0.0), "min (0.0, 0.0)")
+                  ,(~0.0, Real.min (~0.0, 0.0), "min (~0.0, 0.0)")
+                  ,(~0.0, Real.min (0.0, ~0.0), "min (0.0, ~0.0)")
+                  ,(~0.0, Real.min (~0.0, ~0.0), "min (~0.0, ~0.0)")
+                  ,(1.5, Real.max (1.5, ~1.5), "max (1.5, ~1.5)")
+                  ,(1.5, Real.max (~1.5, 1.5), "max (~1.5, 1.5)")
+                  ,(1.5, Real.max (1.5, NaN), "max (1.5, NaN)")
+                  ,(~2.5, Real.max (NaN, ~2.5), "max (NaN, ~2.5)")
+                  ,(NaN, Real.max (NaN, NaN), "max (NaN, NaN)")
+                  ,(0.0, Real.max (0.0, 0.0), "max (0.0, 0.0)")
+                  ,(0.0, Real.max (~0.0, 0.0), "max (~0.0, 0.0)")
+                  ,(0.0, Real.max (0.0, ~0.0), "max (0.0, ~0.0)")
+                  ,(~0.0, Real.max (~0.0, ~0.0), "max (~0.0, ~0.0)")
+                  ];

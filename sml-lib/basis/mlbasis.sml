@@ -593,8 +593,8 @@ end;
 signature REAL = sig
     type real
     (* structure Math *)
-    (* val radix : int *)
-    (* val precision : int *)
+    val radix : int
+    val precision : int
     val maxFinite : real
     val minPos : real
     val minNormalPos : real
@@ -609,8 +609,8 @@ signature REAL = sig
     (* val *- : real * real * real -> real *)
     val ~ : real -> real
     val abs : real -> real
-    (* val min : real * real -> real *)
-    (* val max : real * real -> real *)
+    val min : real * real -> real
+    val max : real * real -> real
     val sign : real -> int
     val signBit : real -> bool
     val sameSign : real * real -> bool
@@ -658,6 +658,8 @@ signature REAL = sig
 end;
 
 structure Real : REAL where type real = real = struct
+val radix : int = 2
+val precision : int = 53 (* Assume binary64 *)
 val posInf = Lua.unsafeFromValue Lua.Lib.math.huge : real
 val negInf = Real.~ posInf
 fun == (x, y) = Lua.== (Lua.fromReal x, Lua.fromReal y)
@@ -690,6 +692,30 @@ fun class x = if x == 0.0 then
                          else
                              IEEEReal.INF
                   end
+fun min (x : real, y : real) = if x < y then
+                                   x
+                               else if y < x then
+                                   y
+                               else if isNan x then
+                                   y
+                               else if isNan y then
+                                   x
+                               else if x == 0.0 then (* x == 0.0 andalso y == 0.0 *)
+                                   ~ (~ x - y) (* Assume 0.0 + ~0.0 = ~0.0 + 0.0 = 0.0 *)
+                               else (* x == y *)
+                                   x
+fun max (x : real, y : real) = if x < y then
+                                   y
+                               else if y < x then
+                                   x
+                               else if isNan x then
+                                   y
+                               else if isNan y then
+                                   x
+                               else if x == 0.0 then (* x == 0.0 andalso y == 0.0 *)
+                                   x + y (* Assume 0.0 + ~0.0 = ~0.0 + 0.0 = 0.0 *)
+                               else (* x == y *)
+                                   x
 fun sign x = if x == 0.0 then
                  0
              else if x < 0.0 then

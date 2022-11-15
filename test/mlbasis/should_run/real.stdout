@@ -221,3 +221,21 @@ realFloor NaN: OK
 realCeil NaN: OK
 realTrunc NaN: OK
 abs NaN: OK
+min (1.5, ~1.5): OK
+min (~1.5, 1.5): OK
+min (1.5, NaN): OK
+min (NaN, ~2.5): OK
+min (NaN, NaN): OK
+min (0.0, 0.0): OK
+min (~0.0, 0.0): OK
+min (0.0, ~0.0): OK
+min (~0.0, ~0.0): OK
+max (1.5, ~1.5): OK
+max (~1.5, 1.5): OK
+max (1.5, NaN): OK
+max (NaN, ~2.5): OK
+max (NaN, NaN): OK
+max (0.0, 0.0): OK
+max (~0.0, 0.0): OK
+max (0.0, ~0.0): OK
+max (~0.0, ~0.0): OK
