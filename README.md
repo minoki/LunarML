@@ -47,6 +47,7 @@ See `--help` for more information.
 * [A subset of SML Basis Library](doc/BasisLibrary.md)
 * [Interface to Lua](doc/LuaInterface.md)
 * [Interface to JavaScript](doc/JavaScriptInterface.md)
+* [Delimited continuations](doc/DelimitedContinuations.md) (JS-CPS backend only; experimental)
 * ML Basis system like [MLton](http://mlton.org/MLBasis)
 
 Successor ML features:
@@ -80,6 +81,7 @@ Other extensions planned:
 * [ ] Packaged modules (like in Alice ML or HaMLet S)
 * [x] Hexadecimal floating-point constants (e.g. `0x1p1024`, `0x1.ffff_ffff_ffff_f`)
 * [x] Variably-encoded Unicode escape sequence in string literals (e.g. `\u{3042}`)
+* [ ] Unicode identifiers
 
 The syntax of hexadecimal floating-point constants is:
 

@@ -17,6 +17,7 @@ structure JavaScript : sig
   val new : value -> value vector -> value
   val method : value * WideString.string -> value vector -> value
   val function : (value vector -> value) -> value
+  val callback : (value vector -> unit) -> value
   val fromBool : bool -> value
   val fromInt : int -> value
   val fromWord : word -> value
