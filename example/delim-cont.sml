@@ -25,7 +25,7 @@ fun sleep delay_ms = DelimCont.withSubCont
                          (toplevel, fn cont : (unit, unit) DelimCont.subcont =>
                                        let val callback = JavaScript.function
                                                               (fn arguments =>
-                                                                  ( DelimCont.pushPrompt (toplevel, fn () => DelimCont.pushSubCont (cont, fn () => ()))
+                                                                  ( DelimCont.pushPrompt (DelimCont.topLevel, fn () => DelimCont.pushPrompt (toplevel, fn () => DelimCont.pushSubCont (cont, fn () => ()))) (* TextIO.print needs DelimCont.topLevel pushed *)
                                                                   ; JavaScript.undefined
                                                                   )
                                                               )
