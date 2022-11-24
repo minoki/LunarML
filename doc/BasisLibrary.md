@@ -322,8 +322,8 @@ signature REAL = sig
   val class : real -> IEEEReal.float_class
   val toManExp : real -> { man : real, exp : int }
   val fromManExp : { man : real, exp : int } -> real
-  (* val split : real -> { whole : real, frac : real } *)
-  (* val realMod : real -> real *)
+  val split : real -> { whole : real, frac : real }
+  val realMod : real -> real
   (* val nextAfter : real * real -> real *)
   val checkFloat : real -> real
   val realFloor : real -> real

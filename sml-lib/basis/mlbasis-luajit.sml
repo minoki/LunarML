@@ -646,8 +646,8 @@ signature REAL = sig
     val class : real -> IEEEReal.float_class
     val toManExp : real -> { man : real, exp : int }
     val fromManExp : { man : real, exp : int } -> real
-    (* val split : real -> { whole : real, frac : real } *)
-    (* val realMod : real -> real *)
+    val split : real -> { whole : real, frac : real }
+    val realMod : real -> real
     (* val nextAfter : real * real -> real *)
     val checkFloat : real -> real
     val realFloor : real -> real
@@ -812,6 +812,13 @@ fun fromManExp { man : real, exp : int } = if ~1022 <= exp then
                                                   else
                                                       fromManExp { man = man * 0x1p~1022, exp = exp' + 1022 }
                                                end (* Avoid undue underflow and double rounding *)
+(* LuaJIT's math.modf calls C's modf *)
+fun split x = let val (intPart, fracPart) = Lua.call2 Lua.Lib.math.modf #[Lua.fromReal x]
+              in { whole = Lua.unsafeFromValue intPart : real, frac = Lua.unsafeFromValue fracPart : real }
+              end
+fun realMod x = let val (_, fracPart) = Lua.call2 Lua.Lib.math.modf #[Lua.fromReal x]
+                in Lua.unsafeFromValue fracPart : real
+                end
 fun checkFloat x = if isNan x then
                        raise Div
                    else if x == posInf orelse x == negInf then

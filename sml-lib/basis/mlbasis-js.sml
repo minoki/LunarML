@@ -332,8 +332,8 @@ signature REAL = sig
     val class : real -> IEEEReal.float_class
     val toManExp : real -> { man : real, exp : int }
     val fromManExp : { man : real, exp : int } -> real
-    (* val split : real -> { whole : real, frac : real } *)
-    (* val realMod : real -> real *)
+    val split : real -> { whole : real, frac : real }
+    val realMod : real -> real
     (* val nextAfter : real * real -> real *)
     val checkFloat : real -> real
     val realFloor : real -> real
@@ -484,6 +484,20 @@ fun fromManExp { man : real, exp : int } = if ~1022 <= exp then
                                                   else
                                                       fromManExp { man = man * 0x1p~1022, exp = exp' + 1022 }
                                                end (* Avoid undue underflow and double rounding *)
+fun split x = let val intPart = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Math.trunc #[JavaScript.fromReal x]) : real
+                  val fracPart = JavaScript.unsafeFromValue (JavaScript.% (JavaScript.fromReal x, JavaScript.fromReal 1.0)) : real
+                  val frac = if isNan fracPart then (* x: infinity or NaN *)
+                                 0.0 / x
+                             else
+                                 fracPart
+              in { whole = intPart, frac = frac }
+              end
+fun realMod x = let val y = JavaScript.unsafeFromValue (JavaScript.% (JavaScript.fromReal x, JavaScript.fromReal 1.0)) : real
+                in if isNan y then (* x: infinity or NaN *)
+                       0.0 / x
+                   else
+                       y
+                end
 fun checkFloat x = if isNan x then
                        raise Div
                    else if x == posInf orelse x == negInf then

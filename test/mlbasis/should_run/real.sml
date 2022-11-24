@@ -45,7 +45,7 @@ List.app (fn (s, v) => print (s ^ ": " ^ checkZero v ^ "\n"))
          ,("Real.abs 0.0", Real.abs 0.0)
          ,("Real.abs ~0.0", Real.abs ~0.0)
          ];
-List.app (fn (s, x, { round, floor, ceil, trunc, abs }) =>
+List.app (fn (s, x, { round, floor, ceil, trunc, frac, abs }) =>
              ( let val y = Real.realRound x
                    val z = round
                in if sameValue (y, z) then
@@ -74,6 +74,19 @@ List.app (fn (s, x, { round, floor, ceil, trunc, abs }) =>
                   else
                       print ("realTrunc " ^ s ^ ": mismatch (" ^ Real.toString y ^ " vs " ^ Real.toString z ^ ")\n")
                end
+             ; let val { whole, frac = frac' } = Real.split x
+               in if sameValue (whole, trunc) andalso sameValue (frac', frac) then
+                      print ("split " ^ s ^ ": OK\n")
+                  else
+                      print ("split " ^ s ^ ": mismatch (expected { whole = " ^ Real.toString trunc ^ ", frac = " ^ Real.toString frac ^ " }, but got { whole = " ^ Real.toString trunc ^ ", frac = " ^ Real.toString frac' ^ " })\n")
+               end
+             ; let val y = Real.realMod x
+                   val z = frac
+               in if sameValue (y, z) then
+                      print ("realMod " ^ s ^ ": OK\n")
+                  else
+                      print ("realMod " ^ s ^ ": mismatch (expected " ^ Real.toString z ^ ", but got " ^ Real.toString y ^ ")\n")
+               end
              ; let val y = Real.abs x
                    val z = abs
                in if sameValue (y, z) then
@@ -83,46 +96,46 @@ List.app (fn (s, x, { round, floor, ceil, trunc, abs }) =>
                end
              )
          )
-         [("negInf", Real.negInf, { round = Real.negInf, floor = Real.negInf, ceil = Real.negInf, trunc = Real.negInf, abs = Real.posInf })
-         ,("~maxFinite", ~Real.maxFinite, { round = ~Real.maxFinite, floor = ~Real.maxFinite, ceil = ~Real.maxFinite, trunc = ~Real.maxFinite, abs = Real.maxFinite })
-         ,("~3.5", ~3.5, { round = ~4.0, floor = ~4.0, ceil = ~3.0, trunc = ~3.0, abs = 3.5 })
-         ,("~3.25", ~3.25, { round = ~3.0, floor = ~4.0, ceil = ~3.0, trunc = ~3.0, abs = 3.25 })
-         ,("~3.0", ~3.0, { round = ~3.0, floor = ~3.0, ceil = ~3.0, trunc = ~3.0, abs = 3.0 })
-         ,("~2.75", ~2.75, { round = ~3.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, abs = 2.75 })
-         ,("~2.5", ~2.5, { round = ~2.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, abs = 2.5 })
-         ,("~2.25", ~2.25, { round = ~2.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, abs = 2.25 })
-         ,("~2.0", ~2.0, { round = ~2.0, floor = ~2.0, ceil = ~2.0, trunc = ~2.0, abs = 2.0 })
-         ,("~1.75", ~1.75, { round = ~2.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, abs = 1.75 })
-         ,("~1.5", ~1.5, { round = ~2.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, abs = 1.5 })
-         ,("~1.25", ~1.25, { round = ~1.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, abs = 1.25 })
-         ,("~1.0", ~1.0, { round = ~1.0, floor = ~1.0, ceil = ~1.0, trunc = ~1.0, abs = 1.0 })
-         ,("~0.75", ~0.75, { round = ~1.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, abs = 0.75 })
-         ,("~0.5", ~0.5, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, abs = 0.5 })
-         ,("~0.25", ~0.25, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, abs = 0.25 })
-         ,("~minNormalPos", ~Real.minNormalPos, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, abs = Real.minNormalPos })
-         ,("~minPos", ~Real.minPos, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, abs = Real.minPos })
-         ,("~0.0", ~0.0, { round = ~0.0, floor = ~0.0, ceil = ~0.0, trunc = ~0.0, abs = 0.0 })
-         ,("0.0", 0.0, { round = 0.0, floor = 0.0, ceil = 0.0, trunc = 0.0, abs = 0.0 })
-         ,("minPos", Real.minPos, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, abs = Real.minPos })
-         ,("minNormalPos", Real.minNormalPos, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, abs = Real.minNormalPos })
-         ,("0.25", 0.25, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, abs = 0.25 })
-         ,("0.5", 0.5, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, abs = 0.5 })
-         ,("0.75", 0.75, { round = 1.0, floor = 0.0, ceil = 1.0, trunc = 0.0, abs = 0.75 })
-         ,("1.0", 1.0, { round = 1.0, floor = 1.0, ceil = 1.0, trunc = 1.0, abs = 1.0 })
-         ,("1.25", 1.25, { round = 1.0, floor = 1.0, ceil = 2.0, trunc = 1.0, abs = 1.25 })
-         ,("1.5", 1.5, { round = 2.0, floor = 1.0, ceil = 2.0, trunc = 1.0, abs = 1.5 })
-         ,("1.75", 1.75, { round = 2.0, floor = 1.0, ceil = 2.0, trunc = 1.0, abs = 1.75 })
-         ,("2.0", 2.0, { round = 2.0, floor = 2.0, ceil = 2.0, trunc = 2.0, abs = 2.0 })
-         ,("2.25", 2.25, { round = 2.0, floor = 2.0, ceil = 3.0, trunc = 2.0, abs = 2.25 })
-         ,("2.5", 2.5, { round = 2.0, floor = 2.0, ceil = 3.0, trunc = 2.0, abs = 2.5 })
-         ,("2.75", 2.75, { round = 3.0, floor = 2.0, ceil = 3.0, trunc = 2.0, abs = 2.75 })
-         ,("3.0", 3.0, { round = 3.0, floor = 3.0, ceil = 3.0, trunc = 3.0, abs = 3.0 })
-         ,("3.25", 3.25, { round = 3.0, floor = 3.0, ceil = 4.0, trunc = 3.0, abs = 3.25 })
-         ,("3.5", 3.5, { round = 4.0, floor = 3.0, ceil = 4.0, trunc = 3.0, abs = 3.5 })
-         ,("maxFinite", Real.maxFinite, { round = Real.maxFinite, floor = Real.maxFinite, ceil = Real.maxFinite, trunc = Real.maxFinite, abs = Real.maxFinite })
-         ,("posInf", Real.posInf, { round = Real.posInf, floor = Real.posInf, ceil = Real.posInf, trunc = Real.posInf, abs = Real.posInf })
+         [("negInf", Real.negInf, { round = Real.negInf, floor = Real.negInf, ceil = Real.negInf, trunc = Real.negInf, frac = ~0.0, abs = Real.posInf })
+         ,("~maxFinite", ~Real.maxFinite, { round = ~Real.maxFinite, floor = ~Real.maxFinite, ceil = ~Real.maxFinite, trunc = ~Real.maxFinite, frac = ~0.0, abs = Real.maxFinite })
+         ,("~3.5", ~3.5, { round = ~4.0, floor = ~4.0, ceil = ~3.0, trunc = ~3.0, frac = ~0.5, abs = 3.5 })
+         ,("~3.25", ~3.25, { round = ~3.0, floor = ~4.0, ceil = ~3.0, trunc = ~3.0, frac = ~0.25, abs = 3.25 })
+         ,("~3.0", ~3.0, { round = ~3.0, floor = ~3.0, ceil = ~3.0, trunc = ~3.0, frac = ~0.0, abs = 3.0 })
+         ,("~2.75", ~2.75, { round = ~3.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, frac = ~0.75, abs = 2.75 })
+         ,("~2.5", ~2.5, { round = ~2.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, frac = ~0.5, abs = 2.5 })
+         ,("~2.25", ~2.25, { round = ~2.0, floor = ~3.0, ceil = ~2.0, trunc = ~2.0, frac = ~0.25, abs = 2.25 })
+         ,("~2.0", ~2.0, { round = ~2.0, floor = ~2.0, ceil = ~2.0, trunc = ~2.0, frac = ~0.0, abs = 2.0 })
+         ,("~1.75", ~1.75, { round = ~2.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, frac = ~0.75, abs = 1.75 })
+         ,("~1.5", ~1.5, { round = ~2.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, frac = ~0.5, abs = 1.5 })
+         ,("~1.25", ~1.25, { round = ~1.0, floor = ~2.0, ceil = ~1.0, trunc = ~1.0, frac = ~0.25, abs = 1.25 })
+         ,("~1.0", ~1.0, { round = ~1.0, floor = ~1.0, ceil = ~1.0, trunc = ~1.0, frac = ~0.0, abs = 1.0 })
+         ,("~0.75", ~0.75, { round = ~1.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, frac = ~0.75, abs = 0.75 })
+         ,("~0.5", ~0.5, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, frac = ~0.5, abs = 0.5 })
+         ,("~0.25", ~0.25, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, frac = ~0.25, abs = 0.25 })
+         ,("~minNormalPos", ~Real.minNormalPos, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, frac = ~Real.minNormalPos, abs = Real.minNormalPos })
+         ,("~minPos", ~Real.minPos, { round = ~0.0, floor = ~1.0, ceil = ~0.0, trunc = ~0.0, frac = ~Real.minPos, abs = Real.minPos })
+         ,("~0.0", ~0.0, { round = ~0.0, floor = ~0.0, ceil = ~0.0, trunc = ~0.0, frac = ~0.0, abs = 0.0 })
+         ,("0.0", 0.0, { round = 0.0, floor = 0.0, ceil = 0.0, trunc = 0.0, frac = 0.0, abs = 0.0 })
+         ,("minPos", Real.minPos, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, frac = Real.minPos, abs = Real.minPos })
+         ,("minNormalPos", Real.minNormalPos, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, frac = Real.minNormalPos, abs = Real.minNormalPos })
+         ,("0.25", 0.25, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, frac = 0.25, abs = 0.25 })
+         ,("0.5", 0.5, { round = 0.0, floor = 0.0, ceil = 1.0, trunc = 0.0, frac = 0.5, abs = 0.5 })
+         ,("0.75", 0.75, { round = 1.0, floor = 0.0, ceil = 1.0, trunc = 0.0, frac = 0.75, abs = 0.75 })
+         ,("1.0", 1.0, { round = 1.0, floor = 1.0, ceil = 1.0, trunc = 1.0, frac = 0.0, abs = 1.0 })
+         ,("1.25", 1.25, { round = 1.0, floor = 1.0, ceil = 2.0, trunc = 1.0, frac = 0.25, abs = 1.25 })
+         ,("1.5", 1.5, { round = 2.0, floor = 1.0, ceil = 2.0, trunc = 1.0, frac = 0.5, abs = 1.5 })
+         ,("1.75", 1.75, { round = 2.0, floor = 1.0, ceil = 2.0, trunc = 1.0, frac = 0.75, abs = 1.75 })
+         ,("2.0", 2.0, { round = 2.0, floor = 2.0, ceil = 2.0, trunc = 2.0, frac = 0.0, abs = 2.0 })
+         ,("2.25", 2.25, { round = 2.0, floor = 2.0, ceil = 3.0, trunc = 2.0, frac = 0.25, abs = 2.25 })
+         ,("2.5", 2.5, { round = 2.0, floor = 2.0, ceil = 3.0, trunc = 2.0, frac = 0.5, abs = 2.5 })
+         ,("2.75", 2.75, { round = 3.0, floor = 2.0, ceil = 3.0, trunc = 2.0, frac = 0.75, abs = 2.75 })
+         ,("3.0", 3.0, { round = 3.0, floor = 3.0, ceil = 3.0, trunc = 3.0, frac = 0.0, abs = 3.0 })
+         ,("3.25", 3.25, { round = 3.0, floor = 3.0, ceil = 4.0, trunc = 3.0, frac = 0.25, abs = 3.25 })
+         ,("3.5", 3.5, { round = 4.0, floor = 3.0, ceil = 4.0, trunc = 3.0, frac = 0.5, abs = 3.5 })
+         ,("maxFinite", Real.maxFinite, { round = Real.maxFinite, floor = Real.maxFinite, ceil = Real.maxFinite, trunc = Real.maxFinite, frac = 0.0, abs = Real.maxFinite })
+         ,("posInf", Real.posInf, { round = Real.posInf, floor = Real.posInf, ceil = Real.posInf, trunc = Real.posInf, frac = 0.0, abs = Real.posInf })
          ,let val NaN = 0.0 / 0.0
-          in ("NaN", NaN, { round = NaN, floor = NaN, ceil = NaN, trunc = NaN, abs = NaN })
+          in ("NaN", NaN, { round = NaN, floor = NaN, ceil = NaN, trunc = NaN, frac = NaN, abs = NaN })
           end
          ];
 val NaN = 0.0 / 0.0;
