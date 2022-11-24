@@ -629,8 +629,8 @@ signature REAL = sig
     val isNan : real -> bool
     val isNormal : real -> bool
     val class : real -> IEEEReal.float_class
-    (* val toManExp : real -> { man : real, exp : int } *)
-    (* val fromManExp : { man : real, exp : int } -> real *)
+    val toManExp : real -> { man : real, exp : int }
+    val fromManExp : { man : real, exp : int } -> real
     (* val split : real -> { whole : real, frac : real } *)
     (* val realMod : real -> real *)
     (* val nextAfter : real * real -> real *)
@@ -753,6 +753,50 @@ fun compareReal (x, y) = if isNan x orelse isNan y then
                                  IEEEReal.EQUAL
                              else
                                  IEEEReal.GREATER
+(* TODO: We may have math.frexp *)
+(* Assumption: 2^exp is exact *)
+fun toManExp x = let val a = abs x
+                 in if a == 0.0 orelse a == posInf orelse isNan a then
+                        { man = x, exp = 0 }
+                    else
+                        let val e0 : int = Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.floor #[Lua.call1 Lua.Lib.math.log #[Lua.fromReal a, Lua.fromInt 2]]) - 1
+                            fun fixup e = let val lower = Lua.unsafeFromValue (Lua.pow (Lua.fromReal 2.0, Lua.fromInt (e - 1))) : real
+                                          in if lower <= a then
+                                                 if a < lower * 2.0 then (* lower * 2.0 may be infinity *)
+                                                     { exp = e, man = x / lower * 0.5 }
+                                                 else
+                                                     fixup (e + 1)
+                                             else
+                                                 fixup (e - 1)
+                                          end
+                        in fixup e0
+                        end
+                 end
+(* TODO: We may have math.ldexp *)
+(* Assumption: 2^exp is exact *)
+fun fromManExp { man : real, exp : int } = if ~1022 <= exp then
+                                               if exp < 1024 then
+                                                   man * Lua.unsafeFromValue (Lua.pow (Lua.fromReal 2.0, Lua.fromInt exp))
+                                               else
+                                                   let val exp' = if exp > 2098 then
+                                                                      2098 (* 0x1p1023 / 0x1p~1074 = 0x1p2097 *)
+                                                                  else
+                                                                      exp
+                                                   in fromManExp { man = man * 0x1p1023, exp = exp' - 1023 } (* Avoid undue overflow *)
+                                                   end
+                                           else
+                                               let val exp' = if exp < ~2099 then
+                                                                  ~2099 (* 0x1p~1074 / 0x1p1024 = 0x1p~2098 *)
+                                                              else
+                                                                  exp
+                                                   val j = exp' mod ~1022 (* ~1022 < j <= 0 *)
+                                               in if j <> 0 then
+                                                      let val s = Lua.unsafeFromValue (Lua.pow (Lua.fromReal 2.0, Lua.fromInt j))
+                                                      in fromManExp { man = man * s, exp = exp' - j }
+                                                      end
+                                                  else
+                                                      fromManExp { man = man * 0x1p~1022, exp = exp' + 1022 }
+                                               end (* Avoid undue underflow and double rounding *)
 fun checkFloat x = if isNan x then
                        raise Div
                    else if x == posInf orelse x == negInf then

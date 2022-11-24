@@ -239,3 +239,64 @@ max (0.0, 0.0): OK
 max (~0.0, 0.0): OK
 max (0.0, ~0.0): OK
 max (~0.0, ~0.0): OK
+toManExp 1.0: OK
+fromManExp -> 1.0: OK
+toManExp 0x1.deadbeefcafeap77: OK
+fromManExp -> 0x1.deadbeefcafeap77: OK
+toManExp ~0x1.deadbeefcafeap77: OK
+fromManExp -> ~0x1.deadbeefcafeap77: OK
+toManExp 0x1p~1074: OK
+fromManExp -> 0x1p~1074: OK
+toManExp 0x0.fffffffffffffp~1022: OK
+fromManExp -> 0x0.fffffffffffffp~1022: OK
+toManExp 0x1p~1022: OK
+fromManExp -> 0x1p~1022: OK
+toManExp 0x1.fffffffffffffp~1022: OK
+fromManExp -> 0x1.fffffffffffffp~1022: OK
+toManExp 0x1p~1001: OK
+fromManExp -> 0x1p~1001: OK
+toManExp 0x1.fffffffffffffp~1001: OK
+fromManExp -> 0x1.fffffffffffffp~1001: OK
+toManExp 0x1.fffffffffffff: OK
+fromManExp -> 0x1.fffffffffffff: OK
+toManExp 0x1p77: OK
+fromManExp -> 0x1p77: OK
+toManExp 0x1.fffffffffffffp77: OK
+fromManExp -> 0x1.fffffffffffffp77: OK
+toManExp ~0x1p999: OK
+fromManExp -> ~0x1p999: OK
+toManExp ~0x1.fffffffffffffp999: OK
+fromManExp -> ~0x1.fffffffffffffp999: OK
+toManExp 0x1p1023: OK
+fromManExp -> 0x1p1023: OK
+toManExp 0x1.fffffffffffffp1023: OK
+fromManExp -> 0x1.fffffffffffffp1023: OK
+toManExp 0.0: OK
+fromManExp -> 0.0: OK
+toManExp ~0.0: OK
+fromManExp -> ~0.0: OK
+toManExp posInf: OK
+toManExp negInf: OK
+toManExp NaN: OK
+fromManExp { man = 0x1p~1074, exp = 1074 }: OK
+fromManExp { man = 0x1p1023, exp = ~1023 }: OK
+fromManExp { man = 1.0, exp = veryLargeInt }: OK
+fromManExp { man = 1.0, exp = verySmallInt }: OK
+fromManExp { man = 0x1.fffffffffffffp1023, exp = ~1023 }: OK
+fromManExp { man = 0x1p1023, exp = ~2097 }: OK
+fromManExp { man = 0x1p1023, exp = ~2098 }: OK
+fromManExp { man = ~0x1p1023, exp = ~2098 }: OK
+fromManExp { man = 0x1.555555555555bp~1, exp = ~1024 }: OK
+fromManExp { man = 0x1.0000000000001p1023, exp = ~2098 }: OK
+fromManExp { man = 0x1.fffffffffffffp~1022, exp = 2045 }: OK
+fromManExp { man = 0x1p~1074, exp = 2097 }: OK
+fromManExp { man = 0x1p~1074, exp = 2098 }: OK
+fromManExp { man = ~0x1p~1074, exp = 2098 }: OK
+fromManExp { man = 0x1p~1074, exp = veryLargeInt }: OK
+fromManExp { man = NaN, exp = 1000000 }: OK
+fromManExp { man = NaN, exp = veryLargeInt }: OK
+fromManExp { man = NaN, exp = verySmallInt }: OK
+fromManExp { man = posInf, exp = ~1000000 }: OK
+fromManExp { man = posInf, exp = verySmallInt }: OK
+fromManExp { man = ~0.0, exp = 1000000 }: OK
+fromManExp { man = ~0.0, exp = veryLargeInt }: OK

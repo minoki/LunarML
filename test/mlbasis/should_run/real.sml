@@ -151,3 +151,88 @@ val () = List.app (fn (expected, actual, s) =>
                   ,(0.0, Real.max (0.0, ~0.0), "max (0.0, ~0.0)")
                   ,(~0.0, Real.max (~0.0, ~0.0), "max (~0.0, ~0.0)")
                   ];
+val () = List.app (fn ({ man, exp }, x, s) =>
+                      ( let val { man = man', exp = exp' } = Real.toManExp x
+                        in if sameValue (man, man') andalso exp = exp' then
+                               print ("toManExp " ^ s ^ ": OK\n")
+                           else
+                               print ("toManExp " ^ s ^ ": mismatch (" ^ Real.toString man ^ " vs " ^ Real.toString man' ^ ", " ^ Int.toString exp ^ " vs " ^ Int.toString exp' ^ ")\n")
+                        end
+                      ; let val y = Real.fromManExp { man = man, exp = exp }
+                        in if sameValue (x, y) then
+                               print ("fromManExp -> " ^ s ^ ": OK\n")
+                           else
+                               print ("fromManExp -> " ^ s ^ ": mismatch (" ^ Real.toString x ^ " vs " ^ Real.toString y ^ ")\n")
+                        end
+                      )
+                  )
+                  [({ man = 0.5, exp = 1 }, 1.0, "1.0")
+                  ,({ man = 0x1.deadbeefcafeap~1, exp = 78 }, 0x1.deadbeefcafeap77, "0x1.deadbeefcafeap77")
+                  ,({ man = ~0x1.deadbeefcafeap~1, exp = 78 }, ~0x1.deadbeefcafeap77, "~0x1.deadbeefcafeap77")
+                  ,({ man = 0.5, exp = ~1073 }, 0x1p~1074, "0x1p~1074")
+                  ,({ man = 0x0.fffffffffffffp0, exp = ~1022 }, 0x0.fffffffffffffp~1022, "0x0.fffffffffffffp~1022")
+                  ,({ man = 0.5, exp = ~1021 }, 0x1p~1022, "0x1p~1022")
+                  ,({ man = 0x1.fffffffffffffp~1, exp = ~1021 }, 0x1.fffffffffffffp~1022, "0x1.fffffffffffffp~1022")
+                  ,({ man = 0.5, exp = ~1000 }, 0x1p~1001, "0x1p~1001")
+                  ,({ man = 0x1.fffffffffffffp~1, exp = ~1000 }, 0x1.fffffffffffffp~1001, "0x1.fffffffffffffp~1001")
+                  ,({ man = 0x1.fffffffffffffp~1, exp = 1 }, 0x1.fffffffffffff, "0x1.fffffffffffff")
+                  ,({ man = 0.5, exp = 78 }, 0x1p77, "0x1p77")
+                  ,({ man = 0x1.fffffffffffffp~1, exp = 78 }, 0x1.fffffffffffffp77, "0x1.fffffffffffffp77")
+                  ,({ man = ~0.5, exp = 1000 }, ~0x1p999, "~0x1p999")
+                  ,({ man = ~0x1.fffffffffffffp~1, exp = 1000 }, ~0x1.fffffffffffffp999, "~0x1.fffffffffffffp999")
+                  ,({ man = 0.5, exp = 1024 }, 0x1p1023, "0x1p1023")
+                  ,({ man = 0x1.fffffffffffffp~1, exp = 1024 }, 0x1.fffffffffffffp1023, "0x1.fffffffffffffp1023")
+                  ,({ man = 0.0, exp = 0 }, 0.0, "0.0")
+                  ,({ man = ~0.0, exp = 0 }, ~0.0, "~0.0")
+                  ];
+val () = List.app (fn (expectedMan, x, s) =>
+                      let val { man, exp } = Real.toManExp x
+                      in if sameValue (expectedMan, man) then
+                               print ("toManExp " ^ s ^ ": OK\n")
+                           else
+                               print ("toManExp " ^ s ^ ": mismatch (" ^ Real.toString expectedMan ^ " vs " ^ Real.toString man ^ ")\n")
+                      end
+                  )
+                  [(Real.posInf, Real.posInf, "posInf")
+                  ,(Real.negInf, Real.negInf, "negInf")
+                  ,(NaN, NaN, "NaN")
+                  ];
+val veryLargeInt = Option.getOpt (Int.maxInt, 0x7fffffff)
+val verySmallInt = Option.getOpt (Int.minInt, ~0x80000000)
+val () = List.app (fn (expected, { man, exp }, s) =>
+                      let val actual = Real.fromManExp { man = man, exp = exp }
+                          val exps = if exp = veryLargeInt then
+                                         "veryLargeInt"
+                                     else if exp = verySmallInt then
+                                         "verySmallInt"
+                                     else
+                                         Int.toString exp
+                      in if sameValue (expected, actual) then
+                             print ("fromManExp { man = " ^ s ^ ", exp = " ^ exps ^ " }: OK\n")
+                         else
+                             print ("fromManExp { man = " ^ s ^ ", exp = " ^ exps ^ " }: mismatch (" ^ Real.toString expected ^ " vs " ^ Real.toString actual ^ ")\n")
+                      end
+                  )
+                  [(1.0, { man = 0x1p~1074, exp = 1074 }, "0x1p~1074")
+                  ,(1.0, { man = 0x1p1023, exp = ~1023 }, "0x1p1023")
+                  ,(Real.posInf, { man = 1.0, exp = veryLargeInt }, "1.0")
+                  ,(0.0, { man = 1.0, exp = verySmallInt }, "1.0")
+                  ,(0x1.fffffffffffffp0, { man = 0x1.fffffffffffffp1023, exp = ~1023 }, "0x1.fffffffffffffp1023")
+                  ,(0x1p~1074, { man = 0x1p1023, exp = ~2097 }, "0x1p1023")
+                  ,(0.0, { man = 0x1p1023, exp = ~2098 }, "0x1p1023")
+                  ,(~0.0, { man = ~0x1p1023, exp = ~2098 }, "~0x1p1023")
+                  ,(0x1.5555555555558p~1025, { man = 0x1.555555555555bp~1, exp = ~1024 }, "0x1.555555555555bp~1")
+                  ,(0x1p~1074, { man = 0x1.0000000000001p1023, exp = ~2098 }, "0x1.0000000000001p1023")
+                  ,(0x1.fffffffffffffp1023, { man = 0x1.fffffffffffffp~1022, exp = 2045 }, "0x1.fffffffffffffp~1022")
+                  ,(0x1p1023, { man = 0x1p~1074, exp = 2097 }, "0x1p~1074")
+                  ,(Real.posInf, { man = 0x1p~1074, exp = 2098 }, "0x1p~1074")
+                  ,(Real.negInf, { man = ~0x1p~1074, exp = 2098 }, "~0x1p~1074")
+                  ,(Real.posInf, { man = 0x1p~1074, exp = veryLargeInt }, "0x1p~1074")
+                  ,(NaN, { man = NaN, exp = 1000000 }, "NaN")
+                  ,(NaN, { man = NaN, exp = veryLargeInt }, "NaN")
+                  ,(NaN, { man = NaN, exp = verySmallInt }, "NaN")
+                  ,(Real.posInf, { man = Real.posInf, exp = ~1000000 }, "posInf")
+                  ,(Real.posInf, { man = Real.posInf, exp = verySmallInt }, "posInf")
+                  ,(~0.0, { man = ~0.0, exp = 1000000 }, "~0.0")
+                  ,(~0.0, { man = ~0.0, exp = veryLargeInt }, "~0.0")
+                  ];
