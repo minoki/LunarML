@@ -305,7 +305,7 @@ signature REAL = sig
     val - : real * real -> real
     val * : real * real -> real
     val / : real * real -> real
-    (* val rem : real * real -> real *)
+    val rem : real * real -> real
     (* val *+ : real * real * real -> real *)
     (* val *- : real * real * real -> real *)
     val ~ : real -> real
@@ -389,6 +389,7 @@ fun class x = if x == 0.0 then
                           IEEEReal.NAN
                       else
                           IEEEReal.INF
+fun rem (x : real, y : real) : real = JavaScript.unsafeFromValue (JavaScript.% (JavaScript.fromReal x, JavaScript.fromReal y))
 fun min (x : real, y : real) = if isNan x then
                                    y
                                else if isNan y then

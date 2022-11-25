@@ -378,3 +378,17 @@ fromManExp { man = posInf, exp = ~1000000 }: OK
 fromManExp { man = posInf, exp = verySmallInt }: OK
 fromManExp { man = ~0.0, exp = 1000000 }: OK
 fromManExp { man = ~0.0, exp = veryLargeInt }: OK
+rem (posInf, 1.0): OK
+rem (negInf, 1.0): OK
+rem (1.0, 0.0): OK
+rem (minPos, posInf): OK
+rem (~minNormalPos, posInf): OK
+rem (maxFinite, negInf): OK
+rem (5.25, 2.0): OK
+rem (5.25, ~2.0): OK
+rem (~5.25, 2.0): OK
+rem (~5.25, ~2.0): OK
+rem (5.0, 1.0): OK
+rem (5.0, ~1.0): OK
+rem (~5.0, 1.0): OK
+rem (~5.0, ~1.0): OK

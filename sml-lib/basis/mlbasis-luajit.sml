@@ -168,6 +168,7 @@ structure Lua : sig
                                           val atan : value
                                           val ceil : value
                                           val floor : value
+                                          val fmod : value
                                           val huge : value
                                           val log : value
                                           val modf : value
@@ -278,6 +279,7 @@ val abs = _Prim.Lua.Lib.math.abs
 val atan = LunarML.assumeDiscardable (field (math, "atan"))
 val ceil = LunarML.assumeDiscardable (field (math, "ceil"))
 val floor = LunarML.assumeDiscardable (field (math, "floor"))
+val fmod = LunarML.assumeDiscardable (field (math, "fmod"))
 val huge = LunarML.assumeDiscardable (field (math, "huge"))
 val log = LunarML.assumeDiscardable (field (math, "log"))
 val modf = LunarML.assumeDiscardable (field (math, "modf"))
@@ -619,7 +621,7 @@ signature REAL = sig
     val - : real * real -> real
     val * : real * real -> real
     val / : real * real -> real
-    (* val rem : real * real -> real *)
+    val rem : real * real -> real
     (* val *+ : real * real * real -> real *)
     (* val *- : real * real * real -> real *)
     val ~ : real -> real
@@ -707,6 +709,7 @@ fun class x = if x == 0.0 then
                          else
                              IEEEReal.INF
                   end
+fun rem (x : real, y : real) : real = Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.fmod #[Lua.fromReal x, Lua.fromReal y])
 fun min (x : real, y : real) = if x < y then
                                    x
                                else if y < x then

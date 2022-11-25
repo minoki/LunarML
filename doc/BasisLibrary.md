@@ -295,7 +295,7 @@ signature REAL = sig
   val - : real * real -> real
   val * : real * real -> real
   val / : real * real -> real
-  (* val rem : real * real -> real *)
+  val rem : real * real -> real
   (* val *+ : real * real * real -> real *)
   (* val *- : real * real * real -> real *)
   val ~ : real -> real

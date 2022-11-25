@@ -249,3 +249,26 @@ val () = List.app (fn (expected, { man, exp }, s) =>
                   ,(~0.0, { man = ~0.0, exp = 1000000 }, "~0.0")
                   ,(~0.0, { man = ~0.0, exp = veryLargeInt }, "~0.0")
                   ];
+val () = List.app (fn (expected, (a, b), (s, t)) =>
+                      let val actual = Real.rem (a, b)
+                      in if sameValue (expected, actual) then
+                             print ("rem (" ^ s ^ ", " ^ t ^ "): OK\n")
+                         else
+                             print ("rem (" ^ s ^ ", " ^ t ^ "): mismatch (expected " ^ Real.toString expected ^ ", but got " ^ Real.toString actual ^ ")\n")
+                      end
+                  )
+                  [(NaN, (Real.posInf, 1.0), ("posInf", "1.0"))
+                  ,(NaN, (Real.negInf, 1.0), ("negInf", "1.0"))
+                  ,(NaN, (1.0, 0.0), ("1.0", "0.0"))
+                  ,(Real.minPos, (Real.minPos, Real.posInf), ("minPos", "posInf"))
+                  ,(~Real.minNormalPos, (~Real.minNormalPos, Real.posInf), ("~minNormalPos", "posInf"))
+                  ,(Real.maxFinite, (Real.maxFinite, Real.negInf), ("maxFinite", "negInf"))
+                  ,(1.25, (5.25, 2.0), ("5.25", "2.0"))
+                  ,(1.25, (5.25, ~2.0), ("5.25", "~2.0"))
+                  ,(~1.25, (~5.25, 2.0), ("~5.25", "2.0"))
+                  ,(~1.25, (~5.25, ~2.0), ("~5.25", "~2.0"))
+                  ,(0.0, (5.0, 1.0), ("5.0", "1.0"))
+                  ,(0.0, (5.0, ~1.0), ("5.0", "~1.0"))
+                  ,(~0.0, (~5.0, 1.0), ("~5.0", "1.0"))
+                  ,(~0.0, (~5.0, ~1.0), ("~5.0", "~1.0"))
+                  ];
