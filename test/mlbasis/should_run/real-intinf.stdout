@@ -154,3 +154,38 @@ toLargeInt TO_NEAREST NaN: OK
 toLargeInt TO_NEGINF NaN: OK
 toLargeInt TO_POSINF NaN: OK
 toLargeInt TO_ZERO NaN: OK
+fromLargeInt 0: OK
+fromLargeInt 1: OK
+fromLargeInt ~1: OK
+fromLargeInt ~0xDEAD_BEEF: OK
+fromLargeInt 0xCAFE_CAFE_CAFE: OK
+fromLargeInt 0xCAFE_CAFE_CAFE_0000: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC0: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FBFF: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC00: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC01: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FBFF_F: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC00_0: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_FC00_1: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_FC: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_FC0: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_FC00: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F4: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F40: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F3FF: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F400: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F401: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F3FF_F: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F400_0: OK
+fromLargeInt 0xFFFF_FFFF_FFFF_F400_1: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F4: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F40: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F400: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F3FF_FF: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F400_00: OK
+fromLargeInt ~0xFFFF_FFFF_FFFF_F400_01: OK
+fromLargeInt 2^100: OK
+fromLargeInt maxFinite: OK
+fromLargeInt maxFinite+1: OK
+fromLargeInt maxFinite-1: OK

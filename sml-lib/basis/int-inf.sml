@@ -1031,7 +1031,7 @@ val realBase : real = (* case Word.wordSize of
 fun wordToReal 0w0 = 0.0
   | wordToReal w = wordToReal (Word.>> (w, 0w31)) * 0x1p31 + Real.fromInt (Word.toInt (Word.andb (w, 0wx7fffffff)))
 fun simpleNatToReal words = Vector.foldr (fn (w, acc) => acc * realBase + wordToReal w) 0.0 words
-fun toRealAbs words = let val k = log2Abs words
+fun toRealAbs words = let val k = log2Abs words (* 2^k <= words < 2^(k+1) *)
                       in if k < Real.precision then
                              simpleNatToReal words
                          else if k >= 1024 then
