@@ -210,6 +210,8 @@ local
                                 val fromWord64 : Word64.word -> int
                                 val fromWord64X : Word64.word -> int
                                 val toWord64 : int -> Word64.word
+                                val fromIntegralReal : real -> int
+                                val toReal : int -> real
                             end where type int = IntInf.int
               end = struct
     structure Word8 = struct
@@ -374,7 +376,7 @@ local
     fun toWord16 (x : IntInf.int) : Word16.word = BigIntToWord (asBigUint16 x)
     fun toWord32 (x : IntInf.int) : Word32.word = BigIntToWord (asBigUint32 x)
     fun toWord64 (x : IntInf.int) : Word64.word = asBigUint64 x
-    open IntInf
+    open IntInfImpl
     end
     end
 in

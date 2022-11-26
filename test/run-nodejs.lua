@@ -213,6 +213,7 @@ should_run "mlbasis/should_run/" {
   "seki-bernoulli.sml",
   "exn-name.sml",
   "real.sml",
+  "real-intinf.sml",
   "substring.sml",
   -- "os-path.sml",
 }

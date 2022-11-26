@@ -33,6 +33,7 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 large-int-is-int-inf.sml
+real.sml
 lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml

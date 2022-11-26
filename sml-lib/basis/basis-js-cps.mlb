@@ -47,6 +47,8 @@ structure IEEEReal
 structure IO
 structure Int
 structure IntInf
+structure LargeInt
+structure LargeReal
 structure LargeWord
 structure List
 structure ListPair

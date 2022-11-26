@@ -63,6 +63,8 @@ structure IntInfImpl :> sig
               val fromWord64 : Word64.word -> int
               val fromWord64X : Word64.word -> int
               val toWord64 : int -> Word64.word
+              val fromIntegralReal : real -> int (* the input must be integral *)
+              val toReal : int -> real (* use roundTiesToEven *)
           end = struct
 structure Vector = struct
 open Vector
@@ -412,9 +414,11 @@ fun log2Word 0w0 = raise Domain
   | log2Word 0w1 = 1
   | log2Word x = 1 + log2Word (x div 0w2)
 
-fun log2 (POSITIVE words) = let val n = Vector.length words - 1
-                            in Word.wordSize * n + log2Word (Vector.sub (words, n))
-                            end
+fun log2Abs words = let val n = Vector.length words - 1
+                    in Word.wordSize * n + log2Word (Vector.sub (words, n))
+                    end
+
+fun log2 (POSITIVE words) = log2Abs words
   | log2 _ = raise Domain
 
 fun orbAbs (words, words') = let val m = Vector.length words
@@ -981,6 +985,73 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                           scanDigits (fromInt 16, Char.isHexDigit, getc) strm
                                    end
 fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+
+local
+    infix 4 ==
+    val op == = Real.==
+in
+fun fromIntegralReal (x : real) = if x == 0.0 then
+                                      ZERO
+                                  else
+                                      let val { man, exp } = Real.toManExp x
+                                          val y = man * 0x1p53 (* 1 <= |y| <= 2^53-1 *)
+                                          val e = exp - 53
+                                          fun go x = if x == 0.0 then
+                                                         #[]
+                                                     else
+                                                         let val { whole, frac } = Real.split (x / 0x1p31)
+                                                             val i = Real.trunc (frac * 0x1p31) (* rounding do not occur *)
+                                                         in orbAbs (LShiftAbs (go whole, 0w31), #[Word.fromInt i])
+                                                         end
+                                          fun adjust words = if e > 0 then
+                                                                 LShiftAbs (words, Word.fromInt e)
+                                                             else if e < 0 then
+                                                                 #1 (RShiftAbs (words, Word.fromInt (~e)))
+                                                             else
+                                                                 words
+                                      in if y < 0.0 then
+                                             NEGATIVE (adjust (go (~y)))
+                                         else
+                                             POSITIVE (adjust (go y))
+                                      end
+val realBase : real = (* case Word.wordSize of
+                          32 => 0x1p32
+                        | 64 => 0x1p64
+                        | _ => *) let fun pow (a, 0, acc) = acc
+                                     | pow (a, 1, acc) = acc * a
+                                     | pow (a, n, acc) = let val q = n div 2
+                                                         in if n mod 2 = 0 then
+                                                                pow (a * a, q, acc)
+                                                            else
+                                                                pow (a * a, q, acc * a)
+                                                         end
+                               in pow (2.0, Word.wordSize, 1.0)
+                               end
+fun wordToReal 0w0 = 0.0
+  | wordToReal w = wordToReal (Word.>> (w, 0w31)) * 0x1p31 + Real.fromInt (Word.toInt (Word.andb (w, 0wx7fffffff)))
+fun simpleNatToReal words = Vector.foldr (fn (w, acc) => acc * realBase + wordToReal w) 0.0 words
+fun toRealAbs words = let val k = log2Abs words
+                      in if k < Real.precision then
+                             simpleNatToReal words
+                         else if k >= 1024 then
+                             Real.posInf (* overflow *)
+                         else (* Real.precision <= k < 1024 *)
+                             let val e = k - Real.precision + 1
+                                 val q = #1 (RShiftAbs (words, Word.fromInt e))
+                                 val r = andbAbs (words, subAbs (LShiftAbs (#[0w1], Word.fromInt e), #[0w1]))
+                             in case compareAbs (r, LShiftAbs (#[0w1], Word.fromInt (e - 1))) of
+                                    LESS => Real.fromManExp { man = simpleNatToReal q, exp = e }
+                                  | EQUAL => if Word.andb (Vector.sub (q, 0), 0w1) = 0w0 then (* even *)
+                                                 Real.fromManExp { man = simpleNatToReal q, exp = e }
+                                             else
+                                                 Real.fromManExp { man = simpleNatToReal (addAbs (q, #[0w1])), exp = e }
+                                  | GREATER => Real.fromManExp { man = simpleNatToReal (addAbs (q, #[0w1])), exp = e }
+                             end
+                      end
+fun toReal ZERO = 0.0
+  | toReal (POSITIVE words) = toRealAbs words
+  | toReal (NEGATIVE words) = ~ (toRealAbs words)
 end
 
 (* Overloaded identifiers *)

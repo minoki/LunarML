@@ -33,6 +33,7 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 large-int-is-int-inf.sml
+real.sml
 lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml
@@ -104,6 +105,6 @@ structure Word8Array
 structure Word8ArraySlice
 signature BYTE
 structure Byte
-structure LargeReal = Real
+structure LargeReal
 top-level.sml
 end

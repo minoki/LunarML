@@ -33,6 +33,7 @@ substring.sml
 js-common/word-sequence.sml
 js-common/scan-num.sml (* depends on Word8, Substring *)
 large-int-is-int-inf.sml
+real.sml
 js-common/unsafe-extra.sml
 byte.sml
 scan-bool.sml
@@ -83,7 +84,7 @@ structure IO
 structure Int
 structure IntInf
 structure LargeInt
-structure LargeReal = Real
+structure LargeReal
 structure LargeWord
 structure List
 structure ListPair

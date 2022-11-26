@@ -335,11 +335,11 @@ signature REAL = sig
   val trunc : real -> int
   val round : real -> int
   val toInt : IEEEReal.rounding_mode -> real -> int
-  (* val toLargeInt : IEEEReal.rounding_mode -> real -> LargeInt.int *)
+  val toLargeInt : IEEEReal.rounding_mode -> real -> LargeInt.int
   val fromInt : int -> real
-  (* val fromLargeInt : LargeInt.int -> real *)
-  (* val toLarge : real -> LargeReal.real *)
-  (* val fromLarge : IEEEReal.rounding_mode -> LargeReal.real -> real *)
+  val fromLargeInt : LargeInt.int -> real
+  val toLarge : real -> LargeReal.real
+  val fromLarge : IEEEReal.rounding_mode -> LargeReal.real -> real
   val fmt : StringCvt.realfmt -> real -> string
   val toString : real -> string
   val scan : (char, 'a) StringCvt.reader -> (real, 'a) StringCvt.reader

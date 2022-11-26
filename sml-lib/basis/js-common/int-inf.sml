@@ -44,7 +44,11 @@ signature INT_INF = sig
     val ~>> : int * Word.word -> int
 end
 
-structure IntInf : INT_INF = struct
+structure IntInfImpl : sig
+              include INT_INF
+              val fromIntegralReal : real -> int (* the input must be integral *)
+              val toReal : int -> real (* use roundTiesToEven *)
+          end = struct
 type int = _Prim.IntInf.int
 _equality int = fn (x, y) => _primCall "IntInf.=" (x, y);
 val maxSmallInt : int = 0x7fffffff
@@ -61,6 +65,8 @@ fun toInt (x : int) : Int.int = if LE (minSmallInt, x) andalso LE (x, maxSmallIn
                                 else
                                     raise Overflow
 fun fromInt (x : Int.int) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
+fun toReal (x : int) : real = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
+fun fromIntegralReal (x : real) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.fromReal x])
 val precision : Int.int option = NONE
 val minInt : int option = NONE
 val maxInt : int option = NONE
@@ -279,6 +285,7 @@ val op <= = LE
 val op > = GT
 val op >= = GE
 end
+structure IntInf = IntInfImpl : INT_INF;
 _overload "Int" [IntInf.int]
   { + = IntInf.+
   , - = IntInf.-
@@ -292,4 +299,4 @@ _overload "Int" [IntInf.int]
   , > = IntInf.>
   , >= = IntInf.>=
   , fromInt = IntInf.fromInt
-  }
+  };
