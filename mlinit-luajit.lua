@@ -195,7 +195,7 @@ local function __Word_LT(x, y)
 end
 
 -- Real
-local NEGATIVE_ZERO = tonumber("-0")
+local NEGATIVE_ZERO = 0 / (-1)
 --[[
 local function _Real_TILDE(x)
   return NEGATIVE_ZERO - x
