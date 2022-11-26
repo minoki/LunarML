@@ -204,6 +204,7 @@ should_run "mlbasis/should_run/" {
   "xorshift64-word64.sml",
   "vector.sml",
   "overflow.sml",
+  "int-inf.sml",
   "int-inf-fib-hex.sml",
   "int-inf-fib.sml",
   "int-inf-fib-monoid.sml",

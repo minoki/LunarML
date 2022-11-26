@@ -411,7 +411,7 @@ fun pow (x : int, y : Int.int) : int = if y < 0 then
                                            end
 
 fun log2Word 0w0 = raise Domain
-  | log2Word 0w1 = 1
+  | log2Word 0w1 = 0
   | log2Word x = 1 + log2Word (x div 0w2)
 
 fun log2Abs words = let val n = Vector.length words - 1
