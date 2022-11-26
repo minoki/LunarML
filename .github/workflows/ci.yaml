@@ -9,11 +9,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install mlton lua5.3
+          sudo apt-get install mlton lua5.3 luajit
       - name: Build
         run: make
       - name: Test
-        run: make test test-stackless-handle test-nodejs test-nodejs-cps
+        run: make test test-stackless-handle test-luajit test-nodejs test-nodejs-cps
       - name: Prepare third-party libraries
         run: make -C thirdparty install
       - name: Compile myself (Lua)
