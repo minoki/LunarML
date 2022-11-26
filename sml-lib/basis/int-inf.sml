@@ -536,7 +536,8 @@ fun xorb (ZERO, y) = y
 
 fun LShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wordSize
                                     val minor = amount mod Word.fromInt Word.wordSize
-                                    val n = Vector.length words + Word.toInt major
+                                    val nn = Vector.length words
+                                    val n = nn + Word.toInt major
                                 in if minor = 0w0 then
                                        Vector.tabulate (n, fn i => if i < Word.toInt major then
                                                                        0w0
@@ -546,13 +547,13 @@ fun LShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wor
                                    else
                                        let val m = n + 1
                                            val arr = Array.array (m, 0w0)
-                                           val () = let fun loop (lo, i) = if i = m then
+                                           val () = let fun loop (lo, i) = if i = nn + 1 then
                                                                                if lo = 0w0 then
                                                                                    ()
                                                                                else
                                                                                    raise Fail "LShiftAbs: carry not zero"
-                                                                           else
-                                                                               let val w = if i < n then Vector.sub (words, i) else 0w0
+                                                                           else (* i < m *)
+                                                                               let val w = if i < nn then Vector.sub (words, i) else 0w0
                                                                                    val v = Word.orb (Word.<< (w, minor), lo)
                                                                                    val hi = Word.>> (w, Word.fromInt Word.wordSize - minor)
                                                                                in Array.update (arr, i + Word.toInt major, v)
