@@ -1,8 +1,8 @@
 # Delimited Continuations
 
-Availability: JS-CPS backend.
+Availability: JS-CPS backend (multi-shot). Lua-continuations backend (one-shot).
 
-Status: Experimental. Does not work well with exceptions.
+Status: Experimental. On JS-CPS backend, delimited continuations do not work well with exceptions.
 
 ```sml
 structure LunarML : sig
@@ -10,6 +10,7 @@ structure LunarML : sig
   structure DelimCont : sig
     type 'a prompt_tag
     type ('a,'b) subcont
+    val supportsMultishot : bool
     val newPromptTag : unit -> 'a prompt_tag
     val pushPrompt : 'a prompt_tag * (unit -> 'a) -> 'a
     val withSubCont : 'b prompt_tag * (('a,'b) subcont -> 'b) -> 'a
@@ -17,7 +18,7 @@ structure LunarML : sig
     val shift : 'a prompt_tag * (('b -> 'a) -> 'a) -> 'b
     val control : 'a prompt_tag * (('b -> 'a) -> 'a) -> 'b
     val abort : 'a prompt_tag * 'a -> 'b
-    val topLevel : unit prompt_tag
+    val topLevel : unit prompt_tag (* JS-CPS backend only *)
   end
   ...
 end
@@ -29,6 +30,6 @@ The interface is based on the following paper:
 
 `pushPrompt` is equivalent to `reset`/`prompt` in other formulations.
 
-`topLevel` is a prompt that is implicitly pushed by the runtime. Some runtime functions, including `TextIO.print`, need it to work.
+JS-CPS backend specific: `topLevel` is a prompt that is implicitly pushed by the runtime. Some runtime functions, including `TextIO.print`, need it to work.
 
 `JavaScript.callback` implicitly pushes `topLevel`, but `JavaScript.function` does not.

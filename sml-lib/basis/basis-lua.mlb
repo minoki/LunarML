@@ -40,6 +40,7 @@ byte.sml
 lua/text-io.sml
 lua/os.sml
 lua/command-line.sml
+delim-cont-$(DELIMITED_CONTINUATIONS).sml
 end
 in
 signature ARRAY
@@ -66,6 +67,7 @@ signature VECTOR_SLICE
 signature WORD
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
+structure LunarML (* extension; to be moved... *)
 structure Int
 structure Word
 structure Real

@@ -73,8 +73,8 @@ src/command-line-settings.sml: util/record.lua Makefile
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)
 
-test-stackless-handle: lunarml
-	$(LUA) test/run.lua ./lunarml $(LUA) stackless-handle
+test-lua-continuations: lunarml
+	$(LUA) test/run.lua ./lunarml $(LUA) continuations
 
 test-luajit: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUAJIT) luajit
@@ -100,4 +100,4 @@ validate-js: lunarml
 	node lunarml.gen2.js -o lunarml.gen3.js --js-cps LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 
-.PHONY: all typecheck test test-stackless-handle test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
+.PHONY: all typecheck test test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js

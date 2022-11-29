@@ -51,32 +51,6 @@ local function _LuaError(x)
   return setmetatable({ tag = _LuaError_tag, payload = x }, _exn_meta)
 end
 
-local _handle
-do
-  local _depth = 0
-  function _handle(f)
-    local success, result
-    if _depth > 150 then
-      local c = coroutine.create(function()
-          return "return", f()
-      end)
-      local olddepth = _depth
-      _depth = 0
-      success, result = coroutine.yield("handle", c)
-      _depth = olddepth
-    else
-      local olddepth = _depth
-      _depth = olddepth + 1
-      success, result = pcall(f)
-      _depth = olddepth
-    end
-    if not success and getmetatable(result) ~= _exn_meta then
-      result = _LuaError(result)
-    end
-    return success, result
-  end
-end
-
 local function _exnName(e)
   return e.tag[1]
 end
@@ -326,32 +300,146 @@ local function _Lua_function(f)
   end
 end
 
-local function _run(f)
-  local c = coroutine.create(function()
-      return "return", f()
-  end)
-  local stack = {c}
-  local values = {}
-  while #stack > 0 do
-    local status, a, b = coroutine.resume(stack[#stack], table.unpack(values))
-    if status then
-      if a == "return" then
-        table.remove(stack)
-        values = {true, b}
-      elseif a == "handle" then
-        table.insert(stack, b)
-        values = {}
-      else
-        error("unexpected result from the function: " .. tostring(a))
-      end
+-- Delimited continuations
+local _handle, _withSubCont, _pushSubCont, _run
+do
+  local ipairs = ipairs
+  local table_insert = table.insert
+  local table_remove = table.remove
+  local table_move = table.move
+  local coroutine = coroutine
+  local coroutine_create = coroutine.create
+  local coroutine_yield = coroutine.yield
+  local coroutine_resume = coroutine.resume
+  local _depth = 0
+  function _handle(f)
+    local success, result
+    if _depth > 150 then
+      local c = coroutine_create(function()
+          return "return", f()
+      end)
+      local olddepth = _depth
+      _depth = 0
+      success, result = coroutine_yield("handle", c)
+      _depth = olddepth
     else
-      table.remove(stack)
-      if #stack > 0 then
-        values = {false, a}
+      local olddepth = _depth
+      _depth = olddepth + 1
+      success, result = pcall(f)
+      _depth = olddepth
+    end
+    if not success and getmetatable(result) ~= _exn_meta then
+      result = _LuaError(result)
+    end
+    return success, result
+  end
+  function _pushPrompt(tag, f)
+    local co = coroutine_create(function()
+        return "return", f(nil)
+    end)
+    local status, a = coroutine_yield("prompt", tag, co)
+    if status then
+      return a
+    else
+      error(a, 0)
+    end
+  end
+  function _withSubCont(tag, f)
+    local a = coroutine_yield("capture", tag, f)
+    return a()
+  end
+  function _pushSubCont(subcont, f)
+    if not subcont[1] then
+      error("cannot resume captured continuation multiple times")
+    end
+    local slice = subcont[1]
+    subcont[1] = nil
+    local status, a = coroutine_yield("push-subcont", slice, f)
+    if status then
+      return a
+    else
+      error(a, 0)
+    end
+  end
+  function _run(f)
+    local co = coroutine_create(function()
+        return "return", f()
+    end)
+    local stack = {{co, nil}}
+    -- stack[i][1]: coroutine, stack[i][2]: prompt tag or nil
+    local values = {}
+    while true do
+      ::continue::
+      local status, a, b, c = coroutine_resume(stack[#stack][1], table_unpack(values))
+      if status then
+        if a == "return" then
+          if #stack == 1 then
+            return b
+          else
+            table_remove(stack)
+            values = {true, b}
+          end
+        elseif a == "handle" then
+          -- b: the new coroutine
+          table_insert(stack, {b, nil})
+          values = {}
+        elseif a == "prompt" then
+          -- b: tag
+          -- c: the new coroutine
+          table_insert(stack, {c, b})
+          values = {}
+        elseif a == "capture" then
+          -- b: tag
+          -- c: callback
+          for i = #stack, 1, -1 do
+            if stack[i][2] == b then
+              local slice = {}
+              table_move(stack, i, #stack, 1, slice)
+              -- slice[1], ... = stack[i+1], ..., stack[#stack]
+              for j = i, #stack do
+                stack[j] = nil
+              end
+              local subcont = {slice}
+              local co = coroutine_create(function()
+                  return "return", c(subcont)
+              end)
+              table_insert(stack, {co, nil})
+              values = {}
+              goto continue
+            end
+          end
+          error("prompt not found")
+        elseif a == "abort" then
+          -- b: tag
+          -- c: value
+          for i = #stack, 1, -1 do
+            if stack[i][2] == b then
+              for j = i, #stack do
+                stack[j] = nil
+              end
+              values = {true, c}
+              goto continue
+            end
+          end
+          error("prompt not found")
+        elseif a == "push-subcont" then
+          -- b: slice
+          -- c: action
+          for _, v in ipairs(b) do
+            table.insert(stack, v)
+          end
+          values = {c}
+        else
+          error("unexpected result from the function: " .. tostring(a))
+        end
       else
-        error(a)
+        if #stack == 1 then
+          error(a, 0)
+        else
+          table_remove(stack)
+          values = {false, a}
+        end
       end
     end
   end
-  return table_unpack(values)
 end

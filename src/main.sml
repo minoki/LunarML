@@ -15,23 +15,23 @@ fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  " ^ progName ^ " [options] file.sml\n\
                                                 \Options:\n\
-                                                \  -o,--output=file.ext   File name to output.\n\
-                                                \  -mexe                  Produce a standalone script.\n\
-                                                \  -mlib                  Produce a Lua module.\n\
-                                                \  --lua                  Produce Lua code (targets Lua 5.3+).\n\
-                                                \  --lua-stackless-handle Produce Lua code (targets Lua 5.3+ / stackless 'handle' mode).\n\
-                                                \  --luajit               Produce Lua code (targets LuaJIT).\n\
-                                                \  --js                   Produce JavaScript code.\n\
-                                                \  --js-cps               Produce JavaScript code (CPS mode).\n\
-                                                \  -h,--help              Show this message.\n\
-                                                \  -v,--version           Show version information.\n\
-                                                \  --dump                 Dump intermediate code.\n\
-                                                \  --dump-final           Dump final intermediate code.\n\
-                                                \  -O,--optimize          Try to optimize hard.\n\
+                                                \  -o,--output=file.ext  File name to output.\n\
+                                                \  -mexe                 Produce a standalone script.\n\
+                                                \  -mlib                 Produce a Lua module.\n\
+                                                \  --lua                 Produce Lua code (targets Lua 5.3+).\n\
+                                                \  --lua-continuations   Produce Lua code (targets Lua 5.3+ / supports one-shot delimited continuations).\n\
+                                                \  --luajit              Produce Lua code (targets LuaJIT).\n\
+                                                \  --js                  Produce JavaScript code.\n\
+                                                \  --js-cps              Produce JavaScript code (CPS mode).\n\
+                                                \  -h,--help             Show this message.\n\
+                                                \  -v,--version          Show version information.\n\
+                                                \  --dump                Dump intermediate code.\n\
+                                                \  --dump-final          Dump final intermediate code.\n\
+                                                \  -O,--optimize         Try to optimize hard.\n\
                                                 \")
 datatype DumpMode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
-datatype LuaCodegen = LUA_PLAIN | LUA_STACKLESS_HANDLE
-datatype Backend = BACKEND_LUA of LuaCodegen | BACKEND_LUAJIT | BACKEND_JS | BACKEND_JS_CPS
+datatype LuaRuntime = LUA_PLAIN | LUA_CONTINUATIONS
+datatype Backend = BACKEND_LUA of LuaRuntime | BACKEND_LUAJIT | BACKEND_JS | BACKEND_JS_CPS
 type Options = { output : string option
                , outputMode : Driver.OutputMode option
                , dump : DumpMode
@@ -71,8 +71,8 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "--lua" then
              parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
-         else if arg = "--lua-stackless-handle" then
-             parseArgs (S.set.backend (BACKEND_LUA LUA_STACKLESS_HANDLE) opts) args
+         else if arg = "--lua-continuations" then
+             parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
          else if arg = "--luajit" then
              parseArgs (S.set.backend (BACKEND_LUAJIT) opts) args
          else if arg = "--js" then
@@ -130,6 +130,7 @@ and doCompile opts fileName
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.joinDirFile { dir = progDir, file = "sml-lib" })
                                    ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -177,6 +178,7 @@ and doMLB opts mlbfilename
           val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = progDir, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
                                    ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
                                    ]
           val ctx = { driverContext = Driver.newContext ()
                     , baseDir = OS.FileSys.getDir ()
@@ -216,18 +218,18 @@ and doMLB opts mlbfilename
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJsCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
-and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
+and emit (opts as { backend = BACKEND_LUA runtime, ... }) fileName nextId decs
     = let val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = case cg of
+          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = case runtime of
                                                                            LUA_PLAIN => "mlinit.lua"
-                                                                         | LUA_STACKLESS_HANDLE => "mlinit-stackless.lua"
+                                                                         | LUA_CONTINUATIONS => "mlinit-continuations.lua"
                                                }
           val mlinit = readFile mlinit_lua
-          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3 }
-          val lua = case cg of
+          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3, hasDelimitedContinuations = runtime = LUA_CONTINUATIONS }
+          val lua = case runtime of
                         LUA_PLAIN => CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
-                      | LUA_STACKLESS_HANDLE => CodeGenLua.doProgramWithStacklessHandle luactx CodeGenLua.initialEnv decs
+                      | LUA_CONTINUATIONS => CodeGenLua.doProgramWithContinuations luactx CodeGenLua.initialEnv decs
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
           val lua = LuaWriter.doChunk lua
@@ -242,7 +244,7 @@ and emit (opts as { backend = BACKEND_LUA cg, ... }) fileName nextId decs
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit-luajit.lua" }
           val mlinit = readFile mlinit_lua
-          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT }
+          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT, hasDelimitedContinuations = false }
           val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
           val lua = LuaTransform.LuaJITFixup.doBlock { nextId = nextId, maxUpvalue = 60 } lua
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)

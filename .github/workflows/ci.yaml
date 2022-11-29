@@ -13,7 +13,7 @@ jobs:
       - name: Build
         run: make
       - name: Test
-        run: make test test-stackless-handle test-luajit test-nodejs test-nodejs-cps
+        run: make test test-lua-continuations test-luajit test-nodejs test-nodejs-cps
         env:
           LUA_INIT_5_3: ""
           # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859

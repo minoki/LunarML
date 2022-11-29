@@ -8,13 +8,13 @@ else
 end
 local compiler = arg[1] or "../lunarml"
 local lua_interpreter = arg[2] or "lua"
-local stackless_mode = arg[3] == "stackless-handle"
+local continuations_mode = arg[3] == "continuations"
 local luajit_mode = arg[3] == "luajit"
-local outext = stackless_mode and ".stackless.lua" or (luajit_mode and ".luajit.lua" or ".lua")
+local outext = continuations_mode and ".continuations.lua" or (luajit_mode and ".luajit.lua" or ".lua")
 function compile(file, outfile)
   local h
-  if stackless_mode then
-    h = io.popen(string.format("\"%s\" --lua-stackless-handle --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+  if continuations_mode then
+    h = io.popen(string.format("\"%s\" --lua-continuations --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   elseif luajit_mode then
     h = io.popen(string.format("\"%s\" --luajit --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   else
@@ -262,3 +262,8 @@ should_run "extension/should_run/" {
 should_compile "extension/should_compile/" {
   "vector_exp_generalize.sml",
 }
+if continuations_mode then
+  should_run "cps/should_run/" {
+    "product.sml",
+  }
+end

@@ -20,7 +20,10 @@ exception CodeGenError of string
  *)
 
 datatype target_lua_version = LUA5_3 | LUAJIT
-type Context = { nextLuaId : int ref, targetLuaVersion : target_lua_version }
+type Context = { nextLuaId : int ref
+               , targetLuaVersion : target_lua_version
+               , hasDelimitedContinuations : bool
+               }
 
 val builtins
     = let open InitialEnv
@@ -818,6 +821,25 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, xs)) dest : L.Stat list
                                                   in putPureTo ctx env dest (stmts'', L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
                                                   end
                                               )
+           | Primitives.DelimCont_newPromptTag => putImpureTo ctx env dest ([], L.TableExp (vector []))
+           | Primitives.DelimCont_pushPrompt => if #hasDelimitedContinuations ctx then
+                                                    doBinary (fn (stmts, env, (promptTag, action)) =>
+                                                                 putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_pushPrompt"), vector [promptTag, action]))
+                                                             )
+                                                else
+                                                    raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+           | Primitives.DelimCont_withSubCont => if #hasDelimitedContinuations ctx then
+                                                     doBinary (fn (stmts, env, (promptTag, action)) =>
+                                                                  putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_withSubCont"), vector [promptTag, action]))
+                                                              )
+                                                 else
+                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+           | Primitives.DelimCont_pushSubCont => if #hasDelimitedContinuations ctx then
+                                                     doBinary (fn (stmts, env, (subcont, action)) =>
+                                                                  putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_pushSubCont"), vector [subcont, action]))
+                                                              )
+                                                 else
+                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
@@ -901,8 +923,8 @@ and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
   | doDecs ctx env [] = []
 
 fun doProgram ctx env decs = vector (doDecs ctx env decs)
-fun doProgramWithStacklessHandle ctx env decs = let val func = L.FunctionExp (vector [], vector (doDecs ctx env decs))
-                                                in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
-                                                end
+fun doProgramWithContinuations ctx env decs = let val func = L.FunctionExp (vector [], vector (doDecs ctx env decs))
+                                              in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
+                                              end
 
 end (* structure CodeGenLua *)

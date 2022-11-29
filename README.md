@@ -9,7 +9,7 @@ You need a recent version of MLton to build the executable, and Lua 5.3+ or rece
 ```
 $ make
 $ make test
-$ make test-stackless-handle
+$ make test-lua-continuations
 $ make test-luajit
 $ make test-nodejs
 $ make test-nodejs-cps
@@ -33,7 +33,7 @@ Targets:
 
 * Lua
     * `--lua` (default): Targets Lua 5.3+.
-    * `--lua-stackless-handle`: Targets Lua 5.3+. Allow deeply nested `handle`.
+    * `--lua-continuations`: Targets Lua 5.3+. Supports one-shot delimited continuations. Also, supports deeply nested `handle`.
     * `--luajit`: Targets LuaJIT.
 * JavaScript (ES2020+)
     * `--js`: Produces a JavaScript program.
@@ -47,7 +47,7 @@ See `--help` for more information.
 * [A subset of SML Basis Library](doc/BasisLibrary.md)
 * [Interface to Lua](doc/LuaInterface.md)
 * [Interface to JavaScript](doc/JavaScriptInterface.md)
-* [Delimited continuations](doc/DelimitedContinuations.md) (JS-CPS backend only; experimental)
+* [Delimited continuations](doc/DelimitedContinuations.md) (experimental)
 * ML Basis system like [MLton](http://mlton.org/MLBasis)
 
 Successor ML features:
