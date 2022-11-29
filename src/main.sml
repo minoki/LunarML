@@ -9,6 +9,7 @@ fun main (progName : string, args : string list) = (print "Hello world!\n" ; OS.
 end
 *)
 structure M = MLBSyntax;
+structure S = CommandLineSettings;
 val progName = CommandLine.name ();
 fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
@@ -48,7 +49,7 @@ fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
 fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
   | parseArgs opts (arg :: args)
     = let fun doOutput (outname, args) = case #output opts of
-                                             NONE => parseArgs { output = SOME outname, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
+                                             NONE => parseArgs (S.set.output (SOME outname) opts) args
                                            | SOME _ => showMessageAndFail "--output was given multiple times.\n"
       in if arg = "-o" orelse arg = "--output" then
              case args of
@@ -60,24 +61,24 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
              doOutput (String.extract (arg, 9, NONE), args)
          else if arg = "-mexe" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.ExecutableMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
+                 NONE => parseArgs (S.set.outputMode (SOME Driver.ExecutableMode) opts) args
                | SOME Driver.ExecutableMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "-mlib" then
              case #outputMode opts of
-                 NONE => parseArgs { output = #output opts, outputMode = SOME Driver.LibraryMode, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
+                 NONE => parseArgs (S.set.outputMode (SOME Driver.LibraryMode) opts) args
                | SOME Driver.LibraryMode => parseArgs opts args
                | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
          else if arg = "--lua" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_PLAIN } args
+             parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
          else if arg = "--lua-stackless-handle" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUA LUA_STACKLESS_HANDLE } args
+             parseArgs (S.set.backend (BACKEND_LUA LUA_STACKLESS_HANDLE) opts) args
          else if arg = "--luajit" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_LUAJIT } args
+             parseArgs (S.set.backend (BACKEND_LUAJIT) opts) args
          else if arg = "--js" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS } args
+             parseArgs (S.set.backend (BACKEND_JS) opts) args
          else if arg = "--js-cps" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts, backend = BACKEND_JS_CPS } args
+             parseArgs (S.set.backend (BACKEND_JS_CPS) opts) args
          else if arg = "-h" orelse arg = "--help" then
              ( showHelp (); OS.Process.exit OS.Process.success )
          else if arg = "-v" orelse arg = "--version" then
@@ -85,11 +86,11 @@ fun parseArgs opts [] = showMessageAndFail "No input given. Try --help.\n"
          else if arg = "--" then
              handleInputFile opts args
          else if arg = "--dump" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_INITIAL, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
+             parseArgs (S.set.dump DUMP_INITIAL opts) args
          else if arg = "--dump-final" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = DUMP_FINAL, optimizationLevel = #optimizationLevel opts, backend = #backend opts } args
+             parseArgs (S.set.dump DUMP_FINAL opts) args
          else if arg = "--optimize" orelse arg = "-O" then
-             parseArgs { output = #output opts, outputMode = #outputMode opts, dump = #dump opts, optimizationLevel = #optimizationLevel opts + 1, backend = #backend opts } args
+             parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
          else if String.isPrefix "-" arg then
              showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
          else

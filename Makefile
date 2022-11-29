@@ -43,6 +43,7 @@ sources = \
   src/mlb-parser.sml \
   src/driver.sml \
   src/mlb-eval.sml \
+  src/command-line-settings.sml \
   src/main.sml
 
 typecheck:
@@ -65,6 +66,9 @@ src/language-options.sml: src/language-options.lua
 
 src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null
+
+src/command-line-settings.sml: util/record.lua Makefile
+	$(LUA) util/record.lua CommandLineSettings "output,outputMode,dump,optimizationLevel,backend" > $@
 
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)

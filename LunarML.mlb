@@ -33,4 +33,5 @@ src/mlb-syntax.sml
 src/mlb-parser.sml
 src/driver.sml
 src/mlb-eval.sml
+src/command-line-settings.sml
 src/main.sml
