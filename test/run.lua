@@ -14,11 +14,11 @@ local outext = continuations_mode and ".continuations.lua" or (luajit_mode and "
 function compile(file, outfile)
   local h
   if continuations_mode then
-    h = io.popen(string.format("\"%s\" --lua-continuations --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+    h = io.popen(string.format("\"%s\" compile --lua-continuations --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   elseif luajit_mode then
-    h = io.popen(string.format("\"%s\" --luajit --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+    h = io.popen(string.format("\"%s\" compile --luajit --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   else
-    h = io.popen(string.format("\"%s\" --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+    h = io.popen(string.format("\"%s\" compile --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   end
   local output = h:read("a")
   local succ = h:close()

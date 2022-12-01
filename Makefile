@@ -53,7 +53,7 @@ lunarml: LunarML.mlb $(sources)
 	mlton -output $@ LunarML.mlb
 
 lunarml.gen2: lunarml LunarML.mlb $(sources)
-	./lunarml -o lunarml.gen2.lua LunarML.mlb
+	./lunarml compile -o lunarml.gen2.lua LunarML.mlb
 	echo "#!/usr/bin/env lua" > $@
 	cat lunarml.gen2.lua >> $@
 	chmod +x $@
@@ -68,7 +68,7 @@ src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null
 
 src/command-line-settings.sml: util/record.lua Makefile
-	$(LUA) util/record.lua CommandLineSettings "output,outputMode,dump,optimizationLevel,backend" > $@
+	$(LUA) util/record.lua CommandLineSettings "subcommand,output,outputMode,dump,optimizationLevel,backend" > $@
 
 test: lunarml
 	$(LUA) test/run.lua ./lunarml $(LUA)
@@ -86,17 +86,17 @@ test-nodejs-cps: lunarml
 	$(LUA) test/run-nodejs.lua ./lunarml $(NODE) cps
 
 validate-lua: lunarml
-	./lunarml -o lunarml.gen2.lua LunarML.mlb
+	./lunarml compile -o lunarml.gen2.lua LunarML.mlb
 	lua lunarml.gen2.lua -o lunarml.gen3.lua LunarML.mlb
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
 
 validate-luajit: lunarml
-	./lunarml -o lunarml.gen2-luajit.lua LunarML.mlb
+	./lunarml compile -o lunarml.gen2-luajit.lua LunarML.mlb
 	luajit lunarml.gen2-luajit.lua -o lunarml.gen3-luajit.lua LunarML.mlb
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: lunarml
-	./lunarml -o lunarml.gen2.js --js-cps LunarML.mlb
+	./lunarml compile -o lunarml.gen2.js --js-cps LunarML.mlb
 	node lunarml.gen2.js -o lunarml.gen3.js --js-cps LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 

@@ -14,11 +14,15 @@ structure S = CommandLineSettings;
 val progName = CommandLine.name ();
 fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
-                                                \  " ^ progName ^ " [options] file.sml\n\
+                                                \  " ^ progName ^ " [subcommand] [options] file.sml\n\
+                                                \Subcommand:\n\
+                                                \  compile               Compile a program.\n\
+                                                \  help                  Show this message.\n\
+                                                \  version               Show version information.\n\
                                                 \Options:\n\
                                                 \  -o,--output=file.ext  File name to output.\n\
-                                                \  -mexe                 Produce a standalone script.\n\
-                                                \  -mlib                 Produce a Lua module.\n\
+                                                \  --exe                 Produce a standalone script.\n\
+                                                \  --lib                 Produce a Lua module.\n\
                                                 \  --lua                 Produce Lua code (targets Lua 5.3+).\n\
                                                 \  --lua-continuations   Produce Lua code (targets Lua 5.3+ / supports one-shot delimited continuations).\n\
                                                 \  --luajit              Produce Lua code (targets LuaJIT).\n\
@@ -36,7 +40,9 @@ datatype backend = BACKEND_LUA of lua_runtime
                  | BACKEND_LUAJIT
                  | BACKEND_JS
                  | BACKEND_JS_CPS
-type options = { output : string option
+datatype subcommand = SUBCOMMAND_COMPILE
+type options = { subcommand : subcommand option
+               , output : string option
                , outputMode : Driver.OutputMode option
                , dump : dump_mode
                , optimizationLevel : int
@@ -210,58 +216,127 @@ fun handleInputFile opts [file] = if String.isSuffix ".sml" file then
                                       showMessageAndFail "Input filename must end with '.sml'\n"
   | handleInputFile opts [] = showMessageAndFail "No input given.\n"
   | handleInputFile opts _ = showMessageAndFail "Multiple input is not supported.\n"
-fun parseArgs (opts : options) [] = showMessageAndFail "No input given. Try --help.\n"
-  | parseArgs opts (arg :: args)
-    = let fun doOutput (outname, args) = case #output opts of
-                                             NONE => parseArgs (S.set.output (SOME outname) opts) args
-                                           | SOME _ => showMessageAndFail "--output was given multiple times.\n"
-      in if arg = "-o" orelse arg = "--output" then
-             case args of
-                 outname :: args => doOutput (outname, args)
-               | [] => showMessageAndFail ("Argument for " ^ arg ^ " is missing.\n")
-         else if String.isPrefix "-o" arg then
-             doOutput (String.extract (arg, 2, NONE), args)
-         else if String.isPrefix "--output=" arg then
-             doOutput (String.extract (arg, 9, NONE), args)
-         else if arg = "-mexe" then
-             case #outputMode opts of
-                 NONE => parseArgs (S.set.outputMode (SOME Driver.ExecutableMode) opts) args
-               | SOME Driver.ExecutableMode => parseArgs opts args
-               | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
-         else if arg = "-mlib" then
-             case #outputMode opts of
-                 NONE => parseArgs (S.set.outputMode (SOME Driver.LibraryMode) opts) args
-               | SOME Driver.LibraryMode => parseArgs opts args
-               | SOME _ => showMessageAndFail "-mexe or -mlib was given multiple times.\n"
-         else if arg = "--lua" then
-             parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
-         else if arg = "--lua-continuations" then
-             parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
-         else if arg = "--luajit" then
-             parseArgs (S.set.backend BACKEND_LUAJIT opts) args
-         else if arg = "--js" then
-             parseArgs (S.set.backend BACKEND_JS opts) args
-         else if arg = "--js-cps" then
-             parseArgs (S.set.backend BACKEND_JS_CPS opts) args
-         else if arg = "-h" orelse arg = "--help" then
-             ( showHelp (); OS.Process.exit OS.Process.success )
-         else if arg = "-v" orelse arg = "--version" then
-             ( showVersion (); OS.Process.exit OS.Process.success )
-         else if arg = "--" then
-             handleInputFile opts args
-         else if arg = "--dump" then
-             parseArgs (S.set.dump DUMP_INITIAL opts) args
-         else if arg = "--dump-final" then
-             parseArgs (S.set.dump DUMP_FINAL opts) args
-         else if arg = "--optimize" orelse arg = "-O" then
-             parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
-         else if String.isPrefix "-" arg then
-             showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
-         else
-             handleInputFile opts (arg :: args)
-      end
+datatype 'a option_action = SIMPLE of 'a
+                          | WITH_ARG of string -> 'a
+datatype option_desc = SHORT of string
+                     | LONG of string
+fun testOption (_, []) = NONE
+  | testOption ((SHORT s, SIMPLE v), arg :: args) = if arg = s then
+                                                        SOME (v, args)
+                                                    else
+                                                        NONE
+  | testOption ((SHORT s, WITH_ARG f), arg :: args) = if arg = s then
+                                                          case args of
+                                                              [] => raise Fail ("Missing argument after" ^ s)
+                                                            | arg' :: args' => SOME (f arg', args')
+                                                      else if String.isPrefix s arg then
+                                                          let val arg' = String.extract (arg, String.size s, NONE)
+                                                          in SOME (f arg', args)
+                                                          end
+                                                      else
+                                                          NONE
+  | testOption ((LONG s, SIMPLE v), arg :: args) = if arg = s then
+                                                       SOME (v, args)
+                                                   else
+                                                       NONE
+  | testOption ((LONG s, WITH_ARG f), arg :: args) = if arg = s then
+                                                         case args of
+                                                             [] => raise Fail ("Missing argument after" ^ s)
+                                                           | arg' :: args' => SOME (f arg', args')
+                                                     else if String.isPrefix (s ^ "=") arg then
+                                                         let val arg' = String.extract (arg, String.size s + 1, NONE)
+                                                         in SOME (f arg', args)
+                                                         end
+                                                     else
+                                                         NONE
+fun parseOption (descs, []) = NONE
+  | parseOption (descs, args) = let fun go [] = NONE
+                                      | go (desc :: descs) = case testOption (desc, args) of
+                                                                 SOME r => SOME r
+                                                               | NONE => go descs
+                                in go descs
+                                end
+datatype option = OPT_OUTPUT of string (* -o,--output *)
+                | OPT_EXE (* --exe *)
+                | OPT_LIB (* --lib *)
+                | OPT_TARGET_LUA (* --lua *)
+                | OPT_TARGET_LUA_CONTINUATIONS (* --lua-continuations *)
+                | OPT_TARGET_LUAJIT (* --luajit *)
+                | OPT_TARGET_JS (* --js *)
+                | OPT_TARGET_JS_CPS (* --js-cps *)
+                | OPT_HELP (* -h,--help *)
+                | OPT_VERSION (* -v,--version *)
+                | OPT_STOP (* -- *)
+                | OPT_DUMP (* --dump *)
+                | OPT_DUMP_FINAL (* --dump-final *)
+                | OPT_OPTIMIZE (* -O,--optimize *)
+val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
+                  ,(LONG "--output", WITH_ARG OPT_OUTPUT)
+                  ,(LONG "--exe", SIMPLE OPT_EXE)
+                  ,(LONG "--lib", SIMPLE OPT_LIB)
+                  ,(LONG "--lua", SIMPLE OPT_TARGET_LUA)
+                  ,(LONG "--lua-continuations", SIMPLE OPT_TARGET_LUA_CONTINUATIONS)
+                  ,(LONG "--luajit", SIMPLE OPT_TARGET_LUAJIT)
+                  ,(LONG "--js", SIMPLE OPT_TARGET_JS)
+                  ,(LONG "--js-cps", SIMPLE OPT_TARGET_JS_CPS)
+                  ,(SHORT "-h", SIMPLE OPT_HELP)
+                  ,(LONG "--help", SIMPLE OPT_HELP)
+                  ,(SHORT "-v", SIMPLE OPT_VERSION)
+                  ,(LONG "--version", SIMPLE OPT_VERSION)
+                  ,(LONG "--", SIMPLE OPT_STOP)
+                  ,(LONG "--dump", SIMPLE OPT_DUMP)
+                  ,(LONG "--dump-final", SIMPLE OPT_DUMP_FINAL)
+                  ,(SHORT "-O", SIMPLE OPT_OPTIMIZE)
+                  ,(LONG "--optimize", SIMPLE OPT_OPTIMIZE)
+                  ]
+fun parseArgs (opts : options) args
+    = case parseOption (optionDescs, args) of
+          SOME (OPT_OUTPUT outname, args) => (case #output opts of
+                                                  NONE => parseArgs (S.set.output (SOME outname) opts) args
+                                                | SOME _ => showMessageAndFail "--output was given multiple times.\n"
+                                             )
+        | SOME (OPT_EXE, args) => (case #outputMode opts of
+                                       NONE => parseArgs (S.set.outputMode (SOME Driver.ExecutableMode) opts) args
+                                     | SOME Driver.ExecutableMode => parseArgs opts args
+                                     | SOME _ => showMessageAndFail "--exe or --lib was given multiple times.\n"
+                                  )
+        | SOME (OPT_LIB, args) => (case #outputMode opts of
+                                       NONE => parseArgs (S.set.outputMode (SOME Driver.LibraryMode) opts) args
+                                     | SOME Driver.LibraryMode => parseArgs opts args
+                                     | SOME _ => showMessageAndFail "--exe or --lib was given multiple times.\n"
+                                  )
+        | SOME (OPT_TARGET_LUA, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
+        | SOME (OPT_TARGET_LUA_CONTINUATIONS, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
+        | SOME (OPT_TARGET_LUAJIT, args) => parseArgs (S.set.backend BACKEND_LUAJIT opts) args
+        | SOME (OPT_TARGET_JS, args) => parseArgs (S.set.backend BACKEND_JS opts) args
+        | SOME (OPT_TARGET_JS_CPS, args) => parseArgs (S.set.backend BACKEND_JS_CPS opts) args
+        | SOME (OPT_HELP, args) => ( showHelp (); OS.Process.exit OS.Process.success )
+        | SOME (OPT_VERSION, args) => ( showVersion (); OS.Process.exit OS.Process.success )
+        | SOME (OPT_STOP, args) => handleInputFile opts args
+        | SOME (OPT_DUMP, args) => parseArgs (S.set.dump DUMP_INITIAL opts) args
+        | SOME (OPT_DUMP_FINAL, args) => parseArgs (S.set.dump DUMP_FINAL opts) args
+        | SOME (OPT_OPTIMIZE, args) => parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
+        | NONE => (case args of
+                       arg :: args' =>
+                       if String.isPrefix "-" arg then
+                           showMessageAndFail ("Unrecognized option: " ^ arg ^ ".\n")
+                       else
+                           (case #subcommand opts of
+                                NONE => (case arg of
+                                             "compile" => parseArgs (S.set.subcommand (SOME SUBCOMMAND_COMPILE) opts) args'
+                                           | "help" => ( showHelp (); OS.Process.exit OS.Process.success )
+                                           | "version" => ( showVersion (); OS.Process.exit OS.Process.success )
+                                           | "run" => showMessageAndFail "'run': not implemented yet\n"
+                                           | "repl" => showMessageAndFail "'repl': not implemented yet\n"
+                                           | _ => showMessageAndFail ("Unrecognized subcommand: " ^ arg ^ ".\n")
+                                        )
+                              | SOME _ => handleInputFile opts args
+                                       )
+                     | [] => showMessageAndFail "No input given. Try --help.\n"
+                  )
 fun main () = let val args = CommandLine.arguments ()
-                  val initialSettings = { output = NONE
+                  val initialSettings = { subcommand = NONE
+                                        , output = NONE
                                         , outputMode = NONE
                                         , dump = NO_DUMP
                                         , optimizationLevel = 0

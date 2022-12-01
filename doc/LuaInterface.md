@@ -63,7 +63,7 @@ end
 
 ## Exporting a value
 
-To produce a Lua module, set `-mlib` compiler option and define a variable or structure named `export`.
+To produce a Lua module, set `--lib` compiler option and define a variable or structure named `export`.
 
 For example,
 

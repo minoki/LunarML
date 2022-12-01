@@ -13,7 +13,7 @@ $ make test-lua-continuations
 $ make test-luajit
 $ make test-nodejs
 $ make test-nodejs-cps
-$ ./lunarml example/hello.sml
+$ ./lunarml compile example/hello.sml
 $ lua example/hello.lua
 Hello world!
 ```
@@ -21,13 +21,14 @@ Hello world!
 ## Usage
 
 ```
-./lunarml [options] input.(sml|mlb)
+./lunarml [subcommand] [options] input.(sml|mlb)
 ```
 
-Modes of operation:
+Subcommand:
 
-* `-mexe` (default): Produces Lua/JavaScript program.
-* `-mlib`: Produces a Lua module.
+* `compile`: Compile a program.
+* `help`: Show help.
+* `version`: Show version information.
 
 Targets:
 
@@ -39,7 +40,10 @@ Targets:
     * `--js`: Produces a JavaScript program.
     * `--js-cps`: Produces a JavaScript program (CPS mode; supports delimited continuations).
 
-See `--help` for more information.
+Output type:
+
+* `--exe` (default): Produces Lua/JavaScript program.
+* `--lib`: Produces a Lua module.
 
 ## Features
 

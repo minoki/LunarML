@@ -13,9 +13,9 @@ local outext = cps_mode and ".cps.js" or ".js"
 function compile(file, outfile)
   local h
   if cps_mode then
-    h = io.popen(string.format("\"%s\" --js-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+    h = io.popen(string.format("\"%s\" compile --js-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   else
-    h = io.popen(string.format("\"%s\" --js --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
+    h = io.popen(string.format("\"%s\" compile --js --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   end
   local output = h:read("a")
   local succ = h:close()
