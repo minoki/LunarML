@@ -2,7 +2,7 @@ LUA = lua
 LUAJIT = luajit
 NODE = node
 
-all: lunarml
+all: bin/lunarml
 
 sources = \
   pluto/token-stream.sig \
@@ -49,11 +49,11 @@ sources = \
 typecheck:
 	mlton -stop tc LunarML.mlb
 
-lunarml: LunarML.mlb $(sources)
+bin/lunarml: LunarML.mlb $(sources)
 	mlton -output $@ LunarML.mlb
 
-lunarml.gen2: lunarml LunarML.mlb $(sources)
-	./lunarml compile -o lunarml.gen2.lua LunarML.mlb
+bin/lunarml.gen2: bin/lunarml LunarML.mlb $(sources)
+	bin/lunarml compile -o lunarml.gen2.lua LunarML.mlb
 	echo "#!/usr/bin/env lua" > $@
 	cat lunarml.gen2.lua >> $@
 	chmod +x $@
@@ -68,35 +68,35 @@ src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null
 
 src/command-line-settings.sml: util/record.lua Makefile
-	$(LUA) util/record.lua CommandLineSettings "subcommand,output,outputMode,dump,optimizationLevel,backend" > $@
+	$(LUA) util/record.lua CommandLineSettings "subcommand,output,outputMode,dump,optimizationLevel,backend,libDir" > $@
 
-test: lunarml
-	$(LUA) test/run.lua ./lunarml $(LUA)
+test: bin/lunarml
+	$(LUA) test/run.lua bin/lunarml $(LUA)
 
-test-lua-continuations: lunarml
-	$(LUA) test/run.lua ./lunarml $(LUA) continuations
+test-lua-continuations: bin/lunarml
+	$(LUA) test/run.lua bin/lunarml $(LUA) continuations
 
-test-luajit: lunarml
-	$(LUA) test/run.lua ./lunarml $(LUAJIT) luajit
+test-luajit: bin/lunarml
+	$(LUA) test/run.lua bin/lunarml $(LUAJIT) luajit
 
-test-nodejs: lunarml
-	$(LUA) test/run-nodejs.lua ./lunarml $(NODE)
+test-nodejs: bin/lunarml
+	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE)
 
-test-nodejs-cps: lunarml
-	$(LUA) test/run-nodejs.lua ./lunarml $(NODE) cps
+test-nodejs-cps: bin/lunarml
+	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) cps
 
-validate-lua: lunarml
-	./lunarml compile -o lunarml.gen2.lua LunarML.mlb
+validate-lua: bin/lunarml
+	bin/lunarml compile -o lunarml.gen2.lua LunarML.mlb
 	lua lunarml.gen2.lua -o lunarml.gen3.lua LunarML.mlb
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
 
 validate-luajit: lunarml
-	./lunarml compile -o lunarml.gen2-luajit.lua LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2-luajit.lua LunarML.mlb
 	luajit lunarml.gen2-luajit.lua -o lunarml.gen3-luajit.lua LunarML.mlb
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: lunarml
-	./lunarml compile -o lunarml.gen2.js --js-cps LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2.js --js-cps LunarML.mlb
 	node lunarml.gen2.js -o lunarml.gen3.js --js-cps LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 

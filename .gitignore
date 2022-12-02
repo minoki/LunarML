@@ -7,10 +7,10 @@ test/*/*.lua
 test/*/*/*.lua
 test/*/*.js
 test/*/*/*.js
-lunarml
+bin/lunarml
 thirdparty/smlnj-lib/
 thirdparty/smlnj-lib-original/
 thirdparty/smlnj-lib-lunarml/
 thirdparty/ml-yacc/
-sml-lib/mlyacc-lib/
-sml-lib/smlnj-lib/
+lib/lunarml/sml-lib/mlyacc-lib/
+lib/lunarml/sml-lib/smlnj-lib/

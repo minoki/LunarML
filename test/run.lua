@@ -6,7 +6,7 @@ if progname:find("[/\\]") then
 else
   testdir = "."
 end
-local compiler = arg[1] or "../lunarml"
+local compiler = arg[1] or "../bin/lunarml"
 local lua_interpreter = arg[2] or "lua"
 local continuations_mode = arg[3] == "continuations"
 local luajit_mode = arg[3] == "luajit"

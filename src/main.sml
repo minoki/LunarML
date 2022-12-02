@@ -33,6 +33,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  --dump                Dump intermediate code.\n\
                                                 \  --dump-final          Dump final intermediate code.\n\
                                                 \  -O,--optimize         Try to optimize hard.\n\
+                                                \  -B<libdir>            Library directory (default: <bindir>/../lib/lunarml).\n\
                                                 \")
 datatype dump_mode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
 datatype lua_runtime = LUA_PLAIN | LUA_CONTINUATIONS
@@ -47,6 +48,7 @@ type options = { subcommand : subcommand option
                , dump : dump_mode
                , optimizationLevel : int
                , backend : backend
+               , libDir : string
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -81,9 +83,8 @@ fun optimize (ctx : context) fdecs 0 = fdecs
                            in optimize ctx (#2 (FTransform.doDecs ctx' FTransform.initialEnv fdecs)) (n - 1)
                            end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nextId decs
-    = let val progDir = OS.Path.dir progName
-          val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = progDir
+    = let val base = OS.Path.base fileName
+          val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
                                                , file = case runtime of
                                                             LUA_PLAIN => "mlinit.lua"
                                                           | LUA_CONTINUATIONS => "mlinit-continuations.lua"
@@ -103,9 +104,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
       in ()
       end
   | emit (opts as { backend = BACKEND_LUAJIT, ... }) fileName nextId decs
-    = let val progDir = OS.Path.dir progName
-          val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = progDir, file = "mlinit-luajit.lua" }
+    = let val base = OS.Path.base fileName
+          val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-luajit.lua" }
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT, hasDelimitedContinuations = false }
           val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
@@ -120,9 +120,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
       in ()
       end
   | emit (opts as { backend = BACKEND_JS, ... }) fileName nextId decs
-    = let val progDir = OS.Path.dir progName
-          val base = OS.Path.base fileName
-          val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit.js" }
+    = let val base = OS.Path.base fileName
+          val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
           val mlinit = readFile mlinit_js
           val jsctx = { nextJsId = nextId }
           val js = CodeGenJs.doProgram jsctx CodeGenJs.initialEnv decs
@@ -143,9 +142,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
                         in TypedSyntax.MkVId ("exh", n)
                         end
           val cexp = CpsTransform.transformDecs { nextVId = nextId } decs { exnCont = exnCont } cont
-          val progDir = OS.Path.dir progName
           val base = OS.Path.base fileName
-          val mlinit_js = OS.Path.joinDirFile { dir = progDir, file = "mlinit-cps.js" }
+          val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
           val jsctx = { nextJsId = nextId }
           val js = CodeGenJsCps.doProgram jsctx cont exnCont cexp
@@ -158,9 +156,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
       in ()
       end
 fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Code)
-    = let val progDir = OS.Path.dir progName
-          val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
-                                   [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = progDir, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
+    = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
+                                   [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
                                    ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
                                    ]
@@ -270,6 +267,7 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_DUMP (* --dump *)
                 | OPT_DUMP_FINAL (* --dump-final *)
                 | OPT_OPTIMIZE (* -O,--optimize *)
+                | OPT_LIB_DIR of string (* -B *)
 val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--output", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--exe", SIMPLE OPT_EXE)
@@ -288,6 +286,7 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--dump-final", SIMPLE OPT_DUMP_FINAL)
                   ,(SHORT "-O", SIMPLE OPT_OPTIMIZE)
                   ,(LONG "--optimize", SIMPLE OPT_OPTIMIZE)
+                  ,(SHORT "-B", WITH_ARG OPT_LIB_DIR)
                   ]
 fun parseArgs (opts : options) args
     = case parseOption (optionDescs, args) of
@@ -316,6 +315,7 @@ fun parseArgs (opts : options) args
         | SOME (OPT_DUMP, args) => parseArgs (S.set.dump DUMP_INITIAL opts) args
         | SOME (OPT_DUMP_FINAL, args) => parseArgs (S.set.dump DUMP_FINAL opts) args
         | SOME (OPT_OPTIMIZE, args) => parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
+        | SOME (OPT_LIB_DIR libDir, args) => parseArgs (S.set.libDir libDir opts) args
         | NONE => (case args of
                        arg :: args' =>
                        if String.isPrefix "-" arg then
@@ -335,12 +335,14 @@ fun parseArgs (opts : options) args
                      | [] => showMessageAndFail "No input given. Try --help.\n"
                   )
 fun main () = let val args = CommandLine.arguments ()
+                  val progDir = OS.Path.dir progName
                   val initialSettings = { subcommand = NONE
                                         , output = NONE
                                         , outputMode = NONE
                                         , dump = NO_DUMP
                                         , optimizationLevel = 0
                                         , backend = BACKEND_LUA LUA_PLAIN
+                                        , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
                                         }
               in parseArgs initialSettings args
                  handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)

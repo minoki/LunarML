@@ -6,7 +6,7 @@ if progname:find("[/\\]") then
 else
   testdir = "."
 end
-local compiler = arg[1] or "../lunarml"
+local compiler = arg[1] or "../bin/lunarml"
 local js_interpreter = arg[2] or "node"
 local cps_mode = arg[3] == "cps"
 local outext = cps_mode and ".cps.js" or ".js"

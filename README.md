@@ -13,7 +13,7 @@ $ make test-lua-continuations
 $ make test-luajit
 $ make test-nodejs
 $ make test-nodejs-cps
-$ ./lunarml compile example/hello.sml
+$ bin/lunarml compile example/hello.sml
 $ lua example/hello.lua
 Hello world!
 ```
@@ -21,7 +21,7 @@ Hello world!
 ## Usage
 
 ```
-./lunarml [subcommand] [options] input.(sml|mlb)
+lunarml [subcommand] [options] input.(sml|mlb)
 ```
 
 Subcommand:
