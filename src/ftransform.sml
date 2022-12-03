@@ -107,20 +107,20 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = let val tag = #tag info
                     val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
-                    val equal_string = case #nativeString (#targetInfo ctx) of
-                                           TargetInfo.NARROW_STRING => Primitives.String_EQUAL
-                                         | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsNativeString (#targetInfo ctx, tag)]), payload)
+                    val equalTag = case #datatypeTag (#targetInfo ctx) of
+                                       TargetInfo.STRING8 => Primitives.String_EQUAL
+                                     | TargetInfo.STRING16 => Primitives.WideString_EQUAL
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
                    | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, vector [], vector [exp])
                    | { representation = _, tag, ... } =>
-                     let val equal_string = case #nativeString (#targetInfo ctx) of
-                                                TargetInfo.NARROW_STRING => Primitives.String_EQUAL
-                                              | TargetInfo.WIDE_STRING => Primitives.WideString_EQUAL
-                     in F.PrimExp (F.PrimFnOp equal_string, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsNativeString (#targetInfo ctx, tag)])
+                     let val equalTag = case #datatypeTag (#targetInfo ctx) of
+                                            TargetInfo.STRING8 => Primitives.String_EQUAL
+                                          | TargetInfo.STRING16 => Primitives.WideString_EQUAL
+                     in F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
                      end
                 )
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = SOME (payloadTy, payloadPat) })

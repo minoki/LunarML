@@ -94,11 +94,12 @@ fun TupleExp xs = let fun doFields i nil = nil
                   end
 fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.MkTyVar (name, n)
 fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
-fun AsciiStringAsNativeString (targetInfo : TargetInfo.target_info, s : string) = let val ty = case #nativeString targetInfo of
-                                                                                                   TargetInfo.NARROW_STRING => TyCon ([], Typing.primTyName_string)
-                                                                                                 | TargetInfo.WIDE_STRING => TyCon ([], Typing.primTyName_wideString)
-                                                                                  in PrimExp (StringConstOp (StringElement.encodeAscii s), vector [ty], vector [])
-                                                                                  end
+fun AsciiStringAsDatatypeTag (targetInfo : TargetInfo.target_info, s : string)
+    = let val ty = case #datatypeTag targetInfo of
+                       TargetInfo.STRING8 => TyCon ([], Typing.primTyName_string)
+                     | TargetInfo.STRING16 => TyCon ([], Typing.primTyName_wideString)
+      in PrimExp (StringConstOp (StringElement.encodeAscii s), vector [ty], vector [])
+      end
 fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
 fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(InitialEnv.VId_false))
 fun SimplifyingAndalsoExp (a as VarExp vid, b) = if TypedSyntax.eqVId (vid, InitialEnv.VId_true) then

@@ -58,16 +58,16 @@ fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
                         end
 fun getTargetInfo (opts : options) = (case #backend opts of
                                           BACKEND_LUA _ => { wideChar = TargetInfo.CHAR8
-                                                           , nativeString = TargetInfo.NARROW_STRING
+                                                           , datatypeTag = TargetInfo.STRING8
                                                            }
                                         | BACKEND_LUAJIT => { wideChar = TargetInfo.CHAR8
-                                                            , nativeString = TargetInfo.NARROW_STRING
+                                                            , datatypeTag = TargetInfo.STRING8
                                                             }
                                         | BACKEND_JS => { wideChar = TargetInfo.CHAR16
-                                                        , nativeString = TargetInfo.WIDE_STRING
+                                                        , datatypeTag = TargetInfo.STRING16
                                                         }
                                         | BACKEND_JS_CPS => { wideChar = TargetInfo.CHAR16
-                                                            , nativeString = TargetInfo.WIDE_STRING
+                                                            , datatypeTag = TargetInfo.STRING16
                                                             }
                                      )
 type context = { driverContext : Driver.Context
