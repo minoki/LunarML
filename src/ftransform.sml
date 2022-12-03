@@ -109,7 +109,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                     val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
                     val equalTag = case #datatypeTag (#targetInfo ctx) of
                                        TargetInfo.STRING8 => Primitives.String_EQUAL
-                                     | TargetInfo.STRING16 => Primitives.WideString_EQUAL
+                                     | TargetInfo.STRING16 => Primitives.String16_EQUAL
                 in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
@@ -119,7 +119,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                    | { representation = _, tag, ... } =>
                      let val equalTag = case #datatypeTag (#targetInfo ctx) of
                                             TargetInfo.STRING8 => Primitives.String_EQUAL
-                                          | TargetInfo.STRING16 => Primitives.WideString_EQUAL
+                                          | TargetInfo.STRING16 => Primitives.String16_EQUAL
                      in F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
                      end
                 )

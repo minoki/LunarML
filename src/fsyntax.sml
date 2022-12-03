@@ -97,7 +97,7 @@ fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied =
 fun AsciiStringAsDatatypeTag (targetInfo : TargetInfo.target_info, s : string)
     = let val ty = case #datatypeTag targetInfo of
                        TargetInfo.STRING8 => TyCon ([], Typing.primTyName_string)
-                     | TargetInfo.STRING16 => TyCon ([], Typing.primTyName_wideString)
+                     | TargetInfo.STRING16 => TyCon ([], Typing.primTyName_string16)
       in PrimExp (StringConstOp (StringElement.encodeAscii s), vector [ty], vector [])
       end
 fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
@@ -683,8 +683,8 @@ fun cookCharacterConstant (ctx, env : Env, span, value : int, ty)
                                              F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
                                          else
                                              raise Fail "invalid character constant: out of range"
-                                     else if T.eqTyName (tycon, Typing.primTyName_wideChar) then
-                                         if 0 <= value andalso value <= 0xffff then (* TODO: target dependence *)
+                                     else if T.eqTyName (tycon, Typing.primTyName_char16) then
+                                         if 0 <= value andalso value <= 0xffff then
                                              F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
                                          else
                                              raise Fail "invalid character constant: out of range"
@@ -699,8 +699,7 @@ fun cookStringConstant (ctx, env : Env, span, value, ty)
                                                           handle Chr => raise Fail "invalid string constant: out of range"
                                          in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])
                                          end
-                                     else if T.eqTyName (tycon, Typing.primTyName_wideString) then
-                                         (* TODO: target dependence *)
+                                     else if T.eqTyName (tycon, Typing.primTyName_string16) then
                                          let val cooked = StringElement.encode16bit value
                                                           handle Chr => raise Fail "invalid string constant: out of range"
                                          in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])

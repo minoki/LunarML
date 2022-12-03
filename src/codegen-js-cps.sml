@@ -140,7 +140,7 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
     = let val exp = case ty of
                         F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_string then
                                           J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
-                                      else if tv = F.tyNameToTyVar Typing.primTyName_wideString then
+                                      else if tv = F.tyNameToTyVar Typing.primTyName_string16 then
                                           J.ConstExp (J.WideString x)
                                       else
                                           raise CodeGenError "PrimExp.StringConstOp: invalid type"
@@ -151,7 +151,7 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
     = let val exp = case ty of
                         F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_char then
                                           J.ConstExp (J.Numeral (Int.toString x))
-                                      else if tv = F.tyNameToTyVar Typing.primTyName_wideChar then
+                                      else if tv = F.tyNameToTyVar Typing.primTyName_char16 then
                                           J.ConstExp (J.WideString (vector [x]))
                                       else
                                           raise CodeGenError "PrimExp.CharConstOp: invalid type"
@@ -250,24 +250,24 @@ fun doCExp (ctx : Context) (C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], a
            | Primitives.Char_GT => doBinaryOp (J.GT, true)
            | Primitives.Char_LE => doBinaryOp (J.LE, true)
            | Primitives.Char_GE => doBinaryOp (J.GE, true)
-           | Primitives.WideChar_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.WideChar_LT => doBinaryOp (J.LT, true)
-           | Primitives.WideChar_GT => doBinaryOp (J.GT, true)
-           | Primitives.WideChar_LE => doBinaryOp (J.LE, true)
-           | Primitives.WideChar_GE => doBinaryOp (J.GE, true)
+           | Primitives.Char16_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.Char16_LT => doBinaryOp (J.LT, true)
+           | Primitives.Char16_GT => doBinaryOp (J.GT, true)
+           | Primitives.Char16_LE => doBinaryOp (J.LE, true)
+           | Primitives.Char16_GE => doBinaryOp (J.GE, true)
            | Primitives.String_EQUAL => doBinaryExp (fn (a, b) =>  J.CallExp (J.VarExp (J.PredefinedId "_String_EQUAL"), vector [a, b]), true)
            | Primitives.String_LT => doBinaryExp (fn (a, b) => J.CallExp (J.VarExp (J.PredefinedId "_String_LT"), vector [a, b]), true)
            | Primitives.String_HAT => doBinaryExp (fn (a, b) => J.CallExp (J.VarExp (J.PredefinedId "_String_append"), vector [a, b]), true)
            | Primitives.String_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
            | Primitives.String_str => doUnaryExp (fn a => J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", vector [a]), true)
-           | Primitives.WideString_EQUAL => doBinaryOp (J.EQUAL, true)
-           | Primitives.WideString_LT => doBinaryOp (J.LT, true)
-           | Primitives.WideString_GT => doBinaryOp (J.GT, true)
-           | Primitives.WideString_LE => doBinaryOp (J.LE, true)
-           | Primitives.WideString_GE => doBinaryOp (J.GE, true)
-           | Primitives.WideString_HAT => doBinaryOp (J.PLUS, true)
-           | Primitives.WideString_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
-           | Primitives.WideString_str => doUnaryExp (fn a => a, true)
+           | Primitives.String16_EQUAL => doBinaryOp (J.EQUAL, true)
+           | Primitives.String16_LT => doBinaryOp (J.LT, true)
+           | Primitives.String16_GT => doBinaryOp (J.GT, true)
+           | Primitives.String16_LE => doBinaryOp (J.LE, true)
+           | Primitives.String16_GE => doBinaryOp (J.GE, true)
+           | Primitives.String16_HAT => doBinaryOp (J.PLUS, true)
+           | Primitives.String16_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
+           | Primitives.String16_str => doUnaryExp (fn a => a, true)
            | Primitives.IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.IntInf_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.IntInf_MINUS => doBinaryOp (J.MINUS, true)

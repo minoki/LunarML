@@ -36,11 +36,11 @@ datatype PrimOp = EQUAL (* = *)
                 | Char_LE (* Char.<= *)
                 | Char_GT (* Char.> *)
                 | Char_GE (* Char.>= *)
-                | WideChar_EQUAL (* WideChar.= *)
-                | WideChar_LT (* WideChar.< *)
-                | WideChar_LE (* WideChar.<= *)
-                | WideChar_GT (* WideChar.> *)
-                | WideChar_GE (* WideChar.>= *)
+                | Char16_EQUAL (* Char16.= *)
+                | Char16_LT (* Char16.< *)
+                | Char16_LE (* Char16.<= *)
+                | Char16_GT (* Char16.> *)
+                | Char16_GE (* Char16.>= *)
                 | String_EQUAL (* String.= *)
                 | String_LT (* String.< *)
                 | String_LE (* String.<= *)
@@ -49,14 +49,14 @@ datatype PrimOp = EQUAL (* = *)
                 | String_HAT (* String.^ *)
                 | String_size (* String.size *)
                 | String_str (* String.str *)
-                | WideString_EQUAL (* WideString.= *)
-                | WideString_LT (* WideString.< *)
-                | WideString_LE (* WideString.<= *)
-                | WideString_GT (* WideString.> *)
-                | WideString_GE (* WideString.>= *)
-                | WideString_HAT (* WideString.^ *)
-                | WideString_size (* WideString.size *)
-                | WideString_str (* WideString.str *)
+                | String16_EQUAL (* String16.= *)
+                | String16_LT (* String16.< *)
+                | String16_LE (* String16.<= *)
+                | String16_GT (* String16.> *)
+                | String16_GE (* String16.>= *)
+                | String16_HAT (* String16.^ *)
+                | String16_size (* String16.size *)
+                | String16_str (* String16.str *)
                 | IntInf_EQUAL (* IntInf.= *)
                 | IntInf_PLUS (* IntInf.+ *)
                 | IntInf_MINUS (* IntInf.- *)
@@ -176,11 +176,11 @@ fun toString EQUAL = "="
   | toString Char_LE = "Char.<="
   | toString Char_GT = "Char.>"
   | toString Char_GE = "Char.>="
-  | toString WideChar_EQUAL = "WideChar.="
-  | toString WideChar_LT = "WideChar.<"
-  | toString WideChar_LE = "WideChar.<="
-  | toString WideChar_GT = "WideChar.>"
-  | toString WideChar_GE = "WideChar.>="
+  | toString Char16_EQUAL = "Char16.="
+  | toString Char16_LT = "Char16.<"
+  | toString Char16_LE = "Char16.<="
+  | toString Char16_GT = "Char16.>"
+  | toString Char16_GE = "Char16.>="
   | toString String_EQUAL = "String.="
   | toString String_LT = "String.<"
   | toString String_LE = "String.<="
@@ -189,14 +189,14 @@ fun toString EQUAL = "="
   | toString String_HAT = "String.^"
   | toString String_size = "String.size"
   | toString String_str = "String.str"
-  | toString WideString_EQUAL = "WideString.="
-  | toString WideString_LT = "WideString.<"
-  | toString WideString_LE = "WideString.<="
-  | toString WideString_GT = "WideString.>"
-  | toString WideString_GE = "WideString.>="
-  | toString WideString_HAT = "WideString.^"
-  | toString WideString_size = "WideString.size"
-  | toString WideString_str = "WideString.str"
+  | toString String16_EQUAL = "String16.="
+  | toString String16_LT = "String16.<"
+  | toString String16_LE = "String16.<="
+  | toString String16_GT = "String16.>"
+  | toString String16_GE = "String16.>="
+  | toString String16_HAT = "String16.^"
+  | toString String16_size = "String16.size"
+  | toString String16_str = "String16.str"
   | toString IntInf_EQUAL = "IntInf.="
   | toString IntInf_PLUS = "IntInf.+"
   | toString IntInf_MINUS = "IntInf.-"
@@ -316,11 +316,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char.<=" = SOME Char_LE
   | fromString "Char.>" = SOME Char_GT
   | fromString "Char.>=" = SOME Char_GE
-  | fromString "WideChar.=" = SOME WideChar_EQUAL
-  | fromString "WideChar.<" = SOME WideChar_LT
-  | fromString "WideChar.<=" = SOME WideChar_LE
-  | fromString "WideChar.>" = SOME WideChar_GT
-  | fromString "WideChar.>=" = SOME WideChar_GE
+  | fromString "Char16.=" = SOME Char16_EQUAL
+  | fromString "Char16.<" = SOME Char16_LT
+  | fromString "Char16.<=" = SOME Char16_LE
+  | fromString "Char16.>" = SOME Char16_GT
+  | fromString "Char16.>=" = SOME Char16_GE
   | fromString "String.=" = SOME String_EQUAL
   | fromString "String.<" = SOME String_LT
   | fromString "String.<=" = SOME String_LE
@@ -329,14 +329,14 @@ fun fromString "=" = SOME EQUAL
   | fromString "String.^" = SOME String_HAT
   | fromString "String.size" = SOME String_size
   | fromString "String.str" = SOME String_str
-  | fromString "WideString.=" = SOME WideString_EQUAL
-  | fromString "WideString.<" = SOME WideString_LT
-  | fromString "WideString.<=" = SOME WideString_LE
-  | fromString "WideString.>" = SOME WideString_GT
-  | fromString "WideString.>=" = SOME WideString_GE
-  | fromString "WideString.^" = SOME WideString_HAT
-  | fromString "WideString.size" = SOME WideString_size
-  | fromString "WideString.str" = SOME WideString_str
+  | fromString "String16.=" = SOME String16_EQUAL
+  | fromString "String16.<" = SOME String16_LT
+  | fromString "String16.<=" = SOME String16_LE
+  | fromString "String16.>" = SOME String16_GT
+  | fromString "String16.>=" = SOME String16_GE
+  | fromString "String16.^" = SOME String16_HAT
+  | fromString "String16.size" = SOME String16_size
+  | fromString "String16.str" = SOME String16_str
   | fromString "IntInf.=" = SOME IntInf_EQUAL
   | fromString "IntInf.+" = SOME IntInf_PLUS
   | fromString "IntInf.-" = SOME IntInf_MINUS
@@ -442,9 +442,9 @@ functor TypeOfPrimitives (type ty
                           val word : ty
                           val real : ty
                           val char : ty
-                          val wideChar : ty
+                          val char16 : ty
                           val string : ty
-                          val wideString : ty
+                          val string16 : ty
                           val intInf : ty
                           val exn : ty
                           val exntag : ty
@@ -501,11 +501,11 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Char_LE = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.Char_GT = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.Char_GE = { vars = [], args = vector [char, char], result = bool }
-  | typeOf Primitives.WideChar_EQUAL = { vars = [], args = vector [wideChar, wideChar], result = bool }
-  | typeOf Primitives.WideChar_LT = { vars = [], args = vector [wideChar, wideChar], result = bool }
-  | typeOf Primitives.WideChar_LE = { vars = [], args = vector [wideChar, wideChar], result = bool }
-  | typeOf Primitives.WideChar_GT = { vars = [], args = vector [wideChar, wideChar], result = bool }
-  | typeOf Primitives.WideChar_GE = { vars = [], args = vector [wideChar, wideChar], result = bool }
+  | typeOf Primitives.Char16_EQUAL = { vars = [], args = vector [char16, char16], result = bool }
+  | typeOf Primitives.Char16_LT = { vars = [], args = vector [char16, char16], result = bool }
+  | typeOf Primitives.Char16_LE = { vars = [], args = vector [char16, char16], result = bool }
+  | typeOf Primitives.Char16_GT = { vars = [], args = vector [char16, char16], result = bool }
+  | typeOf Primitives.Char16_GE = { vars = [], args = vector [char16, char16], result = bool }
   | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], result = bool }
@@ -514,14 +514,14 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.String_HAT = { vars = [], args = vector [string, string], result = string }
   | typeOf Primitives.String_size = { vars = [], args = vector [string], result = int }
   | typeOf Primitives.String_str = { vars = [], args = vector [char], result = string }
-  | typeOf Primitives.WideString_EQUAL = { vars = [], args = vector [wideString, wideString], result = bool }
-  | typeOf Primitives.WideString_LT = { vars = [], args = vector [wideString, wideString], result = bool }
-  | typeOf Primitives.WideString_LE = { vars = [], args = vector [wideString, wideString], result = bool }
-  | typeOf Primitives.WideString_GT = { vars = [], args = vector [wideString, wideString], result = bool }
-  | typeOf Primitives.WideString_GE = { vars = [], args = vector [wideString, wideString], result = bool }
-  | typeOf Primitives.WideString_HAT = { vars = [], args = vector [wideString, wideString], result = wideString }
-  | typeOf Primitives.WideString_size = { vars = [], args = vector [wideString], result = int }
-  | typeOf Primitives.WideString_str = { vars = [], args = vector [wideChar], result = wideString }
+  | typeOf Primitives.String16_EQUAL = { vars = [], args = vector [string16, string16], result = bool }
+  | typeOf Primitives.String16_LT = { vars = [], args = vector [string16, string16], result = bool }
+  | typeOf Primitives.String16_LE = { vars = [], args = vector [string16, string16], result = bool }
+  | typeOf Primitives.String16_GT = { vars = [], args = vector [string16, string16], result = bool }
+  | typeOf Primitives.String16_GE = { vars = [], args = vector [string16, string16], result = bool }
+  | typeOf Primitives.String16_HAT = { vars = [], args = vector [string16, string16], result = string16 }
+  | typeOf Primitives.String16_size = { vars = [], args = vector [string16], result = int }
+  | typeOf Primitives.String16_str = { vars = [], args = vector [char16], result = string16 }
   | typeOf Primitives.IntInf_EQUAL = { vars = [], args = vector [intInf, intInf], result = bool }
   | typeOf Primitives.IntInf_PLUS = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.IntInf_MINUS = { vars = [], args = vector [intInf, intInf], result = intInf }
@@ -603,6 +603,6 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = wideString }
-  | typeOf Primitives.JavaScript_global = { vars = [], args = vector [wideString], result = JavaScriptValue }
+  | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = string16 }
+  | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], result = JavaScriptValue }
 end;

@@ -14,9 +14,9 @@ do
   local word = {"word"}
   local real = {"real"}
   local char = {"char"}
-  local wideChar = {"wideChar"}
+  local char16 = {"char16"}
   local string = {"string"}
-  local wideString = {"wideString"}
+  local string16 = {"string16"}
   local intInf = {"intInf"}
   local exn = {"exn"}
   local exntag = {"exntag"}
@@ -236,29 +236,29 @@ do
       type = Compare(char),
     },
     {
-      name = "WideChar.=",
-      srcname = "WideChar_EQUAL",
-      type = Compare(wideChar),
+      name = "Char16.=",
+      srcname = "Char16_EQUAL",
+      type = Compare(char16),
     },
     {
-      name = "WideChar.<",
-      srcname = "WideChar_LT",
-      type = Compare(wideChar),
+      name = "Char16.<",
+      srcname = "Char16_LT",
+      type = Compare(char16),
     },
     {
-      name = "WideChar.<=",
-      srcname = "WideChar_LE",
-      type = Compare(wideChar),
+      name = "Char16.<=",
+      srcname = "Char16_LE",
+      type = Compare(char16),
     },
     {
-      name = "WideChar.>",
-      srcname = "WideChar_GT",
-      type = Compare(wideChar),
+      name = "Char16.>",
+      srcname = "Char16_GT",
+      type = Compare(char16),
     },
     {
-      name = "WideChar.>=",
-      srcname = "WideChar_GE",
-      type = Compare(wideChar),
+      name = "Char16.>=",
+      srcname = "Char16_GE",
+      type = Compare(char16),
     },
     {
       name = "String.=",
@@ -301,44 +301,44 @@ do
       type = { vars = {}, args = {char}, result = string },
     },
     {
-      name = "WideString.=",
-      srcname = "WideString_EQUAL",
-      type = Compare(wideString),
+      name = "String16.=",
+      srcname = "String16_EQUAL",
+      type = Compare(string16),
     },
     {
-      name = "WideString.<",
-      srcname = "WideString_LT",
-      type = Compare(wideString),
+      name = "String16.<",
+      srcname = "String16_LT",
+      type = Compare(string16),
     },
     {
-      name = "WideString.<=",
-      srcname = "WideString_LE",
-      type = Compare(wideString),
+      name = "String16.<=",
+      srcname = "String16_LE",
+      type = Compare(string16),
     },
     {
-      name = "WideString.>",
-      srcname = "WideString_GT",
-      type = Compare(wideString),
+      name = "String16.>",
+      srcname = "String16_GT",
+      type = Compare(string16),
     },
     {
-      name = "WideString.>=",
-      srcname = "WideString_GE",
-      type = Compare(wideString),
+      name = "String16.>=",
+      srcname = "String16_GE",
+      type = Compare(string16),
     },
     {
-      name = "WideString.^",
-      srcname = "WideString_HAT",
-      type = HomoBinary(wideString),
+      name = "String16.^",
+      srcname = "String16_HAT",
+      type = HomoBinary(string16),
     },
     {
-      name = "WideString.size",
-      srcname = "WideString_size",
-      type = { vars = {}, args = {wideString}, result = int },
+      name = "String16.size",
+      srcname = "String16_size",
+      type = { vars = {}, args = {string16}, result = int },
     },
     {
-      name = "WideString.str",
-      srcname = "WideString_str",
-      type = { vars = {}, args = {wideChar}, result = wideString },
+      name = "String16.str",
+      srcname = "String16_str",
+      type = { vars = {}, args = {char16}, result = string16 },
     },
     {
       name = "IntInf.=",
@@ -756,12 +756,12 @@ do
     {
       name = "JavaScript.typeof",
       srcname = "JavaScript_typeof",
-      type = { vars = {}, args = {JSValue}, result = wideString },
+      type = { vars = {}, args = {JSValue}, result = string16 },
     },
     {
       name = "JavaScript.global",
       srcname = "JavaScript_global",
-      type = { vars = {}, args = {wideString}, result = JSValue },
+      type = { vars = {}, args = {string16}, result = JSValue },
     },
   }
 end
@@ -826,9 +826,9 @@ functor TypeOfPrimitives (type ty
                           val word : ty
                           val real : ty
                           val char : ty
-                          val wideChar : ty
+                          val char16 : ty
                           val string : ty
-                          val wideString : ty
+                          val string16 : ty
                           val intInf : ty
                           val exn : ty
                           val exntag : ty

@@ -14,8 +14,8 @@ unsafe.sml
 $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
-widechar-prim.sml
-widestring-prim.sml (* depends on WideChar.char *)
+widechar-prim-16.sml
+widestring-prim-16.sml (* depends on WideChar.char *)
 lunarml.sml
 js-common/javascript.sml
 $(TARGET_LANG)/string-prim.sml
