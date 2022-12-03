@@ -2,7 +2,7 @@
 
 Availability: JS-CPS backend (multi-shot). Lua-continuations backend (one-shot).
 
-Status: Experimental. On JS-CPS backend, delimited continuations do not work well with exceptions.
+Status: Experimental.
 
 ```sml
 structure LunarML : sig

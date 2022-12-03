@@ -259,5 +259,6 @@ if cps_mode then
   should_run "cps/should_run/" {
     "product.sml",
     "nondet.sml",
+    "exception.sml",
   }
 end

@@ -265,5 +265,6 @@ should_compile "extension/should_compile/" {
 if continuations_mode then
   should_run "cps/should_run/" {
     "product.sml",
+    "exception.sml",
   }
 end
