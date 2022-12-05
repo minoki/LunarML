@@ -82,6 +82,11 @@ fun optimize (ctx : context) fdecs 0 = fdecs
                                           }
                            in optimize ctx (#2 (FTransform.doDecs ctx' FTransform.initialEnv fdecs)) (n - 1)
                            end
+fun optimizeCps (ctx : { nextVId : int ref }) cexp 0 = cexp
+  | optimizeCps ctx cexp n = let val usage = ref TypedSyntax.VIdMap.empty
+                                 val () = CpsSimplify.usageInCExp (usage, cexp)
+                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, !usage, cexp)) (n - 1)
+                             end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nextId decs
     = let val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -141,7 +146,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
                             val _ = nextId := n + 1
                         in TypedSyntax.MkVId ("exh", n)
                         end
-          val cexp = CpsTransform.transformDecs { nextVId = nextId } decs { exnCont = exnCont } cont
+          val cexp = CpsTransform.transformDecs ({ nextVId = nextId }, TypedSyntax.VIdMap.empty) decs { exnCont = exnCont } cont
+          val cexp = optimizeCps { nextVId = nextId } cexp (5 * (#optimizationLevel opts + 4))
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
@@ -331,7 +337,7 @@ fun parseArgs (opts : options) args
                                            | _ => showMessageAndFail ("Unrecognized subcommand: " ^ arg ^ ".\n")
                                         )
                               | SOME _ => handleInputFile opts args
-                                       )
+                           )
                      | [] => showMessageAndFail "No input given. Try --help.\n"
                   )
 fun main () = let val args = CommandLine.arguments ()
