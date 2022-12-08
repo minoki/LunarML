@@ -609,7 +609,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                end
                    | F.ProjectionExp { label, record, fieldTypes } => (case doExp' env record of
                                                                            (exp, SOME (RecordExp m)) => (case Syntax.LabelMap.find (m, label) of
-                                                                                                             SOME iexp => (uninlineExp iexp, SOME iexp)
+                                                                                                             SOME iexp => (#doExp (RefreshBoundNames.run ctx) RefreshBoundNames.emptyEnv (uninlineExp iexp), SOME iexp)
                                                                                                            | NONE => (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, NONE) (* should be an error *)
                                                                                                         )
                                                                          | (exp, SOME iexp) => (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, SOME (ProjectionExp { label = label, record = iexp, fieldTypes = fieldTypes }))
@@ -622,7 +622,7 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                                                              in if TypedSyntax.TyVarSet.member (fv, tv) then
                                                                                                                                     NONE
                                                                                                                                 else
-                                                                                                                                    SOME (uninlineExp exp', SOME exp')
+                                                                                                                                    SOME (#doExp (RefreshBoundNames.run ctx) RefreshBoundNames.emptyEnv (uninlineExp exp'), SOME exp')
                                                                                                                              end
                                                                                                                          else
                                                                                                                              NONE
