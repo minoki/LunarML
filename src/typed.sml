@@ -32,9 +32,9 @@ structure TyVarMap = RedBlackMapFn(TyVarKey)
 
 structure VIdKey = struct
 type ord_key = VId
-fun compare(MkVId(x,a), MkVId(y,b)) = case String.compare (x,y) of
-                                          EQUAL => Int.compare(a,b)
-                                        | ord => ord
+fun compare (MkVId (x, a), MkVId (y, b)) = case Int.compare (a, b) of
+                                               EQUAL => String.compare (x, y)
+                                             | ord => ord
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
 structure VIdSet = struct
