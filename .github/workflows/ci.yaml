@@ -22,5 +22,7 @@ jobs:
         run: make -C thirdparty install
       - name: Compile myself (Lua)
         run: bin/lunarml compile LunarML.mlb
-      - name: Compile myself (JavaScript)
-        run: bin/lunarml compile --js-cps LunarML.mlb
+      - name: Compile myself (LuaJIT)
+        run: bin/lunarml compile --luajit LunarML.mlb
+      - name: Compile myself and validate (JavaScript)
+        run: make validate-js
