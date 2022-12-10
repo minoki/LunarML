@@ -217,17 +217,25 @@ local
                          raise Overflow
                      else if (Lua.>= (x, ZERO) andalso Lua.> (y, ZERO)) orelse (Lua.<= (x, ZERO) andalso Lua.< (y, ZERO)) then
                          Lua./ (x, y) (* same as quot *)
-                     else if Lua.== (y, ONE) then
-                         x
-                     else (* (x > 0 andalso y <= ~1) orelse (x < 0 andalso y > 2) *)
-                         if Lua.< (x, ZERO) then
-                             Lua.unm (Lua./ (x, Lua.unm y)) (* y is positive, so Lua.unm y cannot overflow *)
-                         else
-                             Lua.unm (Lua./ (Lua.unm x, y)) (* x is positive. so Lua.unm x cannot overflow *)
-    fun MOD (x, y) = if Lua.== (y, MINUS_ONE) then
-                         ZERO
                      else
-                         Lua.- (x, Lua.* (DIV (x, y), y))
+                         let val q = Lua./ (x, y)
+                             val r = Lua.% (x, y)
+                         in if Lua.== (r, ZERO) then
+                                q
+                            else
+                                Lua.- (q, Lua.fromInt 1)
+                         end
+    fun MOD (x, y) = if Lua.== (y, ZERO) then
+                         raise Div
+                     else if (Lua.>= (x, ZERO) andalso Lua.> (y, ZERO)) orelse (Lua.<= (x, ZERO) andalso Lua.< (y, ZERO)) then
+                         Lua.% (x, y) (* same as rem *)
+                     else
+                         let val r = Lua.% (x, y)
+                         in if Lua.== (r, ZERO) then
+                                r
+                            else
+                                Lua.+ (r, y)
+                         end
     fun toLarge x = let val d = MIN_INT32_AS_INT64 (* -2^31 *)
                         val q = Lua./ (x, d) (* ~0xffff_ffff <= q <= 0x1_0000_0000 *)
                         val r = Lua.% (x, d) (* ~0x7fff_ffff <= r <= 0x7fff_ffff *)

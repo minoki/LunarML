@@ -134,20 +134,20 @@ val precision = SOME 64
 val minInt = SOME MIN
 val maxInt = SOME MAX
 fun ADD (x, y) = let val z = x + y
-                 in if MIN <= x andalso x <= MAX then
-                        x
+                 in if MIN <= z andalso z <= MAX then
+                        z
                     else
                         raise Overflow
                  end
 fun SUB (x, y) = let val z = x - y
-                 in if MIN <= x andalso x <= MAX then
-                        x
+                 in if MIN <= z andalso z <= MAX then
+                        z
                     else
                         raise Overflow
                  end
 fun MUL (x, y) = let val z = x * y
-                 in if MIN <= x andalso x <= MAX then
-                        x
+                 in if MIN <= z andalso z <= MAX then
+                        z
                     else
                         raise Overflow
                  end
@@ -191,3 +191,16 @@ val op <= = IntInf.<=
 val op > = IntInf.>
 val op >= = IntInf.>=
 end;
+_overload "Int" [Int64.int] { + = Int64.+
+                            , - = Int64.-
+                            , * = Int64.*
+                            , div = Int64.div
+                            , mod = Int64.mod
+                            , ~ = Int64.~
+                            , abs = Int64.abs
+                            , < = Int64.<
+                            , <= = Int64.<=
+                            , > = Int64.>
+                            , >= = Int64.>=
+                            , fromInt = Int64.fromInt
+                            };
