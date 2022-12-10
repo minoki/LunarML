@@ -206,6 +206,10 @@ signature INT_INF = sig
   val ~>> : int * Word.word -> int
 end
 structure Int :> INTEGER where type int = int
+structure Int8 :> INTEGER
+structure Int16 :> INTEGER
+structure Int32 :> INTEGER
+structure Int64 :> INTEGER
 structure IntInf :> INT_INF
 structure LargeInt : INTEGER = IntInf
 ```

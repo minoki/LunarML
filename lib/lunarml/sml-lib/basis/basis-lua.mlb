@@ -33,6 +33,7 @@ array-slice.sml
 list-pair.sml
 int-inf.sml
 large-int-is-int-inf.sml
+lua/int.sml
 real.sml
 lua/word-sequence.sml
 lua/unsafe-extra.sml
@@ -68,45 +69,49 @@ signature WORD
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure LunarML (* extension; to be moved... *)
-structure Int
-structure Word
-structure Real
-structure Char
-structure String
-structure Vector
-structure General
-structure List
-structure Option
+signature BYTE
+structure Array
+structure ArraySlice
 structure Bool
+structure Byte
+structure Char
+structure CharArray
+structure CharArraySlice
+structure CharVector
+structure CharVectorSlice
+structure CommandLine
+structure General
 structure IEEEReal
+structure IO
+structure Int
+structure Int16
+structure Int32
+structure Int64
+structure Int8
+structure IntInf
+structure LargeInt
+structure LargeReal
+structure LargeWord
+structure List
+structure ListPair
 structure Math
+structure OS
+structure Option
+structure Real
+structure String
 structure StringCvt
 structure Substring
-structure Array
-structure IO
 structure TextIO
-structure OS
-structure CommandLine
+structure Vector
 structure VectorSlice
-structure ArraySlice
-structure ListPair
-structure Word8
+structure Word
 structure Word16
 structure Word32
 structure Word64
-structure LargeWord
-structure IntInf
-structure LargeInt
-structure CharVector
-structure CharVectorSlice
-structure CharArray
-structure CharArraySlice
-structure Word8Vector
-structure Word8VectorSlice
+structure Word8
 structure Word8Array
 structure Word8ArraySlice
-signature BYTE
-structure Byte
-structure LargeReal
+structure Word8Vector
+structure Word8VectorSlice
 top-level.sml
 end

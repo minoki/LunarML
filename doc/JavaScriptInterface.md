@@ -70,6 +70,7 @@ Primitives
 * `WideChar.char`: single-character string.
 * `WideString.string`: 16-bit string (JavaScript's native String).
 * `IntInf.int`: BigInt.
+* `Int64.int`: BigInt.
 * `Word64.word`: BigInt.
 * `'a vector`: Array. Must not be modified.
 * `'a array`: Array.

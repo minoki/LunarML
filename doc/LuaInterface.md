@@ -113,6 +113,9 @@ Primitives
 * `real`: Lua's native number, typically 64-bit.
 * `char`: single-character string.
 * `string`: Lua's native string.
+* `Int64.int`:
+    * Lua 5.3 or later: Lua's native integer, assuming the width is 64-bit.
+    * LuaJIT: Boxed 64-bit signed integer: `int64_t`
 * `Word64.word`:
     * Lua 5.3 or later: Lua's native integer, assuming the width is 64-bit.
     * LuaJIT: Boxed 64-bit unsigned integer: `uint64_t`.
