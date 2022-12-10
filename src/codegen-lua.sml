@@ -140,7 +140,7 @@ val builtinsLuaJIT
                     ,(VId_Int_mul_bin, "__Int_mul")
                     ,(VId_Int_div_bin, "__Int_div")
                     ,(VId_Int_mod_bin, "__Int_mod")
-                    ,(VId_Int_quot_bin, "__Int_div")
+                    ,(VId_Int_quot_bin, "__Int_quot")
                     (* word *)
                     ,(VId_Word_add_bin, "__Word_add")
                     ,(VId_Word_sub_bin, "__Word_sub")
