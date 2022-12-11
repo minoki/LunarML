@@ -665,7 +665,7 @@ fun cookWordConstant (ctx, env : Env, span, value : IntInf.int, ty)
                                                                else
                                                                    let val (q, r) = IntInf.quotRem (x, 0xffffffff)
                                                                        val y = case q of
-                                                                                   1 => F.WordConstExp (0xffffffff, wordTy)
+                                                                                   1 => F.AppExp (fromWord, F.WordConstExp (0xffffffff, wordTy))
                                                                                  | _ => F.AppExp (TIMES, F.TupleExp [decompose q, F.AppExp (fromWord, F.WordConstExp (0xffffffff, wordTy))])
                                                                    in if r = 0 then
                                                                           y
