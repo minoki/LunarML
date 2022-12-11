@@ -49,6 +49,8 @@ _overload "Int" [Int8.int] { + = Int8.+
                            , > = Int8.>
                            , >= = Int8.>=
                            , fromInt = Int8.fromInt
+                           , minInt = ~0x80
+                           , maxInt = 0x7f
                            };
 
 structure Int16 :> INTEGER = struct
@@ -102,6 +104,8 @@ _overload "Int" [Int16.int] { + = Int16.+
                             , > = Int16.>
                             , >= = Int16.>=
                             , fromInt = Int16.fromInt
+                            , minInt = ~0x8000
+                            , maxInt = 0x7fff
                             };
 
 structure Int32 :> INTEGER = Int;
@@ -117,6 +121,8 @@ _overload "Int" [Int32.int] { + = Int32.+
                             , > = Int32.>
                             , >= = Int32.>=
                             , fromInt = Int32.fromInt
+                            , minInt = ~0x8000_0000
+                            , maxInt = 0x7fff_ffff
                             };
 
 structure Int64 :> INTEGER = struct
@@ -203,4 +209,6 @@ _overload "Int" [Int64.int] { + = Int64.+
                             , > = Int64.>
                             , >= = Int64.>=
                             , fromInt = Int64.fromInt
+                            , minInt = ~0x8000_0000_0000_0000
+                            , maxInt = 0x7fff_ffff_ffff_ffff
                             };

@@ -102,11 +102,15 @@ fun parse({ nextVId, languageOptions }, fixityEnv, name, lines, str)
 type Context = { typingContext : Typing.Context
                , toFContext : ToFSyntax.Context
                }
-fun newContext() : Context = let val typingContext = Typing.newContext()
-                             in { typingContext = typingContext
-                                , toFContext = typingContext
-                                }
-                             end
+fun newContext (targetInfo : TargetInfo.target_info) : Context
+    = let val typingContext as { nextVId, nextTyVar } = Typing.newContext()
+      in { typingContext = typingContext
+         , toFContext = { nextVId = nextVId
+                        , nextTyVar = nextTyVar
+                        , targetInfo = targetInfo
+                        }
+         }
+      end
 
 type Env = { fixity : Fixity.Env
            , typingEnv : Typing.Env

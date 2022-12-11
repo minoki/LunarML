@@ -37,6 +37,8 @@ _overload "Int" [bin] { + = Bin.+
                       , > = Bin.>
                       , >= = Bin.>=
                       , fromInt = Bin.fromInt
+                      , minInt = 0
+                      , maxInt = 1
                       }
 val () = print (Bin.toString (I + O) ^ "\n");
 val () = print (Bin.toString (I * O) ^ "\n");

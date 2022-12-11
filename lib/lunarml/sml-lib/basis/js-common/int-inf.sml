@@ -286,7 +286,7 @@ val op > = GT
 val op >= = GE
 end
 structure IntInf = IntInfImpl : INT_INF;
-_overload "Int" [IntInf.int]
+_overload "IntInf" [IntInf.int]
   { + = IntInf.+
   , - = IntInf.-
   , * = IntInf.*

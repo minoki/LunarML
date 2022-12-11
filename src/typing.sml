@@ -1710,6 +1710,18 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_fromWord) of
                        NONE => ()
                      | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, primTy_word, ty)))
+          val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_minInt) of
+                       NONE => ()
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_intInf))
+                     | SOME (_, _) => emitTypeError (ctx, [span], "overload: minInt must be literal")
+          val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxInt) of
+                       NONE => ()
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_intInf))
+                     | SOME (_, _) => emitTypeError (ctx, [span], "overload: maxInt must be literal")
+          val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_wordSize) of
+                       NONE => ()
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_int))
+                     | SOME (_, _) => emitTypeError (ctx, [span], "overload: wordSize must be literal")
           val attr = lookupTyNameInEnv (#context ctx, env, span, tyname)
           val attr = { arity = #arity attr
                      , admitsEquality = #admitsEquality attr

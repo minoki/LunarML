@@ -26,6 +26,7 @@ _overload "Word" [word] { + = Word.+
                         , > = Word.>
                         , >= = Word.>=
                         , fromWord = fromWord
+                        , wordSize = 64
                         };
 end
 

@@ -1069,7 +1069,7 @@ fun x > y = y < x
 fun x >= y = not (x < y)
 end
 structure IntInf :> INT_INF where type int = IntInfImpl.int = IntInfImpl;
-_overload "Int" [IntInf.int]
+_overload "IntInf" [IntInf.int]
   { + = IntInf.+
   , - = IntInf.-
   , * = IntInf.*

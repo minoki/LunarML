@@ -56,20 +56,29 @@ fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
 fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
                         in TextIO.inputAll ins before TextIO.closeIn ins
                         end
-fun getTargetInfo (opts : options) = (case #backend opts of
-                                          BACKEND_LUA _ => { wideChar = TargetInfo.CHAR8
-                                                           , datatypeTag = TargetInfo.STRING8
-                                                           }
-                                        | BACKEND_LUAJIT => { wideChar = TargetInfo.CHAR8
-                                                            , datatypeTag = TargetInfo.STRING8
-                                                            }
-                                        | BACKEND_JS => { wideChar = TargetInfo.CHAR16
-                                                        , datatypeTag = TargetInfo.STRING16
-                                                        }
-                                        | BACKEND_JS_CPS => { wideChar = TargetInfo.CHAR16
-                                                            , datatypeTag = TargetInfo.STRING16
-                                                            }
-                                     )
+fun getTargetInfo (opts : options) : TargetInfo.target_info
+    = (case #backend opts of
+           BACKEND_LUA _ => { datatypeTag = TargetInfo.STRING8
+                            , minInt = SOME ~0x8000000000000000
+                            , maxInt = SOME 0x7fffffffffffffff
+                            , wordSize = 64
+                            }
+         | BACKEND_LUAJIT => { datatypeTag = TargetInfo.STRING8
+                             , minInt = SOME ~0x80000000
+                             , maxInt = SOME 0x7fffffff
+                             , wordSize = 32
+                             }
+         | BACKEND_JS => { datatypeTag = TargetInfo.STRING16
+                         , minInt = SOME ~0x80000000
+                         , maxInt = SOME 0x7fffffff
+                         , wordSize = 32
+                         }
+         | BACKEND_JS_CPS => { datatypeTag = TargetInfo.STRING16
+                             , minInt = SOME ~0x80000000
+                             , maxInt = SOME 0x7fffffff
+                             , wordSize = 32
+                             }
+      )
 type context = { driverContext : Driver.Context
                , baseDir : string
                , pathMap : string MLBSyntax.StringMap.map
@@ -167,10 +176,11 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                                    ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
                                    ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
                                    ]
-          val ctx = { driverContext = Driver.newContext ()
+          val targetInfo = getTargetInfo opts
+          val ctx = { driverContext = Driver.newContext targetInfo
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap
-                    , targetInfo = getTargetInfo opts
+                    , targetInfo = targetInfo
                     }
           val (env, { tynameset, toFEnv, fdecs, cache }) = f ctx
           val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of

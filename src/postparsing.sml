@@ -424,62 +424,79 @@ and doDec(ctx, env, UnfixedSyntax.ValDec(span, tyvars, valbind)) = (emptyEnv, [S
                                                                    in (envWithFixityMap fixityMap, [])
                                                                    end
   | doDec(ctx, env, UnfixedSyntax.OverloadDec(span, class, longtycon, map))
-    = let val class = case class of
-                          "Int" => Syntax.CLASS_INT
-                        | "Word" => Syntax.CLASS_WORD
-                        | "Real" => Syntax.CLASS_REAL
-                        | "Char" => Syntax.CLASS_CHAR
-                        | "String" => Syntax.CLASS_STRING
+    = let val (class, keys) = case class of
+                                  "Int" => (Syntax.CLASS_INT, [("+", Syntax.OVERLOAD_PLUS)
+                                                              ,("-", Syntax.OVERLOAD_MINUS)
+                                                              ,("*", Syntax.OVERLOAD_TIMES)
+                                                              ,("div", Syntax.OVERLOAD_div)
+                                                              ,("mod", Syntax.OVERLOAD_mod)
+                                                              ,("abs", Syntax.OVERLOAD_abs)
+                                                              ,("~", Syntax.OVERLOAD_TILDE)
+                                                              ,("<", Syntax.OVERLOAD_LT)
+                                                              ,("<=", Syntax.OVERLOAD_LE)
+                                                              ,(">", Syntax.OVERLOAD_GT)
+                                                              ,(">=", Syntax.OVERLOAD_GE)
+                                                              ,("fromInt", Syntax.OVERLOAD_fromInt)
+                                                              ,("minInt", Syntax.OVERLOAD_minInt)
+                                                              ,("maxInt", Syntax.OVERLOAD_maxInt)
+                                                              ]
+                                           )
+                                | "IntInf" => (Syntax.CLASS_INT, [("+", Syntax.OVERLOAD_PLUS)
+                                                                 ,("-", Syntax.OVERLOAD_MINUS)
+                                                                 ,("*", Syntax.OVERLOAD_TIMES)
+                                                                 ,("div", Syntax.OVERLOAD_div)
+                                                                 ,("mod", Syntax.OVERLOAD_mod)
+                                                                 ,("abs", Syntax.OVERLOAD_abs)
+                                                                 ,("~", Syntax.OVERLOAD_TILDE)
+                                                                 ,("<", Syntax.OVERLOAD_LT)
+                                                                 ,("<=", Syntax.OVERLOAD_LE)
+                                                                 ,(">", Syntax.OVERLOAD_GT)
+                                                                 ,(">=", Syntax.OVERLOAD_GE)
+                                                                 ,("fromInt", Syntax.OVERLOAD_fromInt)
+                                                                 ]
+                                              )
+                        | "Word" => (Syntax.CLASS_WORD, [("+", Syntax.OVERLOAD_PLUS)
+                                                        ,("-", Syntax.OVERLOAD_MINUS)
+                                                        ,("*", Syntax.OVERLOAD_TIMES)
+                                                        ,("div", Syntax.OVERLOAD_div)
+                                                        ,("mod", Syntax.OVERLOAD_mod)
+                                                        ,("~", Syntax.OVERLOAD_TILDE)
+                                                        ,("<", Syntax.OVERLOAD_LT)
+                                                        ,("<=", Syntax.OVERLOAD_LE)
+                                                        ,(">", Syntax.OVERLOAD_GT)
+                                                        ,(">=", Syntax.OVERLOAD_GE)
+                                                        ,("fromWord", Syntax.OVERLOAD_fromWord)
+                                                        ,("wordSize", Syntax.OVERLOAD_wordSize)
+                                                        ]
+                                    )
+                        | "Real" => (Syntax.CLASS_REAL, [("+", Syntax.OVERLOAD_PLUS)
+                                                        ,("-", Syntax.OVERLOAD_MINUS)
+                                                        ,("*", Syntax.OVERLOAD_TIMES)
+                                                        ,("/", Syntax.OVERLOAD_DIVIDE)
+                                                        ,("abs", Syntax.OVERLOAD_abs)
+                                                        ,("~", Syntax.OVERLOAD_TILDE)
+                                                        ,("<", Syntax.OVERLOAD_LT)
+                                                        ,("<=", Syntax.OVERLOAD_LE)
+                                                        ,(">", Syntax.OVERLOAD_GT)
+                                                        ,(">=", Syntax.OVERLOAD_GE)
+                                                        ]
+                                    )
+                        | "Char" => (Syntax.CLASS_CHAR, [("<", Syntax.OVERLOAD_LT)
+                                                        ,("<=", Syntax.OVERLOAD_LE)
+                                                        ,(">", Syntax.OVERLOAD_GT)
+                                                        ,(">=", Syntax.OVERLOAD_GE)
+                                                        ]
+                                    )
+                        | "String" => (Syntax.CLASS_STRING, [("<", Syntax.OVERLOAD_LT)
+                                                            ,("<=", Syntax.OVERLOAD_LE)
+                                                            ,(">", Syntax.OVERLOAD_GT)
+                                                            ,(">=", Syntax.OVERLOAD_GE)
+                                                            ]
+                                      )
                         | _ => emitError(ctx, [span], "unknown overload class: " ^ class)
-          val keys = case class of
-                         Syntax.CLASS_INT => [("+", Syntax.OVERLOAD_PLUS)
-                                             ,("-", Syntax.OVERLOAD_MINUS)
-                                             ,("*", Syntax.OVERLOAD_TIMES)
-                                             ,("div", Syntax.OVERLOAD_div)
-                                             ,("mod", Syntax.OVERLOAD_mod)
-                                             ,("abs", Syntax.OVERLOAD_abs)
-                                             ,("~", Syntax.OVERLOAD_TILDE)
-                                             ,("<", Syntax.OVERLOAD_LT)
-                                             ,("<=", Syntax.OVERLOAD_LE)
-                                             ,(">", Syntax.OVERLOAD_GT)
-                                             ,(">=", Syntax.OVERLOAD_GE)
-                                             ,("fromInt", Syntax.OVERLOAD_fromInt)
-                                             ]
-                       | Syntax.CLASS_WORD => [("+", Syntax.OVERLOAD_PLUS)
-                                              ,("-", Syntax.OVERLOAD_MINUS)
-                                              ,("*", Syntax.OVERLOAD_TIMES)
-                                              ,("div", Syntax.OVERLOAD_div)
-                                              ,("mod", Syntax.OVERLOAD_mod)
-                                              ,("~", Syntax.OVERLOAD_TILDE)
-                                              ,("<", Syntax.OVERLOAD_LT)
-                                              ,("<=", Syntax.OVERLOAD_LE)
-                                              ,(">", Syntax.OVERLOAD_GT)
-                                              ,(">=", Syntax.OVERLOAD_GE)
-                                              ,("fromWord", Syntax.OVERLOAD_fromWord)
-                                              ]
-                       | Syntax.CLASS_REAL => [("+", Syntax.OVERLOAD_PLUS)
-                                              ,("-", Syntax.OVERLOAD_MINUS)
-                                              ,("*", Syntax.OVERLOAD_TIMES)
-                                              ,("/", Syntax.OVERLOAD_DIVIDE)
-                                              ,("abs", Syntax.OVERLOAD_abs)
-                                              ,("~", Syntax.OVERLOAD_TILDE)
-                                              ,("<", Syntax.OVERLOAD_LT)
-                                              ,("<=", Syntax.OVERLOAD_LE)
-                                              ,(">", Syntax.OVERLOAD_GT)
-                                              ,(">=", Syntax.OVERLOAD_GE)
-                                              ]
-                       | Syntax.CLASS_CHAR => [("<", Syntax.OVERLOAD_LT)
-                                              ,("<=", Syntax.OVERLOAD_LE)
-                                              ,(">", Syntax.OVERLOAD_GT)
-                                              ,(">=", Syntax.OVERLOAD_GE)
-                                              ]
-                       | Syntax.CLASS_STRING => [("<", Syntax.OVERLOAD_LT)
-                                                ,("<=", Syntax.OVERLOAD_LE)
-                                                ,(">", Syntax.OVERLOAD_GT)
-                                                ,(">=", Syntax.OVERLOAD_GE)
-                                                ]
           fun isSimpleExp (Syntax.VarExp _) = true
             | isSimpleExp (Syntax.TypedExp (_, exp, _)) = isSimpleExp exp
+            | isSimpleExp (Syntax.SConExp (_, Syntax.IntegerConstant _)) = true
             | isSimpleExp _ = false
           val (keys, map) = List.foldl (fn ((name, exp), (keys, map)) =>
                                            let val exp = doExp(ctx, env, exp)

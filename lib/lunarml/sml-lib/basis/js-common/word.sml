@@ -406,6 +406,7 @@ _overload "Word" [Word8.word] { + = Word8.+
                               , > = Word8.>
                               , >= = Word8.>=
                               , fromWord = WordImpl.wordToWord8
+                              , wordSize = 8
                               }
 _overload "Word" [Word16.word] { + = Word16.+
                                , - = Word16.-
@@ -418,6 +419,7 @@ _overload "Word" [Word16.word] { + = Word16.+
                                , > = Word16.>
                                , >= = Word16.>=
                                , fromWord = WordImpl.wordToWord16
+                               , wordSize = 16
                                }
 _overload "Word" [Word32.word] { + = Word32.+
                                , - = Word32.-
@@ -430,6 +432,7 @@ _overload "Word" [Word32.word] { + = Word32.+
                                , > = Word32.>
                                , >= = Word32.>=
                                , fromWord = WordImpl.wordToWord32
+                               , wordSize = 32
                                }
 _overload "Word" [Word64.word] { + = Word64.+
                                , - = Word64.-
@@ -442,6 +445,7 @@ _overload "Word" [Word64.word] { + = Word64.+
                                , > = Word64.>
                                , >= = Word64.>=
                                , fromWord = WordImpl.wordToWord64
+                               , wordSize = 64
                                }
 end
 

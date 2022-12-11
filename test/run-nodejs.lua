@@ -189,6 +189,10 @@ should_not_compile "should_not_compile/" {
   "invalid-bound-name1.sml",
   "invalid-bound-name2.sml",
   "flex-record.sml",
+  "int-constant.sml",
+  "int-constant-2.sml",
+  "word-constant.sml",
+  "word-constant-2.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",
