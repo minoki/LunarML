@@ -106,121 +106,92 @@ fun transform (ctx, env) exp { exnCont, resultHint } k = transformX (ctx, env) e
 and transformT (ctx, env) exp { exnCont } k = transformX (ctx, env) exp { exnCont = exnCont } (REIFIED k)
 and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont) : C.CExp
     = case exp of
-           F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, args) =>
-           if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'a prompt_tag *)
-                   val f = Vector.sub (args, 1) (* unit -> 'a *)
-               in reify (ctx, k)
-                        (fn kk =>
-                            transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
-                                      (fn p =>
-                                          transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                                    (fn f =>
-                                                        C.PushPrompt { promptTag = p
-                                                                     , f = f
-                                                                     , cont = C.Var kk
-                                                                     , exnCont = C.Var exnCont
-                                                                     }
-                                                    )
-                                      )
-                        )
-               end
-           else
-               raise Fail "DelimCont.pushPrompt: invalid number of arguments"
-         | F.PrimExp (F.PrimFnOp Primitives.DelimCont_withSubCont, tyargs, args) =>
-           if Vector.length args = 2 then
-               let val p = Vector.sub (args, 0) (* 'b prompt_tag *)
-                   val f = Vector.sub (args, 1) (* ('a,'b) subcont -> 'b *)
-               in reify (ctx, k)
-                        (fn kk =>
-                            transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
-                                      (fn p =>
-                                          transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                                    (fn f =>
-                                                        C.WithSubCont { promptTag = p
-                                                                      , f = f
-                                                                      , cont = C.Var kk
-                                                                      , exnCont = C.Var exnCont
-                                                                      }
-                                                    )
-                                      )
-                        )
-               end
-           else
-               raise Fail "DelimCont.withSubCont: invalid number of arguments"
-         | F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushSubCont, tyargs, args) =>
-           if Vector.length args = 2 then
-               let val subcont = Vector.sub (args, 0) (* ('a,'b) subcont *)
-                   val f = Vector.sub (args, 1) (* unit -> 'a *)
-               in reify (ctx, k)
-                        (fn kk =>
-                            transform (ctx, env) subcont { exnCont = exnCont, resultHint = NONE }
-                                      (fn subcont =>
-                                          transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                                    (fn f =>
-                                                        C.PushSubCont { subCont = subcont
-                                                                      , f = f
-                                                                      , cont = C.Var kk
-                                                                      , exnCont = C.Var exnCont
-                                                                      }
-                                                    )
-                                      )
-                        )
-               end
-           else
-               raise Fail "DelimCont.pushSubCont: invalid number of arguments"
-         | F.PrimExp (F.PrimFnOp Primitives.Unsafe_cast, tyargs, args) =>
-           if Vector.length args = 1 then
-               transformX (ctx, env) (Vector.sub (args, 0)) { exnCont = exnCont } k
-           else
-               raise Fail "Unsafe.cast: invalid number of arguments"
+           F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, [p (* 'a prompt_tag *), f (* unit -> 'a *)]) =>
+           reify (ctx, k)
+                 (fn kk =>
+                     transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
+                               (fn p =>
+                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                             (fn f =>
+                                                 C.PushPrompt { promptTag = p
+                                                              , f = f
+                                                              , cont = C.Var kk
+                                                              , exnCont = C.Var exnCont
+                                                              }
+                                             )
+                               )
+                 )
+         | F.PrimExp (F.PrimFnOp Primitives.DelimCont_withSubCont, tyargs, [p (* 'b prompt_tag *), f (* ('a,'b) subcont -> 'b *)]) =>
+           reify (ctx, k)
+                 (fn kk =>
+                     transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
+                               (fn p =>
+                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                             (fn f =>
+                                                 C.WithSubCont { promptTag = p
+                                                               , f = f
+                                                               , cont = C.Var kk
+                                                               , exnCont = C.Var exnCont
+                                                               }
+                                             )
+                               )
+                 )
+         | F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushSubCont, tyargs, [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]) =>
+           reify (ctx, k)
+                 (fn kk =>
+                     transform (ctx, env) subcont { exnCont = exnCont, resultHint = NONE }
+                               (fn subcont =>
+                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                             (fn f =>
+                                                 C.PushSubCont { subCont = subcont
+                                                               , f = f
+                                                               , cont = C.Var kk
+                                                               , exnCont = C.Var exnCont
+                                                               }
+                                             )
+                               )
+                 )
+         | F.PrimExp (F.PrimFnOp Primitives.Unsafe_cast, tyargs, [arg]) =>
+           transformX (ctx, env) arg { exnCont = exnCont } k
          | F.PrimExp (primOp, tyargs, args) =>
            mapCont (fn (e, cont) => transform (ctx, env) e { exnCont = exnCont, resultHint = NONE } cont)
-                   (Vector.foldr (op ::) [] args)
+                   args
                    (fn args =>
                        case primOp of
-                           F.IntConstOp x => if Vector.length tyargs = 1 then
-                                                 case Vector.sub (tyargs, 0) of
-                                                     F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
-                                                                       apply k (C.Int32Const (Int32.fromLarge x))
-                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
-                                                                       apply k (C.IntInfConst x)
+                           F.IntConstOp x => (case tyargs of
+                                                  [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
+                                                                      apply k (C.Int32Const (Int32.fromLarge x))
+                                                                  else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
+                                                                      apply k (C.IntInfConst x)
+                                                                  else
+                                                                      raise Fail "IntConstOp: invalid type"
+                                                | _ => raise Fail "IntConstOp: invalid type"
+                                             )
+                         | F.WordConstOp x => (case tyargs of
+                                                   [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
+                                                                       apply k (C.Word32Const (Word32.fromLargeInt x))
                                                                    else
-                                                                       raise Fail "IntConstOp: invalid type"
-                                                   | _ => raise Fail "IntConstOp: invalid type"
-                                             else
-                                                 raise Fail "IntConstOp: invalid number of type arguments"
-                         | F.WordConstOp x => if Vector.length tyargs = 1 then
-                                                  case Vector.sub (tyargs, 0) of
-                                                      F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
-                                                                        apply k (C.Word32Const (Word32.fromLargeInt x))
-                                                                    else
-                                                                        raise Fail "WordConstOp: invalid type"
-                                                    | _ => raise Fail "WordConstOp: invalid type"
-                                              else
-                                                  raise Fail "WordConstOp: invalid number of type arguments"
-                         | F.CharConstOp x => if Vector.length tyargs = 1 then
-                                                  case Vector.sub (tyargs, 0) of
-                                                      F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char) then
-                                                                        apply k (C.CharConst (Char.chr x))
-                                                                    else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char16) then
-                                                                        apply k (C.Char16Const x)
-                                                                    else
-                                                                        raise Fail "CharConstOp: invalid type"
-                                                    | _ => raise Fail "CharConstOp: invalid type"
-                                              else
-                                                  raise Fail "CharConstOp: invalid number of type arguments"
-                         | F.StringConstOp x => if Vector.length tyargs = 1 then
-                                                    case Vector.sub (tyargs, 0) of
-                                                        F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string) then
-                                                                          apply k (C.StringConst x)
-                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string16) then
-                                                                          apply k (C.String16Const x)
-                                                                      else
-                                                                          raise Fail "StringConstOp: invalid type"
-                                                      | _ => raise Fail "StringConstOp: invalid type"
-                                                else
-                                                    raise Fail "StringConstOp: invalid number of type arguments"
+                                                                       raise Fail "WordConstOp: invalid type"
+                                                 | _ => raise Fail "WordConstOp: invalid type"
+                                              )
+                         | F.CharConstOp x => (case tyargs of
+                                                   [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char) then
+                                                                       apply k (C.CharConst (Char.chr x))
+                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char16) then
+                                                                       apply k (C.Char16Const x)
+                                                                   else
+                                                                       raise Fail "CharConstOp: invalid type"
+                                                 | _ => raise Fail "CharConstOp: invalid type"
+                                              )
+                         | F.StringConstOp x => (case tyargs of
+                                                     [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string) then
+                                                                         apply k (C.StringConst x)
+                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string16) then
+                                                                         apply k (C.String16Const x)
+                                                                     else
+                                                                         raise Fail "StringConstOp: invalid type"
+                                                   | _ => raise Fail "StringConstOp: invalid type"
+                                                )
                          | _ => let val result = case k of
                                                      META (SOME r, _) => r
                                                    | _ => genSym ctx
@@ -241,7 +212,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                                      | F.ConstructExnOp => false
                                                      | F.ConstructExnWithPayloadOp => false
                                                      | F.PrimFnOp p => Primitives.mayRaise p
-                                in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = Vector.foldr (op ::) [] tyargs, args = args }
+                                in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
                                          , result = result
                                          , cont = apply k (C.Var result)
                                          , exnCont = if mayraise then SOME (C.Var exnCont) else NONE

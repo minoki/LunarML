@@ -26,7 +26,7 @@ fun isWildcardPat (F.WildcardPat _) = true
 fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec -> F.Dec, doDecs : F.Dec list -> F.Dec list }
     = let fun doExp exp0
               = (case exp0 of
-                     F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, Vector.map doExp args)
+                     F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, List.map doExp args)
                    | F.VarExp longvid => exp0
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, e) => (label, doExp e)) fields)
                    | F.LetExp (dec, exp) => F.LetExp (doDec dec, doExp exp)
@@ -106,39 +106,39 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = let val tag = #tag info
-                    val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
+                    val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                     val equalTag = case #datatypeTag (#targetInfo ctx) of
                                        TargetInfo.STRING8 => Primitives.String_EQUAL
                                      | TargetInfo.STRING16 => Primitives.String16_EQUAL
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (F.DataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
-                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, vector [], vector [exp])
+                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [exp])
                    | { representation = _, tag, ... } =>
                      let val equalTag = case #datatypeTag (#targetInfo ctx) of
                                             TargetInfo.STRING8 => Primitives.String_EQUAL
                                           | TargetInfo.STRING16 => Primitives.String16_EQUAL
-                     in F.PrimExp (F.PrimFnOp equalTag, vector [], vector [F.PrimExp (F.DataTagOp info, vector [], vector [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
+                     in F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (F.DataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
                      end
                 )
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = SOME (payloadTy, payloadPat) })
-              = let val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag]), payload)
+              = let val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, [payloadTy], [exp])) payloadTy payloadPat
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, [], [exp, tag]), payload)
                 end
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = NONE })
-              = F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, vector [], vector [exp, tag])
+              = F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, [], [exp, tag])
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
-              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.Vector_length, vector [elemTy], vector [exp])
+              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.Vector_length, [elemTy], [exp])
                     val intTy = F.TyCon ([], Typing.primTyName_int)
                     val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
-                                 F.PrimExp (F.PrimFnOp Primitives.Int_GE, vector [], vector [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimFnOp Primitives.Int_GE, [], [vectorLengthExp, expectedLengthExp])
                              else
-                                 F.PrimExp (F.PrimFnOp Primitives.Int_EQUAL, vector [], vector [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
+                                 F.PrimExp (F.PrimFnOp Primitives.Int_EQUAL, [], [vectorLengthExp, expectedLengthExp])
+                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                     in F.SimplifyingAndalsoExp (e, exp)
                                                     end
                                  ) e0 pats
@@ -155,15 +155,15 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
-                     { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, vector [payloadTy], vector [exp])) payloadTy payloadPat
-                   | _ => genBinders (F.PrimExp (F.DataPayloadOp info, vector [payloadTy], vector [exp])) payloadTy payloadPat
+                     { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
+                   | _ => genBinders (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                 )
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = NONE }) = []
-            | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = genBinders (F.PrimExp (F.ExnPayloadOp, vector [payloadTy], vector [exp])) payloadTy payloadPat
+            | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) = genBinders (F.PrimExp (F.ExnPayloadOp, [payloadTy], [exp])) payloadTy payloadPat
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
             | genBinders exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
-                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, vector [elemTy], vector [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
                                                                                end
           and isExhaustive (F.WildcardPat _) = true
             | isExhaustive (F.SConPat _) = false
@@ -185,7 +185,7 @@ end (* structure DesugarPatternMatches *)
 structure DecomposeValRec = struct
 structure F = FSyntax
 type Context = {}
-fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map doExp args)
+fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.map doExp args)
   | doExp (exp as F.VarExp _) = exp
   | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
   | doExp (F.LetExp (dec, exp)) = let val decs = doDec dec
@@ -350,7 +350,7 @@ fun run (ctx : Context) : { doTy : Env -> F.Ty -> F.Ty
                                                     ) (emptyEnv, []) pats
                 in (env', F.VectorPat (span, Vector.fromList pats, ellipsis, doTy env ty))
                 end
-          and doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, Vector.map (doTy env) tyargs, Vector.map (doExp env) args)
+          and doExp (env : Env) (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, List.map (doTy env) tyargs, List.map (doExp env) args)
             | doExp env (exp as F.VarExp vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                                      SOME vid => F.VarExp vid
                                                    | NONE => exp
@@ -453,7 +453,7 @@ datatype InlineExp = VarExp of TypedSyntax.VId
                    | FnExp of TypedSyntax.VId * F.Ty * F.Exp
                    | TyAbsExp of F.TyVar * F.Kind * InlineExp
                    | TyAppExp of InlineExp * F.Ty
-                   | PrimExp of F.PrimOp * F.Ty vector * InlineExp vector
+                   | PrimExp of F.PrimOp * F.Ty list * InlineExp list
 type Env = { valMap : InlineExp TypedSyntax.VIdMap.map }
 val emptyEnv : Env = { valMap = TypedSyntax.VIdMap.empty }
 fun freeVarsInPat (F.WildcardPat _) = TypedSyntax.VIdSet.empty
@@ -479,7 +479,7 @@ fun costOfExp (F.PrimExp (primOp, tyargs, args)) = (case primOp of
                                                       | F.ConstructValWithPayloadOp _ => 100 (* don't inline constructors *)
                                                       | F.ConstructExnOp => 100 (* don't inline constructors *)
                                                       | F.ConstructExnWithPayloadOp => 100 (* don't inline constructors *)
-                                                      | _ => Vector.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
+                                                      | _ => List.foldl (fn (exp, acc) => acc + costOfExp exp) 1 args
                                                    )
   | costOfExp (F.VarExp _) = 0
   | costOfExp (F.RecordExp fields) = List.foldl (fn ((label, exp), acc) => acc + costOfExp exp) 1 fields
@@ -513,7 +513,7 @@ fun substTyInInlineExp subst = let val { doTy, doExp, ... } = F.substTy subst
                                                                                  else
                                                                                      TyAbsExp (tv, kind, doInlineExp iexp)
                                      | doInlineExp (TyAppExp (iexp, ty)) = TyAppExp (doInlineExp iexp, doTy ty)
-                                     | doInlineExp (PrimExp (primOp, tys, exps)) = PrimExp (primOp, Vector.map doTy tys, Vector.map doInlineExp exps)
+                                     | doInlineExp (PrimExp (primOp, tys, exps)) = PrimExp (primOp, List.map doTy tys, List.map doInlineExp exps)
                                in doInlineExp
                                end
 fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
@@ -522,14 +522,14 @@ fun freeTyVarsInInlineExp (bound, VarExp _) acc = acc
   | freeTyVarsInInlineExp (bound, FnExp (vid, ty, exp)) acc = F.freeTyVarsInTy (bound, ty) (F.freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInInlineExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInInlineExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
   | freeTyVarsInInlineExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInInlineExp (bound, exp) (F.freeTyVarsInTy (bound, ty) acc)
-  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) acc = Vector.foldl (fn (ty, acc) => F.freeTyVarsInTy (bound, ty) acc) (Vector.foldl (fn (exp, acc) => freeTyVarsInInlineExp (bound, exp) acc) acc exps) tys
+  | freeTyVarsInInlineExp (bound, PrimExp (primOp, tys, exps)) acc = List.foldl (fn (ty, acc) => F.freeTyVarsInTy (bound, ty) acc) (List.foldl (fn (exp, acc) => freeTyVarsInInlineExp (bound, exp) acc) acc exps) tys
 fun uninlineExp (VarExp vid) = F.VarExp vid
   | uninlineExp (RecordExp map) = F.RecordExp (Syntax.LabelMap.foldli (fn (label, path, xs) => (label, uninlineExp path) :: xs) [] map)
   | uninlineExp (ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = uninlineExp record, fieldTypes = fieldTypes }
   | uninlineExp (FnExp (vid, ty, exp)) = F.FnExp (vid, ty, exp)
   | uninlineExp (TyAbsExp (tv, kind, iexp)) = F.TyAbsExp (tv, kind, uninlineExp iexp)
   | uninlineExp (TyAppExp (iexp, ty)) = F.TyAppExp (uninlineExp iexp, ty)
-  | uninlineExp (PrimExp (primOp, tys, exps)) = F.PrimExp (primOp, tys, Vector.map uninlineExp exps)
+  | uninlineExp (PrimExp (primOp, tys, exps)) = F.PrimExp (primOp, tys, List.map uninlineExp exps)
 fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                           , doDec : Env -> F.Dec -> (* modified environment *) Env * F.Dec
                           , doDecs : Env -> F.Dec list -> (* modified environment *) Env * F.Dec list
@@ -541,19 +541,19 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                     F.PrimFnOp Primitives.Unsafe_cast => true
                                                                                   | _ => false
                                                          in if shouldInline then
-                                                                let val (exps, iexps) = Vector.foldr (fn (exp, (exps, SOME iexps)) => (case doExp' env exp of
-                                                                                                                                           (exp', SOME iexp) => (exp :: exps, SOME (iexp :: iexps))
-                                                                                                                                         | (exp', NONE) => (exp :: exps, NONE)
-                                                                                                                                      )
-                                                                                                     | (exp, (exps, NONE)) => (doExp env exp :: exps, NONE)
-                                                                                                     ) ([], SOME []) args
-                                                                in (F.PrimExp (primOp, tyargs, Vector.fromList exps), case iexps of
-                                                                                                                          SOME iexps => SOME (PrimExp (primOp, tyargs, Vector.fromList iexps))
-                                                                                                                        | NONE => NONE
+                                                                let val (exps, iexps) = List.foldr (fn (exp, (exps, SOME iexps)) => (case doExp' env exp of
+                                                                                                                                         (exp', SOME iexp) => (exp :: exps, SOME (iexp :: iexps))
+                                                                                                                                       | (exp', NONE) => (exp :: exps, NONE)
+                                                                                                                                    )
+                                                                                                   | (exp, (exps, NONE)) => (doExp env exp :: exps, NONE)
+                                                                                                   ) ([], SOME []) args
+                                                                in (F.PrimExp (primOp, tyargs, exps), case iexps of
+                                                                                                          SOME iexps => SOME (PrimExp (primOp, tyargs, iexps))
+                                                                                                        | NONE => NONE
                                                                    )
                                                                 end
                                                             else
-                                                                (F.PrimExp (primOp, tyargs, Vector.map (doExp env) args), NONE)
+                                                                (F.PrimExp (primOp, tyargs, List.map (doExp env) args), NONE)
                                                          end
                    | F.VarExp vid => (case TypedSyntax.VIdMap.find (#valMap env, vid) of
                                           SOME (VarExp vid) => (F.VarExp vid, SOME (VarExp vid))
@@ -577,9 +577,9 @@ fun run (ctx : Context) : { doExp : Env -> F.Exp -> F.Exp
                                                                                           end
                                                    | _ => let val exp2 = doExp env exp2
                                                               val vectorFromListRule = case (exp1, exp2) of
-                                                                                           (F.TyAppExp (F.VarExp vid, ty1), F.PrimExp (F.ListOp, ty2, xs)) =>
-                                                                                           if vid = InitialEnv.VId_Vector_fromList andalso Vector.length ty2 = 1 then
-                                                                                               SOME (F.VectorExp (xs, Vector.sub (ty2, 0)), NONE)
+                                                                                           (F.TyAppExp (F.VarExp vid, ty1), F.PrimExp (F.ListOp, [ty2], xs)) =>
+                                                                                           if vid = InitialEnv.VId_Vector_fromList then
+                                                                                               SOME (F.VectorExp (Vector.fromList xs, ty2), NONE)
                                                                                            else
                                                                                                NONE
                                                                                          | _ => NONE
@@ -723,7 +723,7 @@ fun extractLet ctx (F.LetExp (dec, exp)) = let val (decs, exp) = extractLet ctx 
                                           in (decs, F.RecordExp fields)
                                           end
   | extractLet ctx exp = ([], exp)
-fun doExp ctx (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, Vector.map (doExp ctx) args)
+fun doExp ctx (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.map (doExp ctx) args)
   | doExp ctx (exp as F.VarExp _) = exp
   | doExp ctx (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp ctx exp)) fields)
   | doExp ctx (F.LetExp (dec, exp2)) = F.LetExp (doDec ctx dec, doExp ctx exp2)
@@ -791,7 +791,7 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.ConstructExnWithPayloadOp = true
   | isDiscardablePrimOp (F.PrimFnOp Primitives.Exception_instanceof) = true
   | isDiscardablePrimOp (F.PrimFnOp _) = false
-fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso Vector.all isDiscardable args
+fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso List.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
@@ -818,8 +818,8 @@ fun doPat (F.WildcardPat _) acc = acc
   | doPat (F.VectorPat (_, pats, ellipsis, elemTy)) acc = Vector.foldl (fn (pat, acc) => doPat pat acc) acc pats
 (* doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp *)
 and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.set * F.Exp
-    = let val (acc, args') = Vector.foldr (fn (x, (acc, xs)) => let val (acc, x) = doExp x acc in (acc, x :: xs) end) (acc, []) args
-      in (acc, F.PrimExp (primOp, tyargs, Vector.fromList args'))
+    = let val (acc, args') = List.foldr (fn (x, (acc, xs)) => let val (acc, x) = doExp x acc in (acc, x :: xs) end) (acc, []) args
+      in (acc, F.PrimExp (primOp, tyargs, args'))
       end
   | doExp (exp as F.VarExp vid) acc = (TypedSyntax.VIdSet.add (acc, vid), exp)
   | doExp (F.RecordExp fields) acc = let val (acc, fields) = List.foldr (fn ((label, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (label, exp) :: xs) end) (acc, []) fields
@@ -871,7 +871,7 @@ and doIgnoredExpAsExp exp acc = let val (used, exps) = doIgnoredExp exp acc
 (* doIgnoredExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp list *)
 and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
     = if isDiscardablePrimOp primOp then
-          Vector.foldr (fn (x, (acc, xs)) => let val (acc, ys) = doIgnoredExp x acc in (acc, ys @ xs) end) (acc, []) args
+          List.foldr (fn (x, (acc, xs)) => let val (acc, ys) = doIgnoredExp x acc in (acc, ys @ xs) end) (acc, []) args
       else
           let val (used, exp) = doExp exp acc
           in (used, [exp])

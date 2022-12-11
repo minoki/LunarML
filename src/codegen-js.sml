@@ -169,76 +169,65 @@ and putImpureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SO
                                                        in cont (stmts @ [ J.VarStat (vector [(dest, SOME exp)]) ], env, J.VarExp (J.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : J.Stat list * Env * J.Exp -> J.Stat list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
-    = if Vector.length xs = 0 andalso Vector.length tys = 1 then
-          case Vector.sub (tys, 0) of
-              F.TyVar tv => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
-                                                 ""
-                                             else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
-                                                 "n"
-                                             else
-                                                 raise CodeGenError "PrimExp.IntConstOp: invalid type"
-                                val exp = if x < 0 then
-                                              J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ suffix)))
-                                          else
-                                              J.ConstExp (J.Numeral (LargeInt.toString x ^ suffix))
-                            in putPureTo ctx env dest ([], exp)
-                            end
-           | _ => raise CodeGenError "PrimExp.IntConstOp: invalid type"
-      else
-          raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, xs)) dest
-    = if Vector.length xs = 0 then
-          let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-          in putPureTo ctx env dest ([], exp)
-          end
-      else
-          raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, xs)) dest
-    = if Vector.length xs = 0 then
-          let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
-                            (* JavaScript does not support hexadecimal floating-point literals *)
-                        in case y of
-                               SOME z => if Numeric.Notation.isNegative z then
-                                             J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs z))))
+and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
+    = (case tys of
+           [F.TyVar tv] => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
+                                                ""
+                                            else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
+                                                "n"
+                                            else
+                                                raise CodeGenError "PrimExp.IntConstOp: invalid type"
+                               val exp = if x < 0 then
+                                             J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ suffix)))
                                          else
-                                             J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
-                             | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
-                        end
-          in putPureTo ctx env dest ([], exp)
-          end
-      else
-          raise CodeGenError "PrimExp.RealConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, tys, xs)) dest
-    = if Vector.length xs = 0 andalso Vector.length tys = 1 then
-          let val ty = Vector.sub (tys, 0)
-              val exp = case ty of
-                            F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_string then
-                                              J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
-                                          else if tv = F.tyNameToTyVar Typing.primTyName_string16 then
-                                              J.ConstExp (J.WideString x)
-                                          else
-                                              raise CodeGenError "PrimExp.StringConstOp: invalid type"
-                          | _ => raise CodeGenError "PrimExp.StringConstOp: invalid type"
-          in putPureTo ctx env dest ([], exp)
-          end
-      else
-          raise CodeGenError "PrimExp.StringConstOp: invalid argument"
-  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, tys, xs)) dest
-    = if Vector.length xs = 0 andalso Vector.length tys = 1 then
-          let val ty = Vector.sub (tys, 0)
-              val exp = case ty of
-                            F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_char then
-                                              J.ConstExp (J.Numeral (Int.toString x))
-                                          else if tv = F.tyNameToTyVar Typing.primTyName_char16 then
-                                              J.ConstExp (J.WideString (vector [x]))
-                                          else
-                                              raise CodeGenError "PrimExp.CharConstOp: invalid type"
-                          | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
-          in putPureTo ctx env dest ([], exp)
-          end
-      else
-          raise CodeGenError "PrimExp.StringConstOp: invalid argument"
+                                             J.ConstExp (J.Numeral (LargeInt.toString x ^ suffix))
+                           in putPureTo ctx env dest ([], exp)
+                           end
+         | _ => raise CodeGenError "PrimExp.IntConstOp: invalid type"
+      )
+  | doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, _)) dest = raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, [])) dest
+    = let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+      in putPureTo ctx env dest ([], exp)
+      end
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, _)) dest = raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, [])) dest
+    = let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
+                        (* JavaScript does not support hexadecimal floating-point literals *)
+                    in case y of
+                           SOME z => if Numeric.Notation.isNegative z then
+                                         J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs z))))
+                                     else
+                                         J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
+                         | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
+                    end
+      in putPureTo ctx env dest ([], exp)
+      end
+  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, _)) dest = raise CodeGenError "PrimExp.RealConstOp: non-empty argument"
+  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, tys, [])) dest
+    = let val exp = case tys of
+                        [F.TyVar tv] => if tv = F.tyNameToTyVar Typing.primTyName_string then
+                                            J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
+                                        else if tv = F.tyNameToTyVar Typing.primTyName_string16 then
+                                            J.ConstExp (J.WideString x)
+                                        else
+                                            raise CodeGenError "PrimExp.StringConstOp: invalid type"
+                      | _ => raise CodeGenError "PrimExp.StringConstOp: invalid type"
+      in putPureTo ctx env dest ([], exp)
+      end
+  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, _, _)) dest = raise CodeGenError "PrimExp.StringConstOp: invalid argument"
+  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, tys, [])) dest
+    = let val exp = case tys of
+                        [F.TyVar tv] => if tv = F.tyNameToTyVar Typing.primTyName_char then
+                                            J.ConstExp (J.Numeral (Int.toString x))
+                                        else if tv = F.tyNameToTyVar Typing.primTyName_char16 then
+                                            J.ConstExp (J.WideString (vector [x]))
+                                        else
+                                            raise CodeGenError "PrimExp.CharConstOp: invalid type"
+                      | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
+      in putPureTo ctx env dest ([], exp)
+      end
+  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, tys, xs)) dest = raise CodeGenError "PrimExp.StringConstOp: invalid argument"
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToJs vid of
                                                                           J.PredefinedId "null" => J.ConstExp J.Null
                                                                         | J.PredefinedId "false" => J.ConstExp J.False
@@ -277,7 +266,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                   SOME (fn () => doExpCont ctx env f
                                                            (fn (stmts1, env, f) =>
                                                                mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                       (Vector.foldr (op ::) [] xs)
+                                                                       xs
                                                                        (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                      val zs = Vector.map #2 (vector ys)
                                                                                  in putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (f, zs))
@@ -289,14 +278,14 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                   NONE
                             | _ => NONE
           val doJsMethod = case (exp1, exp2) of
-                               (F.AppExp (F.VarExp vid_jsmethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp(F.VectorOp, _, xs)) =>
+                               (F.AppExp (F.VarExp vid_jsmethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp (F.VectorOp, _, xs)) =>
                                 (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
                                      SOME method =>
                                      if TypedSyntax.eqVId (vid_jsmethod, InitialEnv.VId_JavaScript_method) andalso JsWriter.isIdentifier method then
                                          SOME (fn () => doExpCont ctx env self
                                                                   (fn (stmts1, env, self) =>
                                                                       mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                              (Vector.foldr (op ::) [] xs)
+                                                                              xs
                                                                               (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                                                                                             val zs = Vector.map #2 (vector ys)
                                                                                         in putImpureTo ctx env dest (stmts1 @ stmts2, J.MethodExp (self, method, zs))
@@ -350,16 +339,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                 in [ J.TryCatchStat (vector (doExpTo ctx (increaseLevel env) body dest), exnName, vector (doExpTo ctx (increaseLevel env') handler dest)) ]
                 end
       )
-  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, xs)) dest
-    = if Vector.length xs = 1 then
-          let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp
-                       (fn (stmts, env, exp) =>
-                           stmts @ [ J.ThrowStat exp ] (* TODO: location information *)
-                       )
-          end
-      else
-          raise CodeGenError "PrimExp.RaiseOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, [exp])) dest
+    = doExpCont ctx env exp
+                (fn (stmts, env, exp) =>
+                    stmts @ [ J.ThrowStat exp ] (* TODO: location information *)
+                )
+  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, xs)) dest = raise CodeGenError "PrimExp.RaiseOp: invalid number of arguments"
   | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
     = doExpCont ctx env exp1
                 (fn (stmts1, env, exp1') =>
@@ -440,71 +425,53 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                                                                         in putPureTo ctx env dest (stmts, J.IndexExp (record', label))
                                                                                                         end
                                                                                                     )
+  | doExpTo ctx env (F.PrimExp (F.ListOp, _, [])) dest
+    = putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "_nil"))
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
-    = if Vector.length xs = 0 then
-          putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "_nil"))
-      else
-          mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                  (Vector.foldr (op ::) [] xs)
-                  (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                            in putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map #2 (vector ys))]))
-                            end
-                  )
+    = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+              xs
+              (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
+                        in putPureTo ctx env dest (stmts, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map #2 (vector ys))]))
+                        end
+              )
   | doExpTo ctx env (F.PrimExp (F.VectorOp, _, xs)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-              (Vector.foldr (op ::) [] xs)
+              xs
               (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
                         in putPureTo ctx env dest (stmts, J.ArrayExp (Vector.map #2 (vector ys)))
                         end
               )
   | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, xs)) dest
-    = if Vector.length xs = 1 then
-          let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "tag"))))
-          end
-      else
-          raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, xs)) dest
-    = if Vector.length xs = 1 then
-          let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
-          end
-      else
-          raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, xs)) dest
-    = if Vector.length xs = 1 then
-          let val exp = Vector.sub (xs, 0)
-          in doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
-          end
-      else
-          raise CodeGenError "PrimExp.ExnPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, [exp])) dest
+    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "tag"))))
+  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, _)) dest = raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, [exp])) dest
+    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
+  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, _)) dest = raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, [exp])) dest
+    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
+  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, _)) dest = raise CodeGenError "PrimExp.ExnPayloadOp: invalid number of arguments"
   | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.PrimExp (F.PrimFnOp primOp, _, args)) dest
-    = let fun doUnary cont = if Vector.length args = 1 then
-                                 let val a = Vector.sub (args, 0)
-                                 in doExpCont ctx env a cont
-                                 end
-                             else
-                                 raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+    = let fun doUnary cont = case args of
+                                 [a] => doExpCont ctx env a cont
+                               | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
           fun doUnaryExp (f, pure) = doUnary (fn (stmts, env, a) =>
                                                  if pure then
                                                      putPureTo ctx env dest (stmts, f a)
                                                  else
                                                      putImpureTo ctx env dest (stmts, f a)
                                              )
-          fun doBinary cont = if Vector.length args = 2 then
-                                  let val a = Vector.sub (args, 0)
-                                      val b = Vector.sub (args, 1)
-                                  in doExpCont ctx env a (fn (stmts0, env, a) =>
-                                                             doExpCont ctx env b (fn (stmts1, env, b) =>
-                                                                                     cont (stmts0 @ stmts1, env, (a, b))
-                                                                                 )
-                                                         )
-                                  end
-                              else
-                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+          fun doBinary cont = case args of
+                                  [a, b] => doExpCont ctx env a
+                                                      (fn (stmts0, env, a) =>
+                                                          doExpCont ctx env b
+                                                                    (fn (stmts1, env, b) =>
+                                                                        cont (stmts0 @ stmts1, env, (a, b))
+                                                                    )
+                                                      )
+                                | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
           fun doBinaryExp (f, pure) = doBinary (fn (stmts, env, (a, b)) =>
                                                    if pure then
                                                        putPureTo ctx env dest (stmts, f (a, b))
@@ -512,20 +479,18 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                        putImpureTo ctx env dest (stmts, f (a, b))
                                                )
           fun doBinaryOp (binop, pure) = doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
-          fun doTernary cont = if Vector.length args = 3 then
-                                  let val a = Vector.sub (args, 0)
-                                      val b = Vector.sub (args, 1)
-                                      val c = Vector.sub (args, 2)
-                                  in doExpCont ctx env a (fn (stmts0, env, a) =>
-                                                             doExpCont ctx env b (fn (stmts1, env, b) =>
-                                                                                     doExpCont ctx env c (fn (stmts2, env, c) =>
-                                                                                                             cont (stmts0 @ stmts1 @ stmts2, env, (a, b, c))
-                                                                                                         )
-                                                                                 )
-                                                         )
-                                  end
-                              else
-                                  raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+          fun doTernary cont = case args of
+                                   [a, b, c] => doExpCont ctx env a
+                                                          (fn (stmts0, env, a) =>
+                                                              doExpCont ctx env b
+                                                                        (fn (stmts1, env, b) =>
+                                                                            doExpCont ctx env c
+                                                                                      (fn (stmts2, env, c) =>
+                                                                                          cont (stmts0 @ stmts1 @ stmts2, env, (a, b, c))
+                                                                                      )
+                                                                        )
+                                                          )
+                                 | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
           fun doTernaryExp (f, pure) = doTernary (fn (stmts, env, (a, b, c)) =>
                                                      if pure then
                                                          putPureTo ctx env dest (stmts, f (a, b, c))
@@ -534,23 +499,22 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
                                                  )
       in case primOp of
              Primitives.call2 => doTernaryExp (fn (f, a0, a1) => J.CallExp (f, vector [a0, a1]), false)
-           | Primitives.call3 => if Vector.length args = 4 then
-                                     let val f = Vector.sub (args, 0)
-                                         val a0 = Vector.sub (args, 1)
-                                         val a1 = Vector.sub (args, 2)
-                                         val a2 = Vector.sub (args, 3)
-                                     in doExpCont ctx env f (fn (stmts0, env, f) =>
-                                                                doExpCont ctx env a0 (fn (stmts1, env, a0) =>
-                                                                                         doExpCont ctx env a1 (fn (stmts2, env, a1) =>
-                                                                                                                  doExpCont ctx env a2 (fn (stmts3, env, a2) =>
-                                                                                                                                           putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, J.CallExp (f, vector [a0, a1, a2]))
-                                                                                                                                       )
-                                                                                                              )
-                                                                                     )
-                                                            )
-                                     end
-                                 else
-                                     raise CodeGenError "primop call3: invalid number of arguments"
+           | Primitives.call3 => (case args of
+                                      [f, a0, a1, a2] => doExpCont ctx env f
+                                                                   (fn (stmts0, env, f) =>
+                                                                       doExpCont ctx env a0
+                                                                                 (fn (stmts1, env, a0) =>
+                                                                                     doExpCont ctx env a1
+                                                                                               (fn (stmts2, env, a1) =>
+                                                                                                   doExpCont ctx env a2
+                                                                                                             (fn (stmts3, env, a2) =>
+                                                                                                                 putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, J.CallExp (f, vector [a0, a1, a2]))
+                                                                                                             )
+                                                                                               )
+                                                                                 )
+                                                                   )
+                                    | _ => raise CodeGenError "primop call3: invalid number of arguments"
+                                 )
            | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                 (* REPRESENTATION_OF_REF *)
@@ -606,10 +570,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.String16_GE => doBinaryOp (J.GE, true)
            | Primitives.String16_HAT => doBinaryOp (J.PLUS, true)
            | Primitives.String16_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
-           | Primitives.String16_str => if Vector.length args = 1 then
-                                            doExpTo ctx env (Vector.sub (args, 0)) dest
-                                        else
-                                            raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.String16_str => (case args of
+                                             [a] => doExpTo ctx env a dest
+                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+                                        )
            | Primitives.IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.IntInf_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.IntInf_MINUS => doBinaryOp (J.MINUS, true)
@@ -629,10 +593,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
            | Primitives.Vector_unsafeFromListRevN => doBinaryExp (fn (n, xs) => J.CallExp (J.VarExp (J.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), true)
            | Primitives.Array_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Array_length => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
-           | Primitives.Unsafe_cast => if Vector.length args = 1 then
-                                           doExpTo ctx env (Vector.sub (args, 0)) dest
-                                       else
-                                           raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+           | Primitives.Unsafe_cast => (case args of
+                                            [a] => doExpTo ctx env a dest
+                                          | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+                                       )
            | Primitives.Unsafe_Vector_sub => doBinaryExp (fn (vec, i) => J.IndexExp (vec, i), true)
            | Primitives.Unsafe_Array_sub => doBinaryExp (fn (arr, i) => J.IndexExp (arr, i), false)
            | Primitives.Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
@@ -676,37 +640,25 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, xs)) dest : J.Stat list
     = let val tag = #tag info
       in putPureTo ctx env dest ([], J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))]))
       end
-  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, args)) dest
-    = if Vector.length args = 1 then
-          let val tag = #tag info
-              val payload = Vector.sub (args, 0)
-          in doExpCont ctx env payload (fn (stmts, env, payload) =>
-                                           putPureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)]))
-                                       )
-          end
-      else
-          raise CodeGenError "ConstructValWithPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, args)) dest
-    = if Vector.length args = 1 then
-          let val tag = Vector.sub (args, 0)
-          in doExpCont ctx env tag (fn (stmts, env, tag) =>
-                                       putPureTo ctx env dest (stmts, J.NewExp (tag, vector []))
+  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, [payload])) dest
+    = let val tag = #tag info
+      in doExpCont ctx env payload (fn (stmts, env, payload) =>
+                                       putPureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)]))
                                    )
-          end
-      else
-          raise CodeGenError "ConstructExnOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, args)) dest
-    = if Vector.length args = 2 then
-          let val tag = Vector.sub (args, 0)
-              val payload = Vector.sub (args, 1)
-          in doExpCont ctx env tag (fn (stmts0, env, tag) =>
-                                       doExpCont ctx env payload (fn (stmts1, env, payload) =>
-                                                                     putPureTo ctx env dest (stmts0 @ stmts1, J.NewExp (tag, vector [payload]))
-                                                                 )
-                                   )
-          end
-      else
-          raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
+      end
+  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, _)) dest = raise CodeGenError "ConstructValWithPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, [tag])) dest
+    = doExpCont ctx env tag (fn (stmts, env, tag) =>
+                                putPureTo ctx env dest (stmts, J.NewExp (tag, vector []))
+                            )
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, _)) dest = raise CodeGenError "ConstructExnOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, [tag, payload])) dest
+    = doExpCont ctx env tag (fn (stmts0, env, tag) =>
+                                doExpCont ctx env payload (fn (stmts1, env, payload) =>
+                                                              putPureTo ctx env dest (stmts0 @ stmts1, J.NewExp (tag, vector [payload]))
+                                                          )
+                            )
+  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, _)) dest = raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
 (* doDec : Context -> Env -> F.Dec -> J.Stat list *)
 and doDec ctx env (F.ValDec (vid, _, exp)) : J.Stat list
     = if isHoisted (env, vid) then

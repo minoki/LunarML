@@ -46,7 +46,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | ExnConPat of { sourceSpan : SourcePos.span, tagPath : Exp, payload : (Ty * Pat) option }
              | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
              | VectorPat of SourcePos.span * Pat vector * bool * Ty
-     and Exp = PrimExp of PrimOp * Ty vector * Exp vector
+     and Exp = PrimExp of PrimOp * Ty list * Exp list
              | VarExp of TypedSyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
              | LetExp of Dec * Exp
@@ -74,11 +74,11 @@ datatype Pat = WildcardPat of SourcePos.span
 fun ValueLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid)
 fun StructLabel (Syntax.MkStrId name) = Syntax.IdentifierLabel ("_" ^ name)
 fun ExnTagLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag")
-fun IntConstExp (value, ty) = PrimExp (IntConstOp value, vector [ty], vector [])
-fun WordConstExp (value, ty) = PrimExp (WordConstOp value, vector [ty], vector [])
-fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp span, vector [ty], vector [exp])
-fun ListExp (exps, elemTy) = PrimExp (ListOp, vector [elemTy], exps)
-fun VectorExp (exps, elemTy) = PrimExp (VectorOp, vector [elemTy], exps)
+fun IntConstExp (value, ty) = PrimExp (IntConstOp value, [ty], [])
+fun WordConstExp (value, ty) = PrimExp (WordConstOp value, [ty], [])
+fun RaiseExp (span, ty, exp) = PrimExp (RaiseOp span, [ty], [exp])
+fun ListExp (exps, elemTy) = PrimExp (ListOp, [elemTy], Vector.foldr (op ::) [] exps)
+fun VectorExp (exps, elemTy) = PrimExp (VectorOp, [elemTy], Vector.foldr (op ::) [] exps)
 fun TupleType xs = let fun doFields i [] acc = acc
                          | doFields i (x :: xs) acc = doFields (i + 1) xs (Syntax.LabelMap.insert (acc, Syntax.NumericLabel i, x))
                    in RecordType (doFields 1 xs Syntax.LabelMap.empty)
@@ -98,7 +98,7 @@ fun AsciiStringAsDatatypeTag (targetInfo : TargetInfo.target_info, s : string)
     = let val ty = case #datatypeTag targetInfo of
                        TargetInfo.STRING8 => TyCon ([], Typing.primTyName_string)
                      | TargetInfo.STRING16 => TyCon ([], Typing.primTyName_string16)
-      in PrimExp (StringConstOp (StringElement.encodeAscii s), vector [ty], vector [])
+      in PrimExp (StringConstOp (StringElement.encodeAscii s), [ty], [])
       end
 fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
 fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(InitialEnv.VId_false))
@@ -210,7 +210,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doPat (ExnConPat { sourceSpan, tagPath, payload }) = ExnConPat { sourceSpan = sourceSpan, tagPath = doExp tagPath, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload }
           | doPat (LayeredPat (span, vid, ty, pat)) = LayeredPat (span, vid, doTy ty, doPat pat)
           | doPat (VectorPat (span, pats, ellipsis, elemTy)) = VectorPat (span, Vector.map doPat pats, ellipsis, doTy elemTy)
-        and doExp (PrimExp (primOp, tyargs, args)) = PrimExp (primOp, Vector.map doTy tyargs, Vector.map doExp args)
+        and doExp (PrimExp (primOp, tyargs, args)) = PrimExp (primOp, List.map doTy tyargs, List.map doExp args)
           | doExp (exp as VarExp _) = exp
           | doExp (RecordExp fields) = RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
           | doExp (LetExp (dec, exp)) = LetExp (doDec dec, doExp exp)
@@ -268,8 +268,8 @@ fun freeTyVarsInPat (bound, WildcardPat _) acc = acc
   | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInPat (bound, payloadPat) (freeTyVarsInExp (bound, tagPath) acc))
   | freeTyVarsInPat (bound, LayeredPat (_, _, ty, innerPat)) acc = freeTyVarsInTy (bound, ty) (freeTyVarsInPat (bound, innerPat) acc)
   | freeTyVarsInPat (bound, VectorPat (_, pats, ellipsis, elemTy)) acc = Vector.foldr (fn (pat, acc) => freeTyVarsInPat (bound, pat) acc) (freeTyVarsInTy (bound, elemTy) acc) pats
-and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, args)) acc = let val acc = Vector.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc tyargs
-                                                                                             in Vector.foldl (fn (exp, acc) => freeTyVarsInExp (bound, exp) acc) acc args
+and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, args)) acc = let val acc = List.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc tyargs
+                                                                                             in List.foldl (fn (exp, acc) => freeTyVarsInExp (bound, exp) acc) acc args
                                                                                              end
   | freeTyVarsInExp (bound, VarExp _) acc = acc
   | freeTyVarsInExp (bound, RecordExp fields) acc = List.foldl (fn ((label, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc fields
@@ -340,7 +340,7 @@ fun freeVarsInPat (bound : TypedSyntax.VIdSet.set, WildcardPat _) acc = acc
   | freeVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath, payload = SOME (_, payloadPat) }) acc = freeVarsInExp (bound, tagPath) (freeVarsInPat (bound, payloadPat) acc)
   | freeVarsInPat (bound, LayeredPat (_, _, _, innerPat)) acc = freeVarsInPat (bound, innerPat) acc
   | freeVarsInPat (bound, VectorPat (_, pats, _, _)) acc = Vector.foldl (fn (pat, acc) => freeVarsInPat (bound, pat) acc) acc pats
-and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) acc = Vector.foldl (fn (exp, acc) => freeVarsInExp (bound, exp) acc) acc args
+and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args)) acc = List.foldl (fn (exp, acc) => freeVarsInExp (bound, exp) acc) acc args
   | freeVarsInExp (bound, VarExp vid) acc = if TypedSyntax.VIdSet.member (bound, vid) then
                                                 acc
                                             else
@@ -414,7 +414,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
       )
   | print_Pat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) fields ^ ",SOME(" ^ print_Pat basePat ^ "))"
   | print_Pat (VectorPat _) = "VectorPat"
-and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Ty x :: xs) [] tyargs) ^ "," ^ String.concatWith "," (Vector.foldr (fn (x, xs) => print_Exp x :: xs) [] args) ^ ")"
+and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (List.map print_Ty tyargs) ^ "," ^ String.concatWith "," (List.map print_Exp args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
   | print_Exp (RecordExp x) = (case Syntax.extractTuple (1, x) of
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
@@ -680,12 +680,12 @@ fun cookCharacterConstant (ctx, env : Env, span, value : int, ty)
     = (case ty of
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_char) then
                                          if 0 <= value andalso value <= 255 then
-                                             F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+                                             F.PrimExp (F.CharConstOp value, [toFTy (ctx, env, ty)], [])
                                          else
                                              raise Fail "invalid character constant: out of range"
                                      else if T.eqTyName (tycon, Typing.primTyName_char16) then
                                          if 0 <= value andalso value <= 0xffff then
-                                             F.PrimExp (F.CharConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+                                             F.PrimExp (F.CharConstOp value, [toFTy (ctx, env, ty)], [])
                                          else
                                              raise Fail "invalid character constant: out of range"
                                      else
@@ -697,12 +697,12 @@ fun cookStringConstant (ctx, env : Env, span, value, ty)
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_string) then
                                          let val cooked = StringElement.encode8bit value
                                                           handle Chr => raise Fail "invalid string constant: out of range"
-                                         in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])
+                                         in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_string16) then
                                          let val cooked = StringElement.encode16bit value
                                                           handle Chr => raise Fail "invalid string constant: out of range"
-                                         in F.PrimExp (F.StringConstOp cooked, vector [toFTy (ctx, env, ty)], vector [])
+                                         in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
                                          end
                                      else
                                          raise Fail "invalid string constant: type"
@@ -782,7 +782,7 @@ fun toFPat (ctx, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.empty, F.W
       end
 and toFExp (ctx, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
-  | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = F.PrimExp (F.RealConstOp value, vector [toFTy (ctx, env, ty)], vector [])
+  | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = F.PrimExp (F.RealConstOp value, [toFTy (ctx, env, ty)], [])
   | toFExp (ctx, env, T.SConExp (span, Syntax.StringConstant value, ty)) = cookStringConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.CharacterConstant value, ty)) = cookCharacterConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.VarExp (span, longvid as TypedSyntax.MkShortVId vid, _, [(tyarg, cts)]))
@@ -905,7 +905,7 @@ and toFExp (ctx, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) 
                                                                               end
                                                                           else
                                                                               raise Fail ("invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
-  | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimFnOp primOp, Vector.map (fn ty => toFTy (ctx, env, ty)) tyargs, Vector.map (fn x => toFExp (ctx, env, x)) args)
+  | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimFnOp primOp, Vector.foldr (fn (ty, xs) => toFTy (ctx, env, ty) :: xs) [] tyargs, Vector.foldr (fn (x, xs) => toFExp (ctx, env, x) :: xs) [] args)
 and doValBind ctx env (T.TupleBind (span, vars, exp))
     = let val tupleVId = freshVId (ctx, "tmp")
           val exp = toFExp (ctx, env, exp)
@@ -1054,11 +1054,11 @@ and toFDecs (ctx, env, []) = (env, [])
                                             let val baseTy = F.TyCon (List.map F.TyVar tyvars, tycon)
                                             in List.foldr (fn (T.ConBind (span, vid, optPayload, info), acc) =>
                                                               let val (ty, exp) = case optPayload of
-                                                                                      NONE => (baseTy, F.PrimExp (F.ConstructValOp info, vector [baseTy], vector []))
+                                                                                      NONE => (baseTy, F.PrimExp (F.ConstructValOp info, [baseTy], []))
                                                                                     | SOME payloadTy => let val payloadId = freshVId (ctx, "payload")
                                                                                                             val payloadTy = toFTy (ctx, env, payloadTy)
                                                                                                             val ty = F.FnType (payloadTy, baseTy)
-                                                                                                        in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructValWithPayloadOp info, vector [baseTy, payloadTy], vector [F.VarExp payloadId])))
+                                                                                                        in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructValWithPayloadOp info, [baseTy, payloadTy], [F.VarExp payloadId])))
                                                                                                         end
                                                                   val ty = List.foldr (fn (tv, ty) => F.ForallType (tv, F.TypeKind, ty)) ty tyvars
                                                                   val exp = List.foldr (fn (tv, exp) => F.TyAbsExp (tv, F.TypeKind, exp)) exp tyvars
@@ -1078,10 +1078,10 @@ and toFDecs (ctx, env, []) = (env, [])
                                                             let val tag = freshVId (ctx, name ^ "_tag")
                                                                 val optPayloadTy = Option.map (fn ty => toFTy (ctx, env, ty)) optPayloadTy
                                                                 val (ty, exp) = case optPayloadTy of
-                                                                                    NONE => (exnTy, F.PrimExp (F.ConstructExnOp, vector [], vector [F.VarExp tag]))
+                                                                                    NONE => (exnTy, F.PrimExp (F.ConstructExnOp, [], [F.VarExp tag]))
                                                                                   | SOME payloadTy => let val payloadId = freshVId (ctx, "payload")
                                                                                                           val ty = F.FnType (payloadTy, exnTy)
-                                                                                                      in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructExnWithPayloadOp, vector [payloadTy], vector [F.VarExp tag, F.VarExp payloadId])))
+                                                                                                      in (ty, F.FnExp (payloadId, payloadTy, F.PrimExp (F.ConstructExnWithPayloadOp, [payloadTy], [F.VarExp tag, F.VarExp payloadId])))
                                                                                                       end
                                                                 val env = updateValMap (fn m => T.VIdMap.insert (m, vid, ty), env)
                                                                 val conDec = F.ValDec (vid, SOME ty, exp)

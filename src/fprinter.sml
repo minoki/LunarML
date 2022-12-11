@@ -57,7 +57,7 @@ fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
          | "fn type" tv ":" kind "=>" exp
          | "case" exp "of" matches (* prec: 0 *)
  *)
-and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrimOp primOp @ P.Fragment " [" :: P.commaSepV (Vector.map (doTy 0) types) @ (P.Fragment "] (" :: P.commaSepV (Vector.map (doExp 0) exps) @ [P.Fragment ")"])
+and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrimOp primOp @ P.Fragment " [" :: P.commaSep (List.map (doTy 0) types) @ (P.Fragment "] (" :: P.commaSep (List.map (doExp 0) exps) @ [P.Fragment ")"])
   | doExp prec (F.VarExp vid) = [P.Fragment (TypedSyntax.print_VId vid)]
   | doExp prec (F.RecordExp fields) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, exp), xs) => (doLabel label @ P.Fragment " = " :: doExp 0 exp) :: xs) [] fields) @ [P.Fragment "}"]
   | doExp prec (F.LetExp (dec, exp)) = showParen (prec >= 1) (P.Fragment "let " :: doDec dec @ P.Fragment " in " :: doExp 0 exp @ [P.Fragment " end"])
