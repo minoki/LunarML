@@ -7,13 +7,16 @@ type Var = TypedSyntax.VId
 type Tag = string
 datatype Value = Var of Var
                | Unit
-(*
                | BoolConst of bool
-               | IntConst of IntInf.int
-               | WordConst of IntInf.int
-               | RealConst of Numeric.float_notation
-               | CharConst of int
+               | Int32Const of Int32.int
+               | IntInfConst of IntInf.int
+               | Word32Const of Word32.word
+               | CharConst of char
+               | Char16Const of int
                | StringConst of int vector
+               | String16Const of int vector
+(*
+               | RealConst of Numeric.float_notation
 *)
 datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty list, args : Value list }
                    | Record of Value Syntax.LabelMap.map (* non-empty record *)
@@ -169,32 +172,76 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
          | F.PrimExp (primOp, tyargs, args) =>
            mapCont (fn (e, cont) => transform (ctx, env) e { exnCont = exnCont, resultHint = NONE } cont)
                    (Vector.foldr (op ::) [] args)
-                   (fn args => let val result = case k of
-                                                    META (SOME r, _) => r
-                                                  | _ => genSym ctx
-                                   val mayraise = case primOp of
-                                                      F.IntConstOp _ => false
-                                                    | F.WordConstOp _ => false
-                                                    | F.RealConstOp _ => false
-                                                    | F.StringConstOp _ => false
-                                                    | F.CharConstOp _ => false
-                                                    | F.RaiseOp _ => true
-                                                    | F.ListOp => false
-                                                    | F.VectorOp => false
-                                                    | F.DataTagOp _ => false
-                                                    | F.DataPayloadOp _ => false
-                                                    | F.ExnPayloadOp => false
-                                                    | F.ConstructValOp _ => false
-                                                    | F.ConstructValWithPayloadOp _ => false
-                                                    | F.ConstructExnOp => false
-                                                    | F.ConstructExnWithPayloadOp => false
-                                                    | F.PrimFnOp p => Primitives.mayRaise p
-                               in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = Vector.foldr (op ::) [] tyargs, args = args }
-                                        , result = result
-                                        , cont = apply k (C.Var result)
-                                        , exnCont = if mayraise then SOME (C.Var exnCont) else NONE
-                                        }
-                               end
+                   (fn args =>
+                       case primOp of
+                           F.IntConstOp x => if Vector.length tyargs = 1 then
+                                                 case Vector.sub (tyargs, 0) of
+                                                     F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
+                                                                       apply k (C.Int32Const (Int32.fromLarge x))
+                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
+                                                                       apply k (C.IntInfConst x)
+                                                                   else
+                                                                       raise Fail "IntConstOp: invalid type"
+                                                   | _ => raise Fail "IntConstOp: invalid type"
+                                             else
+                                                 raise Fail "IntConstOp: invalid number of type arguments"
+                         | F.WordConstOp x => if Vector.length tyargs = 1 then
+                                                  case Vector.sub (tyargs, 0) of
+                                                      F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
+                                                                        apply k (C.Word32Const (Word32.fromLargeInt x))
+                                                                    else
+                                                                        raise Fail "WordConstOp: invalid type"
+                                                    | _ => raise Fail "WordConstOp: invalid type"
+                                              else
+                                                  raise Fail "WordConstOp: invalid number of type arguments"
+                         | F.CharConstOp x => if Vector.length tyargs = 1 then
+                                                  case Vector.sub (tyargs, 0) of
+                                                      F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char) then
+                                                                        apply k (C.CharConst (Char.chr x))
+                                                                    else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char16) then
+                                                                        apply k (C.Char16Const x)
+                                                                    else
+                                                                        raise Fail "CharConstOp: invalid type"
+                                                    | _ => raise Fail "CharConstOp: invalid type"
+                                              else
+                                                  raise Fail "CharConstOp: invalid number of type arguments"
+                         | F.StringConstOp x => if Vector.length tyargs = 1 then
+                                                    case Vector.sub (tyargs, 0) of
+                                                        F.TyVar tv => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string) then
+                                                                          apply k (C.StringConst x)
+                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string16) then
+                                                                          apply k (C.String16Const x)
+                                                                      else
+                                                                          raise Fail "StringConstOp: invalid type"
+                                                      | _ => raise Fail "StringConstOp: invalid type"
+                                                else
+                                                    raise Fail "StringConstOp: invalid number of type arguments"
+                         | _ => let val result = case k of
+                                                     META (SOME r, _) => r
+                                                   | _ => genSym ctx
+                                    val mayraise = case primOp of
+                                                       F.IntConstOp _ => false
+                                                     | F.WordConstOp _ => false
+                                                     | F.RealConstOp _ => false
+                                                     | F.StringConstOp _ => false
+                                                     | F.CharConstOp _ => false
+                                                     | F.RaiseOp _ => true
+                                                     | F.ListOp => false
+                                                     | F.VectorOp => false
+                                                     | F.DataTagOp _ => false
+                                                     | F.DataPayloadOp _ => false
+                                                     | F.ExnPayloadOp => false
+                                                     | F.ConstructValOp _ => false
+                                                     | F.ConstructValWithPayloadOp _ => false
+                                                     | F.ConstructExnOp => false
+                                                     | F.ConstructExnWithPayloadOp => false
+                                                     | F.PrimFnOp p => Primitives.mayRaise p
+                                in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = Vector.foldr (op ::) [] tyargs, args = args }
+                                         , result = result
+                                         , cont = apply k (C.Var result)
+                                         , exnCont = if mayraise then SOME (C.Var exnCont) else NONE
+                                         }
+                                end
                    )
          | F.VarExp vid => (case TypedSyntax.VIdMap.find (env, vid) of
                                 SOME v => apply k v
@@ -358,6 +405,14 @@ fun freeVarsInValue bound (C.Var v, acc) = if TypedSyntax.VIdSet.member (bound, 
                                            else
                                                TypedSyntax.VIdSet.add (acc, v)
   | freeVarsInValue bound (C.Unit, acc) = acc
+  | freeVarsInValue bound (C.BoolConst _, acc) = acc
+  | freeVarsInValue bound (C.Int32Const _, acc) = acc
+  | freeVarsInValue bound (C.IntInfConst _, acc) = acc
+  | freeVarsInValue bound (C.Word32Const _, acc) = acc
+  | freeVarsInValue bound (C.CharConst _, acc) = acc
+  | freeVarsInValue bound (C.Char16Const _, acc) = acc
+  | freeVarsInValue bound (C.StringConst _, acc) = acc
+  | freeVarsInValue bound (C.String16Const _, acc) = acc
 fun freeVarsInSimpleExp (bound, C.PrimOp { primOp = _, tyargs = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
   | freeVarsInSimpleExp (bound, C.Record fields, acc) = Syntax.LabelMap.foldl (freeVarsInValue bound) acc fields
   | freeVarsInSimpleExp (bound, C.ExnTag { name = _, payloadTy = _}, acc) = acc
@@ -393,6 +448,14 @@ fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
                                     | NONE => ()
                                  )
   | usageInValue env C.Unit = ()
+  | usageInValue env (C.BoolConst _) = ()
+  | usageInValue env (C.Int32Const _) = ()
+  | usageInValue env (C.IntInfConst _) = ()
+  | usageInValue env (C.Word32Const _) = ()
+  | usageInValue env (C.CharConst _) = ()
+  | usageInValue env (C.Char16Const _) = ()
+  | usageInValue env (C.StringConst _) = ()
+  | usageInValue env (C.String16Const _) = ()
 fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
                                               SOME r => (case !r of
                                                              NEVER => r := ONCE_AS_CALLEE
@@ -403,6 +466,14 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
                                             | NONE => ()
                                          )
   | usageInValueAsCallee env C.Unit = ()
+  | usageInValueAsCallee env (C.BoolConst _) = ()
+  | usageInValueAsCallee env (C.Int32Const _) = ()
+  | usageInValueAsCallee env (C.IntInfConst _) = ()
+  | usageInValueAsCallee env (C.Word32Const _) = ()
+  | usageInValueAsCallee env (C.CharConst _) = ()
+  | usageInValueAsCallee env (C.Char16Const _) = ()
+  | usageInValueAsCallee env (C.StringConst _) = ()
+  | usageInValueAsCallee env (C.String16Const _) = ()
 fun usageInSimpleExp (env, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (usageInValue env) args
   | usageInSimpleExp (env, C.Record fields) = Syntax.LabelMap.app (usageInValue env) fields
   | usageInSimpleExp (env, C.ExnTag { name = _, payloadTy = _ }) = ()

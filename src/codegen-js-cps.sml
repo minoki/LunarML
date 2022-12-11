@@ -94,6 +94,21 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
                              | id => J.VarExp id
                           )
   | doValue C.Unit = J.UndefinedExp
+  | doValue (C.BoolConst false) = J.ConstExp J.False
+  | doValue (C.BoolConst true) = J.ConstExp J.True
+  | doValue (C.Int32Const x) = if x < 0 then
+                                   J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
+                               else
+                                   J.ConstExp (J.Numeral (Int32.toString x))
+  | doValue (C.IntInfConst x) = if x < 0 then
+                                    J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ "n")))
+                                else
+                                    J.ConstExp (J.Numeral (LargeInt.toString x ^ "n"))
+  | doValue (C.Word32Const x) = J.ConstExp (J.Numeral ("0x" ^ Word32.fmt StringCvt.HEX x))
+  | doValue (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
+  | doValue (C.Char16Const x) = J.ConstExp (J.WideString (vector [x]))
+  | doValue (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
+  | doValue (C.String16Const x) = J.ConstExp (J.WideString x)
 
 fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
@@ -104,27 +119,7 @@ fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
                              in TypedSyntax.MkVId ("tmp", n)
                              end
 
-fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.IntConstOp x, tyargs = [ty], args = _ }, result, cont, exnCont }) : J.Stat list
-    = (case ty of
-           F.TyVar tv => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
-                                              ""
-                                          else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
-                                              "n"
-                                          else
-                                              raise CodeGenError "PrimExp.IntConstOp: invalid type"
-                             val exp = if x < 0 then
-                                           J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ suffix)))
-                                       else
-                                           J.ConstExp (J.Numeral (LargeInt.toString x ^ suffix))
-                         in VarStat (result, exp) :: doCExp ctx cont
-                         end
-         | _ => raise CodeGenError "PrimExp.IntConstOp: invalid type"
-      )
-  | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.WordConstOp x, tyargs = _, args = _ }, result, cont, exnCont })
-    = let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-      in VarStat (result, exp) :: doCExp ctx cont
-      end
-  | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result, cont, exnCont })
+fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result, cont, exnCont }) : J.Stat list
     = let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
                         (* JavaScript does not support hexadecimal floating-point literals *)
                     in case y of
@@ -134,28 +129,6 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.IntConstOp x, ty
                                          J.ConstExp (J.Numeral (Numeric.Notation.toString "-" z))
                          | NONE => raise CodeGenError "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
                     end
-      in VarStat (result, exp) :: doCExp ctx cont
-      end
-  | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.StringConstOp x, tyargs = [ty], args = _ }, result, cont, exnCont })
-    = let val exp = case ty of
-                        F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_string then
-                                          J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
-                                      else if tv = F.tyNameToTyVar Typing.primTyName_string16 then
-                                          J.ConstExp (J.WideString x)
-                                      else
-                                          raise CodeGenError "PrimExp.StringConstOp: invalid type"
-                      | _ => raise CodeGenError "PrimExp.StringConstOp: invalid type"
-      in VarStat (result, exp) :: doCExp ctx cont
-      end
-  | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.CharConstOp x, tyargs = [ty], args = _ }, result, cont, exnCont })
-    = let val exp = case ty of
-                        F.TyVar tv => if tv = F.tyNameToTyVar Typing.primTyName_char then
-                                          J.ConstExp (J.Numeral (Int.toString x))
-                                      else if tv = F.tyNameToTyVar Typing.primTyName_char16 then
-                                          J.ConstExp (J.WideString (vector [x]))
-                                      else
-                                          raise CodeGenError "PrimExp.CharConstOp: invalid type"
-                      | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
       in VarStat (result, exp) :: doCExp ctx cont
       end
   | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result, cont, exnCont })
