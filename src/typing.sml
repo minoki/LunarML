@@ -307,6 +307,12 @@ fun newContext() : Context
       , nextVId = ref 100
       }
 
+fun freshVId (ctx : Context, name) : TypedSyntax.VId
+    = let val n = !(#nextVId ctx)
+      in #nextVId ctx := n + 1
+       ; TypedSyntax.MkVId (name, n)
+      end
+
 fun renewVId (ctx : Context) (TypedSyntax.MkVId (name, _)) : TypedSyntax.VId
     = let val n = !(#nextVId ctx)
       in #nextVId ctx := n + 1
@@ -1301,7 +1307,13 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                          end
                     fun isMonoVar vid = List.exists (fn (vid', T.TypeScheme (tvs, _)) => T.eqVId (vid, vid') andalso List.null tvs) valEnv'L
                     val valbind' = if allPoly then
-                                       polyPart valEnv'L
+                                       if List.null valEnv'L then
+                                           let val vid = freshVId (#context ctx, "dummy")
+                                               val (_, tysc) = doVal (vid, expTy)
+                                           in [T.PolyVarBind (span, vid, tysc, exp)] (* Make sure the constants in exp are range-checked *)
+                                           end
+                                       else
+                                           polyPart valEnv'L
                                    else
                                        let val xs = List.mapPartial (fn (vid, tysc) => case tysc of
                                                                                            T.TypeScheme ([], ty) => SOME (vid, ty)
@@ -1387,9 +1399,17 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                               val tysc = T.TypeScheme (List.map doTyVar (T.TyVarSet.listItems tyVars) @ aTyVars, ty)
                           in (vid, tysc, aTyVars)
                           end
-                    val valEnv' = Syntax.VIdMap.map doVal valEnv
-                    val aTyVars = Syntax.VIdMap.foldl (fn ((_, _, aTyVars), acc) => List.foldl (fn ((tv, _), acc) => T.TyVarSet.add (acc, tv)) acc aTyVars) T.TyVarSet.empty valEnv'
-                    val valbinds = Syntax.VIdMap.foldr (fn ((vid, tysc, _), rest) => (span, vid, tysc, exp) :: rest) valbinds valEnv'
+                    val (valEnv', valEnv'L) = if Syntax.VIdMap.isEmpty valEnv then
+                                                  let val vid = freshVId (#context ctx, "dummy")
+                                                      val (vid, tysc, aTyVars) = doVal (vid, expTy)
+                                                  in (Syntax.VIdMap.empty, [(vid, tysc, aTyVars)]) (* Make sure the constants in exp are range-checked *)
+                                                  end
+                                              else
+                                                  let val valEnv' = Syntax.VIdMap.map doVal valEnv
+                                                  in (valEnv', Syntax.VIdMap.listItems valEnv')
+                                                  end
+                    val aTyVars = List.foldl (fn ((_, _, aTyVars), acc) => List.foldl (fn ((tv, _), acc) => T.TyVarSet.add (acc, tv)) acc aTyVars) T.TyVarSet.empty valEnv'L
+                    val valbinds = List.foldr (fn ((vid, tysc, _), rest) => (span, vid, tysc, exp) :: rest) valbinds valEnv'L
                 in (valbinds, Syntax.VIdMap.unionWith #2 (valEnv', valEnvRest), T.TyVarSet.union (aTyVars, tyVarsAcc))
                 end
           val (valbinds, valEnv, allTyVars) = List.foldr generalize ([], Syntax.VIdMap.empty, T.TyVarSet.fromList (List.map #2 tyvarseq')) valbinds''
