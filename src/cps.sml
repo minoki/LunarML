@@ -169,6 +169,11 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                end
            else
                raise Fail "DelimCont.pushSubCont: invalid number of arguments"
+         | F.PrimExp (F.PrimFnOp Primitives.Unsafe_cast, tyargs, args) =>
+           if Vector.length args = 1 then
+               transformX (ctx, env) (Vector.sub (args, 0)) { exnCont = exnCont } k
+           else
+               raise Fail "Unsafe.cast: invalid number of arguments"
          | F.PrimExp (primOp, tyargs, args) =>
            mapCont (fn (e, cont) => transform (ctx, env) e { exnCont = exnCont, resultHint = NONE } cont)
                    (Vector.foldr (op ::) [] args)
