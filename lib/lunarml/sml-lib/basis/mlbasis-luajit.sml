@@ -558,13 +558,6 @@ val >> : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
                                                 0w0
                                             else
                                                 coerceWord (Lua.>> (Lua.fromWord x, Lua.fromWord y))
-val ~>> : word * word -> word = fn (x, y) => if y >= fromInt (Int.- (wordSize, 1)) then
-                                                 if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
-                                                     ~(0w1)
-                                                 else
-                                                     0w0
-                                             else
-                                                 coerceWord (Lua.call1 Lua.Lib.bit.arshift #[Lua.fromWord x, Lua.fromWord y])
 val compare : word * word -> order = fn (x, y) => if x = y then
                                                       EQUAL
                                                   else if x < y then
@@ -579,6 +572,10 @@ val max : word * word -> word = fn (x, y) => if x < y then
                                                  y
                                              else
                                                  x
+val ~>> : word * word -> word = fn (x, y) => let val y = min (y, fromInt (Int.- (wordSize, 1)))
+                                                 val x' = Lua.call1 Lua.Lib.bit.tobit #[Lua.fromWord x]
+                                             in coerceWord (Lua.call1 Lua.Lib.bit.arshift #[x', Lua.fromWord y])
+                                             end
 fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
   | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord x]
                           in Lua.unsafeFromValue result

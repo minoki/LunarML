@@ -237,7 +237,7 @@ local
     fun << (x, y) = Word.andb (Word.<< (x, y), FULL)
     val >> = Word.>>
     fun ~>> (x, y) = if x >= 0wx80 then
-                         Word.andb (Word.~>> (x - 0wx80, y), FULL)
+                         Word.andb (Word.~>> (Word.andb (x, 0wx7F) - 0wx80, y), FULL)
                      else
                          Word.>> (x, y)
     fun x + y = Word.andb (Word.+ (x, y), FULL)
@@ -282,7 +282,7 @@ local
     fun << (x, y) = Word.andb (Word.<< (x, y), FULL)
     val >> = Word.>>
     fun ~>> (x, y) = if x >= 0wx8000 then
-                         Word.andb (Word.~>> (x - 0wx8000, y), FULL)
+                         Word.andb (Word.~>> (Word.andb (x, 0wx7FFF) - 0wx8000, y), FULL)
                      else
                          Word.>> (x, y)
     fun x + y = Word.andb (Word.+ (x, y), FULL)
@@ -332,7 +332,7 @@ local
     fun notb x = asBigUint64 (IntInf.notb x)
     fun << (x, y) = asBigUint64 (IntInf.<< (x, y))
     fun >> (x, y) = IntInf.~>> (x, y)
-    fun ~>> (x, y) = IntInf.~>> (asBigInt64 x, y)
+    fun ~>> (x, y) = asBigUint64 (IntInf.~>> (asBigInt64 x, y))
     fun x + y = asBigUint64 (IntInf.+ (x, y))
     fun x - y = asBigUint64 (IntInf.- (x, y))
     fun x * y = asBigUint64 (IntInf.* (x, y))
