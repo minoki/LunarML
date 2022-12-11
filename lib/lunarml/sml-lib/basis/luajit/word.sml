@@ -249,6 +249,7 @@ local
                          y
                      else
                          x
+    (* Newer LuaJIT (after https://github.com/LuaJIT/LuaJIT/commit/1b7171c339a8d33cb1fd332e31787ebc23266f10):
     fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
       | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", x]
                               in Lua.unsafeFromValue result
@@ -260,6 +261,35 @@ local
                               in Lua.unsafeFromValue result
                               end
     val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x])
+     *)
+    fun toOctString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord (Uint64ToWord x)]) : string
+                        else
+                            let val d = WordToUint64 0wx40000000 (* 2^30 = 0o10000000000 *)
+                                val q = Lua./ (x, d)
+                                val r = Lua.% (x, d)
+                            in toOctString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromWord (Uint64ToWord r)])
+                            end
+    fun toDecString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord (Uint64ToWord x)]) : string
+                        else
+                            let val d = WordToUint64 0w1000000000
+                                val q = Lua./ (x, d)
+                                val r = Lua.% (x, d)
+                            in toDecString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromWord (Uint64ToWord r)])
+                            end
+    fun toString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+                         Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord (Uint64ToWord x)]) : string
+                     else
+                         let val d = WordToUint64 0wx10000000 (* 2^28 *)
+                             val q = Lua./ (x, d)
+                             val r = Lua.% (x, d)
+                         in toString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromWord (Uint64ToWord r)])
+                         end
+    fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
+      | fmt StringCvt.OCT = toOctString
+      | fmt StringCvt.DEC = toDecString
+      | fmt StringCvt.HEX = toString
     end
     val Word64_eq = Lua.==
     fun wordToWord64 x = WordToUint64 x

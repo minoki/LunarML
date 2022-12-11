@@ -286,6 +286,7 @@ local
                            else
                                0
     fun sameSign (x, y) = sign x = sign y
+    (* Newer LuaJIT (after https://github.com/LuaJIT/LuaJIT/commit/1b7171c339a8d33cb1fd332e31787ebc23266f10):
     fun toString x = if Lua.>= (x, ZERO) then
                          Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", x]) : string
                      else
@@ -300,6 +301,47 @@ local
                                   Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x]) : string
                               else
                                   Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm x]) : string
+     *)
+    fun toStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
+                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromInt (Int64ToInt x)]) : string
+                        else
+                            let val d = IntToInt64 1000000000
+                                val q = Lua./ (x, d)
+                                val r = Lua.% (x, d)
+                            in toStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromInt (Int64ToInt r)])
+                            end
+    fun toString x = if Lua.>= (x, ZERO) then
+                         toStringAbs x
+                     else
+                         "~" ^ toStringAbs (Lua.unm x) (* overflow is fine *)
+    fun toOctStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
+                               Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt (Int64ToInt x)]) : string
+                           else
+                               let val d = IntToInt64 0x40000000 (* 2^30 = 0o10000000000 *)
+                                   val q = Lua./ (x, d)
+                                   val r = Lua.% (x, d)
+                               in toOctStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromInt (Int64ToInt r)])
+                               end
+    fun toOctString x = if Lua.>= (x, ZERO) then
+                            toOctStringAbs x
+                        else
+                            "~" ^ toOctStringAbs (Lua.unm x) (* overflow is fine *)
+    fun toHexStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
+                               Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt (Int64ToInt x)]) : string
+                           else
+                               let val d = IntToInt64 0x10000000 (* 2^28 *)
+                                   val q = Lua./ (x, d)
+                                   val r = Lua.% (x, d)
+                               in toHexStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromInt (Int64ToInt r)])
+                               end
+    fun toHexString x = if Lua.>= (x, ZERO) then
+                            toHexStringAbs x
+                        else
+                            "~" ^ toHexStringAbs (Lua.unm x) (* overflow is fine *)
+    fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
+      | fmt StringCvt.OCT = toOctString
+      | fmt StringCvt.DEC = toString
+      | fmt StringCvt.HEX = toHexString
     local
         open ScanNumUtils
         fun scanDigits (radix, isDigit, getc)
