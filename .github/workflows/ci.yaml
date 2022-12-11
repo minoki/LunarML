@@ -12,12 +12,20 @@ jobs:
           sudo apt-get install mlton lua5.3 luajit
       - name: Build
         run: make
-      - name: Test
-        run: make test test-lua-continuations test-luajit test-nodejs test-nodejs-cps
+      - name: Test (Lua)
+        run: make test
+      - name: Test (LuaJIT)
+        run: make test-luajit
         env:
           LUA_INIT_5_3: ""
           # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859
           LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
+      - name: Test (JS)
+        run: make test-nodejs
+      - name: Test (JS-CPS)
+        run: make test-nodejs-cps
+      - name: Test (Lua-continuations)
+        run: make test-lua-continuations
       - name: Prepare third-party libraries
         run: make -C thirdparty install
       - name: Compile myself (Lua)
