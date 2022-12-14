@@ -110,6 +110,10 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
   | doValue (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
   | doValue (C.String16Const x) = J.ConstExp (J.WideString x)
 
+fun CVarToId v = TypedSyntax.MkVId ("cont", C.CVar.toInt v)
+fun CVarToJs v = J.UserDefinedId (CVarToId v)
+fun doCVar v = J.VarExp (CVarToJs v)
+
 fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
 
@@ -162,7 +166,7 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
       in VarStat (result, J.NewExp (tag, vector [payload])) :: doCExp ctx cont
       end
   | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result, cont, exnCont = SOME exnCont })
-    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue exnCont, J.ArrayExp (vector [doValue exp]) ]))) ] (* TODO: location information *)
+    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [doValue exp]) ]))) ] (* TODO: location information *)
   | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args }, result, cont, exnCont })
     = let fun doNullary f = case args of
                                 [] => f ()
@@ -184,11 +188,11 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
       in case prim of
              Primitives.call2 => doTernary (fn (f, a0, a1) =>
                                                case exnCont of
-                                                   SOME (C.Var exnCont) =>
+                                                   SOME exnCont =>
                                                    let val exnName = genSym ctx
                                                    in J.TryCatchStat ( vector [VarStat (result, J.CallExp (f, vector [a0, a1]))]
                                                                      , exnName
-                                                                     , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, J.VarExp (J.UserDefinedId exnCont), J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                                                     , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
                                                                      )
                                                       :: doCExp ctx cont
                                                    end
@@ -324,26 +328,38 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
                         | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
       in VarStat (result, J.IndexExp (doValue record, label)) :: doCExp ctx cont
       end
-  | doCExp ctx (C.App { applied, args })
-    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue applied, J.ArrayExp (vector (List.map doValue args))]))) ]
+  | doCExp ctx (C.App { applied, cont, exnCont, args })
+    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue applied, J.ArrayExp (vector (doCVar cont :: doCVar exnCont :: List.map doValue args))]))) ]
+  | doCExp ctx (C.AppCont { applied, args })
+    = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar applied, J.ArrayExp (vector (List.map doValue args))]))) ]
   | doCExp ctx (C.If { cond, thenCont, elseCont })
     = [ J.IfStat (doValue cond, vector (doCExp ctx thenCont), vector (doCExp ctx elseCont)) ]
-  | doCExp ctx (C.Fn { function = (f, params, body), cont })
-    = let val dec = J.VarStat (vector [(f, SOME (J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx body))))])
+  | doCExp ctx (C.LetFun { name, contParam, exnContParam, params, body, cont })
+    = let val dec = J.VarStat (vector [(name, SOME (J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map VIdToJs params), vector (doCExp ctx body))))])
       in dec :: doCExp ctx cont
       end
-  | doCExp ctx (C.Fix { functions, cont })
-    = let val (decs, assignments) = List.foldr (fn ((vid, params, body), (decs, assignments)) =>
-                                                   (J.VarStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx body))) :: assignments)
-                                               ) ([], []) functions
+  | doCExp ctx (C.LetRec { defs, cont })
+    = let val (decs, assignments) = List.foldr (fn ((vid, k, h, params, body), (decs, assignments)) =>
+                                                   (J.VarStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: CVarToJs h :: List.map VIdToJs params), vector (doCExp ctx body))) :: assignments)
+                                               ) ([], []) defs
+      in decs @ assignments @ doCExp ctx cont
+      end
+  | doCExp ctx (C.LetCont { name, params, body, cont })
+    = let val dec = J.VarStat (vector [(CVarToId name, SOME (J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx body))))])
+      in dec :: doCExp ctx cont
+      end
+  | doCExp ctx (C.LetRecCont { defs, cont })
+    = let val (decs, assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
+                                                   (J.VarStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx body))) :: assignments)
+                                               ) ([], []) defs
       in decs @ assignments @ doCExp ctx cont
       end
   | doCExp ctx (C.PushPrompt { promptTag, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushPrompt"), vector [doValue promptTag, doValue f, doValue cont, doValue exnCont]))) ]
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushPrompt"), vector [doValue promptTag, doValue f, doCVar cont, doCVar exnCont]))) ]
   | doCExp ctx (C.WithSubCont { promptTag, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_withSubCont"), vector [doValue promptTag, doValue f, doValue cont, doValue exnCont]))) ]
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_withSubCont"), vector [doValue promptTag, doValue f, doCVar cont, doCVar exnCont]))) ]
   | doCExp ctx (C.PushSubCont { subCont, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushSubCont"), vector [doValue subCont, doValue f, doValue cont, doValue exnCont]))) ]
+    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushSubCont"), vector [doValue subCont, doValue f, doCVar cont, doCVar exnCont]))) ]
 
-fun doProgram ctx cont exnCont cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [J.UserDefinedId cont, J.UserDefinedId exnCont], vector (doCExp ctx cexp))]))]
+fun doProgram ctx cont exnCont cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont, CVarToJs exnCont], vector (doCExp ctx cexp))]))]
 end;

@@ -5,6 +5,22 @@
 structure CSyntax = struct
 type Var = TypedSyntax.VId
 type Tag = string
+structure CVar :> sig
+              type t
+              type ord_key = t
+              val compare : ord_key * ord_key -> order
+              val fromInt : int -> t
+              val toInt : t -> int
+          end = struct
+type t = int
+type ord_key = t
+val compare = Int.compare
+fun fromInt x = x
+fun toInt x = x
+end
+type CVar = CVar.t
+structure CVarSet = RedBlackSetFn (CVar)
+structure CVarMap = RedBlackMapFn (CVar)
 datatype Value = Var of Var
                | Unit
                | BoolConst of bool
@@ -22,17 +38,20 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
                    | Record of Value Syntax.LabelMap.map (* non-empty record *)
                    | ExnTag of { name : string, payloadTy : FSyntax.Ty option }
                    | Projection of { label : Syntax.Label, record : Value, fieldTypes : FSyntax.Ty Syntax.LabelMap.map }
-datatype CExp = Let of { exp : SimpleExp, result : Var, cont : CExp, exnCont : Value option }
-              | App of { applied : Value, args : Value list } (* tail call *)
+datatype CExp = Let of { exp : SimpleExp, result : Var, cont : CExp, exnCont : CVar option }
+              | App of { applied : Value, cont : CVar, exnCont : CVar, args : Value list } (* tail call *)
+              | AppCont of { applied : CVar, args : Value list }
               | If of { cond : Value
                       , thenCont : CExp
                       , elseCont : CExp
                       }
-              | Fn of { function : Var * Var list * CExp, cont : CExp } (* non-recursive function *)
-              | Fix of { functions : (Var * Var list * CExp) list, cont : CExp } (* recursive function *)
-              | PushPrompt of { promptTag : Value, f : Value, cont : Value, exnCont : Value }
-              | WithSubCont of { promptTag : Value, f : Value, cont : Value, exnCont : Value }
-              | PushSubCont of { subCont : Value, f : Value, cont : Value, exnCont : Value }
+              | LetFun of { name : Var, contParam : CVar, exnContParam : CVar, params : Var list, body : CExp, cont : CExp } (* non-recursive function *)
+              | LetRec of { defs : (Var * CVar * CVar * Var list * CExp) list, cont : CExp } (* recursive function *)
+              | LetCont of { name : CVar, params : Var list, body : CExp, cont : CExp }
+              | LetRecCont of { defs : (CVar * Var list * CExp) list, cont : CExp }
+              | PushPrompt of { promptTag : Value, f : Value, cont : CVar, exnCont : CVar }
+              | WithSubCont of { promptTag : Value, f : Value, cont : CVar, exnCont : CVar }
+              | PushSubCont of { subCont : Value, f : Value, cont : CVar, exnCont : CVar }
 local structure F = FSyntax in
 fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.WordConstOp _, ... }) = true
@@ -63,15 +82,17 @@ in
 
 type Context = { nextVId : int ref }
 
-fun genContSym (ctx : Context) = let val n = !(#nextVId ctx)
-                                     val _ = #nextVId ctx := n + 1
-                                 in TypedSyntax.MkVId ("cont", n)
-                                 end
+fun genContSym (ctx : Context) : CSyntax.CVar
+    = let val n = !(#nextVId ctx)
+          val _ = #nextVId ctx := n + 1
+      in CSyntax.CVar.fromInt n
+      end
 
-fun genExnContSym (ctx : Context) = let val n = !(#nextVId ctx)
-                                        val _ = #nextVId ctx := n + 1
-                                    in TypedSyntax.MkVId ("exh", n)
-                                    end
+fun genExnContSym (ctx : Context) : CSyntax.CVar
+    = let val n = !(#nextVId ctx)
+          val _ = #nextVId ctx := n + 1
+      in CSyntax.CVar.fromInt n
+      end
 
 fun genSym (ctx : Context) = let val n = !(#nextVId ctx)
                                  val _ = #nextVId ctx := n + 1
@@ -88,23 +109,25 @@ fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
 (* 'a -> 'b ~~> (cont : 'b -> 'ans, exh : exn -> 'ans, param : 'a) -> 'ans *)
 (* continuation of 'a : (value : 'a) -> 'ans *)
 
-datatype cont = REIFIED of C.Var
+datatype cont = REIFIED of C.CVar
               | META of C.Var option * (C.Value -> C.CExp)
 fun reify (ctx, REIFIED k) f = f k
   | reify (ctx, META (hint, m)) f = let val k = genContSym ctx
                                         val x = case hint of
                                                     NONE => genSym ctx
                                                   | SOME x => x
-                                    in C.Fn { function = (k, [x], m (C.Var x)) (* letcont *)
-                                            , cont = f k
-                                            }
+                                    in C.LetCont { name = k
+                                                 , params = [x]
+                                                 , body = m (C.Var x)
+                                                 , cont = f k
+                                                 }
                                     end
-fun apply (REIFIED k) arg = C.App { applied = C.Var k, args = [arg] }
+fun apply (REIFIED k) arg = C.AppCont { applied = k, args = [arg] }
   | apply (META (_, m)) arg = m arg
 (* transformX : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> { exnCont : C.Var } -> cont -> C.Exp *)
 fun transform (ctx, env) exp { exnCont, resultHint } k = transformX (ctx, env) exp { exnCont = exnCont } (META (resultHint, k))
 and transformT (ctx, env) exp { exnCont } k = transformX (ctx, env) exp { exnCont = exnCont } (REIFIED k)
-and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont) : C.CExp
+and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont) : C.CExp
     = case exp of
            F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, [p (* 'a prompt_tag *), f (* unit -> 'a *)]) =>
            reify (ctx, k)
@@ -115,8 +138,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                              (fn f =>
                                                  C.PushPrompt { promptTag = p
                                                               , f = f
-                                                              , cont = C.Var kk
-                                                              , exnCont = C.Var exnCont
+                                                              , cont = kk
+                                                              , exnCont = exnCont
                                                               }
                                              )
                                )
@@ -130,8 +153,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                              (fn f =>
                                                  C.WithSubCont { promptTag = p
                                                                , f = f
-                                                               , cont = C.Var kk
-                                                               , exnCont = C.Var exnCont
+                                                               , cont = kk
+                                                               , exnCont = exnCont
                                                                }
                                              )
                                )
@@ -145,8 +168,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                              (fn f =>
                                                  C.PushSubCont { subCont = subcont
                                                                , f = f
-                                                               , cont = C.Var kk
-                                                               , exnCont = C.Var exnCont
+                                                               , cont = kk
+                                                               , exnCont = exnCont
                                                                }
                                              )
                                )
@@ -215,7 +238,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                 in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
                                          , result = result
                                          , cont = apply k (C.Var result)
-                                         , exnCont = if mayraise then SOME (C.Var exnCont) else NONE
+                                         , exnCont = if mayraise then SOME exnCont else NONE
                                          }
                                 end
                    )
@@ -242,16 +265,16 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                          transformX (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) exp2 { exnCont = exnCont } k
                      )
          | F.LetExp (F.RecValDec decs, exp2) =>
-           C.Fix { functions = List.map (fn (vid, _, exp1) =>
-                                            let val contParam = genContSym ctx
-                                                val exnContParam = genExnContSym ctx
-                                            in case stripTyAbs exp1 of
-                                                   F.FnExp (param, _, body) => (vid, [contParam, exnContParam, param], transformT (ctx, env) body { exnCont = exnContParam } contParam)
-                                                 | _ => raise Fail "RecValDec"
-                                            end
-                                        ) decs
-                 , cont = transformX (ctx, env) exp2 { exnCont = exnCont } k
-                 }
+           C.LetRec { defs = List.map (fn (vid, _, exp1) =>
+                                          let val contParam = genContSym ctx
+                                              val exnContParam = genExnContSym ctx
+                                          in case stripTyAbs exp1 of
+                                                 F.FnExp (param, _, body) => (vid, contParam, exnContParam, [param], transformT (ctx, env) body { exnCont = exnContParam } contParam)
+                                               | _ => raise Fail "RecValDec"
+                                          end
+                                      ) decs
+                    , cont = transformX (ctx, env) exp2 { exnCont = exnCont } k
+                    }
          | F.LetExp (F.UnpackDec (_, _, vid, _, exp1), exp2) =>
            transform (ctx, env) exp1 { exnCont = exnCont, resultHint = SOME vid }
                      (fn v =>
@@ -281,16 +304,18 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                    (fn v =>
                                        reify (ctx, k)
                                              (fn j =>
-                                                 C.App { applied = f, args = [C.Var j, C.Var exnCont, v] }
+                                                 C.App { applied = f, cont = j, exnCont = exnCont, args = [v] }
                                              )
                                    )
                      )
          | F.HandleExp { body, exnName, handler } =>
            let val h' = genExnContSym ctx
            in reify (ctx, k)
-                    (fn j => C.Fix { functions = [(h', [exnName], transformT (ctx, env) handler { exnCont = exnCont } j)]
-                                   , cont = transformT (ctx, env) body { exnCont = h' } j
-                                   }
+                    (fn j => C.LetCont { name = h'
+                                       , params = [exnName]
+                                       , body = transformT (ctx, env) handler { exnCont = exnCont } j
+                                       , cont = transformT (ctx, env) body { exnCont = h' } j
+                                       }
                     )
            end
          | F.IfThenElseExp (e1, e2, e3) =>
@@ -309,9 +334,13 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
                                                    | _ => genSym ctx
                                          val kk = genContSym ctx
                                          val hh = genExnContSym ctx
-                                     in C.Fn { function = (f, [kk, hh, vid], transformT (ctx, env) body { exnCont = hh } kk)
-                                             , cont = apply k (C.Var f)
-                                             }
+                                     in C.LetFun { name = f
+                                                 , contParam = kk
+                                                 , exnContParam = hh
+                                                 , params = [vid]
+                                                 , body = transformT (ctx, env) body { exnCont = hh } kk
+                                                 , cont = apply k (C.Var f)
+                                                 }
                                      end
          | F.ProjectionExp { label, record, fieldTypes } =>
            transform (ctx, env) record { exnCont = exnCont, resultHint = NONE }
@@ -332,22 +361,22 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.Var } (k : cont)
          | F.TyAbsExp (_, _, exp) => transformX (ctx, env) exp { exnCont = exnCont } k
          | F.TyAppExp (exp, _) => transformX (ctx, env) exp { exnCont = exnCont } k
          | F.PackExp { payloadTy, exp, packageTy } => transformX (ctx, env) exp { exnCont = exnCont } k
-fun transformDecs (ctx : Context, env) ([] : F.Dec list) { exnCont : C.Var } (k : C.Var) : C.CExp
-    = C.App { applied = C.Var k, args = [] } (* apply continuation *)
+fun transformDecs (ctx : Context, env) ([] : F.Dec list) { exnCont : C.CVar } (k : C.CVar) : C.CExp
+    = C.AppCont { applied = k, args = [] } (* apply continuation *)
   | transformDecs (ctx, env) (dec :: decs) { exnCont } k
     = (case dec of
            F.ValDec (vid, _, exp) => transform (ctx, env) exp { exnCont = exnCont, resultHint = SOME vid }
                                                (fn v => transformDecs (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) decs { exnCont = exnCont } k)
-         | F.RecValDec decs' => C.Fix { functions = List.map (fn (vid, _, exp) =>
-                                                                 let val contParam = genContSym ctx
-                                                                     val exnContParam = genExnContSym ctx
-                                                                 in case stripTyAbs exp of
-                                                                        F.FnExp (param, _, body) => (vid, [contParam, exnContParam, param], transformT (ctx, env) body { exnCont = exnContParam } contParam)
-                                                                      | _ => raise Fail "RecValDec"
-                                                                 end
-                                                             ) decs'
-                                      , cont = transformDecs (ctx, env) decs { exnCont = exnCont } k
-                                      }
+         | F.RecValDec decs' => C.LetRec { defs = List.map (fn (vid, _, exp) =>
+                                                               let val contParam = genContSym ctx
+                                                                   val exnContParam = genExnContSym ctx
+                                                               in case stripTyAbs exp of
+                                                                      F.FnExp (param, _, body) => (vid, contParam, exnContParam, [param], transformT (ctx, env) body { exnCont = exnContParam } contParam)
+                                                                    | _ => raise Fail "RecValDec"
+                                                               end
+                                                           ) decs'
+                                         , cont = transformDecs (ctx, env) decs { exnCont = exnCont } k
+                                         }
          | F.UnpackDec (_, _, vid, _, exp) => transform (ctx, env) exp { exnCont = exnCont, resultHint = SOME vid }
                                                         (fn v => transformDecs (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) decs { exnCont = exnCont } k)
          | F.IgnoreDec exp => transform (ctx, env) exp { exnCont = exnCont, resultHint = NONE }
@@ -376,56 +405,27 @@ fun renewVId ({ nextVId } : Context, TypedSyntax.MkVId (name, _))
     = let val n = !nextVId
       in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
       end
+fun renewCVar ({ nextVId } : Context, _ : C.CVar)
+    = let val n = !nextVId
+      in C.CVar.fromInt n before (nextVId := n + 1)
+      end
 fun sizeOfSimpleExp (C.PrimOp { primOp = _, tyargs = _, args }) = List.length args
   | sizeOfSimpleExp (C.Record fields) = Syntax.LabelMap.numItems fields
   | sizeOfSimpleExp (C.ExnTag _) = 1
   | sizeOfSimpleExp (C.Projection _) = 1
 fun sizeOfCExp (C.Let { exp, result = _, cont, exnCont = _ }) = sizeOfSimpleExp exp + sizeOfCExp cont
-  | sizeOfCExp (C.App { applied, args }) = List.length args
+  | sizeOfCExp (C.App { applied, cont, exnCont, args }) = List.length args
+  | sizeOfCExp (C.AppCont { applied, args }) = List.length args
   | sizeOfCExp (C.If { cond, thenCont, elseCont }) = 1 + sizeOfCExp thenCont + sizeOfCExp elseCont
-  | sizeOfCExp (C.Fn { function = (f, params, body), cont }) = sizeOfCExp body + sizeOfCExp cont
-  | sizeOfCExp (C.Fix { functions, cont }) = List.foldl (fn ((_, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) functions
+  | sizeOfCExp (C.LetFun { name, contParam, exnContParam, params, body, cont }) = sizeOfCExp body + sizeOfCExp cont
+  | sizeOfCExp (C.LetRec { defs, cont }) = List.foldl (fn ((_, _, _, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
+  | sizeOfCExp (C.LetCont { name, params, body, cont }) = sizeOfCExp body + sizeOfCExp cont
+  | sizeOfCExp (C.LetRecCont { defs, cont }) = List.foldl (fn ((_, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
   | sizeOfCExp (C.PushPrompt _) = 1
   | sizeOfCExp (C.WithSubCont _) = 1
   | sizeOfCExp (C.PushSubCont _) = 1
-fun freeVarsInValue bound (C.Var v, acc) = if TypedSyntax.VIdSet.member (bound, v) then
-                                               acc
-                                           else
-                                               TypedSyntax.VIdSet.add (acc, v)
-  | freeVarsInValue bound (C.Unit, acc) = acc
-  | freeVarsInValue bound (C.BoolConst _, acc) = acc
-  | freeVarsInValue bound (C.Int32Const _, acc) = acc
-  | freeVarsInValue bound (C.IntInfConst _, acc) = acc
-  | freeVarsInValue bound (C.Word32Const _, acc) = acc
-  | freeVarsInValue bound (C.CharConst _, acc) = acc
-  | freeVarsInValue bound (C.Char16Const _, acc) = acc
-  | freeVarsInValue bound (C.StringConst _, acc) = acc
-  | freeVarsInValue bound (C.String16Const _, acc) = acc
-fun freeVarsInSimpleExp (bound, C.PrimOp { primOp = _, tyargs = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
-  | freeVarsInSimpleExp (bound, C.Record fields, acc) = Syntax.LabelMap.foldl (freeVarsInValue bound) acc fields
-  | freeVarsInSimpleExp (bound, C.ExnTag { name = _, payloadTy = _}, acc) = acc
-  | freeVarsInSimpleExp (bound, C.Projection { label = _, record, fieldTypes = _}, acc) = freeVarsInValue bound (record, acc)
-fun freeVarsInCExp (bound, C.Let { exp, result, cont, exnCont = SOME (C.Var exnCont) }, acc) = freeVarsInCExp (TypedSyntax.VIdSet.add (bound, result), cont, freeVarsInSimpleExp (bound, exp, TypedSyntax.VIdSet.add (acc, exnCont)))
-  | freeVarsInCExp (bound, C.Let { exp, result, cont, exnCont = _ }, acc) = freeVarsInCExp (TypedSyntax.VIdSet.add (bound, result), cont, freeVarsInSimpleExp (bound, exp, acc))
-  | freeVarsInCExp (bound, C.App { applied, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
-  | freeVarsInCExp (bound, C.If { cond, thenCont, elseCont }, acc) = freeVarsInCExp (bound, elseCont, freeVarsInCExp (bound, thenCont, freeVarsInValue bound (cond, acc)))
-  | freeVarsInCExp (bound, C.Fn { function = (f, params, body), cont }, acc) = let val acc = freeVarsInCExp (List.foldl TypedSyntax.VIdSet.add' bound params, body, acc)
-                                                                               in freeVarsInCExp (TypedSyntax.VIdSet.add (bound, f), cont, acc)
-                                                                               end
-  | freeVarsInCExp (bound, C.Fix { functions, cont }, acc) = let val bound' = List.foldl (fn ((f, params, body), bound) =>
-                                                                                             TypedSyntax.VIdSet.add (bound, f)
-                                                                                         ) bound functions
-                                                                 val acc = List.foldl (fn ((f, params, body), acc) =>
-                                                                                          let val bound'' = List.foldl TypedSyntax.VIdSet.add' bound' params
-                                                                                          in freeVarsInCExp (bound'', body, acc)
-                                                                                          end
-                                                                                      ) acc functions
-                                                             in freeVarsInCExp (bound', cont, acc)
-                                                             end
-  | freeVarsInCExp (bound, C.PushPrompt { promptTag, f, cont, exnCont }, acc) = List.foldl (freeVarsInValue bound) acc [promptTag, f, cont, exnCont]
-  | freeVarsInCExp (bound, C.WithSubCont { promptTag, f, cont, exnCont }, acc) = List.foldl (freeVarsInValue bound) acc [promptTag, f, cont, exnCont]
-  | freeVarsInCExp (bound, C.PushSubCont { subCont, f, cont, exnCont }, acc) = List.foldl (freeVarsInValue bound) acc [subCont, f, cont, exnCont]
 datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
+datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
 fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
                                       SOME r => (case !r of
                                                      NEVER => r := ONCE
@@ -462,6 +462,26 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
   | usageInValueAsCallee env (C.Char16Const _) = ()
   | usageInValueAsCallee env (C.StringConst _) = ()
   | usageInValueAsCallee env (C.String16Const _) = ()
+fun usageContVar cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
+                                          SOME r => (case !r of
+                                                         C_NEVER => r := C_ONCE
+                                                       | C_ONCE => r := C_MANY
+                                                       | C_ONCE_DIRECT => r := C_MANY
+                                                       | C_MANY_DIRECT => r := C_MANY
+                                                       | C_MANY => ()
+                                                    )
+                                        | NONE => ()
+                                     )
+fun usageContVarDirect cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
+                                                SOME r => (case !r of
+                                                               C_NEVER => r := C_ONCE_DIRECT
+                                                             | C_ONCE => r := C_MANY
+                                                             | C_ONCE_DIRECT => r := C_MANY_DIRECT
+                                                             | C_MANY_DIRECT => ()
+                                                             | C_MANY => ()
+                                                          )
+                                              | NONE => ()
+                                           )
 fun usageInSimpleExp (env, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (usageInValue env) args
   | usageInSimpleExp (env, C.Record fields) = Syntax.LabelMap.app (usageInValue env) fields
   | usageInSimpleExp (env, C.ExnTag { name = _, payloadTy = _ }) = ()
@@ -471,117 +491,212 @@ local
                            raise Fail ("usageInCExp: duplicate name in AST: " ^ TypedSyntax.print_VId v)
                        else
                            TypedSyntax.VIdMap.insert (env, v, ref NEVER)
+    fun addC (cenv, v) = if C.CVarMap.inDomain (cenv, v) then
+                             raise Fail ("usageInCExp: duplicate continuation name in AST: " ^ Int.toString (C.CVar.toInt v))
+                         else
+                             C.CVarMap.insert (cenv, v, ref C_NEVER)
 in
-fun usageInCExp (env : ((usage ref) TypedSyntax.VIdMap.map) ref, C.Let { exp, result, cont, exnCont })
-    = ( usageInSimpleExp (!env, exp)
-      ; Option.app (usageInValue (!env)) exnCont
-      ; env := add (!env, result)
-      ; usageInCExp (env, cont)
-      )
-  | usageInCExp (env, C.App { applied, args }) = ( usageInValueAsCallee (!env) applied
-                                                 ; List.app (usageInValue (!env)) args
-                                                 )
-  | usageInCExp (env, C.If { cond, thenCont, elseCont }) = ( usageInValue (!env) cond
-                                                           ; usageInCExp (env, thenCont)
-                                                           ; usageInCExp (env, elseCont)
-                                                           )
-  | usageInCExp (env, C.Fn { function = (f, params, body), cont }) = ( env := List.foldl (fn (p, e) => add (e, p)) (!env) params
-                                                                     ; usageInCExp (env, body)
-                                                                     ; env := add (!env, f)
-                                                                     ; usageInCExp (env, cont)
-                                                                     )
-  | usageInCExp (env, C.Fix { functions, cont }) = let val env' = List.foldl (fn ((f, params, body), e) =>
-                                                                                 let val e = add (e, f)
-                                                                                 in List.foldl (fn (p, e) => add (e, p)) e params
-                                                                                 end
-                                                                             ) (!env) functions
-                                                   in env := env'
-                                                    ; List.app (fn (f, params, body) => usageInCExp (env, body)) functions
-                                                    ; usageInCExp (env, cont)
-                                                   end
-  | usageInCExp (env, C.PushPrompt { promptTag, f, cont, exnCont }) = ( usageInValue (!env) promptTag
-                                                                      ; usageInValue (!env) f
-                                                                      ; usageInValue (!env) cont
-                                                                      ; usageInValue (!env) exnCont
-                                                                      )
-  | usageInCExp (env, C.WithSubCont { promptTag, f, cont, exnCont }) = ( usageInValue (!env) promptTag
-                                                                       ; usageInValue (!env) f
-                                                                       ; usageInValue (!env) cont
-                                                                       ; usageInValue (!env) exnCont
-                                                                       )
-  | usageInCExp (env, C.PushSubCont { subCont, f, cont, exnCont }) = ( usageInValue (!env) subCont
-                                                                     ; usageInValue (!env) f
-                                                                     ; usageInValue (!env) cont
-                                                                     ; usageInValue (!env) exnCont
-                                                                     )
+fun usageInCExp (env : ((usage ref) TypedSyntax.VIdMap.map) ref, cenv : ((cont_usage ref) C.CVarMap.map) ref, cexp)
+    = case cexp of
+          C.Let { exp, result, cont, exnCont } =>
+          ( usageInSimpleExp (!env, exp)
+          ; Option.app (usageContVar (!cenv)) exnCont
+          ; env := add (!env, result)
+          ; usageInCExp (env, cenv, cont)
+          )
+        | C.App { applied, cont, exnCont, args } =>
+          ( usageInValueAsCallee (!env) applied
+          ; usageContVar (!cenv) cont
+          ; usageContVar (!cenv) exnCont
+          ; List.app (usageInValue (!env)) args
+          )
+        | C.AppCont { applied, args } =>
+          ( usageContVarDirect (!cenv) applied
+          ; List.app (usageInValue (!env)) args
+          )
+        | C.If { cond, thenCont, elseCont } =>
+          ( usageInValue (!env) cond
+          ; usageInCExp (env, cenv, thenCont)
+          ; usageInCExp (env, cenv, elseCont)
+          )
+        | C.LetFun { name, contParam, exnContParam, params, body, cont } =>
+          ( env := List.foldl (fn (p, e) => add (e, p)) (!env) params
+          ; cenv := addC (addC (!cenv, contParam), exnContParam)
+          ; usageInCExp (env, cenv, body)
+          ; env := add (!env, name)
+          ; usageInCExp (env, cenv, cont)
+          )
+        | C.LetRec { defs, cont } =>
+          let val env' = List.foldl (fn ((f, _, _, params, _), e) =>
+                                        List.foldl (fn (p, e) => add (e, p)) (add (e, f)) params
+                                    ) (!env) defs
+              val cenv' = List.foldl (fn ((_, k, h, _, _), ce) =>
+                                         addC (addC (ce, k), h)
+                                     ) (!cenv) defs
+          in env := env'
+           ; cenv := cenv'
+           ; List.app (fn (_, _, _, _, body) => usageInCExp (env, cenv, body)) defs
+           ; usageInCExp (env, cenv, cont)
+          end
+        | C.LetCont { name, params, body, cont } =>
+          ( env := List.foldl (fn (p, e) => add (e, p)) (!env) params
+          ; usageInCExp (env, cenv, body)
+          ; cenv := addC (!cenv, name)
+          ; usageInCExp (env, cenv, cont)
+          )
+        | C.LetRecCont { defs, cont } =>
+          let val env' = List.foldl (fn ((f, params, _), e) =>
+                                        List.foldl (fn (p, e) => add (e, p)) e params
+                                    ) (!env) defs
+              val cenv' = List.foldl (fn ((f, _, _), ce) => addC (ce, f)) (!cenv) defs
+          in env := env'
+           ; cenv := cenv'
+           ; List.app (fn (_, _, body) => usageInCExp (env, cenv, body)) defs
+           ; usageInCExp (env, cenv, cont)
+          end
+        | C.PushPrompt { promptTag, f, cont, exnCont } =>
+          ( usageInValue (!env) promptTag
+          ; usageInValue (!env) f
+          ; usageContVar (!cenv) cont
+          ; usageContVar (!cenv) exnCont
+          )
+        | C.WithSubCont { promptTag, f, cont, exnCont } =>
+          ( usageInValue (!env) promptTag
+          ; usageInValue (!env) f
+          ; usageContVar (!cenv) cont
+          ; usageContVar (!cenv) exnCont
+          )
+        | C.PushSubCont { subCont, f, cont, exnCont } =>
+          ( usageInValue (!env) subCont
+          ; usageInValue (!env) f
+          ; usageContVar (!cenv) cont
+          ; usageContVar (!cenv) exnCont
+          )
 end
 fun substValue (subst : C.Value TypedSyntax.VIdMap.map) (x as C.Var v) = (case TypedSyntax.VIdMap.find (subst, v) of
                                                                               SOME w => w
                                                                             | NONE => x
                                                                          )
   | substValue subst v = v
+fun substCVar (csubst : C.CVar C.CVarMap.map) v = case C.CVarMap.find (csubst, v) of
+                                                      SOME w => w
+                                                    | NONE => v
 fun substSimpleExp (subst, C.PrimOp { primOp, tyargs, args }) = C.PrimOp { primOp = primOp, tyargs = tyargs, args = List.map (substValue subst) args }
   | substSimpleExp (subst, C.Record fields) = C.Record (Syntax.LabelMap.map (substValue subst) fields)
   | substSimpleExp (subst, e as C.ExnTag _) = e
   | substSimpleExp (subst, C.Projection { label, record, fieldTypes }) = C.Projection { label = label, record = substValue subst record, fieldTypes = fieldTypes }
-fun substCExp (subst : C.Value TypedSyntax.VIdMap.map, C.Let { exp, result, cont, exnCont }) = C.Let { exp = substSimpleExp (subst, exp), result = result, cont = substCExp (subst, cont), exnCont = Option.map (substValue subst) exnCont }
-  | substCExp (subst, C.App { applied, args }) = C.App { applied = substValue subst applied, args = List.map (substValue subst) args }
-  | substCExp (subst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, thenCont), elseCont = substCExp (subst, elseCont) }
-  | substCExp (subst, C.Fn { function = (f, params, body), cont }) = C.Fn { function = (f, params, substCExp (subst, body)), cont = substCExp (subst, cont) }
-  | substCExp (subst, C.Fix { functions, cont }) = C.Fix { functions = List.map (fn (f, params, body) => (f, params, substCExp (subst, body))) functions, cont = substCExp (subst, cont) }
-  | substCExp (subst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-  | substCExp (subst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-  | substCExp (subst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-val substCExp = fn (subst, e) => if TypedSyntax.VIdMap.isEmpty subst then
-                                     e
-                                 else
-                                     substCExp (subst, e)
-fun alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, C.Let { exp, result, cont, exnCont })
+fun substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { exp, result, cont, exnCont }) = C.Let { exp = substSimpleExp (subst, exp), result = result, cont = substCExp (subst, csubst, cont), exnCont = Option.map (substCVar csubst) exnCont }
+  | substCExp (subst, csubst, C.App { applied, cont, exnCont, args }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont, args = List.map (substValue subst) args }
+  | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
+  | substCExp (subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, csubst, thenCont), elseCont = substCExp (subst, csubst, elseCont) }
+  | substCExp (subst, csubst, C.LetFun { name, contParam, exnContParam, params, body, cont }) = C.LetFun { name = name, contParam = contParam, exnContParam = exnContParam, params = params, body = substCExp (subst, csubst, body), cont = substCExp (subst, csubst, cont) }
+  | substCExp (subst, csubst, C.LetRec { defs, cont }) = C.LetRec { defs = List.map (fn (f, k, h, params, body) => (f, k, h, params, substCExp (subst, csubst, body))) defs, cont = substCExp (subst, csubst, cont) }
+  | substCExp (subst, csubst, C.LetCont { name, params, body, cont }) = C.LetCont { name = name, params = params, body = substCExp (subst, csubst, body), cont = substCExp (subst, csubst, cont) }
+  | substCExp (subst, csubst, C.LetRecCont { defs, cont }) = C.LetRecCont { defs = List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs, cont = substCExp (subst, csubst, cont) }
+  | substCExp (subst, csubst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+  | substCExp (subst, csubst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+  | substCExp (subst, csubst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+val substCExp = fn (subst, csubst, e) => if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
+                                             e
+                                         else
+                                             substCExp (subst, csubst, e)
+fun alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { exp, result, cont, exnCont })
     = let val result' = renewVId (ctx, result)
           val subst' = TypedSyntax.VIdMap.insert (subst, result, C.Var result')
       in C.Let { exp = substSimpleExp (subst, exp)
                , result = result'
-               , exnCont = Option.map (substValue subst) exnCont
-               , cont = alphaConvert (ctx, subst', cont)
+               , exnCont = Option.map (substCVar csubst) exnCont
+               , cont = alphaConvert (ctx, subst', csubst, cont)
                }
       end
-  | alphaConvert (ctx, subst, C.App { applied, args }) = C.App { applied = substValue subst applied, args = List.map (substValue subst) args }
-  | alphaConvert (ctx, subst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = alphaConvert (ctx, subst, thenCont), elseCont = alphaConvert (ctx, subst, elseCont) }
-  | alphaConvert (ctx, subst, C.Fn { function = (f, params, body), cont })
+  | alphaConvert (ctx, subst, csubst, C.App { applied, cont, exnCont, args })
+    = C.App { applied = substValue subst applied
+            , cont = substCVar csubst cont
+            , exnCont = substCVar csubst exnCont
+            , args = List.map (substValue subst) args
+            }
+  | alphaConvert (ctx, subst, csubst, C.AppCont { applied, args })
+    = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
+  | alphaConvert (ctx, subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = alphaConvert (ctx, subst, csubst, thenCont), elseCont = alphaConvert (ctx, subst, csubst, elseCont) }
+  | alphaConvert (ctx, subst, csubst, C.LetFun { name, contParam, exnContParam, params, body, cont })
     = let val (params', subst') = List.foldr (fn (p, (params', subst)) =>
                                                  let val p' = renewVId (ctx, p)
                                                  in (p' :: params', TypedSyntax.VIdMap.insert (subst, p, C.Var p'))
                                                  end
                                              ) ([], subst) params
-          val body = alphaConvert (ctx, subst', body)
-          val f' = renewVId (ctx, f)
-          val subst = TypedSyntax.VIdMap.insert (subst, f, C.Var f')
-      in C.Fn { function = (f', params', body)
-              , cont = alphaConvert (ctx, subst, cont)
-              }
+          val contParam' = renewCVar (ctx, contParam)
+          val exnContParam' = renewCVar (ctx, exnContParam)
+          val csubst' = C.CVarMap.insert (C.CVarMap.insert (csubst, contParam, contParam'), exnContParam, exnContParam')
+          val body = alphaConvert (ctx, subst', csubst', body)
+          val name' = renewVId (ctx, name)
+          val subst = TypedSyntax.VIdMap.insert (subst, name, C.Var name')
+      in C.LetFun { name = name'
+                  , contParam = contParam'
+                  , exnContParam = exnContParam'
+                  , params = params'
+                  , body = body
+                  , cont = alphaConvert (ctx, subst, csubst, cont)
+                  }
       end
-  | alphaConvert (ctx, subst, C.Fix { functions, cont })
-    = let val (subst, nameMap) = List.foldl (fn ((f, _, _), (subst, nameMap)) =>
+  | alphaConvert (ctx, subst, csubst, C.LetRec { defs, cont })
+    = let val (subst, nameMap) = List.foldl (fn ((f, _, _, _, _), (subst, nameMap)) =>
                                                 let val f' = renewVId (ctx, f)
                                                 in (TypedSyntax.VIdMap.insert (subst, f, C.Var f'), TypedSyntax.VIdMap.insert (nameMap, f, f'))
                                                 end
-                                            ) (subst, TypedSyntax.VIdMap.empty) functions
-      in C.Fix { functions = List.map (fn (f, params, body) =>
-                                          let val f' = TypedSyntax.VIdMap.lookup (nameMap, f)
-                                              val (params', subst) = List.foldr (fn (p, (params', subst)) =>
-                                                                                    let val p' = renewVId (ctx, p)
-                                                                                    in (p' :: params', TypedSyntax.VIdMap.insert (subst, p, C.Var p'))
-                                                                                    end
-                                                                                ) ([], subst) params
-                                          in (f', params', alphaConvert (ctx, subst, body))
-                                          end
-                                      ) functions
-               , cont = alphaConvert (ctx, subst, cont)
-               }
+                                            ) (subst, TypedSyntax.VIdMap.empty) defs
+      in C.LetRec { defs = List.map (fn (f, k, h, params, body) =>
+                                        let val f' = TypedSyntax.VIdMap.lookup (nameMap, f)
+                                            val k' = renewCVar (ctx, k)
+                                            val h' = renewCVar (ctx, h)
+                                            val (params', subst) = List.foldr (fn (p, (params', subst)) =>
+                                                                                  let val p' = renewVId (ctx, p)
+                                                                                  in (p' :: params', TypedSyntax.VIdMap.insert (subst, p, C.Var p'))
+                                                                                  end
+                                                                              ) ([], subst) params
+                                            val csubst = C.CVarMap.insert (C.CVarMap.insert (csubst, k, k'), h, h')
+                                        in (f', k', h', params', alphaConvert (ctx, subst, csubst, body))
+                                        end
+                                    ) defs
+                  , cont = alphaConvert (ctx, subst, csubst, cont)
+                  }
       end
-  | alphaConvert (ctx, subst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-  | alphaConvert (ctx, subst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-  | alphaConvert (ctx, subst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
+  | alphaConvert (ctx, subst, csubst, C.LetCont { name, params, body, cont })
+    = let val (params', subst') = List.foldr (fn (p, (params', subst)) =>
+                                                 let val p' = renewVId (ctx, p)
+                                                 in (p' :: params', TypedSyntax.VIdMap.insert (subst, p, C.Var p'))
+                                                 end
+                                             ) ([], subst) params
+          val body = alphaConvert (ctx, subst', csubst, body)
+          val name' = renewCVar (ctx, name)
+          val csubst = C.CVarMap.insert (csubst, name, name')
+      in C.LetCont { name = name'
+                   , params = params'
+                   , body = body
+                   , cont = alphaConvert (ctx, subst, csubst, cont)
+                   }
+      end
+  | alphaConvert (ctx, subst, csubst, C.LetRecCont { defs, cont })
+    = let val (csubst, nameMap) = List.foldl (fn ((f, _, _), (csubst, nameMap)) =>
+                                                 let val f' = renewCVar (ctx, f)
+                                                 in (C.CVarMap.insert (csubst, f, f'), C.CVarMap.insert (nameMap, f, f'))
+                                                 end
+                                             ) (csubst, C.CVarMap.empty) defs
+      in C.LetRecCont { defs = List.map (fn (f, params, body) =>
+                                            let val f' = C.CVarMap.lookup (nameMap, f)
+                                                val (params', subst) = List.foldr (fn (p, (params', subst)) =>
+                                                                                      let val p' = renewVId (ctx, p)
+                                                                                      in (p' :: params', TypedSyntax.VIdMap.insert (subst, p, C.Var p'))
+                                                                                      end
+                                                                                  ) ([], subst) params
+                                            in (f', params', alphaConvert (ctx, subst, csubst, body))
+                                            end
+                                        ) defs
+                      , cont = alphaConvert (ctx, subst, csubst, cont)
+                      }
+      end
+  | alphaConvert (ctx, subst, csubst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+  | alphaConvert (ctx, subst, csubst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+  | alphaConvert (ctx, subst, csubst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
 fun simplifySimpleExp (env : C.SimpleExp TypedSyntax.VIdMap.map, usage, C.PrimOp { primOp, tyargs, args }) : C.Value option = NONE (* TODO: constant folding *)
   | simplifySimpleExp (env, usage, C.Record fields) = NONE
   | simplifySimpleExp (env, usage, C.ExnTag _) = NONE
@@ -596,71 +711,114 @@ fun simplifySimpleExp (env : C.SimpleExp TypedSyntax.VIdMap.map, usage, C.PrimOp
                       )
          | _ => NONE
       )
-fun simplifyCExp (ctx, env, fenv : (C.Var list * C.CExp) TypedSyntax.VIdMap.map, subst, usage, e)
+fun simplifyCExp (ctx, env, fenv : (C.CVar * C.CVar * C.Var list * C.CExp) TypedSyntax.VIdMap.map, cenv, subst, csubst, usage, cusage, e)
     = case e of
           C.Let { exp, result, cont, exnCont } =>
           let val exp = substSimpleExp (subst, exp)
-              val exnCont = Option.map (substValue subst) exnCont
+              val exnCont = Option.map (substCVar csubst) exnCont
           in case simplifySimpleExp (env, usage, exp) of
-                 SOME v => simplifyCExp (ctx, env, fenv, TypedSyntax.VIdMap.insert (subst, result, v), usage, cont)
+                 SOME v => simplifyCExp (ctx, env, fenv, cenv, TypedSyntax.VIdMap.insert (subst, result, v), csubst, usage, cusage, cont)
                | NONE => if C.isDiscardable exp then
                              case TypedSyntax.VIdMap.find (usage, result) of
-                                 SOME (ref NEVER) => simplifyCExp (ctx, env, fenv, subst, usage, cont)
+                                 SOME (ref NEVER) => simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
                                | _ => C.Let { exp = exp
                                             , result = result
-                                            , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), fenv, subst, usage, cont)
+                                            , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), fenv, cenv, subst, csubst, usage, cusage, cont)
                                             , exnCont = exnCont
                                             }
                          else
                              C.Let { exp = exp
                                    , result = result
-                                   , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), fenv, subst, usage, cont)
+                                   , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), fenv, cenv, subst, csubst, usage, cusage, cont)
                                    , exnCont = exnCont
                                    }
           end
-        | C.App { applied, args } =>
+        | C.App { applied, cont, exnCont, args } =>
           let val applied = substValue subst applied
+              val cont = substCVar csubst cont
+              val exnCont = substCVar csubst exnCont
               val args = List.map (substValue subst) args
           in case applied of
                  C.Var applied =>
                  (case TypedSyntax.VIdMap.find (fenv, applied) of
-                      SOME (params, body) => let val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) TypedSyntax.VIdMap.empty (params, args)
-                                             in case TypedSyntax.VIdMap.find (usage, applied) of
-                                                    SOME (ref ONCE_AS_CALLEE) => substCExp (subst, body) (* no alpha conversion *)
-                                                  | _ => alphaConvert (ctx, subst, body)
-                                             end
-                    | NONE => C.App { applied = C.Var applied, args = args }
+                      SOME (k, h, params, body) =>
+                      let val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
+                          val csubst = C.CVarMap.insert (C.CVarMap.insert (csubst, k, cont), h, exnCont)
+                      in case TypedSyntax.VIdMap.find (usage, applied) of
+                             SOME (ref ONCE_AS_CALLEE) => substCExp (subst, csubst, body) (* no alpha conversion *)
+                           | _ => alphaConvert (ctx, subst, csubst, body)
+                      end
+                    | NONE => C.App { applied = C.Var applied, cont = cont, exnCont = exnCont, args = args }
                  )
-               | _ => C.App { applied = applied, args = args }
+               | _ => C.App { applied = applied, cont = cont, exnCont = exnCont, args = args } (* should not occur *)
+          end
+        | C.AppCont { applied, args } =>
+          let val applied = substCVar csubst applied
+              val args = List.map (substValue subst) args
+          in case C.CVarMap.find (cenv, applied) of
+                 SOME (params, body) =>
+                 let val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
+                 in case C.CVarMap.find (cusage, applied) of
+                        SOME (ref C_ONCE_DIRECT) => substCExp (subst, csubst, body) (* no alpha conversion *)
+                      | _ => alphaConvert (ctx, subst, csubst, body)
+                 end
+               | NONE => C.AppCont { applied = applied, args = args }
           end
         | C.If { cond, thenCont, elseCont } =>
           C.If { cond = substValue subst cond
-               , thenCont = simplifyCExp (ctx, env, fenv, subst, usage, thenCont)
-               , elseCont = simplifyCExp (ctx, env, fenv, subst, usage, elseCont)
+               , thenCont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, thenCont)
+               , elseCont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, elseCont)
                }
-        | C.Fn { function = (f, params, body), cont } =>
-          (case TypedSyntax.VIdMap.find (usage, f) of
-               SOME (ref NEVER) => simplifyCExp (ctx, env, fenv, subst, usage, cont)
-             | SOME (ref ONCE_AS_CALLEE) => let val body' = simplifyCExp (ctx, env, fenv, subst, usage, body)
-                                                val fenv' = TypedSyntax.VIdMap.insert (fenv, f, (params, body'))
-                                            in simplifyCExp (ctx, env, fenv', subst, usage, cont)
+        | C.LetFun { name, contParam, exnContParam, params, body, cont } =>
+          (case TypedSyntax.VIdMap.find (usage, name) of
+               SOME (ref NEVER) => simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+             | SOME (ref ONCE_AS_CALLEE) => let val body' = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body)
+                                                val fenv' = TypedSyntax.VIdMap.insert (fenv, name, (contParam, exnContParam, params, body'))
+                                            in simplifyCExp (ctx, env, fenv', cenv, subst, csubst, usage, cusage, cont)
                                             end
-             | _ => let val body = simplifyCExp (ctx, env, fenv, subst, usage, body)
+             | _ => let val body = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body)
                         val fenv = if sizeOfCExp body <= 10 then (* Inline small functions *)
-                                       TypedSyntax.VIdMap.insert (fenv, f, (params, body))
+                                       TypedSyntax.VIdMap.insert (fenv, name, (contParam, exnContParam, params, body))
                                    else
                                        fenv
-                    in C.Fn { function = (f, params, body)
-                            , cont = simplifyCExp (ctx, env, fenv, subst, usage, cont)
-                            }
+                    in C.LetFun { name = name
+                                , contParam = contParam
+                                , exnContParam = exnContParam
+                                , params = params
+                                , body = body
+                                , cont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+                                }
                     end
           )
-        | C.Fix { functions, cont } =>
-          C.Fix { functions = List.map (fn (f, params, body) => (f, params, simplifyCExp (ctx, env, fenv, subst, usage, body))) functions
-                , cont = simplifyCExp (ctx, env, fenv, subst, usage, cont)
-                }
-        | C.PushPrompt { promptTag, f, cont, exnCont } => C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-        | C.WithSubCont { promptTag, f, cont, exnCont } => C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
-        | C.PushSubCont { subCont, f, cont, exnCont } => C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substValue subst cont, exnCont = substValue subst exnCont }
+        | C.LetRec { defs, cont } =>
+          C.LetRec { defs = List.map (fn (f, k, h, params, body) => (f, k, h, params, simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body))) defs
+                   , cont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+                   }
+        | C.LetCont { name, params, body, cont } =>
+          (case C.CVarMap.find (cusage, name) of
+               SOME (ref C_NEVER) => simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+             | SOME (ref C_ONCE_DIRECT) => let val body' = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body)
+                                               val cenv' = C.CVarMap.insert (cenv, name, (params, body'))
+                                           in simplifyCExp (ctx, env, fenv, cenv', subst, csubst, usage, cusage, cont)
+                                           end
+             | _ => let val body = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body)
+                        val cenv = if sizeOfCExp body <= 3 then (* Inline small continuations *)
+                                       C.CVarMap.insert (cenv, name, (params, body))
+                                   else
+                                       cenv
+                    in C.LetCont { name = name
+                                 , params = params
+                                 , body = body
+                                 , cont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+                                 }
+                    end
+          )
+        | C.LetRecCont { defs, cont } =>
+          C.LetRecCont { defs = List.map (fn (f, params, body) => (f, params, simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, body))) defs
+                       , cont = simplifyCExp (ctx, env, fenv, cenv, subst, csubst, usage, cusage, cont)
+                       }
+        | C.PushPrompt { promptTag, f, cont, exnCont } => C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+        | C.WithSubCont { promptTag, f, cont, exnCont } => C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+        | C.PushSubCont { subCont, f, cont, exnCont } => C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
 end
 end;

@@ -93,8 +93,9 @@ fun optimize (ctx : context) fdecs 0 = fdecs
                            end
 fun optimizeCps (ctx : { nextVId : int ref }) cexp 0 = cexp
   | optimizeCps ctx cexp n = let val usage = ref TypedSyntax.VIdMap.empty
-                                 val () = CpsSimplify.usageInCExp (usage, cexp)
-                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, !usage, cexp)) (n - 1)
+                                 val cusage = ref CSyntax.CVarMap.empty
+                                 val () = CpsSimplify.usageInCExp (usage, cusage, cexp)
+                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, !usage, !cusage, cexp)) (n - 1)
                              end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nextId decs
     = let val base = OS.Path.base fileName
@@ -149,11 +150,11 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
   | emit (opts as { backend = BACKEND_JS_CPS, ... }) fileName nextId decs
     = let val cont = let val n = !nextId
                          val _ = nextId := n + 1
-                     in TypedSyntax.MkVId ("cont", n)
+                     in CSyntax.CVar.fromInt n
                      end
           val exnCont = let val n = !nextId
                             val _ = nextId := n + 1
-                        in TypedSyntax.MkVId ("exh", n)
+                        in CSyntax.CVar.fromInt n
                         end
           val cexp = CpsTransform.transformDecs ({ nextVId = nextId }, TypedSyntax.VIdMap.empty) decs { exnCont = exnCont } cont
           val cexp = optimizeCps { nextVId = nextId } cexp (5 * (#optimizationLevel opts + 4))
