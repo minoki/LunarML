@@ -376,6 +376,18 @@ fun renewVId ({ nextVId } : Context, TypedSyntax.MkVId (name, _))
     = let val n = !nextVId
       in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
       end
+fun sizeOfSimpleExp (C.PrimOp { primOp = _, tyargs = _, args }) = List.length args
+  | sizeOfSimpleExp (C.Record fields) = Syntax.LabelMap.numItems fields
+  | sizeOfSimpleExp (C.ExnTag _) = 1
+  | sizeOfSimpleExp (C.Projection _) = 1
+fun sizeOfCExp (C.Let { exp, result = _, cont, exnCont = _ }) = sizeOfSimpleExp exp + sizeOfCExp cont
+  | sizeOfCExp (C.App { applied, args }) = List.length args
+  | sizeOfCExp (C.If { cond, thenCont, elseCont }) = 1 + sizeOfCExp thenCont + sizeOfCExp elseCont
+  | sizeOfCExp (C.Fn { function = (f, params, body), cont }) = sizeOfCExp body + sizeOfCExp cont
+  | sizeOfCExp (C.Fix { functions, cont }) = List.foldl (fn ((_, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) functions
+  | sizeOfCExp (C.PushPrompt _) = 1
+  | sizeOfCExp (C.WithSubCont _) = 1
+  | sizeOfCExp (C.PushSubCont _) = 1
 fun freeVarsInValue bound (C.Var v, acc) = if TypedSyntax.VIdSet.member (bound, v) then
                                                acc
                                            else
@@ -633,9 +645,15 @@ fun simplifyCExp (ctx, env, fenv : (C.Var list * C.CExp) TypedSyntax.VIdMap.map,
                                                 val fenv' = TypedSyntax.VIdMap.insert (fenv, f, (params, body'))
                                             in simplifyCExp (ctx, env, fenv', subst, usage, cont)
                                             end
-             | _ => C.Fn { function = (f, params, simplifyCExp (ctx, env, fenv, subst, usage, body))
-                         , cont = simplifyCExp (ctx, env, fenv, subst, usage, cont)
-                         } (* TODO: Inline if non-recursive and the body is small *)
+             | _ => let val body = simplifyCExp (ctx, env, fenv, subst, usage, body)
+                        val fenv = if sizeOfCExp body <= 10 then (* Inline small functions *)
+                                       TypedSyntax.VIdMap.insert (fenv, f, (params, body))
+                                   else
+                                       fenv
+                    in C.Fn { function = (f, params, body)
+                            , cont = simplifyCExp (ctx, env, fenv, subst, usage, cont)
+                            }
+                    end
           )
         | C.Fix { functions, cont } =>
           C.Fix { functions = List.map (fn (f, params, body) => (f, params, simplifyCExp (ctx, env, fenv, subst, usage, body))) functions
