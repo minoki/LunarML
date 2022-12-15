@@ -2,12 +2,24 @@ structure JsTransform = struct
 structure J = JsSyntax
 
 fun collectVarsStat (J.VarStat vars) acc = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) acc vars
+  | collectVarsStat (J.LetStat _) acc = acc
+  | collectVarsStat (J.ConstStat _) acc = acc
   | collectVarsStat (J.ExpStat _) acc = acc
   | collectVarsStat (J.IfStat (_, then', else')) acc = collectVarsBlock then' (collectVarsBlock else' acc)
   | collectVarsStat (J.ReturnStat _) acc = acc
   | collectVarsStat (J.TryCatchStat (try, vid, catch)) acc = collectVarsBlock try (J.IdSet.union (J.IdSet.subtract (collectVarsBlock catch J.IdSet.empty, J.UserDefinedId vid), acc))
   | collectVarsStat (J.ThrowStat _) acc = acc
 and collectVarsBlock stats acc = Vector.foldl (fn (stat, acc) => collectVarsStat stat acc) acc stats
+
+fun collectLetConstStat (J.VarStat vars) acc = acc
+  | collectLetConstStat (J.LetStat vars) acc = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) acc vars
+  | collectLetConstStat (J.ConstStat vars) acc = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) acc vars
+  | collectLetConstStat (J.ExpStat _) acc = acc
+  | collectLetConstStat (J.IfStat (_, then', else')) acc = acc
+  | collectLetConstStat (J.ReturnStat _) acc = acc
+  | collectLetConstStat (J.TryCatchStat (try, vid, catch)) acc = acc
+  | collectLetConstStat (J.ThrowStat _) acc = acc
+and collectLetConstBlock stats acc = Vector.foldl (fn (stat, acc) => collectLetConstStat stat acc) acc stats
 
 fun freeVarsExp (_, J.ConstExp _) acc = acc
   | freeVarsExp (_, J.ThisExp) acc = acc
@@ -22,7 +34,8 @@ fun freeVarsExp (_, J.ConstExp _) acc = acc
   | freeVarsExp (bound, J.NewExp (x, ys)) acc = Vector.foldl (fn (exp, acc) => freeVarsExp (bound, exp) acc) (freeVarsExp (bound, x) acc) ys
   | freeVarsExp (bound, J.FunctionExp (params, body)) acc = let val bound' = Vector.foldl (fn (id, bound) => J.IdSet.add (bound, id)) bound params
                                                                 val bound'' = collectVarsBlock body bound'
-                                                            in freeVarsBlock (bound'', body) acc
+                                                                val bound''' = collectLetConstBlock body bound''
+                                                            in freeVarsBlock (bound''', body) acc
                                                             end
   | freeVarsExp (bound, J.BinExp (_, x, y)) acc = freeVarsExp (bound, x) (freeVarsExp (bound, y) acc)
   | freeVarsExp (bound, J.UnaryExp (_, x)) acc = freeVarsExp (bound, x) acc
@@ -31,13 +44,19 @@ fun freeVarsExp (_, J.ConstExp _) acc = acc
 and freeVarsStat (bound, J.VarStat vars) acc = Vector.foldl (fn ((vid, NONE), acc) => acc
                                                             | ((vid, SOME exp), acc) => freeVarsExp (bound, exp) acc
                                                             ) acc vars
+  | freeVarsStat (bound, J.LetStat vars) acc = Vector.foldl (fn ((vid, NONE), acc) => acc
+                                                            | ((vid, SOME exp), acc) => freeVarsExp (bound, exp) acc
+                                                            ) acc vars
+  | freeVarsStat (bound, J.ConstStat vars) acc = Vector.foldl (fn ((vid, exp), acc) => freeVarsExp (bound, exp) acc) acc vars
   | freeVarsStat (bound, J.ExpStat exp) acc = freeVarsExp (bound, exp) acc
   | freeVarsStat (bound, J.IfStat (cond, then', else')) acc = freeVarsExp (bound, cond) (freeVarsBlock (bound, then') (freeVarsBlock (bound, else') acc))
   | freeVarsStat (bound, J.ReturnStat NONE) acc = acc
   | freeVarsStat (bound, J.ReturnStat (SOME exp)) acc = freeVarsExp (bound, exp) acc
   | freeVarsStat (bound, J.TryCatchStat (try, vid, catch)) acc = freeVarsBlock (bound, try) (freeVarsBlock (J.IdSet.add (bound, J.UserDefinedId vid), catch) acc)
   | freeVarsStat (bound, J.ThrowStat exp) acc = freeVarsExp (bound, exp) acc
-and freeVarsBlock (bound, stats) acc = Vector.foldl (fn (stat, acc) => freeVarsStat (bound, stat) acc) acc stats
+and freeVarsBlock (bound, stats) acc = let val bound' = collectLetConstBlock stats bound
+                                       in Vector.foldl (fn (stat, acc) => freeVarsStat (bound', stat) acc) acc stats
+                                       end
 
 type Context = { nextVId : int ref }
 
@@ -81,7 +100,7 @@ fun goExp (ctx, bound, depth, e as J.ConstExp _) = ([], e)
               val name = freshVId (ctx, "f")
               val params' = Vector.foldr (op ::) [] params
               val capturesAndParams = Vector.fromList (captures @ params')
-              val newDec = J.VarStat (vector [(name, SOME (J.FunctionExp (capturesAndParams, body')))])
+              val newDec = J.ConstStat (vector [(name, J.FunctionExp (capturesAndParams, body'))])
               val newExp = J.FunctionExp (params, vector [J.ReturnStat (SOME (J.CallExp (J.VarExp (J.UserDefinedId name), Vector.map J.VarExp capturesAndParams)))])
           in (decs @ [newDec], newExp)
           end
@@ -121,6 +140,19 @@ and goStat (ctx, bound, depth, J.VarStat vars) = let val (decs, vars) = Vector.f
                                                                                      ) ([], []) vars
                                                  in (decs, J.VarStat (Vector.fromList vars))
                                                  end
+  | goStat (ctx, bound, depth, J.LetStat vars) = let val (decs, vars) = Vector.foldr (fn ((vid, NONE), (decs, vars)) => (decs, (vid, NONE) :: vars)
+                                                                                     | ((vid, SOME exp), (decs, vars)) => let val (decs', exp) = goExp (ctx, bound, depth, exp)
+                                                                                                                          in (decs' @ decs, (vid, SOME exp) :: vars)
+                                                                                                                          end
+                                                                                     ) ([], []) vars
+                                                 in (decs, J.LetStat (Vector.fromList vars))
+                                                 end
+  | goStat (ctx, bound, depth, J.ConstStat vars) = let val (decs, vars) = Vector.foldr (fn ((vid, exp), (decs, vars)) => let val (decs', exp) = goExp (ctx, bound, depth, exp)
+                                                                                                                         in (decs' @ decs, (vid, exp) :: vars)
+                                                                                                                         end
+                                                                                       ) ([], []) vars
+                                                   in (decs, J.ConstStat (Vector.fromList vars))
+                                                   end
   | goStat (ctx, bound, depth, J.ExpStat exp) = let val (decs, exp) = goExp (ctx, bound, depth, exp)
                                                 in (decs, J.ExpStat exp)
                                                 end
@@ -140,8 +172,9 @@ and goStat (ctx, bound, depth, J.VarStat vars) = let val (decs, vars) = Vector.f
   | goStat (ctx, bound, depth, J.ThrowStat exp) = let val (decs, exp) = goExp (ctx, bound, depth, exp)
                                                   in (decs, J.ThrowStat exp)
                                                   end
-and goBlock (ctx, bound, depth, stats) = let val (decs, ys) = Vector.foldr (fn (stat, (decs, ys)) =>
-                                                                               let val (decs', stat') = goStat (ctx, bound, depth, stat)
+and goBlock (ctx, bound, depth, stats) = let val bound' = collectLetConstBlock stats bound
+                                             val (decs, ys) = Vector.foldr (fn (stat, (decs, ys)) =>
+                                                                               let val (decs', stat') = goStat (ctx, bound', depth, stat)
                                                                                in (decs' @ decs, stat' :: ys)
                                                                                end
                                                                            ) ([], []) stats

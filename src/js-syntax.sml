@@ -70,6 +70,8 @@ datatype Exp = ConstExp of JsConst
              | IndexExp of Exp * Exp
              | CondExp of Exp * Exp * Exp (* exp1 ? exp2 : exp3 *)
      and Stat = VarStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
+              | LetStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
+              | ConstStat of (TypedSyntax.VId * Exp) vector (* must not be empty *)
               | ExpStat of Exp
               | IfStat of Exp * Block * Block
               | ReturnStat of Exp option
@@ -341,6 +343,10 @@ and doCommaSepExp elements = commaSepV (Vector.map (fn value => doExp (Precedenc
 and doStat (S.VarStat variables) = (fn rest => Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
                                                                                                   | (id, SOME init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)
                                                                                                   ) variables) (Fragment ";" :: LineTerminator :: rest))
+  | doStat (S.LetStat variables) = (fn rest => Indent :: Fragment "let " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
+                                                                                                  | (id, SOME init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)
+                                                                                                  ) variables) (Fragment ";" :: LineTerminator :: rest))
+  | doStat (S.ConstStat variables) = (fn rest => Indent :: Fragment "const " :: commaSepV (Vector.map (fn (id, init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)) variables) (Fragment ";" :: LineTerminator :: rest))
   | doStat (S.ExpStat exp) = (fn rest => let val rest' = Fragment ";" :: LineTerminator :: rest
                                              val fragments = doExp (Precedence.Expression, exp) rest'
                                              val needParen = case fragments of

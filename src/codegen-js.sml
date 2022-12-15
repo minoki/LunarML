@@ -125,7 +125,7 @@ fun declareIfNotHoisted (env : Env, vars : TypedSyntax.VId list) : Env * JsSynta
                                                                  (addHoistedSymbol (env, v), (v, NONE) :: xs)) (env, []) vars
       in (env, case vars of
                    [] => []
-                 | _ => [ JsSyntax.VarStat (vector vars) ]
+                 | _ => [ JsSyntax.LetStat (vector vars) ]
          )
       end
 fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoistedSymbols, level = level + 1 }
@@ -152,7 +152,7 @@ fun mapCont f [] cont = cont []
 fun putPureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.True, exp]))) ]
   | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId v), exp)) ]
   | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                     stmts @ [ J.VarStat (vector [(destination, SOME exp)]) ]
+                                                                                     stmts @ [ J.ConstStat (vector [(destination, exp)]) ]
                                                                                  else
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
@@ -160,13 +160,13 @@ fun putPureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME
 and putImpureTo ctx env Return (stmts, exp : J.Exp) = stmts @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.True, exp]))) ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ J.ExpStat (J.BinExp (J.ASSIGN, J.VarExp (J.UserDefinedId v), exp)) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ [ J.VarStat (vector [(destination, SOME exp)]) ]
+                                                                                       stmts @ [ J.ConstStat (vector [(destination, exp)]) ]
                                                                                    else
                                                                                        raise CodeGenError "invalid DeclareAndAssignTo"
   | putImpureTo ctx env Discard (stmts, exp) = stmts @ [ J.ExpStat exp ]
   | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
                                                            val env = addSymbol (env, dest)
-                                                       in cont (stmts @ [ J.VarStat (vector [(dest, SOME exp)]) ], env, J.VarExp (J.UserDefinedId dest))
+                                                       in cont (stmts @ [ J.ConstStat (vector [(dest, exp)]) ], env, J.VarExp (J.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : J.Stat list * Env * J.Exp -> J.Stat list) = doExpTo ctx env exp (Continue cont)
 and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
@@ -321,7 +321,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
            Continue cont => let val result = genSym ctx
                                 val env' = addSymbol (env, result)
                                 val env'' = addSymbol (env', exnName)
-                            in cont ( [ J.VarStat (vector [(result, NONE)])
+                            in cont ( [ J.LetStat (vector [(result, NONE)])
                                       , J.TryCatchStat (vector (doExpTo ctx (increaseLevel env') body (AssignTo result)), exnName, vector (doExpTo ctx (increaseLevel env'') handler (AssignTo result)))
                                       ]
                                     , env'
@@ -330,7 +330,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                             end
          | DeclareAndAssignTo { level, destination } => let val env' = addSymbol (env, destination)
                                                             val env'' = addSymbol (env', exnName)
-                                                        in [ J.VarStat (vector [(destination, NONE)])
+                                                        in [ J.LetStat (vector [(destination, NONE)])
                                                            , J.TryCatchStat (vector (doExpTo ctx (increaseLevel env') body (AssignTo destination)), exnName, vector (doExpTo ctx (increaseLevel env'') handler (AssignTo destination)))
                                                            ]
                                                         end
@@ -373,8 +373,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                 val exp3' = doExpTo ctx (increaseLevel env') exp3 (AssignTo result)
                                             in cont ( stmts1
                                                       @ (case tryAssignToCondExp (result, exp2', exp3') of
-                                                             SOME condExp => [ J.VarStat (vector [(result, SOME condExp)]) ]
-                                                           | NONE => [ J.VarStat (vector [(result, NONE)])
+                                                             SOME condExp => [ J.ConstStat (vector [(result, condExp)]) ]
+                                                           | NONE => [ J.LetStat (vector [(result, NONE)])
                                                                      , J.IfStat (exp1', vector exp2', vector exp3')
                                                                      ]
                                                         )
@@ -386,8 +386,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                                             val exp3' = doExpTo ctx (increaseLevel env) exp3 (AssignTo destination)
                                                                         in stmts1
                                                                            @ (case tryAssignToCondExp (destination, exp2', exp3') of
-                                                                                  SOME condExp => [ J.VarStat (vector [(destination, SOME condExp)]) ]
-                                                                                | NONE => [ J.VarStat (vector [(destination, NONE)])
+                                                                                  SOME condExp => [ J.ConstStat (vector [(destination, condExp)]) ]
+                                                                                | NONE => [ J.LetStat (vector [(destination, NONE)])
                                                                                           , J.IfStat (exp1', vector exp2', vector exp3')
                                                                                           ]
                                                                              )
@@ -686,7 +686,7 @@ and doDec ctx env (F.ValDec (vid, _, exp)) : J.Stat list
         in if isHoisted (env, tagName) then
                J.AssignStat (J.VarExp (J.UserDefinedId tagName), value)
            else
-               J.VarStat (vector [(tagName, SOME value)])
+               J.ConstStat (vector [(tagName, value)])
         end
       , J.AssignStat (J.IndexExp (J.IndexExp (J.VarExp (J.UserDefinedId tagName), J.ConstExp (J.asciiStringAsWide "prototype")), J.ConstExp (J.asciiStringAsWide "name")), J.ConstExp (J.asciiStringAsWide name))
       ]
