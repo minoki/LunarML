@@ -95,7 +95,7 @@ fun optimizeCps (ctx : { nextVId : int ref }) cexp 0 = cexp
   | optimizeCps ctx cexp n = let val usage = ref TypedSyntax.VIdMap.empty
                                  val cusage = ref CSyntax.CVarMap.empty
                                  val () = CpsSimplify.usageInCExp (usage, cusage, cexp)
-                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, !usage, !cusage, cexp)) (n - 1)
+                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, !usage, !cusage, cexp)) (n - 1)
                              end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nextId decs
     = let val base = OS.Path.base fileName

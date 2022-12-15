@@ -334,8 +334,8 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
     = [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar applied, J.ArrayExp (vector (List.map doValue args))]))) ]
   | doCExp ctx (C.If { cond, thenCont, elseCont })
     = [ J.IfStat (doValue cond, vector (doCExp ctx thenCont), vector (doCExp ctx elseCont)) ]
-  | doCExp ctx (C.LetFun { name, contParam, exnContParam, params, body, cont })
-    = let val dec = J.VarStat (vector [(name, SOME (J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map VIdToJs params), vector (doCExp ctx body))))])
+  | doCExp ctx (C.Let { exp = C.Abs { contParam, exnContParam, params, body }, result, cont, exnCont })
+    = let val dec = J.VarStat (vector [(result, SOME (J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map VIdToJs params), vector (doCExp ctx body))))])
       in dec :: doCExp ctx cont
       end
   | doCExp ctx (C.LetRec { defs, cont })
