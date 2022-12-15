@@ -69,6 +69,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnWithPayloadOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.PrimFnOp p, ... }) = false (* TODO *)
+  | isDiscardable (PrimOp { primOp = F.JsCallOp, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true
@@ -233,6 +234,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                      | F.ConstructExnOp => false
                                                      | F.ConstructExnWithPayloadOp => false
                                                      | F.PrimFnOp p => Primitives.mayRaise p
+                                                     | F.JsCallOp => true
                                     val returnsUnit = case primOp of
                                                           F.PrimFnOp Primitives.Ref_set => true
                                                         | F.PrimFnOp Primitives.Unsafe_Array_update => true
@@ -718,82 +720,115 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
   | alphaConvert (ctx, subst, csubst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
   | alphaConvert (ctx, subst, csubst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
   | alphaConvert (ctx, subst, csubst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-fun simplifySimpleExp (env : C.SimpleExp TypedSyntax.VIdMap.map, usage, C.PrimOp { primOp, tyargs, args }) : C.Value option = NONE (* TODO: constant folding *)
-  | simplifySimpleExp (env, usage, C.Record fields) = NONE
-  | simplifySimpleExp (env, usage, C.ExnTag _) = NONE
+datatype simplify_result = VALUE of C.Value
+                         | SIMPLE_EXP of C.SimpleExp
+                         | NOT_SIMPLIFIED
+fun simplifySimpleExp (env : C.SimpleExp TypedSyntax.VIdMap.map, usage, C.Record fields) = NOT_SIMPLIFIED
+  | simplifySimpleExp (env, usage, C.PrimOp { primOp = F.PrimFnOp Primitives.JavaScript_call, tyargs, args = [f, C.Var args] })
+    = (case TypedSyntax.VIdMap.find (env, args) of
+           SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }) => SIMPLE_EXP (C.PrimOp { primOp = F.JsCallOp, tyargs = [], args = f :: args })
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, usage, C.PrimOp { primOp, tyargs, args }) = NOT_SIMPLIFIED (* TODO: constant folding *)
+  | simplifySimpleExp (env, usage, C.ExnTag _) = NOT_SIMPLIFIED
   | simplifySimpleExp (env, usage, C.Projection { label, record, fieldTypes })
     = (case record of
            C.Var v => (case TypedSyntax.VIdMap.find (env, v) of
                            SOME (C.Record fields) => (case Syntax.LabelMap.find (fields, label) of
-                                                          SOME w => SOME w
-                                                        | NONE => NONE
+                                                          SOME w => VALUE w
+                                                        | NONE => NOT_SIMPLIFIED
                                                      )
-                         | _ => NONE
+                         | _ => NOT_SIMPLIFIED
                       )
-         | _ => NONE
+         | _ => NOT_SIMPLIFIED
       )
-  | simplifySimpleExp (env, usage, C.Abs { contParam, exnContParam, params, body }) = NONE (* TODO: Try eta conversion *)
+  | simplifySimpleExp (env, usage, C.Abs { contParam, exnContParam, params, body }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
 and simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, e)
     = case e of
           C.Let { exp, result, cont, exnCont } =>
           let val exp = substSimpleExp (subst, csubst, exp)
               val exnCont = Option.map (substCVar csubst) exnCont
           in case simplifySimpleExp (env, usage, exp) of
-                 SOME v => let val subst = case result of
-                                               SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
-                                             | NONE => subst
-                           in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                           end
-               | NONE => case exp of
-                             C.Abs { contParam, exnContParam, params, body } =>
-                             (case result of
-                                  SOME result => (case TypedSyntax.VIdMap.find (usage, result) of
-                                                      SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                                    | SOME (ref ONCE_AS_CALLEE) => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
-                                                                                       val env = TypedSyntax.VIdMap.insert (env, result, C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body })
-                                                                                   in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                                                                   end
-                                                    | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
-                                                               val exp = C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body }
-                                                               val env = if sizeOfCExp body <= 10 then (* Inline small functions *)
-                                                                             TypedSyntax.VIdMap.insert (env, result, exp)
-                                                                         else
-                                                                             env
-                                                           in C.Let { exp = exp
-                                                                    , result = SOME result
-                                                                    , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                                                    , exnCont = NONE
-                                                                    }
-                                                           end
-                                                 )
-                                | NONE => C.Let { exp = exp
-                                                , result = NONE
-                                                , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                                , exnCont = NONE
-                                                }
-                             )
-                           | _ => if C.isDiscardable exp then
-                                      case result of
-                                          SOME result =>
-                                          (case TypedSyntax.VIdMap.find (usage, result) of
-                                               SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                             | _ => C.Let { exp = exp
-                                                          , result = SOME result
-                                                          , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
-                                                          , exnCont = exnCont
-                                                          }
-                                          )
-                                        | NONE => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                  else
-                                      let val env = case result of
-                                                          SOME result => TypedSyntax.VIdMap.insert (env, result, exp)
-                                                        | NONE => env
-                                      in C.Let { exp = exp
-                                               , result = result
-                                               , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                               , exnCont = exnCont
-                                               }
-                                      end
+                 VALUE v => let val subst = case result of
+                                                SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
+                                              | NONE => subst
+                            in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                            end
+               | SIMPLE_EXP exp =>
+                 (if C.isDiscardable exp then
+                      case result of
+                          SOME result =>
+                          (case TypedSyntax.VIdMap.find (usage, result) of
+                               SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                             | _ => C.Let { exp = exp
+                                          , result = SOME result
+                                          , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
+                                          , exnCont = exnCont
+                                          }
+                          )
+                        | NONE => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                  else
+                      let val env = case result of
+                                        SOME result => TypedSyntax.VIdMap.insert (env, result, exp)
+                                      | NONE => env
+                      in C.Let { exp = exp
+                               , result = result
+                               , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                               , exnCont = exnCont
+                               }
+                      end
+                 )
+               | NOT_SIMPLIFIED =>
+                 case exp of
+                     C.Abs { contParam, exnContParam, params, body } =>
+                     (case result of
+                          SOME result => (case TypedSyntax.VIdMap.find (usage, result) of
+                                              SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                            | SOME (ref ONCE_AS_CALLEE) => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
+                                                                               val env = TypedSyntax.VIdMap.insert (env, result, C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body })
+                                                                           in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                                                           end
+                                            | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
+                                                       val exp = C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body }
+                                                       val env = if sizeOfCExp body <= 10 then (* Inline small functions *)
+                                                                     TypedSyntax.VIdMap.insert (env, result, exp)
+                                                                 else
+                                                                     env
+                                                   in C.Let { exp = exp
+                                                            , result = SOME result
+                                                            , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                                            , exnCont = NONE
+                                                            }
+                                                   end
+                                         )
+                        | NONE => C.Let { exp = exp
+                                        , result = NONE
+                                        , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                        , exnCont = NONE
+                                        }
+                     )
+                   | _ => if C.isDiscardable exp then
+                              case result of
+                                  SOME result =>
+                                  (case TypedSyntax.VIdMap.find (usage, result) of
+                                       SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                     | _ => C.Let { exp = exp
+                                                  , result = SOME result
+                                                  , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
+                                                  , exnCont = exnCont
+                                                  }
+                                  )
+                                | NONE => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                          else
+                              let val env = case result of
+                                                SOME result => TypedSyntax.VIdMap.insert (env, result, exp)
+                                              | NONE => env
+                              in C.Let { exp = exp
+                                       , result = result
+                                       , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                       , exnCont = exnCont
+                                       }
+                              end
           end
         | C.App { applied, cont, exnCont, args } =>
           let val applied = substValue subst applied

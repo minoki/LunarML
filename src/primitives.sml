@@ -141,6 +141,7 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_isFalsy (* JavaScript.isFalsy *)
                 | JavaScript_typeof (* JavaScript.typeof *)
                 | JavaScript_global (* JavaScript.global *)
+                | JavaScript_call (* JavaScript.call *)
 fun toString EQUAL = "="
   | toString call2 = "call2"
   | toString call3 = "call3"
@@ -281,6 +282,7 @@ fun toString EQUAL = "="
   | toString JavaScript_isFalsy = "JavaScript.isFalsy"
   | toString JavaScript_typeof = "JavaScript.typeof"
   | toString JavaScript_global = "JavaScript.global"
+  | toString JavaScript_call = "JavaScript.call"
 fun fromString "=" = SOME EQUAL
   | fromString "call2" = SOME call2
   | fromString "call3" = SOME call3
@@ -421,6 +423,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.isFalsy" = SOME JavaScript_isFalsy
   | fromString "JavaScript.typeof" = SOME JavaScript_typeof
   | fromString "JavaScript.global" = SOME JavaScript_global
+  | fromString "JavaScript.call" = SOME JavaScript_call
   | fromString _ = NONE
 fun mayRaise EQUAL = false
   | mayRaise call2 = true
@@ -562,6 +565,7 @@ fun mayRaise EQUAL = false
   | mayRaise JavaScript_isFalsy = false
   | mayRaise JavaScript_typeof = false
   | mayRaise JavaScript_global = true
+  | mayRaise JavaScript_call = true
 end;
 
 functor TypeOfPrimitives (type ty
@@ -746,4 +750,5 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], result = bool }
   | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = string16 }
   | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], result = JavaScriptValue }
+  | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
 end;

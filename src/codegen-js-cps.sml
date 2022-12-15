@@ -67,7 +67,6 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_undefined, "undefined")
                     ,(VId_JavaScript_null, "null")
-                    ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
                     ,(VId_JavaScript_function, "_function")
@@ -349,8 +348,42 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
            | Primitives.JavaScript_isFalsy => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), false)
            | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), true)
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
+           | Primitives.JavaScript_call => doBinary (fn (f, args) =>
+                                                        case exnCont of
+                                                            SOME exnCont =>
+                                                            let val exnName = genSym ctx
+                                                            in case result of
+                                                                   SOME result => J.LetStat (vector [(result, NONE)])
+                                                                                  :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) ]
+                                                                                                    , exnName
+                                                                                                    , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                                                                                    )
+                                                                                  :: doCExp ctx cont
+                                                                 | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) ]
+                                                                                          , exnName
+                                                                                          , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                                                                          )
+                                                                           :: doCExp ctx cont
+                                                            end
+                                                          | NONE => raise CodeGenError "No exnCont for JavaScript.call"
+                                                    )
            | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.CallExp (J.VarExp (J.PredefinedId "_newPromptTag"), vector []), false)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript-CPS backend")
+      end
+  | doCExp ctx (C.Let { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, result, cont, exnCont = SOME exnCont })
+    = let val exnName = genSym ctx
+      in case result of
+             SOME result => J.LetStat (vector [(result, NONE)])
+                            :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.CallExp (doValue f, Vector.map doValue (vector args))) ]
+                                              , exnName
+                                              , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                              )
+                            :: doCExp ctx cont
+           | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (doValue f, Vector.map doValue (vector args))) ]
+                                    , exnName
+                                    , vector [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar exnCont, J.ArrayExp (vector [J.VarExp (J.UserDefinedId exnName)]) ]))) ]
+                                    )
+                     :: doCExp ctx cont
       end
   | doCExp ctx (C.Let { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result, cont, exnCont })
     = raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")

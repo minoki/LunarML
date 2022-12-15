@@ -829,6 +829,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                           )
                             )
   | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, _)) dest = raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, _)) dest = raise CodeGenError "JsCallOp: not supported"
 (* doDec : Context -> Env -> F.Dec -> L.Stat list *)
 and doDec ctx env (F.ValDec (vid, _, exp)) : L.Stat list
     = if isHoisted (env, vid) then

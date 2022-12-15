@@ -903,6 +903,12 @@ do
       type = { vars = {}, args = {string16}, result = JSValue },
       mayraise = true,
     },
+    {
+      name = "JavaScript.call",
+      srcname = "JavaScript_call",
+      type = { vars = {}, args = {JSValue, vector(JSValue)}, result = JSValue },
+      mayraise = true,
+    },
   }
 end
 

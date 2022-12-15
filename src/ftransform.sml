@@ -791,6 +791,7 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.ConstructExnWithPayloadOp = true
   | isDiscardablePrimOp (F.PrimFnOp Primitives.Exception_instanceof) = true
   | isDiscardablePrimOp (F.PrimFnOp _) = false
+  | isDiscardablePrimOp F.JsCallOp = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso List.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields

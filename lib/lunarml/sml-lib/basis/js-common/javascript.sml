@@ -108,7 +108,7 @@ structure JavaScript : sig
 type value = _Prim.JavaScript.value
 val undefined = _Prim.JavaScript.undefined
 val null = _Prim.JavaScript.null
-val call = _Prim.JavaScript.call
+fun call f args = _primCall "JavaScript.call" (f, args)
 val new = _Prim.JavaScript.new
 val method = _Prim.JavaScript.method
 val function = _Prim.JavaScript.function

@@ -79,7 +79,6 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_undefined, "undefined")
                     ,(VId_JavaScript_null, "null")
-                    ,(VId_JavaScript_call, "_call")
                     ,(VId_JavaScript_new, "_new")
                     ,(VId_JavaScript_method, "_method")
                     ,(VId_JavaScript_function, "_function")
@@ -260,24 +259,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
       in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doJsCall = case (exp1, exp2) of
-                              (F.AppExp (F.VarExp vid_jscall, f), F.PrimExp (F.VectorOp, _, xs)) =>
-                              if TypedSyntax.eqVId (vid_jscall, InitialEnv.VId_JavaScript_call) then
-                                  SOME (fn () => doExpCont ctx env f
-                                                           (fn (stmts1, env, f) =>
-                                                               mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                       xs
-                                                                       (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                     val zs = Vector.map #2 (vector ys)
-                                                                                 in putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (f, zs))
-                                                                                 end
-                                                                       )
-                                                           )
-                                       )
-                              else
-                                  NONE
-                            | _ => NONE
-          val doJsMethod = case (exp1, exp2) of
+    = let val doJsMethod = case (exp1, exp2) of
                                (F.AppExp (F.VarExp vid_jsmethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp (F.VectorOp, _, xs)) =>
                                 (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
                                      SOME method =>
@@ -301,20 +283,20 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
           val isNoop = case exp1 of
                            F.TyAppExp (F.VarExp vid, _) => TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
                          | _ => false
-      in case List.mapPartial (fn x => x) [doJsCall, doJsMethod] of
-             f :: _ => f ()
-           | [] => if isNoop then
-                       doExpTo ctx env exp2 dest
-                   else
-                       doExpCont ctx env exp1
-                                 (fn (stmts1, env, e1') =>
-                                     doExpCont ctx env exp2
-                                               (fn (stmts2, env, e2') =>
-                                                   case dest of
-                                                       Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
-                                                     | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
-                                               )
-                                 )
+      in case doJsMethod of
+             SOME f => f ()
+           | NONE => if isNoop then
+                         doExpTo ctx env exp2 dest
+                     else
+                         doExpCont ctx env exp1
+                                   (fn (stmts1, env, e1') =>
+                                       doExpCont ctx env exp2
+                                                 (fn (stmts2, env, e2') =>
+                                                     case dest of
+                                                         Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
+                                                       | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
+                                                 )
+                                   )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = (case dest of
@@ -634,6 +616,28 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
            | Primitives.JavaScript_isFalsy => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), false)
            | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), true)
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
+           | Primitives.JavaScript_call => (case args of
+                                                [f, F.PrimExp (F.VectorOp, _, args)] =>
+                                                doExpCont ctx env f
+                                                          (fn (stmts1, env, f) =>
+                                                              mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+                                                                      args
+                                                                      (fn args => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] args
+                                                                                      val args = Vector.map #2 (vector args)
+                                                                                  in putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (f, args))
+                                                                                  end
+                                                                      )
+                                                          )
+                                              | [f, args] =>
+                                                doExpCont ctx env f
+                                                          (fn (stmts0, env, f) =>
+                                                              doExpCont ctx env args
+                                                                        (fn (stmts1, env, args) =>
+                                                                            putImpureTo ctx env dest (stmts0 @ stmts1, J.MethodExp (f, "apply", vector [J.UndefinedExp, args]))
+                                                                        )
+                                                          )
+                                              | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+                                           )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
@@ -659,6 +663,16 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                           )
                             )
   | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, _)) dest = raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, [])) dest = raise CodeGenError "JsCallOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, f :: args)) dest
+    = doExpCont ctx env f (fn (stmts0, env, f) =>
+                              mapCont (fn (a, cont) => doExpCont ctx env a (fn (stmts, env, a) => cont (stmts, a)))
+                                      args
+                                      (fn args => let val (stmts1, args) = ListPair.unzip args
+                                                  in putImpureTo ctx env dest (stmts0 @ List.concat stmts1, J.CallExp (f, vector args))
+                                                  end
+                                      )
+                          )
 (* doDec : Context -> Env -> F.Dec -> J.Stat list *)
 and doDec ctx env (F.ValDec (vid, _, exp)) : J.Stat list
     = if isHoisted (env, vid) then

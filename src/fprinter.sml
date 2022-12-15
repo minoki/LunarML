@@ -33,6 +33,7 @@ fun doPrimOp (F.IntConstOp x) = [P.Fragment ("int " ^ IntInf.toString x)]
   | doPrimOp F.ConstructExnOp = [P.Fragment "ConstructExn"]
   | doPrimOp F.ConstructExnWithPayloadOp = [P.Fragment "ConstructExnWithPayload"]
   | doPrimOp (F.PrimFnOp primOp) = [P.Fragment (Primitives.toString primOp)]
+  | doPrimOp F.JsCallOp = [P.Fragment "JsCall"]
 fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
   | doPat prec (F.SConPat { scon, ... }) = [P.Fragment (Syntax.print_SCon scon)]
   | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)

@@ -118,7 +118,6 @@ val VId_Lua_LuaError_tag = newVId "_Prim.Lua.LuaError.tag"
 (* JavaScript interface *)
 val VId_JavaScript_undefined = newVId "_Prim.JavaScript.undefined"
 val VId_JavaScript_null = newVId "_Prim.JavaScript.null"
-val VId_JavaScript_call = newVId "_Prim.JavaScript.call"
 val VId_JavaScript_new = newVId "_Prim.JavaScript.new"
 val VId_JavaScript_method = newVId "_Prim.JavaScript.method"
 val VId_JavaScript_function = newVId "_Prim.JavaScript.function"
@@ -266,7 +265,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Lua.Lib.table.unpack", VId_Lua_Lib_table_unpack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.JavaScript.undefined", VId_JavaScript_undefined, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.null", VId_JavaScript_null, TypeScheme ([], primTy_JavaScript_value))
-                                           ,("_Prim.JavaScript.call", VId_JavaScript_call, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.new", VId_JavaScript_new, TypeScheme ([], primTy_JavaScript_value --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.method", VId_JavaScript_method, TypeScheme ([], mkPairType (primTy_JavaScript_value, primTy_string16) --> vectorOf primTy_JavaScript_value --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.function", VId_JavaScript_function, TypeScheme ([], (vectorOf primTy_JavaScript_value --> primTy_JavaScript_value) --> primTy_JavaScript_value))
