@@ -39,7 +39,7 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
                    | ExnTag of { name : string, payloadTy : FSyntax.Ty option }
                    | Projection of { label : Syntax.Label, record : Value, fieldTypes : FSyntax.Ty Syntax.LabelMap.map }
                    | Abs of { contParam : CVar, exnContParam : CVar, params : Var list, body : CExp } (* non-recursive function *)
-     and CExp = Let of { exp : SimpleExp, result : Var, cont : CExp, exnCont : CVar option }
+     and CExp = Let of { exp : SimpleExp, result : Var option, cont : CExp, exnCont : CVar option }
               | App of { applied : Value, cont : CVar, exnCont : CVar, args : Value list } (* tail call *)
               | AppCont of { applied : CVar, args : Value list }
               | If of { cond : Value
@@ -216,10 +216,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                                          raise Fail "StringConstOp: invalid type"
                                                    | _ => raise Fail "StringConstOp: invalid type"
                                                 )
-                         | _ => let val result = case k of
-                                                     META (SOME r, _) => r
-                                                   | _ => genSym ctx
-                                    val mayraise = case primOp of
+                         | _ => let val mayraise = case primOp of
                                                        F.IntConstOp _ => false
                                                      | F.WordConstOp _ => false
                                                      | F.RealConstOp _ => false
@@ -236,11 +233,30 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                      | F.ConstructExnOp => false
                                                      | F.ConstructExnWithPayloadOp => false
                                                      | F.PrimFnOp p => Primitives.mayRaise p
-                                in C.Let { exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
-                                         , result = result
-                                         , cont = apply k (C.Var result)
-                                         , exnCont = if mayraise then SOME exnCont else NONE
-                                         }
+                                    val returnsUnit = case primOp of
+                                                          F.PrimFnOp Primitives.Ref_set => true
+                                                        | F.PrimFnOp Primitives.Unsafe_Array_update => true
+                                                        | F.PrimFnOp Primitives.Lua_set => true
+                                                        | F.PrimFnOp Primitives.Lua_call0 => true
+                                                        | F.PrimFnOp Primitives.JavaScript_set => true
+                                                        | _ => false
+                                    val exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
+                                in if returnsUnit then
+                                       C.Let { exp = exp
+                                             , result = NONE
+                                             , cont = apply k C.Unit
+                                             , exnCont = if mayraise then SOME exnCont else NONE
+                                             }
+                                   else
+                                       let val result = case k of
+                                                            META (SOME r, _) => r
+                                                          | _ => genSym ctx
+                                       in C.Let { exp = exp
+                                                , result = SOME result
+                                                , cont = apply k (C.Var result)
+                                                , exnCont = if mayraise then SOME exnCont else NONE
+                                                }
+                                       end
                                 end
                    )
          | F.VarExp vid => (case TypedSyntax.VIdMap.find (env, vid) of
@@ -254,7 +270,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                                             META (SOME r, _) => r
                                                                           | _ => genSym ctx
                                                        in C.Let { exp = C.Record (List.foldl Syntax.LabelMap.insert' Syntax.LabelMap.empty fields)
-                                                                , result = result
+                                                                , result = SOME result
                                                                 , cont = apply k (C.Var result)
                                                                 , exnCont = NONE
                                                                 }
@@ -291,7 +307,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
            C.Let { exp = C.ExnTag { name = name
                                   , payloadTy = payloadTy
                                   }
-                 , result = tagName
+                 , result = SOME tagName
                  , cont = transformX (ctx, env) exp { exnCont = exnCont } k
                  , exnCont = NONE
                  }
@@ -340,7 +356,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                             , params = [vid]
                                                             , body = transformT (ctx, env) body { exnCont = hh } kk
                                                             }
-                                              , result = f
+                                              , result = SOME f
                                               , cont = apply k (C.Var f)
                                               , exnCont = NONE
                                               }
@@ -355,7 +371,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                        , record = record
                                                        , fieldTypes = fieldTypes
                                                        }
-                                  , result = x
+                                  , result = SOME x
                                   , cont = apply k (C.Var x)
                                   , exnCont = NONE
                                   }
@@ -388,7 +404,7 @@ fun transformDecs (ctx : Context, env) ([] : F.Dec list) { exnCont : C.CVar } (k
          | F.ExceptionDec { name, tagName, payloadTy } => C.Let { exp = C.ExnTag { name = name
                                                                                  , payloadTy = payloadTy
                                                                                  }
-                                                                , result = tagName
+                                                                , result = SOME tagName
                                                                 , cont = transformDecs (ctx, env) decs { exnCont = exnCont } k
                                                                 , exnCont = NONE
                                                                 }
@@ -509,7 +525,9 @@ and usageInCExp (env : ((usage ref) TypedSyntax.VIdMap.map) ref, cenv : ((cont_u
           C.Let { exp, result, cont, exnCont } =>
           ( usageInSimpleExp (env, cenv, exp)
           ; Option.app (usageContVar (!cenv)) exnCont
-          ; env := add (!env, result)
+          ; case result of
+                SOME result => env := add (!env, result)
+              | NONE => ()
           ; usageInCExp (env, cenv, cont)
           )
         | C.App { applied, cont, exnCont, args } =>
@@ -617,15 +635,21 @@ fun alphaConvertSimpleExp (ctx, subst, csubst, C.Abs { contParam, exnContParam, 
                }
       end
   | alphaConvertSimpleExp (ctx, subst, csubst, e) = substSimpleExp (subst, csubst, e)
-and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { exp, result, cont, exnCont })
+and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { exp, result = SOME result, cont, exnCont })
     = let val result' = renewVId (ctx, result)
           val subst' = TypedSyntax.VIdMap.insert (subst, result, C.Var result')
       in C.Let { exp = alphaConvertSimpleExp (ctx, subst, csubst, exp)
-               , result = result'
+               , result = SOME result'
                , exnCont = Option.map (substCVar csubst) exnCont
                , cont = alphaConvert (ctx, subst', csubst, cont)
                }
       end
+  | alphaConvert (ctx, subst, csubst, C.Let { exp, result = NONE, cont, exnCont })
+    = C.Let { exp = alphaConvertSimpleExp (ctx, subst, csubst, exp)
+            , result = NONE
+            , exnCont = Option.map (substCVar csubst) exnCont
+            , cont = alphaConvert (ctx, subst, csubst, cont)
+            }
   | alphaConvert (ctx, subst, csubst, C.App { applied, cont, exnCont, args })
     = C.App { applied = substValue subst applied
             , cont = substCVar csubst cont
@@ -715,42 +739,61 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, e)
           let val exp = substSimpleExp (subst, csubst, exp)
               val exnCont = Option.map (substCVar csubst) exnCont
           in case simplifySimpleExp (env, usage, exp) of
-                 SOME v => simplifyCExp (ctx, env, cenv, TypedSyntax.VIdMap.insert (subst, result, v), csubst, usage, cusage, cont)
+                 SOME v => let val subst = case result of
+                                               SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
+                                             | NONE => subst
+                           in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                           end
                | NONE => case exp of
                              C.Abs { contParam, exnContParam, params, body } =>
-                             (case TypedSyntax.VIdMap.find (usage, result) of
-                                  SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                | SOME (ref ONCE_AS_CALLEE) => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
-                                                                   val env = TypedSyntax.VIdMap.insert (env, result, C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body })
-                                                               in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                                               end
-                                | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
-                                           val exp = C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body }
-                                           val env = if sizeOfCExp body <= 10 then (* Inline small functions *)
-                                                         TypedSyntax.VIdMap.insert (env, result, exp)
-                                                     else
-                                                         env
-                                       in C.Let { exp = exp
-                                                , result = result
+                             (case result of
+                                  SOME result => (case TypedSyntax.VIdMap.find (usage, result) of
+                                                      SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                                    | SOME (ref ONCE_AS_CALLEE) => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
+                                                                                       val env = TypedSyntax.VIdMap.insert (env, result, C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body })
+                                                                                   in simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                                                                   end
+                                                    | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, body)
+                                                               val exp = C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = body }
+                                                               val env = if sizeOfCExp body <= 10 then (* Inline small functions *)
+                                                                             TypedSyntax.VIdMap.insert (env, result, exp)
+                                                                         else
+                                                                             env
+                                                           in C.Let { exp = exp
+                                                                    , result = SOME result
+                                                                    , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                                                    , exnCont = NONE
+                                                                    }
+                                                           end
+                                                 )
+                                | NONE => C.Let { exp = exp
+                                                , result = NONE
                                                 , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
                                                 , exnCont = NONE
                                                 }
-                                       end
                              )
                            | _ => if C.isDiscardable exp then
-                                      case TypedSyntax.VIdMap.find (usage, result) of
-                                          SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
-                                        | _ => C.Let { exp = exp
-                                                     , result = result
-                                                     , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
-                                                     , exnCont = exnCont
-                                                     }
+                                      case result of
+                                          SOME result =>
+                                          (case TypedSyntax.VIdMap.find (usage, result) of
+                                               SOME (ref NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                             | _ => C.Let { exp = exp
+                                                          , result = SOME result
+                                                          , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
+                                                          , exnCont = exnCont
+                                                          }
+                                          )
+                                        | NONE => simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
                                   else
-                                      C.Let { exp = exp
-                                            , result = result
-                                            , cont = simplifyCExp (ctx, TypedSyntax.VIdMap.insert (env, result, exp), cenv, subst, csubst, usage, cusage, cont)
-                                            , exnCont = exnCont
-                                            }
+                                      let val env = case result of
+                                                          SOME result => TypedSyntax.VIdMap.insert (env, result, exp)
+                                                        | NONE => env
+                                      in C.Let { exp = exp
+                                               , result = result
+                                               , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, cont)
+                                               , exnCont = exnCont
+                                               }
+                                      end
           end
         | C.App { applied, cont, exnCont, args } =>
           let val applied = substValue subst applied
