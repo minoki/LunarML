@@ -205,7 +205,7 @@ fun scan getc strm = let fun go (strm, revAcc) = case scanChar (getc, strm) of
                           | Error => NONE
                           | Empty => SOME ("", strm)
                      end
-val fromString = StringCvt.scanString scan
+fun fromString s = StringCvt.scanString scan s
 fun scanC getc strm = let fun go (strm, revAcc) = case scanCChar (getc, strm) of
                                                       Parsed (c, strm') => go (strm', c :: revAcc)
                                                     | Skipped strm' => go (strm', revAcc) (* cannot happen *)
@@ -217,7 +217,7 @@ fun scanC getc strm = let fun go (strm, revAcc) = case scanCChar (getc, strm) of
                            | Error => NONE
                            | Empty => SOME ("", strm)
                       end
-val fromCString = StringCvt.scanString scanC
+fun fromCString s = StringCvt.scanString scanC s
 open String
 end
 end;
