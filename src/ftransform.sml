@@ -790,13 +790,13 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.ConstructExnOp = true
   | isDiscardablePrimOp F.ConstructExnWithPayloadOp = true
   | isDiscardablePrimOp (F.PrimFnOp Primitives.Exception_instanceof) = true
+  | isDiscardablePrimOp (F.PrimFnOp Primitives.assumeDiscardable) = true
   | isDiscardablePrimOp (F.PrimFnOp _) = false
   | isDiscardablePrimOp F.JsCallOp = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso List.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
   | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
-  | isDiscardable (F.AppExp (F.TyAppExp (F.VarExp vid, _), exp2)) = TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3

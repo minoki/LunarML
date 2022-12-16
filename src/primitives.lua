@@ -565,6 +565,12 @@ do
       type = { vars = {TV.a, TV.b}, args = {subcont(TV.a, TV.b), function1(TV.a, unit)}, result = TV.b },
       mayraise = true,
     },
+    {
+      name = "assumeDiscardable",
+      srcname = "assumeDiscardable",
+      type = { vars = {TV.a, TV.b}, args = {function1(TV.b, TV.a), TV.a}, result = TV.b },
+      mayraise = true,
+    },
 
     --
     -- Lua backend

@@ -3,7 +3,7 @@ structure CommandLine : sig
               val arguments : unit -> string list
           end = struct
 local
-    val luaarg = LunarML.assumeDiscardable (Lua.global "arg")
+    val luaarg = LunarML.assumeDiscardable Lua.global "arg"
 in
 val name : unit -> string = fn () => let val s = Lua.sub (luaarg, Lua.fromInt 0)
                                      in if Lua.isNil s then

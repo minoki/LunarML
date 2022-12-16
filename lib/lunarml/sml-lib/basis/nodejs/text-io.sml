@@ -25,8 +25,8 @@ structure TextIO :> sig
               val print : string -> unit
           end = struct
 local
-    val process = LunarML.assumeDiscardable (JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"])
-    val stdout = LunarML.assumeDiscardable (JavaScript.field (process, "stdout"))
+    val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
+    val stdout = LunarML.assumeDiscardable JavaScript.field (process, "stdout")
 in
 fun print (s : string) = ( JavaScript.method (stdout, "write") #[JavaScript.unsafeToValue s]; ())
 end

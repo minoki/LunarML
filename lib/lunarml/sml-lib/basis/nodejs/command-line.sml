@@ -2,8 +2,8 @@ structure CommandLine : sig
               val name : unit -> string
               val arguments : unit -> string list
           end = struct
-local val process = LunarML.assumeDiscardable (JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"])
-      val argv = LunarML.assumeDiscardable (JavaScript.field (process, "argv"))
+local val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
+      val argv = LunarML.assumeDiscardable JavaScript.field (process, "argv")
 in
 fun name () = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.sub (argv, JavaScript.fromInt 1)))
 fun arguments () = let val n = JavaScript.unsafeFromValue (JavaScript.field (argv, "length"))

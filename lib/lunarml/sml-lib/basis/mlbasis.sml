@@ -87,11 +87,9 @@ _overload "String" [string] { < = String.<
                             };
 
 structure LunarML : sig
-              val assumePure : 'a -> 'a
-              val assumeDiscardable : 'a -> 'a
+              val assumeDiscardable : ('a -> 'b) -> 'a -> 'b
           end = struct
-val assumePure = _Prim.assumePure
-val assumeDiscardable = _Prim.assumeDiscardable
+fun assumeDiscardable f x = _primCall "assumeDiscardable" (f, x)
 end
 
 structure Lua : sig
@@ -251,45 +249,46 @@ val setmetatable = _Prim.Lua.Lib.setmetatable
 val math = _Prim.Lua.Lib.math
 val string = _Prim.Lua.Lib.string
 val table = _Prim.Lua.Lib.table
-val require = LunarML.assumeDiscardable (global "require")
-val tonumber = LunarML.assumeDiscardable (global "tonumber")
-val tostring = LunarML.assumeDiscardable (global "tostring")
-val type' = LunarML.assumeDiscardable (global "type")
+val require = LunarML.assumeDiscardable global "require"
+val tonumber = LunarML.assumeDiscardable global "tonumber"
+val tostring = LunarML.assumeDiscardable global "tostring"
+val type' = LunarML.assumeDiscardable global "type"
 structure math = struct
 val abs = _Prim.Lua.Lib.math.abs
 val type' = _Prim.Lua.Lib.math.type'
 val maxinteger = _Prim.Lua.Lib.math.maxinteger
 val mininteger = _Prim.Lua.Lib.math.mininteger
-val atan = LunarML.assumeDiscardable (field (math, "atan"))
-val ceil = LunarML.assumeDiscardable (field (math, "ceil"))
-val floor = LunarML.assumeDiscardable (field (math, "floor"))
-val fmod = LunarML.assumeDiscardable (field (math, "fmod"))
-val huge = LunarML.assumeDiscardable (field (math, "huge"))
-val log = LunarML.assumeDiscardable (field (math, "log"))
-val modf = LunarML.assumeDiscardable (field (math, "modf"))
+val atan = LunarML.assumeDiscardable field (math, "atan")
+val ceil = LunarML.assumeDiscardable field (math, "ceil")
+val floor = LunarML.assumeDiscardable field (math, "floor")
+val fmod = LunarML.assumeDiscardable field (math, "fmod")
+val huge = LunarML.assumeDiscardable field (math, "huge")
+val log = LunarML.assumeDiscardable field (math, "log")
+val modf = LunarML.assumeDiscardable field (math, "modf")
 end
 structure string = struct
 val format = _Prim.Lua.Lib.string.format
-val byte = LunarML.assumeDiscardable (field (string, "byte"))
-val char = LunarML.assumeDiscardable (field (string, "char"))
-val find = LunarML.assumeDiscardable (field (string, "find"))
-val gsub = LunarML.assumeDiscardable (field (string, "gsub"))
-val match = LunarML.assumeDiscardable (field (string, "match"))
-val sub = LunarML.assumeDiscardable (field (string, "sub"))
+val byte = LunarML.assumeDiscardable field (string, "byte")
+val char = LunarML.assumeDiscardable field (string, "char")
+val find = LunarML.assumeDiscardable field (string, "find")
+val gsub = LunarML.assumeDiscardable field (string, "gsub")
+val match = LunarML.assumeDiscardable field (string, "match")
+val sub = LunarML.assumeDiscardable field (string, "sub")
 end
 structure table = struct
 val pack = _Prim.Lua.Lib.table.pack
 val unpack = _Prim.Lua.Lib.table.unpack
-val concat = LunarML.assumeDiscardable (field (table, "concat"))
+val concat = LunarML.assumeDiscardable field (table, "concat")
 end
-val lfs = LunarML.assumeDiscardable (let val (ok, module) = call2 pcall #[require, fromString "lfs"]
-                                         val ok = unsafeFromValue ok : bool
-                                     in if ok then
-                                            SOME module
-                                        else
-                                            NONE
-                                     end
-                                    )
+val lfs = LunarML.assumeDiscardable
+              (fn () => let val (ok, module) = call2 pcall #[require, fromString "lfs"]
+                            val ok = unsafeFromValue ok : bool
+                        in if ok then
+                               SOME module
+                           else
+                               NONE
+                        end
+              ) ()
 end
 fun typeof x : string = unsafeFromValue (call1 Lib.type' #[x])
 exception TypeError of string
@@ -386,16 +385,14 @@ structure Int : INTEGER where type int = int = struct
 open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
-val precision : int option = LunarML.assumeDiscardable
-                                 (let fun computeWordSize (x : int, n) = if x = 0 then
-                                                                             n
-                                                                         else
-                                                                             computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
-                                  in SOME (computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1))
-                                  end
-                                 )
-val minInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.mininteger))
-val maxInt : int option = LunarML.assumeDiscardable (SOME (Lua.unsafeFromValue Lua.Lib.math.maxinteger))
+val precision : int option = let fun computeWordSize (x : int, n) = if x = 0 then
+                                                                        n
+                                                                    else
+                                                                        computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), n + 1)
+                             in SOME (LunarML.assumeDiscardable computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1))
+                             end
+val minInt : int option = SOME (Lua.unsafeFromValue Lua.Lib.math.mininteger)
+val maxInt : int option = SOME (Lua.unsafeFromValue Lua.Lib.math.maxinteger)
 fun quot (x, y) = if (x >= 0 andalso y >= 0) orelse (x <= 0 andalso y <= 0) then
                       x div y (* raise Overflow if x = minInt and y = ~1, Div if y = 0 *)
                   else
@@ -517,14 +514,12 @@ end;
 
 structure Word :> WORD where type word = word = struct
 open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
-val wordSize : int = LunarML.assumeDiscardable
-                         (let fun computeWordSize (x : int, n : int) = if x = 0 then
-                                                                           n
-                                                                       else
-                                                                           computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
-                          in computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1)
-                          end
-                         )
+val wordSize : int = let fun computeWordSize (x : int, n : int) = if x = 0 then
+                                                                      n
+                                                                  else
+                                                                      computeWordSize (Lua.unsafeFromValue (Lua.>> (Lua.fromInt x, Lua.fromInt 1)), Int.+ (n, 1))
+                     in LunarML.assumeDiscardable computeWordSize (Lua.unsafeFromValue Lua.Lib.math.maxinteger, 1)
+                     end
 (* toLarge, toLargeX, toLargeWord, toLargeWordX, fromLarge, fromLargeWord, toLargeInt, toLargeIntX, fromLargeInt *)
 val toInt : word -> int = fn x => if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) then
                                       raise Overflow
@@ -961,44 +956,47 @@ end; (* structure Real *)
 
 structure Math :> MATH where type real = Real.real = struct
 type real = real
-val pi : real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "pi")))
-val sqrt : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sqrt")))
-val sin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "sin")))
-val cos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "cos")))
-val tan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "tan")))
-val asin : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "asin")))
-val acos : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "acos")))
+val pi : real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "pi"))
+val sqrt : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "sqrt"))
+val sin : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "sin"))
+val cos : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "cos"))
+val tan : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "tan"))
+val asin : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "asin"))
+val acos : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "acos"))
 val atan : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.atan)
 val atan2 : real * real -> real = fn (y, x) => Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.atan #[Lua.fromReal y, Lua.fromReal x])
-val exp : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue (Lua.field (Lua.Lib.math, "exp")))
-val e = LunarML.assumeDiscardable (exp 1.0)
+val exp : real -> real = Lua.unsafeFromValue (LunarML.assumeDiscardable Lua.field (Lua.Lib.math, "exp"))
+val e = LunarML.assumeDiscardable exp 1.0
 val pow : real * real -> real = fn (x, y) => Lua.unsafeFromValue (Lua.pow (Lua.fromReal x, Lua.fromReal y))
-val ln : real -> real = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.math.log)
+val ln : real -> real = Lua.unsafeFromValue Lua.Lib.math.log
 val log10 : real -> real = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.math.log #[Lua.fromReal x, Lua.fromInt 10])
-val sinh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "sinh")
-                                                     in if Lua.isNil raw then
-                                                            fn x => (exp x - exp (~ x)) / 2.0
-                                                        else
-                                                            Lua.unsafeFromValue raw : real -> real
-                                                     end
-                                                    )
-val cosh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "cosh")
-                                                     in if Lua.isNil raw then
-                                                            fn x => (exp x + exp (~ x)) / 2.0
-                                                        else
-                                                            Lua.unsafeFromValue raw : real -> real
-                                                     end
-                                                    )
-val tanh : real -> real = LunarML.assumeDiscardable (let val raw = Lua.field (Lua.Lib.math, "tanh")
-                                                     in if Lua.isNil raw then
-                                                            fn x => let val ex = exp x
-                                                                        val e_x = exp (~ x)
-                                                                    in (ex - e_x) / (ex + e_x)
-                                                                    end
-                                                        else
-                                                            Lua.unsafeFromValue raw : real -> real
-                                                     end
-                                                    )
+val sinh : real -> real = LunarML.assumeDiscardable
+                              (fn () => let val raw = Lua.field (Lua.Lib.math, "sinh")
+                                        in if Lua.isNil raw then
+                                               fn x => (exp x - exp (~ x)) / 2.0
+                                           else
+                                               Lua.unsafeFromValue raw : real -> real
+                                        end
+                              ) ()
+val cosh : real -> real = LunarML.assumeDiscardable
+                              (fn () => let val raw = Lua.field (Lua.Lib.math, "cosh")
+                                        in if Lua.isNil raw then
+                                               fn x => (exp x + exp (~ x)) / 2.0
+                                           else
+                                               Lua.unsafeFromValue raw : real -> real
+                                        end
+                              ) ()
+val tanh : real -> real = LunarML.assumeDiscardable
+                              (fn () => let val raw = Lua.field (Lua.Lib.math, "tanh")
+                                        in if Lua.isNil raw then
+                                               fn x => let val ex = exp x
+                                                           val e_x = exp (~ x)
+                                                       in (ex - e_x) / (ex + e_x)
+                                                       end
+                                           else
+                                               Lua.unsafeFromValue raw : real -> real
+                                        end
+                              ) ()
 end; (* structure Math *)
 
 structure String : sig
@@ -1156,7 +1154,7 @@ type string = string
 val minChar = #"\000"
 val maxChar = #"\255"
 val maxOrd = 255
-val ord : char -> int = LunarML.assumeDiscardable (Lua.unsafeFromValue Lua.Lib.string.byte)
+val ord : char -> int = Lua.unsafeFromValue Lua.Lib.string.byte
 val chr : int -> char = fn x => if x < 0 orelse x > 255 then
                                     raise Chr
                                 else
@@ -1328,7 +1326,7 @@ end;
 
 structure String :> STRING where type string = string where type char = Char.char = struct
 open String
-val maxSize = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
+val maxSize = LunarML.assumeDiscardable (fn () => case Int.maxInt of SOME n => n | NONE => 0x7fffffff) ()
 fun toString s = translate Char.toString s
 fun toCString s = translate Char.toCString s
 end;
@@ -1357,5 +1355,5 @@ structure Vector : sig
               (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 open Vector
-val maxLen = LunarML.assumeDiscardable (case Int.maxInt of SOME n => n | NONE => 0x7fffffff)
+val maxLen = LunarML.assumeDiscardable (fn () => case Int.maxInt of SOME n => n | NONE => 0x7fffffff) ()
 end;

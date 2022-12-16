@@ -126,8 +126,6 @@ val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
 val VId_JavaScript_require = newVId "_Prim.JavaScript.require" (* Node.js *)
 
 (* Other primitives *)
-val VId_assumePure = newVId "_Prim.assumePure"
-val VId_assumeDiscardable = newVId "_Prim.assumeDiscardable"
 val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
 val VId_Int_add_bin = newVId "_Prim.Int.+"
 val VId_Int_sub_bin = newVId "_Prim.Int.-"
@@ -271,8 +269,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.JavaScript.encodeUtf8", VId_JavaScript_encodeUtf8, TypeScheme ([], primTy_string16 --> primTy_string))
                                            ,("_Prim.JavaScript.decodeUtf8", VId_JavaScript_decodeUtf8, TypeScheme ([], primTy_string --> primTy_string16))
                                            ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))
-                                           ,("_Prim.assumePure", VId_assumePure, TypeScheme ([(tyVarA, [])], tyA --> tyA))
-                                           ,("_Prim.assumeDiscardable", VId_assumeDiscardable, TypeScheme ([(tyVarA, [])], tyA --> tyA))
                                            ,("_Prim.DelimCont.topLevel", VId_DelimCont_topLevel, TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt_tag)))
                                            ]
                           ]

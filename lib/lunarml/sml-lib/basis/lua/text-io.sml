@@ -23,9 +23,9 @@ structure TextIO :> sig
               val print : string -> unit
           end = struct
 local
-    val io = LunarML.assumeDiscardable (Lua.global "io")
-    val io_open = LunarML.assumeDiscardable (Lua.field (io, "open"))
-    val io_write = LunarML.assumeDiscardable (Lua.field (io, "write"))
+    val io = LunarML.assumeDiscardable Lua.global "io"
+    val io_open = LunarML.assumeDiscardable Lua.field (io, "open")
+    val io_write = LunarML.assumeDiscardable Lua.field (io, "write")
     structure Instream :> sig
                   type instream
                   type vector = string
@@ -92,7 +92,7 @@ local
                       else
                           r0
                    end
-    val stdIn = LunarML.assumeDiscardable (Lua.field (io, "stdin"))
+    val stdIn = LunarML.assumeDiscardable Lua.field (io, "stdin")
     end
     structure Outstream :> sig
                   type outstream
@@ -128,8 +128,8 @@ local
                           else
                               r0
                        end
-    val stdOut = LunarML.assumeDiscardable (Lua.field (io, "stdout"))
-    val stdErr = LunarML.assumeDiscardable (Lua.field (io, "stderr"))
+    val stdOut = LunarML.assumeDiscardable Lua.field (io, "stdout")
+    val stdErr = LunarML.assumeDiscardable Lua.field (io, "stderr")
     fun print s = Lua.call0 io_write #[Lua.fromString s]
     end
 in

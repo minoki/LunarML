@@ -1,7 +1,5 @@
 structure LunarML : sig
-              val assumePure : 'a -> 'a
-              val assumeDiscardable : 'a -> 'a
+              val assumeDiscardable : ('a -> 'b) -> 'a -> 'b
           end = struct
-val assumePure = _Prim.assumePure
-val assumeDiscardable = _Prim.assumeDiscardable
+fun assumeDiscardable f x = _primCall "assumeDiscardable" (f, x)
 end;

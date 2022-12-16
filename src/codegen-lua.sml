@@ -99,9 +99,6 @@ val builtins
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
-                    (* extra *)
-                    ,(VId_assumePure, "_id") (* no-op *)
-                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
 val builtinsLuaJIT
@@ -180,9 +177,6 @@ val builtinsLuaJIT
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
-                    (* extra *)
-                    ,(VId_assumePure, "_id") (* no-op *)
-                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
 fun VIdToLua (ctx : Context, vid as TypedSyntax.MkVId (name, n))
@@ -391,21 +385,15 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                 )
                               | _ => NONE
           (* doLuaGlobal: VId_Lua_global *)
-          val isNoop = case exp1 of
-                           F.TyAppExp (F.VarExp vid, _) => TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
-                         | _ => false
       in case List.mapPartial (fn x => x) [doLuaCall, doLuaMethod] of
              f :: _ => f ()
-           | [] => if isNoop then
-                       doExpTo ctx env exp2 dest
-                   else
-                       doExpCont ctx env exp1
-                                 (fn (stmts1, env, e1') =>
-                                     doExpCont ctx env exp2
-                                               (fn (stmts2, env, e2') =>
-                                                   putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (e1', vector [e2']))
-                                               )
-                                 )
+           | [] => doExpCont ctx env exp1
+                             (fn (stmts1, env, e1') =>
+                                 doExpCont ctx env exp2
+                                           (fn (stmts2, env, e2') =>
+                                               putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (e1', vector [e2']))
+                                           )
+                             )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = let val status = genSym ctx
@@ -804,6 +792,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                               )
                                                  else
                                                      raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+           | Primitives.assumeDiscardable => doBinary (fn (stmts, env, (f, arg)) =>
+                                                          putImpureTo ctx env dest (stmts, L.CallExp (f, vector [arg]))
+                                                      )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest

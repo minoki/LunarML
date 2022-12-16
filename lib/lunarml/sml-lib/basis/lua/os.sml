@@ -50,12 +50,12 @@ structure OS :> sig
 type syserror = string
 exception SysErr of string * syserror option
 local
-    val oslib = LunarML.assumeDiscardable (Lua.global "os")
-    val os_execute = LunarML.assumeDiscardable (Lua.field (oslib, "execute"))
-    val os_exit = LunarML.assumeDiscardable (Lua.field (oslib, "exit"))
-    val os_getenv = LunarML.assumeDiscardable (Lua.field (oslib, "getenv"))
-    val os_remove = LunarML.assumeDiscardable (Lua.field (oslib, "remove"))
-    val os_rename = LunarML.assumeDiscardable (Lua.field (oslib, "rename"))
+    val oslib = LunarML.assumeDiscardable Lua.global "os"
+    val os_execute = LunarML.assumeDiscardable Lua.field (oslib, "execute")
+    val os_exit = LunarML.assumeDiscardable Lua.field (oslib, "exit")
+    val os_getenv = LunarML.assumeDiscardable Lua.field (oslib, "getenv")
+    val os_remove = LunarML.assumeDiscardable Lua.field (oslib, "remove")
+    val os_rename = LunarML.assumeDiscardable Lua.field (oslib, "rename")
 in
 structure FileSys = struct
 (*
@@ -77,127 +77,117 @@ val compare : file_id * file_id -> order
 fun use_lfs (field, f : Lua.value -> 'a -> 'b) = case Lua.Lib.lfs of
                                                      SOME lfs => f (Lua.field (lfs, field))
                                                    | NONE => fn _ => raise SysErr ("LuaFileSystem not available", NONE)
-val chDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("chdir", fn lfs_chdir =>
-                                                                             fn path => let val (ok, message) = Lua.call2 lfs_chdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy ok then
-                                                                                               let val message = Lua.checkString message
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
+val chDir : string -> unit = LunarML.assumeDiscardable use_lfs ("chdir", fn lfs_chdir =>
+                                                                            fn path => let val (ok, message) = Lua.call2 lfs_chdir #[Lua.fromString path]
+                                                                                       in if Lua.isFalsy ok then
+                                                                                              let val message = Lua.checkString message
+                                                                                              in raise SysErr (message, SOME message)
+                                                                                              end
+                                                                                          else
+                                                                                              ()
+                                                                                       end
+                                                               )
+val getDir : unit -> string = LunarML.assumeDiscardable use_lfs ("currentdir", fn lfs_currentdir =>
+                                                                                  fn () => let val (r0, message) = Lua.call2 lfs_currentdir #[]
+                                                                                           in if Lua.typeof r0 = "string" then
+                                                                                                  Lua.unsafeFromValue r0
+                                                                                              else
+                                                                                                  let val message = Lua.checkString message
+                                                                                                  in raise SysErr (message, SOME message)
+                                                                                                  end
+                                                                                           end
                                                                 )
-                                                       )
-val getDir : unit -> string = LunarML.assumeDiscardable (use_lfs ("currentdir", fn lfs_currentdir =>
-                                                                                   fn () => let val (r0, message) = Lua.call2 lfs_currentdir #[]
-                                                                                            in if Lua.typeof r0 = "string" then
-                                                                                                   Lua.unsafeFromValue r0
-                                                                                               else
+val mkDir : string -> unit = LunarML.assumeDiscardable use_lfs ("mkdir", fn lfs_mkdir =>
+                                                                            fn path => let val (ok, message) = Lua.call2 lfs_mkdir #[Lua.fromString path]
+                                                                                       in if Lua.isFalsy ok then
+                                                                                              let val message = Lua.checkString message
+                                                                                              in raise SysErr (message, SOME message)
+                                                                                              end
+                                                                                          else
+                                                                                              ()
+                                                                                       end
+                                                               )
+val rmDir : string -> unit = LunarML.assumeDiscardable use_lfs ("rmdir", fn lfs_rmdir =>
+                                                                            fn path => let val (ok, message) = Lua.call2 lfs_rmdir #[Lua.fromString path]
+                                                                                       in if Lua.isFalsy ok then
+                                                                                              let val message = Lua.checkString message
+                                                                                              in raise SysErr (message, SOME message)
+                                                                                              end
+                                                                                          else
+                                                                                              ()
+                                                                                       end
+                                                               )
+val isDir : string -> bool = LunarML.assumeDiscardable use_lfs ("attributes", fn lfs_attributes =>
+                                                                                 fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "mode"]
+                                                                                            in if Lua.isFalsy r0 then
                                                                                                    let val message = Lua.checkString message
                                                                                                    in raise SysErr (message, SOME message)
                                                                                                    end
+                                                                                               else
+                                                                                                   Lua.== (r0, Lua.fromString "directory")
                                                                                             end
-                                                                 )
-                                                        )
-val mkDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("mkdir", fn lfs_mkdir =>
-                                                                             fn path => let val (ok, message) = Lua.call2 lfs_mkdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy ok then
-                                                                                               let val message = Lua.checkString message
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
-                                                                )
-                                                       )
-val rmDir : string -> unit = LunarML.assumeDiscardable (use_lfs ("rmdir", fn lfs_rmdir =>
-                                                                             fn path => let val (ok, message) = Lua.call2 lfs_rmdir #[Lua.fromString path]
-                                                                                        in if Lua.isFalsy ok then
-                                                                                               let val message = Lua.checkString message
-                                                                                               in raise SysErr (message, SOME message)
-                                                                                               end
-                                                                                           else
-                                                                                               ()
-                                                                                        end
-                                                                )
-                                                       )
-val isDir : string -> bool = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                  fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "mode"]
-                                                                                             in if Lua.isFalsy r0 then
-                                                                                                    let val message = Lua.checkString message
-                                                                                                    in raise SysErr (message, SOME message)
+                                                               )
+val isLink : string -> bool = LunarML.assumeDiscardable use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
+                                                                                         fn path => let val (r0, message) = Lua.call2 lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "mode"]
+                                                                                                    in if Lua.isFalsy r0 then
+                                                                                                           let val message = Lua.checkString message
+                                                                                                           in raise SysErr (message, SOME message)
+                                                                                                           end
+                                                                                                       else
+                                                                                                           Lua.== (r0, Lua.fromString "link")
                                                                                                     end
-                                                                                                else
-                                                                                                    Lua.== (r0, Lua.fromString "directory")
-                                                                                             end
                                                                 )
-                                                       )
-val isLink : string -> bool = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
-                                                                                          fn path => let val (r0, message) = Lua.call2 lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "mode"]
-                                                                                                     in if Lua.isFalsy r0 then
-                                                                                                            let val message = Lua.checkString message
-                                                                                                            in raise SysErr (message, SOME message)
-                                                                                                            end
-                                                                                                        else
-                                                                                                            Lua.== (r0, Lua.fromString "link")
-                                                                                                     end
-                                                                 )
-                                                        )
-val readLink : string -> string = LunarML.assumeDiscardable (use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
-                                                                                              fn path => let val (r0, message) = Lua.call2 lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "target"]
-                                                                                                         in if Lua.isFalsy r0 then
-                                                                                                                let val message = Lua.checkString message
-                                                                                                                in raise SysErr (message, SOME message)
-                                                                                                                end
-                                                                                                            else
-                                                                                                                Lua.checkString r0
-                                                                                                         end
-                                                                     )
-                                                            )
-(* fullPath, realPath *)
-(*
-val modTime : string -> Time.time = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                  fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "modification"]
-                                                                                             in if Lua.isFalsy r0 then
-                                                                                                    let val message = Lua.checkString message
-                                                                                                    in raise SysErr (message, SOME message)
-                                                                                                    end
-                                                                                                else
-                                                                                                    raise Fail "modTime: not implemented yet"
-                                                                                             end
-                                                                       )
-                                                              )
-val fileSize : string -> Position.int = LunarML.assumeDiscardable (use_lfs ("attributes", fn lfs_attributes =>
-                                                                                             fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "size"]
+val readLink : string -> string = LunarML.assumeDiscardable use_lfs ("symlinkattributes", fn lfs_symlinkattributes =>
+                                                                                             fn path => let val (r0, message) = Lua.call2 lfs_symlinkattributes #[Lua.fromString path, Lua.fromString "target"]
                                                                                                         in if Lua.isFalsy r0 then
                                                                                                                let val message = Lua.checkString message
                                                                                                                in raise SysErr (message, SOME message)
                                                                                                                end
                                                                                                            else
-                                                                                                               raise Fail "fileSize: not implemented yet"
+                                                                                                               Lua.checkString r0
                                                                                                         end
-                                                                           )
-                                                                  )
-val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable (use_lfs ("touch", fn lfs_touch =>
-                                                                                                  (fn (path, NONE) => let val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path]
-                                                                                                                      in if Lua.isFalsy r0 then
-                                                                                                                             let val message = Lua.checkString message
-                                                                                                                             in raise SysErr (message, SOME message)
-                                                                                                                             end
-                                                                                                                         else
-                                                                                                                             ()
-                                                                                                                      end
-                                                                                                  | (path, SOME t) => let val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path, (* TODO *) t, (* TODO *) t]
-                                                                                                                      in if Lua.isFalsy r0 then
-                                                                                                                             let val message = Lua.checkString message
-                                                                                                                             in raise SysErr (message, SOME message)
-                                                                                                                             end
-                                                                                                                         else
-                                                                                                                             ()
-                                                                                                                      end
-                                                                                                  )
-                                                                                     )
-                                                                            )
+                                                                    )
+(* fullPath, realPath *)
+(*
+val modTime : string -> Time.time = LunarML.assumeDiscardable use_lfs ("attributes", fn lfs_attributes =>
+                                                                                 fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "modification"]
+                                                                                            in if Lua.isFalsy r0 then
+                                                                                                   let val message = Lua.checkString message
+                                                                                                   in raise SysErr (message, SOME message)
+                                                                                                   end
+                                                                                               else
+                                                                                                   raise Fail "modTime: not implemented yet"
+                                                                                            end
+                                                                      )
+val fileSize : string -> Position.int = LunarML.assumeDiscardable use_lfs ("attributes", fn lfs_attributes =>
+                                                                                            fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "size"]
+                                                                                                       in if Lua.isFalsy r0 then
+                                                                                                              let val message = Lua.checkString message
+                                                                                                              in raise SysErr (message, SOME message)
+                                                                                                              end
+                                                                                                          else
+                                                                                                              raise Fail "fileSize: not implemented yet"
+                                                                                                       end
+                                                                          )
+val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_lfs ("touch", fn lfs_touch =>
+                                                                                                 (fn (path, NONE) => let val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path]
+                                                                                                                     in if Lua.isFalsy r0 then
+                                                                                                                            let val message = Lua.checkString message
+                                                                                                                            in raise SysErr (message, SOME message)
+                                                                                                                            end
+                                                                                                                        else
+                                                                                                                            ()
+                                                                                                                     end
+                                                                                                 | (path, SOME t) => let val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path, (* TODO *) t, (* TODO *) t]
+                                                                                                                     in if Lua.isFalsy r0 then
+                                                                                                                            let val message = Lua.checkString message
+                                                                                                                            in raise SysErr (message, SOME message)
+                                                                                                                            end
+                                                                                                                        else
+                                                                                                                            ()
+                                                                                                                     end
+                                                                                                 )
+                                                                                    )
 *)
 val remove : string -> unit = fn filename => Lua.call0 os_remove #[Lua.fromString filename]
 val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 os_rename #[Lua.fromString old, Lua.fromString new]

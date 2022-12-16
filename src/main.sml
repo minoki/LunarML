@@ -157,7 +157,9 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
                         in CSyntax.CVar.fromInt n
                         end
           val cexp = CpsTransform.transformDecs ({ nextVId = nextId }, TypedSyntax.VIdMap.empty) decs { exnCont = exnCont } cont
-          val cexp = optimizeCps { nextVId = nextId } cexp (5 * (#optimizationLevel opts + 4))
+          val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
+          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId }, cexp)
+          val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js

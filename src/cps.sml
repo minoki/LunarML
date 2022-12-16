@@ -68,6 +68,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructValWithPayloadOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnWithPayloadOp, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.PrimFnOp Primitives.assumeDiscardable, ... }) = true
   | isDiscardable (PrimOp { primOp = F.PrimFnOp p, ... }) = false (* TODO *)
   | isDiscardable (PrimOp { primOp = F.JsCallOp, ... }) = false
   | isDiscardable (Record _) = true
@@ -422,6 +423,11 @@ local structure F = FSyntax
       structure C = CSyntax
 in
 type Context = { nextVId : int ref }
+fun genContSym (ctx : Context) : CSyntax.CVar
+    = let val n = !(#nextVId ctx)
+          val _ = #nextVId ctx := n + 1
+      in CSyntax.CVar.fromInt n
+      end
 fun renewVId ({ nextVId } : Context, TypedSyntax.MkVId (name, _))
     = let val n = !nextVId
       in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
@@ -896,5 +902,35 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, cusage, e)
         | C.PushPrompt { promptTag, f, cont, exnCont } => C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
         | C.WithSubCont { promptTag, f, cont, exnCont } => C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
         | C.PushSubCont { subCont, f, cont, exnCont } => C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
+
+(* Eliminate assumeDiscardable *)
+fun finalizeCExp (ctx, C.Let { exp = C.PrimOp { primOp = F.PrimFnOp Primitives.assumeDiscardable, tyargs, args = [f, arg] }, result = SOME result, cont, exnCont = SOME exnCont })
+    = let val name = genContSym ctx
+      in C.LetCont { name = name
+                   , params = [result]
+                   , body = finalizeCExp (ctx, cont)
+                   , cont = C.App { applied = f, cont = name, exnCont = exnCont, args = [arg] }
+                   }
+      end
+  | finalizeCExp (ctx, C.Let { exp = C.PrimOp { primOp = F.PrimFnOp Primitives.assumeDiscardable, tyargs, args = _ }, result = _, cont, exnCont = _ }) = raise Fail "assumeDiscardable: invalid argument"
+  | finalizeCExp (ctx, C.Let { exp as C.PrimOp { primOp, tyargs, args }, result, cont, exnCont }) = C.Let { exp = exp, result = result, cont = finalizeCExp (ctx, cont), exnCont = exnCont }
+  | finalizeCExp (ctx, C.Let { exp as C.Record _, result, cont, exnCont }) = C.Let { exp = exp, result = result, cont = finalizeCExp (ctx, cont), exnCont = exnCont }
+  | finalizeCExp (ctx, C.Let { exp as C.ExnTag _, result, cont, exnCont }) = C.Let { exp = exp, result = result, cont = finalizeCExp (ctx, cont), exnCont = exnCont }
+  | finalizeCExp (ctx, C.Let { exp as C.Projection _, result, cont, exnCont }) = C.Let { exp = exp, result = result, cont = finalizeCExp (ctx, cont), exnCont = exnCont }
+  | finalizeCExp (ctx, C.Let { exp = C.Abs { contParam, exnContParam, params, body }, result, cont, exnCont })
+    = C.Let { exp = C.Abs { contParam = contParam, exnContParam = exnContParam, params = params, body = finalizeCExp (ctx, body) }
+            , result = result
+            , cont = finalizeCExp (ctx, cont)
+            , exnCont = exnCont
+            }
+  | finalizeCExp (ctx, e as C.App _) = e
+  | finalizeCExp (ctx, e as C.AppCont _) = e
+  | finalizeCExp (ctx, C.If { cond, thenCont, elseCont }) = C.If { cond = cond, thenCont = finalizeCExp (ctx, thenCont), elseCont = finalizeCExp (ctx, elseCont) }
+  | finalizeCExp (ctx, C.LetRec { defs, cont }) = C.LetRec { defs = List.map (fn (name, k, h, params, body) => (name, k, h, params, finalizeCExp (ctx, body))) defs, cont = finalizeCExp (ctx, cont) }
+  | finalizeCExp (ctx, C.LetCont { name, params, body, cont }) = C.LetCont { name = name, params = params, body = finalizeCExp (ctx, body), cont = finalizeCExp (ctx, cont) }
+  | finalizeCExp (ctx, C.LetRecCont { defs, cont }) = C.LetRecCont { defs = List.map (fn (name, params, body) => (name, params, finalizeCExp (ctx, body))) defs, cont = finalizeCExp (ctx, cont) }
+  | finalizeCExp (ctx, e as C.PushPrompt _) = e
+  | finalizeCExp (ctx, e as C.WithSubCont _) = e
+  | finalizeCExp (ctx, e as C.PushSubCont _) = e
 end
 end;

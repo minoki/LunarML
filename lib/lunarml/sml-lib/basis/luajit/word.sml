@@ -1,6 +1,6 @@
 local
-    val ffi = LunarML.assumeDiscardable (Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"])
-    val uint64_t = LunarML.assumeDiscardable (Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "uint64_t"]) (* ffi.typeof("uint64_t") *)
+    val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
+    val uint64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "uint64_t"]) () (* ffi.typeof("uint64_t") *)
     fun WordToUint64 (x : word) : Lua.value = Lua.call1 uint64_t #[Lua.fromWord x]
     fun Uint64ToWord (x : Lua.value) : word = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x])
     structure WordImpl :> sig

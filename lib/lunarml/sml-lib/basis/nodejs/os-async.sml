@@ -49,9 +49,9 @@ structure OS :> sig
           end = struct
 type syserror = string
 exception SysErr of string * syserror option
-local val fs = LunarML.assumeDiscardable (JavaScript.call JavaScript.require #[JavaScript.fromWideString "fs"])
-      val process = LunarML.assumeDiscardable (JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"])
-      val child_process = LunarML.assumeDiscardable (JavaScript.call JavaScript.require #[JavaScript.fromWideString "child_process"])
+local val fs = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "fs"]) ()
+      val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
+      val child_process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "child_process"]) ()
 in
 structure FileSys = struct
 (*

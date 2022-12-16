@@ -74,8 +74,6 @@ val builtins
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
                     ,(VId_JavaScript_require, "require")
                     (* extra *)
-                    ,(VId_assumePure, "_id") (* no-op *)
-                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ,(VId_DelimCont_topLevel, "_topLevel")
                     ]
       end

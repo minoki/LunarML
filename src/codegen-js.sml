@@ -85,9 +85,6 @@ val builtins
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
                     ,(VId_JavaScript_require, "require")
-                    (* extra *)
-                    ,(VId_assumePure, "_id") (* no-op *)
-                    ,(VId_assumeDiscardable, "_id") (* no-op *)
                     ]
       end
 fun VIdToJs (vid as TypedSyntax.MkVId (name, n)) = if n < 0 then
@@ -280,23 +277,17 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                    | NONE => NONE
                                 )
                               | _ => NONE
-          val isNoop = case exp1 of
-                           F.TyAppExp (F.VarExp vid, _) => TypedSyntax.eqVId (vid, InitialEnv.VId_assumePure) orelse TypedSyntax.eqVId (vid, InitialEnv.VId_assumeDiscardable)
-                         | _ => false
       in case doJsMethod of
              SOME f => f ()
-           | NONE => if isNoop then
-                         doExpTo ctx env exp2 dest
-                     else
-                         doExpCont ctx env exp1
-                                   (fn (stmts1, env, e1') =>
-                                       doExpCont ctx env exp2
-                                                 (fn (stmts2, env, e2') =>
-                                                     case dest of
-                                                         Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
-                                                       | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
-                                                 )
-                                   )
+           | NONE => doExpCont ctx env exp1
+                               (fn (stmts1, env, e1') =>
+                                   doExpCont ctx env exp2
+                                             (fn (stmts2, env, e2') =>
+                                                 case dest of
+                                                     Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
+                                                   | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
+                                             )
+                               )
       end
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = (case dest of
@@ -587,6 +578,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                              end
                                                          )
            | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), true)
+           | Primitives.assumeDiscardable => doBinary (fn (stmts, env, (f, arg)) =>
+                                                          putImpureTo ctx env dest (stmts, J.CallExp (f, vector [arg]))
+                                                      )
            | Primitives.JavaScript_sub => doBinaryExp (fn (a, b) => J.IndexExp (a, b), false)
            | Primitives.JavaScript_set => doTernary (fn (stmts, env, (a, b, c)) =>
                                                         let val stmts = stmts @ [ J.AssignStat (J.IndexExp (a, b), c) ]

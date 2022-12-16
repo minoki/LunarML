@@ -126,8 +126,8 @@ _overload "Int" [Int32.int] { + = Int32.+
                             };
 
 local
-    val ffi = LunarML.assumeDiscardable (Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"])
-    val int64_t = LunarML.assumeDiscardable (Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "int64_t"]) (* ffi.typeof("int64_t") *)
+    val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
+    val int64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "int64_t"]) () (* ffi.typeof("int64_t") *)
     fun IntToInt64 (x : int) : Lua.value = Lua.call1 int64_t #[Lua.fromInt x]
     fun Int64ToInt (x : Lua.value) : int = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x])
     structure Int64Impl :> sig
