@@ -17,7 +17,7 @@ bool.sml
 $(TARGET_LANG)/array-prim.sml
 math-sig.sml
 string-cvt-sig.sml
-mlbasis.sml
+lua/mlbasis.sml
 vector-sig.sml
 array.sml
 lua/word.sml

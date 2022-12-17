@@ -22,7 +22,7 @@ $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 math-sig.sml
 string-cvt-sig.sml
-mlbasis-js.sml
+js-common/mlbasis.sml
 vector-sig.sml
 array.sml
 scan-num-utils.sml
