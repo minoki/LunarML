@@ -68,8 +68,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructValWithPayloadOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnWithPayloadOp, ... }) = true
-  | isDiscardable (PrimOp { primOp = F.PrimFnOp Primitives.assumeDiscardable, ... }) = true
-  | isDiscardable (PrimOp { primOp = F.PrimFnOp p, ... }) = false (* TODO *)
+  | isDiscardable (PrimOp { primOp = F.PrimFnOp p, ... }) = Primitives.isDiscardable p
   | isDiscardable (PrimOp { primOp = F.JsCallOp, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
