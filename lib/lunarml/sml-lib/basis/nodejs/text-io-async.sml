@@ -269,7 +269,7 @@ local
     fun setInstream (stream, stream') = stream := stream'
     fun openIn path = ref (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)]))
     fun openString content = ref (StreamIO.openVector content)
-    val stdIn = ref (StreamIO.openReadable stdin)
+    val stdIn = LunarML.assumeDiscardable (fn () => ref (StreamIO.openReadable stdin)) ()
     end
     structure Outstream :> sig
                   type outstream
