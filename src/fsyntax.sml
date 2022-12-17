@@ -1014,10 +1014,8 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
   | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
   | getEquality (ctx, env, recordTy as T.RecordType (span, fields))
     = let val param = freshVId (ctx, "a")
-      in if Syntax.LabelMap.numItems fields = 0 then
-             let val unitTy = F.RecordType Syntax.LabelMap.empty
-             in F.FnExp (param, F.PairType (unitTy, unitTy), F.VarExp InitialEnv.VId_true)
-             end
+      in if Syntax.LabelMap.isEmpty fields then
+             F.VarExp Typing.VId_unit_equal
          else
              let val recordTy = toFTy (ctx, env, recordTy)
                  val fieldTypes = case recordTy of

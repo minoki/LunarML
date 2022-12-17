@@ -29,7 +29,7 @@ fun newVId name = let val n = !vidCounter
                   end
 
 (* Ref *)
-val VId_ref = newVId "ref"
+val VId_ref = Typing.VId_ref
 
 (* Bool *)
 val VId_true = newVId "true"
@@ -37,7 +37,7 @@ val VId_false = newVId "false"
 
 (* List *)
 val VId_nil = newVId "nil"
-val VId_DCOLON = newVId "::"
+val VId_DCOLON = Typing.VId_DCOLON
 
 (* Exception *)
 val VId_Match = newVId "Match"

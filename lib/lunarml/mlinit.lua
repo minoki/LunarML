@@ -204,20 +204,12 @@ local __Word_LT = math_ult
 
 -- List
 local _nil = { tag = "nil" }
-local function _cons(t)
-  return { tag = "::", payload = t }
-end
 local function _list(t)
   local xs = _nil
   for i = t.n, 1, -1 do
     xs = { tag = "::", payload = { t[i], xs } }
   end
   return xs
-end
-
--- Ref
-local function _ref(x)
-  return { tag = "ref", payload = x }
 end
 
 -- Vector/Array

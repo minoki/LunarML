@@ -2,6 +2,7 @@ infixes.sml
 _prim
 _primOverloads
 ann "allowPrim true" "allowBindEqual true" "allowOverload true" in
+prim.sml
 equal.sml
 end
 local

@@ -74,6 +74,18 @@ do
       mayraise = true,
     },
     {
+      name = "List.::",
+      srcname = "List_cons",
+      type = { vars = {TV.a}, args = {TV.a, list(TV.a)}, result = list(TV.a) },
+      mayraise = false,
+    },
+    {
+      name = "Ref.ref",
+      srcname = "Ref_ref",
+      type = { vars = {TV.a}, args = {TV.a}, result = ref(TV.a) },
+      mayraise = false,
+    },
+    {
       name = "Ref.=",
       srcname = "Ref_EQUAL",
       type = { vars = {TV.a}, args = {ref(TV.a), ref(TV.a)}, result = bool },

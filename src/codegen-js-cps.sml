@@ -14,14 +14,11 @@ fun ConstStat (vid, exp) = J.ConstStat (vector [(vid, exp)])
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* ref *)
-                     (VId_ref, "_ref")
-                    (* boolean *)
-                    ,(VId_true, "true") (* boolean literal *)
+                    [(* boolean *)
+                     (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
                     ,(VId_nil, "_nil")
-                    ,(VId_DCOLON, "_cons")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -233,6 +230,25 @@ fun doCExp (ctx : Context) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, t
                                                                   :: doCExp ctx cont
                                                    end
                                                  | _ => raise CodeGenError "No exnCont for Primitives.call2"
+                                           )
+           | Primitives.List_cons => doBinary (fn (x, xs) =>
+                                                  case result of
+                                                      SOME result => ConstStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "::"))
+                                                                                                            ,(J.StringKey "payload", J.ArrayExp (vector [x, xs]))
+                                                                                                            ]
+                                                                                                    )
+                                                                               ) :: doCExp ctx cont
+                                                    | NONE => doCExp ctx cont
+                                              )
+           | Primitives.Ref_ref => doUnary (fn x =>
+                                               (* REPRESENTATION_OF_REF *)
+                                               case result of
+                                                   SOME result => ConstStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "ref"))
+                                                                                                         ,(J.StringKey "payload", x)
+                                                                                                         ]
+                                                                                                 )
+                                                                            ) :: doCExp ctx cont
+                                                 | NONE => doCExp ctx cont
                                            )
            | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (a, b) => J.AssignStat (J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b) :: (case result of

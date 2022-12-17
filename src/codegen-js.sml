@@ -23,14 +23,11 @@ exception CodeGenError of string
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* ref *)
-                     (VId_ref, "_ref")
-                    (* boolean *)
-                    ,(VId_true, "true") (* boolean literal *)
+                    [(* boolean *)
+                     (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
                     ,(VId_nil, "_nil")
-                    ,(VId_DCOLON, "_cons")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -488,6 +485,21 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                                    )
                                     | _ => raise CodeGenError "primop call3: invalid number of arguments"
                                  )
+           | Primitives.List_cons => doBinary (fn (stmts, env, (x, xs)) =>
+                                                  putPureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "::"))
+                                                                                                     ,(J.StringKey "payload", J.ArrayExp (vector [x, xs]))
+                                                                                                     ]
+                                                                                             )
+                                                                         )
+                                              )
+           | Primitives.Ref_ref => doUnary (fn (stmts, env, x) =>
+                                               (* REPRESENTATION_OF_REF *)
+                                               putImpureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "ref"))
+                                                                                                    ,(J.StringKey "payload", x)
+                                                                                                    ]
+                                                                                            )
+                                                                        )
+                                           )
            | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                 (* REPRESENTATION_OF_REF *)

@@ -257,6 +257,11 @@ val primTy_JavaScript_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyN
 val VId_Bind = TypedSyntax.MkVId ("Bind", ~1)
 val LongVId_Bind = TypedSyntax.MkShortVId VId_Bind
 
+(* Index of user-defined identifiers start with 100 *)
+val VId_ref = TypedSyntax.MkVId ("ref", 0)
+val VId_DCOLON = TypedSyntax.MkVId ("::", 1)
+val VId_unit_equal = TypedSyntax.MkVId ("unit_equal", 2)
+
 fun isRefOrArray (tyname : TypedSyntax.TyName) = TypedSyntax.eqTyName (tyname, primTyName_ref) orelse TypedSyntax.eqTyName (tyname, primTyName_array)
 
 structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
@@ -770,6 +775,21 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                                                                  )
                                          )
       )
+  | typeCheckPat (ctx, env, S.VarPat (span, vid as S.MkVId "_Prim.ref"), typeHint)
+    = let val payloadTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+          val ty = T.FnType (span, payloadTy, T.TyCon (span, [payloadTy], primTyName_ref))
+      in (ty, S.VIdMap.singleton (vid, (VId_ref, ty)), T.VarPat (span, VId_ref, ty))
+      end
+  | typeCheckPat (ctx, env, S.VarPat (span, vid as S.MkVId "_Prim.::"), typeHint)
+    = let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+          val listTy = T.TyCon (span, [elemTy], primTyName_list)
+          val ty = T.FnType (span, T.PairType (span, elemTy, listTy), listTy)
+      in (ty, S.VIdMap.singleton (vid, (VId_DCOLON, ty)), T.VarPat (span, VId_DCOLON, ty))
+      end
+  | typeCheckPat (ctx, env, S.VarPat (span, vid as S.MkVId "_Prim.unit.equal"), typeHint)
+    = let val ty = T.FnType (span, T.PairType (span, primTy_unit, primTy_unit), primTy_bool)
+      in (ty, S.VIdMap.singleton (vid, (VId_unit_equal, ty)), T.VarPat (span, VId_unit_equal, ty))
+      end
   | typeCheckPat (ctx, env, S.VarPat (span, vid), typeHint)
     = (case Syntax.VIdMap.find(#valMap env, vid) of
            SOME (_, Syntax.ValueConstructor _, _) => emitTypeError (ctx, [span], "VarPat: invalid pattern")

@@ -4,6 +4,8 @@ structure Primitives = struct
 datatype PrimOp = EQUAL (* = *)
                 | call2 (* call2 *)
                 | call3 (* call3 *)
+                | List_cons (* List.:: *)
+                | Ref_ref (* Ref.ref *)
                 | Ref_EQUAL (* Ref.= *)
                 | Ref_set (* Ref.:= *)
                 | Ref_read (* Ref.! *)
@@ -146,6 +148,8 @@ datatype PrimOp = EQUAL (* = *)
 fun toString EQUAL = "="
   | toString call2 = "call2"
   | toString call3 = "call3"
+  | toString List_cons = "List.::"
+  | toString Ref_ref = "Ref.ref"
   | toString Ref_EQUAL = "Ref.="
   | toString Ref_set = "Ref.:="
   | toString Ref_read = "Ref.!"
@@ -288,6 +292,8 @@ fun toString EQUAL = "="
 fun fromString "=" = SOME EQUAL
   | fromString "call2" = SOME call2
   | fromString "call3" = SOME call3
+  | fromString "List.::" = SOME List_cons
+  | fromString "Ref.ref" = SOME Ref_ref
   | fromString "Ref.=" = SOME Ref_EQUAL
   | fromString "Ref.:=" = SOME Ref_set
   | fromString "Ref.!" = SOME Ref_read
@@ -431,6 +437,8 @@ fun fromString "=" = SOME EQUAL
 fun mayRaise EQUAL = false
   | mayRaise call2 = true
   | mayRaise call3 = true
+  | mayRaise List_cons = false
+  | mayRaise Ref_ref = false
   | mayRaise Ref_EQUAL = false
   | mayRaise Ref_set = false
   | mayRaise Ref_read = false
@@ -617,6 +625,8 @@ functor TypeOfPrimitives (type ty
 fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [tyEqA, tyEqA], result = bool }
   | typeOf Primitives.call2 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, [])], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], result = tyA }
   | typeOf Primitives.call3 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, []), (tyVarD, [])], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], result = tyA }
+  | typeOf Primitives.List_cons = { vars = [(tyVarA, [])], args = vector [tyA, listOf (tyA)], result = listOf (tyA) }
+  | typeOf Primitives.Ref_ref = { vars = [(tyVarA, [])], args = vector [tyA], result = refOf (tyA) }
   | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, [])], args = vector [refOf (tyA), refOf (tyA)], result = bool }
   | typeOf Primitives.Ref_set = { vars = [(tyVarA, [])], args = vector [refOf (tyA), tyA], result = unit }
   | typeOf Primitives.Ref_read = { vars = [(tyVarA, [])], args = vector [refOf (tyA)], result = tyA }

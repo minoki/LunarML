@@ -28,14 +28,11 @@ type Context = { nextLuaId : int ref
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* ref *)
-                     (VId_ref, "_ref")
-                    (* boolean *)
-                    ,(VId_true, "true") (* boolean literal *)
+                    [(* boolean *)
+                     (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
                     ,(VId_nil, "_nil")
-                    ,(VId_DCOLON, "_cons")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -104,14 +101,11 @@ val builtins
 val builtinsLuaJIT
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* ref *)
-                     (VId_ref, "_ref")
-                    (* boolean *)
-                    ,(VId_true, "true") (* boolean literal *)
+                    [(* boolean *)
+                     (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
                     ,(VId_nil, "_nil")
-                    ,(VId_DCOLON, "_cons")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -593,6 +587,21 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                                    )
                                     | _ => raise CodeGenError "primop call3: invalid number of arguments"
                                  )
+           | Primitives.List_cons => doBinary (fn (stmts, env, (x, xs)) =>
+                                                  putPureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "::"))
+                                                                                                    ,(L.StringKey "payload", L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]))
+                                                                                                    ]
+                                                                                            )
+                                                                         )
+                                              )
+           | Primitives.Ref_ref => doUnary (fn (stmts, env, x) =>
+                                               (* REPRESENTATION_OF_REF *)
+                                               putImpureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "ref"))
+                                                                                                   ,(L.StringKey "payload", x)
+                                                                                                   ]
+                                                                                           )
+                                                                        )
+                                           )
            | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, true)
            | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                 (* REPRESENTATION_OF_REF *)
