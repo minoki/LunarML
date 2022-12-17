@@ -945,3 +945,73 @@ fun finalizeCExp (ctx, C.Let { exp = C.PrimOp { primOp = F.PrimFnOp Primitives.a
   | finalizeCExp (ctx, e as C.PushSubCont _) = e
 end
 end;
+
+structure CpsAnalyze = struct
+local structure F = FSyntax
+      structure C = CSyntax
+in
+type env = { escapes : bool ref, level : int, outerDestinations : C.CVarSet.set } C.CVarMap.map
+fun direct (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
+                                                SOME { escapes, level = level', outerDestinations } => if level' < level then
+                                                                                                           C.CVarSet.add (acc, k)
+                                                                                                       else
+                                                                                                           acc
+                                              | NONE => acc
+fun recEscape (env : env) k = case C.CVarMap.find (env, k) of
+                                  SOME { escapes, level, outerDestinations } => if !escapes then
+                                                                                    ()
+                                                                                else
+                                                                                    ( escapes := true
+                                                                                    ; C.CVarSet.app (recEscape env) outerDestinations
+                                                                                    )
+                                | NONE => ()
+fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
+                                                SOME { escapes, level = level', outerDestinations } => ( recEscape (!env) k
+                                                                                                       ; if level' < level then
+                                                                                                             C.CVarSet.add (acc, k)
+                                                                                                         else
+                                                                                                             acc
+                                                                                                       )
+                                              | NONE => acc
+fun go (env, level, C.Let { exp = C.Abs { contParam, exnContParam, params, body}, result = SOME result, cont, exnCont }, acc)
+    = let val acc = case exnCont of
+                        SOME exnCont => direct (env, level, exnCont, acc)
+                      | NONE => acc
+          val acc = go (env, 0, body, acc)
+      in go (env, level, cont, acc)
+      end
+  | go (env, level, C.Let { exp, result, cont, exnCont }, acc) = let val acc = case exnCont of
+                                                                                   SOME exnCont => direct (env, level, exnCont, acc)
+                                                                                 | NONE => acc
+                                                                 in go (env, level, cont, acc)
+                                                                 end
+  | go (env, level, C.App { applied, cont, exnCont, args }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
+  | go (env, level, C.AppCont { applied, args }, acc) = direct (env, level, applied, acc)
+  | go (env, level, C.If { cond, thenCont, elseCont }, acc) = go (env, level, elseCont, go (env, level, thenCont, acc))
+  | go (env, level, C.LetRec { defs, cont }, acc) = let val acc = List.foldl (fn ((f, k, h, params, body), acc) =>
+                                                                                 go (env, 0, body, acc)
+                                                                             ) acc defs
+                                                    in go (env, level, cont, acc)
+                                                    end
+  | go (env, level, C.LetCont { name, params, body, cont }, acc) = let val outerDestinations = go (env, level + 1, body, C.CVarSet.empty)
+                                                                   in env := C.CVarMap.insert (!env, name, { escapes = ref false, level = level, outerDestinations = outerDestinations })
+                                                                    ; go (env, level, cont, C.CVarSet.union (acc, outerDestinations))
+                                                                   end
+  | go (env, level, C.LetRecCont { defs, cont }, acc) = let val () = env := List.foldl (fn ((name, params, body), env) => C.CVarMap.insert (env, name, { escapes = ref false, level = level, outerDestinations = C.CVarSet.empty })) (!env) defs
+                                                            val outerDestinations = List.foldl (fn ((name, params, body), acc) => go (env, level + 1, body, acc)) C.CVarSet.empty defs
+                                                        in env := List.foldl (fn ((name, params, body), env) => C.CVarMap.insert (env, name, { escapes = #escapes (C.CVarMap.lookup (env, name)), level = level, outerDestinations = outerDestinations })) (!env) defs
+                                                         ; if List.exists (fn (name, _, _) => !(#escapes (C.CVarMap.lookup (!env, name)))) defs then
+                                                               List.app (fn (name, _, _) => ignore (escape (env, level + 1, name, C.CVarSet.empty))) defs
+                                                           else
+                                                               ()
+                                                         ; go (env, level, cont, C.CVarSet.union (acc, outerDestinations))
+                                                        end
+  | go (env, level, C.PushPrompt { promptTag, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
+  | go (env, level, C.WithSubCont { promptTag, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
+  | go (env, level, C.PushSubCont { subCont, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
+fun contEscape cexp = let val env = ref C.CVarMap.empty
+                          val _ = go (env, 0, cexp, C.CVarSet.empty)
+                      in C.CVarMap.map (fn { escapes, ... } => !escapes) (!env)
+                      end
+end (* local *)
+end; (* structure CpsAnalyze *)

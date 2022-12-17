@@ -162,11 +162,12 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) fileName nex
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
           val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId }, cexp)
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
+          val contEscapeMap = CpsAnalyze.contEscape cexp
           val base = OS.Path.base fileName
           val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
-          val jsctx = { nextJsId = nextId }
-          val js = CodeGenJsCps.doProgram jsctx cont exnCont cexp
+          val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap }
+          val js = CodeGenJsCps.doProgram jsctx CSyntax.CVarMap.empty cont exnCont cexp
           val js = JsTransform.doProgram { nextVId = nextId } js
           val js = JsWriter.doProgram js
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)

@@ -77,12 +77,20 @@ datatype Exp = ConstExp of JsConst
               | ReturnStat of Exp option
               | TryCatchStat of Block * TypedSyntax.VId * Block
               | ThrowStat of Exp
+              | BlockStat of Id option * Block
+              | LoopStat of Id option * Block (* label: for(;;) { body } *)
+              | SwitchStat of Exp * (JsConst * Block) list (* switch (e) { case c0: { ... } case c1: { ... } } *)
+              | BreakStat of Id option
+              | ContinueStat of Id option
 withtype Block = Stat vector
 
 val UndefinedExp = VarExp (PredefinedId "undefined")
 fun ToInt32Exp exp = BinExp (BITOR, exp, ConstExp (Numeral "0"))
 fun ToUint32Exp exp = BinExp (URSHIFT, exp, ConstExp (Numeral "0"))
 fun AssignStat (lhs, rhs) = ExpStat (BinExp (ASSIGN, lhs, rhs))
+fun MultiAssignStat ([], []) = []
+  | MultiAssignStat ([lhs], [rhs]) = [ AssignStat (lhs, rhs) ]
+  | MultiAssignStat (lhs, rhs) = [ ExpStat (BinExp (ASSIGN, ArrayExp (vector lhs), ArrayExp (vector rhs))) ]
 end;
 
 structure JsWriter = struct
@@ -284,14 +292,12 @@ fun binOpInfo S.PLUS = InfixOp (7, "+")
   | binOpInfo S.IN = InfixOp (9, "in")
   | binOpInfo S.EXP = ExponentiationOp
 
-fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list
-    = (fn rest => case ct of
-                      S.Null => Fragment "null" :: rest
-                    | S.False => Fragment "false" :: rest
-                    | S.True => Fragment "true" :: rest
-                    | S.Numeral s => Fragment s :: rest (* TODO: hexadecimal floating-point *)
-                    | S.WideString s => Fragment (toWideStringLit s) :: rest
-      )
+fun doConst S.Null = (fn rest => Fragment "null" :: rest)
+  | doConst S.False = (fn rest => Fragment "false" :: rest)
+  | doConst S.True = (fn rest => Fragment "true" :: rest)
+  | doConst (S.Numeral s) = (fn rest => Fragment s :: rest)
+  | doConst (S.WideString s) = (fn rest => Fragment (toWideStringLit s) :: rest)
+fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
   | doExp (prec, S.ThisExp) = (fn rest => Fragment "this" :: rest)
   | doExp (prec, S.VarExp id) = (fn rest => Fragment (idToJs id) :: rest)
   | doExp (prec, S.ObjectExp fields) = (fn rest => Fragment "{" :: commaSepV (Vector.map (fn (key, value) => fn rest => Fragment (doKey key) :: Fragment ": " :: doExp (Precedence.AssignmentExpression, value) rest) fields) (Fragment "}" :: rest))
@@ -375,6 +381,15 @@ and doStat (S.VarStat variables) = (fn rest => Indent :: Fragment "var " :: comm
   | doStat (S.ReturnStat (SOME exp)) = (fn rest => Indent :: Fragment "return " :: doExp (Precedence.Expression, exp) (Fragment ";" :: LineTerminator :: rest))
   | doStat (S.TryCatchStat (body, exnName, catch)) = (fn rest => Indent :: Fragment "try {" :: IncreaseIndent :: LineTerminator :: doBlock body (DecreaseIndent :: Indent :: Fragment "} catch (" :: Fragment (idToJs (S.UserDefinedId exnName)) :: Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock catch (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest)))
   | doStat (S.ThrowStat exp) = (fn rest => Indent :: Fragment "throw " :: doExp (Precedence.Expression, exp) (Fragment ";" :: LineTerminator :: rest))
+  | doStat (S.BlockStat (NONE, block)) = (fn rest => Indent :: Fragment "{" :: IncreaseIndent :: LineTerminator :: doBlock block (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
+  | doStat (S.BlockStat (SOME label, block)) = (fn rest => Indent :: Fragment (idToJs label) :: Fragment ": {" :: IncreaseIndent :: LineTerminator :: doBlock block (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
+  | doStat (S.LoopStat (NONE, block)) = (fn rest => Indent :: Fragment "for (;;) {" :: IncreaseIndent :: LineTerminator :: doBlock block (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
+  | doStat (S.LoopStat (SOME label, block)) = (fn rest => Indent :: Fragment (idToJs label) :: Fragment ": for (;;) {" :: IncreaseIndent :: LineTerminator :: doBlock block (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))
+  | doStat (S.SwitchStat (exp, cases)) = (fn rest => Indent :: Fragment "switch (" :: doExp (Precedence.Expression, exp) (Fragment ") {" :: LineTerminator :: List.foldr (fn ((c, block), rest) => Indent :: Fragment "case " :: doConst c (Fragment ":" :: IncreaseIndent :: LineTerminator :: Indent :: Fragment "{" :: IncreaseIndent :: LineTerminator :: doBlock block (DecreaseIndent :: Indent :: Fragment "}" :: LineTerminator :: rest))) rest cases))
+  | doStat (S.BreakStat NONE) = (fn rest => Indent :: Fragment "break;" :: LineTerminator :: rest)
+  | doStat (S.BreakStat (SOME label)) = (fn rest => Indent :: Fragment "break " :: Fragment (idToJs label) :: Fragment ";" :: LineTerminator :: rest)
+  | doStat (S.ContinueStat NONE) = (fn rest => Indent :: Fragment "break;" :: LineTerminator :: rest)
+  | doStat (S.ContinueStat (SOME label)) = (fn rest => Indent :: Fragment "break " :: Fragment (idToJs label) :: Fragment ";" :: LineTerminator :: rest)
 and doBlock stats = (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
 
 fun doProgram stats = buildProgram (doBlock stats [])
