@@ -113,10 +113,10 @@ fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
 
 type Context = { nextJsId : int ref, contEscapeMap : bool C.CVarMap.map }
-datatype cont_type = NONREC of { params : J.Id list }
-                   | REC of { label : J.Id, which : J.Id, whichVal : J.JsConst, params : J.Id list }
-                   | CONTINUE of { label : J.Id, which : J.Id, whichVal : J.JsConst, params : J.Id list }
-type Env = cont_type option C.CVarMap.map
+datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
+                   | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
+                   | TAILCALL
+type Env = cont_type C.CVarMap.map
 fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
                                  val _ = #nextJsId ctx := n + 1
                              in TypedSyntax.MkVId ("tmp", n)
@@ -124,10 +124,12 @@ fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
 
 fun applyCont (ctx : Context, env : Env, cont, args)
     = case C.CVarMap.find (env, cont) of
-          SOME (SOME (NONREC { params })) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.BreakStat (SOME (CVarToJs cont)) ]
-        | SOME (SOME (REC { label, which, whichVal, params })) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp which, J.ConstExp whichVal), J.BreakStat (SOME label) ]
-        | SOME (SOME (CONTINUE { label, which, whichVal, params })) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp which, J.ConstExp whichVal), J.ContinueStat (SOME label) ]
-        | _ => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar cont, J.ArrayExp (vector args)]))) ]
+          SOME (BREAK_TO { label, which = NONE, params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.BreakStat (SOME label) ]
+        | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ]
+        | SOME (CONTINUE_TO { label, which = NONE, params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.ContinueStat (SOME label) ]
+        | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ]
+        | SOME TAILCALL => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar cont, J.ArrayExp (vector args)]))) ]
+        | NONE => raise CodeGenError "undefined continuation"
 fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result, cont, exnCont }) : J.Stat list
     = let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
                         (* JavaScript does not support hexadecimal floating-point literals *)
@@ -451,14 +453,17 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
     = [ J.IfStat (doValue cond, vector (doCExp ctx env thenCont), vector (doCExp ctx env elseCont)) ]
   | doCExp ctx env (C.Let { exp = C.Abs { contParam, exnContParam, params, body }, result, cont, exnCont })
     = (case result of
-           SOME result => let val dec = ConstStat (result, J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map VIdToJs params), vector (doCExp ctx env body)))
+           SOME result => let val env' = C.CVarMap.insert (C.CVarMap.insert (env, contParam, TAILCALL), exnContParam, TAILCALL)
+                              val dec = ConstStat (result, J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map VIdToJs params), vector (doCExp ctx env' body)))
                           in dec :: doCExp ctx env cont
                           end
          | NONE => doCExp ctx env cont
       )
   | doCExp ctx env (C.LetRec { defs, cont })
     = let val (decs, assignments) = List.foldr (fn ((vid, k, h, params, body), (decs, assignments)) =>
-                                                   (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: CVarToJs h :: List.map VIdToJs params), vector (doCExp ctx env body))) :: assignments) (* in fact, ConstStat can be used *)
+                                                   let val env' = C.CVarMap.insert (C.CVarMap.insert (env, k, TAILCALL), h, TAILCALL)
+                                                   in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: CVarToJs h :: List.map VIdToJs params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
+                                                   end
                                                ) ([], []) defs
       in decs @ assignments @ doCExp ctx env cont
       end
@@ -468,12 +473,13 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                            []
                                        else
                                            [J.LetStat (vector (List.map (fn p => (p, NONE)) params))]
-                             val newEnv = C.CVarMap.insert (env, name, SOME (NONREC { params = List.map VIdToJs params }))
+                             val newEnv = C.CVarMap.insert (env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map VIdToJs params })
                          in dec @ J.BlockStat (SOME (CVarToJs name), vector (doCExp ctx newEnv cont))
                             :: doCExp ctx env body
                          end
          | _ => let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx env body)))
-                in dec :: doCExp ctx env cont
+                    val env' = C.CVarMap.insert (env, name, TAILCALL)
+                in dec :: doCExp ctx env' cont
                 end
       )
   | doCExp ctx env (C.LetRecCont { defs, cont })
@@ -485,8 +491,8 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
               val maxargs = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
               val commonParams = List.tabulate (maxargs, fn _ => genSym ctx)
               val vars = which :: commonParams
-              val (_, contEnv) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, SOME (REC { label = blockLabel, which = which', whichVal = J.Numeral (Int.toString i), params = List.map VIdToJs (List.take (commonParams, List.length params)) })))) (0, env) defs
-              val (n, recEnv) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, SOME (CONTINUE { label = loopLabel, which = which', whichVal = J.Numeral (Int.toString i), params = List.map VIdToJs (List.take (commonParams, List.length params)) })))) (0, env) defs
+              val (_, contEnv) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, BREAK_TO { label = blockLabel, which = SOME (which', J.Numeral (Int.toString i)), params = List.map VIdToJs (List.take (commonParams, List.length params)) }))) (0, env) defs
+              val (n, recEnv) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, CONTINUE_TO { label = loopLabel, which = SOME (which', J.Numeral (Int.toString i)), params = List.map VIdToJs (List.take (commonParams, List.length params)) }))) (0, env) defs
           in J.LetStat (vector (List.map (fn p => (p, NONE)) vars))
              :: J.BlockStat (SOME blockLabel, vector (doCExp ctx contEnv cont))
              :: [ J.LoopStat ( SOME loopLabel
@@ -506,10 +512,11 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                 ]
           end
       else
-          let val (decs, assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
-                                                       (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx env body))) :: assignments) (* in fact, ConstStat can be used *)
+          let val env' = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL)) env defs
+              val (decs, assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
+                                                       (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map VIdToJs params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
                                                    ) ([], []) defs
-          in decs @ assignments @ doCExp ctx env cont
+          in decs @ assignments @ doCExp ctx env' cont
           end
   | doCExp ctx env (C.PushPrompt { promptTag, f, cont, exnCont })
     = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushPrompt"), vector [doValue promptTag, doValue f, doCVar cont, doCVar exnCont]))) ]
@@ -518,5 +525,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
   | doCExp ctx env (C.PushSubCont { subCont, f, cont, exnCont })
     = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushSubCont"), vector [doValue subCont, doValue f, doCVar cont, doCVar exnCont]))) ]
 
-fun doProgram ctx env cont exnCont cexp = vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont, CVarToJs exnCont], vector (doCExp ctx env cexp))]))]
+fun doProgram ctx env cont exnCont cexp = let val env' = C.CVarMap.insert (C.CVarMap.insert (env, cont, TAILCALL), exnCont, TAILCALL)
+                                          in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont, CVarToJs exnCont], vector (doCExp ctx env' cexp))]))]
+                                          end
 end;
