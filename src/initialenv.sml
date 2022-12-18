@@ -146,6 +146,9 @@ val VId_String_concatWith = newVId "_Prim.String.concatWith"
 val VId_String_implode = newVId "_Prim.String.implode"
 val VId_String_translate = newVId "_Prim.String.translate"
 
+val VId_DelimCont_pushPrompt = newVId "_Prim.DelimCont.pushPrompt"
+val VId_DelimCont_withSubCont = newVId "_Prim.DelimCont.withSubCont"
+val VId_DelimCont_pushSubCont = newVId "_Prim.DelimCont.pushSubCont"
 val VId_DelimCont_topLevel = newVId "_Prim.DelimCont.topLevel"
 
 val initialEnv : Typing.Env

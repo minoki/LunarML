@@ -49,9 +49,6 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
               | LetRec of { defs : (Var * CVar * CVar * Var list * CExp) list, cont : CExp } (* recursive function *)
               | LetCont of { name : CVar, params : Var list, body : CExp, cont : CExp }
               | LetRecCont of { defs : (CVar * Var list * CExp) list, cont : CExp }
-              | PushPrompt of { promptTag : Value, f : Value, cont : CVar, exnCont : CVar }
-              | WithSubCont of { promptTag : Value, f : Value, cont : CVar, exnCont : CVar }
-              | PushSubCont of { subCont : Value, f : Value, cont : CVar, exnCont : CVar }
 local structure F = FSyntax in
 fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.WordConstOp _, ... }) = true
@@ -132,47 +129,35 @@ and transformT (ctx, env) exp { exnCont } k = transformX (ctx, env) exp { exnCon
 and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont) : C.CExp
     = case exp of
            F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushPrompt, tyargs, [p (* 'a prompt_tag *), f (* unit -> 'a *)]) =>
-           reify (ctx, k)
-                 (fn kk =>
-                     transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
-                               (fn p =>
-                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                             (fn f =>
-                                                 C.PushPrompt { promptTag = p
-                                                              , f = f
-                                                              , cont = kk
-                                                              , exnCont = exnCont
-                                                              }
+           transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
+                     (fn p =>
+                         transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                   (fn f =>
+                                       reify (ctx, k)
+                                             (fn kk =>
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushPrompt, cont = kk, exnCont = exnCont, args = [p, f] }
                                              )
-                               )
-                 )
+                                   )
+                     )
          | F.PrimExp (F.PrimFnOp Primitives.DelimCont_withSubCont, tyargs, [p (* 'b prompt_tag *), f (* ('a,'b) subcont -> 'b *)]) =>
-           reify (ctx, k)
-                 (fn kk =>
-                     transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
-                               (fn p =>
-                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                             (fn f =>
-                                                 C.WithSubCont { promptTag = p
-                                                               , f = f
-                                                               , cont = kk
-                                                               , exnCont = exnCont
-                                                               }
+           transform (ctx, env) p { exnCont = exnCont, resultHint = NONE }
+                     (fn p =>
+                         transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                   (fn f =>
+                                       reify (ctx, k)
+                                             (fn kk =>
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_withSubCont, cont = kk, exnCont = exnCont, args = [p, f] }
                                              )
                                )
                  )
          | F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushSubCont, tyargs, [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]) =>
-           reify (ctx, k)
-                 (fn kk =>
-                     transform (ctx, env) subcont { exnCont = exnCont, resultHint = NONE }
-                               (fn subcont =>
-                                   transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
-                                             (fn f =>
-                                                 C.PushSubCont { subCont = subcont
-                                                               , f = f
-                                                               , cont = kk
-                                                               , exnCont = exnCont
-                                                               }
+           transform (ctx, env) subcont { exnCont = exnCont, resultHint = NONE }
+                     (fn subcont =>
+                         transform (ctx, env) f { exnCont = exnCont, resultHint = NONE }
+                                   (fn f =>
+                                       reify (ctx, k)
+                                             (fn kk =>
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushSubCont, cont = kk, exnCont = exnCont, args = [subcont, f] }
                                              )
                                )
                  )
@@ -447,9 +432,6 @@ and sizeOfCExp (C.Let { exp, result = _, cont, exnCont = _ }) = sizeOfSimpleExp 
   | sizeOfCExp (C.LetRec { defs, cont }) = List.foldl (fn ((_, _, _, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
   | sizeOfCExp (C.LetCont { name, params, body, cont }) = sizeOfCExp body + sizeOfCExp cont
   | sizeOfCExp (C.LetRecCont { defs, cont }) = List.foldl (fn ((_, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
-  | sizeOfCExp (C.PushPrompt _) = 1
-  | sizeOfCExp (C.WithSubCont _) = 1
-  | sizeOfCExp (C.PushSubCont _) = 1
 datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
 datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
 fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
@@ -586,24 +568,6 @@ and usageInCExp (env : ((usage ref) TypedSyntax.VIdMap.map) ref, renv, cenv : ((
            ; cenv := List.foldl (fn ((f, _, _), m) => C.CVarMap.insert (m, f, ref C_NEVER)) (!cenv) defs
            ; usageInCExp (env, renv, cenv, crenv, cont)
           end
-        | C.PushPrompt { promptTag, f, cont, exnCont } =>
-          ( usageInValue (!env) promptTag
-          ; usageInValue (!env) f
-          ; usageContVar (!cenv) cont
-          ; usageContVar (!cenv) exnCont
-          )
-        | C.WithSubCont { promptTag, f, cont, exnCont } =>
-          ( usageInValue (!env) promptTag
-          ; usageInValue (!env) f
-          ; usageContVar (!cenv) cont
-          ; usageContVar (!cenv) exnCont
-          )
-        | C.PushSubCont { subCont, f, cont, exnCont } =>
-          ( usageInValue (!env) subCont
-          ; usageInValue (!env) f
-          ; usageContVar (!cenv) cont
-          ; usageContVar (!cenv) exnCont
-          )
 end
 fun substValue (subst : C.Value TypedSyntax.VIdMap.map) (x as C.Var v) = (case TypedSyntax.VIdMap.find (subst, v) of
                                                                               SOME w => w
@@ -625,9 +589,6 @@ and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap
   | substCExp (subst, csubst, C.LetRec { defs, cont }) = C.LetRec { defs = List.map (fn (f, k, h, params, body) => (f, k, h, params, substCExp (subst, csubst, body))) defs, cont = substCExp (subst, csubst, cont) }
   | substCExp (subst, csubst, C.LetCont { name, params, body, cont }) = C.LetCont { name = name, params = params, body = substCExp (subst, csubst, body), cont = substCExp (subst, csubst, cont) }
   | substCExp (subst, csubst, C.LetRecCont { defs, cont }) = C.LetRecCont { defs = List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs, cont = substCExp (subst, csubst, cont) }
-  | substCExp (subst, csubst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-  | substCExp (subst, csubst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-  | substCExp (subst, csubst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
 val substCExp = fn (subst, csubst, e) => if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
                                              e
                                          else
@@ -728,9 +689,6 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
                       , cont = alphaConvert (ctx, subst, csubst, cont)
                       }
       end
-  | alphaConvert (ctx, subst, csubst, C.PushPrompt { promptTag, f, cont, exnCont }) = C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-  | alphaConvert (ctx, subst, csubst, C.WithSubCont { promptTag, f, cont, exnCont }) = C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-  | alphaConvert (ctx, subst, csubst, C.PushSubCont { subCont, f, cont, exnCont }) = C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
 datatype simplify_result = VALUE of C.Value
                          | SIMPLE_EXP of C.SimpleExp
                          | NOT_SIMPLIFIED
@@ -910,9 +868,6 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                            }
           else
               simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
-        | C.PushPrompt { promptTag, f, cont, exnCont } => C.PushPrompt { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-        | C.WithSubCont { promptTag, f, cont, exnCont } => C.WithSubCont { promptTag = substValue subst promptTag, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
-        | C.PushSubCont { subCont, f, cont, exnCont } => C.PushSubCont { subCont = substValue subst subCont, f = substValue subst f, cont = substCVar csubst cont, exnCont = substCVar csubst exnCont }
 
 (* Eliminate assumeDiscardable *)
 fun finalizeCExp (ctx, C.Let { exp = C.PrimOp { primOp = F.PrimFnOp Primitives.assumeDiscardable, tyargs, args = [f, arg] }, result = SOME result, cont, exnCont = SOME exnCont })
@@ -940,9 +895,6 @@ fun finalizeCExp (ctx, C.Let { exp = C.PrimOp { primOp = F.PrimFnOp Primitives.a
   | finalizeCExp (ctx, C.LetRec { defs, cont }) = C.LetRec { defs = List.map (fn (name, k, h, params, body) => (name, k, h, params, finalizeCExp (ctx, body))) defs, cont = finalizeCExp (ctx, cont) }
   | finalizeCExp (ctx, C.LetCont { name, params, body, cont }) = C.LetCont { name = name, params = params, body = finalizeCExp (ctx, body), cont = finalizeCExp (ctx, cont) }
   | finalizeCExp (ctx, C.LetRecCont { defs, cont }) = C.LetRecCont { defs = List.map (fn (name, params, body) => (name, params, finalizeCExp (ctx, body))) defs, cont = finalizeCExp (ctx, cont) }
-  | finalizeCExp (ctx, e as C.PushPrompt _) = e
-  | finalizeCExp (ctx, e as C.WithSubCont _) = e
-  | finalizeCExp (ctx, e as C.PushSubCont _) = e
 end
 end;
 
@@ -1006,9 +958,6 @@ fun go (env, level, C.Let { exp = C.Abs { contParam, exnContParam, params, body}
                                                                ()
                                                          ; go (env, level, cont, C.CVarSet.union (acc, outerDestinations))
                                                         end
-  | go (env, level, C.PushPrompt { promptTag, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
-  | go (env, level, C.WithSubCont { promptTag, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
-  | go (env, level, C.PushSubCont { subCont, f, cont, exnCont }, acc) = escape (env, level, cont, escape (env, level, exnCont, acc))
 fun contEscape cexp = let val env = ref C.CVarMap.empty
                           val _ = go (env, 0, cexp, C.CVarSet.empty)
                       in C.CVarMap.map (fn { escapes, ... } => !escapes) (!env)

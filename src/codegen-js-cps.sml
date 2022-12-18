@@ -70,6 +70,9 @@ val builtins
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
                     ,(VId_JavaScript_require, "require")
                     (* extra *)
+                    ,(VId_DelimCont_pushPrompt, "_pushPrompt")
+                    ,(VId_DelimCont_withSubCont, "_withSubCont")
+                    ,(VId_DelimCont_pushSubCont, "_pushSubCont")
                     ,(VId_DelimCont_topLevel, "_topLevel")
                     ]
       end
@@ -517,12 +520,6 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                    ) ([], []) defs
           in decs @ assignments @ doCExp ctx env' cont
           end
-  | doCExp ctx env (C.PushPrompt { promptTag, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushPrompt"), vector [doValue promptTag, doValue f, doCVar cont, doCVar exnCont]))) ]
-  | doCExp ctx env (C.WithSubCont { promptTag, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_withSubCont"), vector [doValue promptTag, doValue f, doCVar cont, doCVar exnCont]))) ]
-  | doCExp ctx env (C.PushSubCont { subCont, f, cont, exnCont })
-    = [ J.ReturnStat (SOME (J.CallExp (J.VarExp (J.PredefinedId "_pushSubCont"), vector [doValue subCont, doValue f, doCVar cont, doCVar exnCont]))) ]
 
 fun doProgram ctx env cont exnCont cexp = let val env' = C.CVarMap.insert (C.CVarMap.insert (env, cont, TAILCALL), exnCont, TAILCALL)
                                           in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont, CVarToJs exnCont], vector (doCExp ctx env' cexp))]))]
