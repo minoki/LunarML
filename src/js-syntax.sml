@@ -340,7 +340,14 @@ fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
                                       end
                                     | _ => NONE
           val indexPart = case tryIdentifierName of
-                              SOME name => (fn rest => Fragment "." :: Fragment name :: rest)
+                              SOME name => let val isIntegerLiteral = case objectExp of
+                                                                          S.ConstExp (S.Numeral s) => CharVector.all (fn #"." => false | #"e" => false | #"E" => false | _ => true) s
+                                                                        | _ => false
+                                           in if isIntegerLiteral then
+                                                  fn rest => Fragment " ." :: Fragment name :: rest
+                                              else
+                                                  fn rest => Fragment "." :: Fragment name :: rest
+                                           end
                             | _ => (fn rest => Fragment "[" :: doExp (Precedence.Expression, indexExp) (Fragment "]" :: rest))
       in paren (prec < Precedence.MemberExpression) (doExp (Precedence.MemberExpression, objectExp) o indexPart)
       end
