@@ -1071,6 +1071,20 @@ do
       mayraise = true,
       discardable = false,
     },
+    {
+      name = "JavaScript.method",
+      srcname = "JavaScript_method",
+      type = { vars = {}, args = {JSValue, string16, vector(JSValue)}, result = JSValue },
+      mayraise = true,
+      discardable = false,
+    },
+    {
+      name = "JavaScript.new",
+      srcname = "JavaScript_new",
+      type = { vars = {}, args = {JSValue, vector(JSValue)}, result = JSValue },
+      mayraise = true,
+      discardable = false,
+    },
   }
 end
 

@@ -67,6 +67,8 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructExnWithPayloadOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.PrimFnOp p, ... }) = Primitives.isDiscardable p
   | isDiscardable (PrimOp { primOp = F.JsCallOp, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.JsMethodOp, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.JsNewOp, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true
@@ -220,6 +222,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                      | F.ConstructExnWithPayloadOp => false
                                                      | F.PrimFnOp p => Primitives.mayRaise p
                                                      | F.JsCallOp => true
+                                                     | F.JsMethodOp => true
+                                                     | F.JsNewOp => true
                                     val returnsUnit = case primOp of
                                                           F.PrimFnOp Primitives.Ref_set => true
                                                         | F.PrimFnOp Primitives.Unsafe_Array_update => true
@@ -717,6 +721,16 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.JavaScript_call, tyargs, args = [f, C.Var args] })
     = (case TypedSyntax.VIdMap.find (env, args) of
            SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsCallOp, tyargs = [], args = f :: args })
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.JavaScript_method, tyargs, args = [obj, name, C.Var args] })
+    = (case TypedSyntax.VIdMap.find (env, args) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsMethodOp, tyargs = [], args = obj :: name :: args })
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.JavaScript_new, tyargs, args = [ctor, C.Var args] })
+    = (case TypedSyntax.VIdMap.find (env, args) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsNewOp, tyargs = [], args = ctor :: args })
          | _ => NOT_SIMPLIFIED
       )
   | simplifySimpleExp (env, C.PrimOp { primOp, tyargs, args }) = NOT_SIMPLIFIED (* TODO: constant folding *)

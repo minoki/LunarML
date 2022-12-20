@@ -32,6 +32,8 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | ConstructExnWithPayloadOp (* type argument: payload, value argument: exception tag, value argument: payload *)
                 | PrimFnOp of Primitives.PrimOp
                 | JsCallOp (* value argument: function, arguments *)
+                | JsMethodOp (* value argument: object, name, arguments *)
+                | JsNewOp (* value argument: constructor, arguments *)
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of { sourceSpan : SourcePos.span
                           , scon : Syntax.SCon
@@ -403,6 +405,8 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp ConstructExnWithPayloadOp = "ConstructExnWithPayloadOp"
   | print_PrimOp (PrimFnOp x) = Primitives.toString x
   | print_PrimOp JsCallOp = "JsCallOp"
+  | print_PrimOp JsMethodOp = "JsMethodOp"
+  | print_PrimOp JsNewOp = "JsNewOp"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat { sourceSpan, scon, equality, cookedValue }) = "SConPat(" ^ Syntax.print_SCon scon ^ ")"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"

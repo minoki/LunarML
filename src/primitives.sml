@@ -145,6 +145,8 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_typeof (* JavaScript.typeof *)
                 | JavaScript_global (* JavaScript.global *)
                 | JavaScript_call (* JavaScript.call *)
+                | JavaScript_method (* JavaScript.method *)
+                | JavaScript_new (* JavaScript.new *)
 fun toString EQUAL = "="
   | toString call2 = "call2"
   | toString call3 = "call3"
@@ -289,6 +291,8 @@ fun toString EQUAL = "="
   | toString JavaScript_typeof = "JavaScript.typeof"
   | toString JavaScript_global = "JavaScript.global"
   | toString JavaScript_call = "JavaScript.call"
+  | toString JavaScript_method = "JavaScript.method"
+  | toString JavaScript_new = "JavaScript.new"
 fun fromString "=" = SOME EQUAL
   | fromString "call2" = SOME call2
   | fromString "call3" = SOME call3
@@ -433,6 +437,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.typeof" = SOME JavaScript_typeof
   | fromString "JavaScript.global" = SOME JavaScript_global
   | fromString "JavaScript.call" = SOME JavaScript_call
+  | fromString "JavaScript.method" = SOME JavaScript_method
+  | fromString "JavaScript.new" = SOME JavaScript_new
   | fromString _ = NONE
 fun mayRaise EQUAL = false
   | mayRaise call2 = true
@@ -578,6 +584,8 @@ fun mayRaise EQUAL = false
   | mayRaise JavaScript_typeof = false
   | mayRaise JavaScript_global = true
   | mayRaise JavaScript_call = true
+  | mayRaise JavaScript_method = true
+  | mayRaise JavaScript_new = true
 fun isDiscardable EQUAL = true
   | isDiscardable call2 = false
   | isDiscardable call3 = false
@@ -722,6 +730,8 @@ fun isDiscardable EQUAL = true
   | isDiscardable JavaScript_typeof = true
   | isDiscardable JavaScript_global = false
   | isDiscardable JavaScript_call = false
+  | isDiscardable JavaScript_method = false
+  | isDiscardable JavaScript_new = false
 end;
 
 functor TypeOfPrimitives (type ty
@@ -910,4 +920,6 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = string16 }
   | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
+  | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], result = JavaScriptValue }
+  | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
 end;

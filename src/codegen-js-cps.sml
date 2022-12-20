@@ -63,8 +63,6 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_undefined, "undefined")
                     ,(VId_JavaScript_null, "null")
-                    ,(VId_JavaScript_new, "_new")
-                    ,(VId_JavaScript_method, "_method")
                     ,(VId_JavaScript_function, "_function")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
@@ -395,6 +393,44 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                             end
                                                           | NONE => raise CodeGenError "No exnCont for JavaScript.call"
                                                     )
+           | Primitives.JavaScript_method => doTernary (fn (obj, method, args) =>
+                                                           case exnCont of
+                                                               SOME exnCont =>
+                                                               let val exnName = genSym ctx
+                                                               in case result of
+                                                                      SOME result => J.LetStat (vector [(result, NONE)])
+                                                                                     :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) ]
+                                                                                                       , exnName
+                                                                                                       , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                                                                                       )
+                                                                                     :: doCExp ctx env cont
+                                                                    | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) ]
+                                                                                             , exnName
+                                                                                             , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                                                                             )
+                                                                              :: doCExp ctx env cont
+                                                               end
+                                                             | NONE => raise CodeGenError "No exnCont for JavaScript.method"
+                                                       )
+           | Primitives.JavaScript_new => doBinary (fn (ctor, args) =>
+                                                       case exnCont of
+                                                           SOME exnCont =>
+                                                           let val exnName = genSym ctx
+                                                           in case result of
+                                                                  SOME result => J.LetStat (vector [(result, NONE)])
+                                                                                 :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) ]
+                                                                                                   , exnName
+                                                                                                   , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                                                                                   )
+                                                                                 :: doCExp ctx env cont
+                                                                | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) ]
+                                                                                         , exnName
+                                                                                         , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                                                                         )
+                                                                          :: doCExp ctx env cont
+                                                           end
+                                                         | NONE => raise CodeGenError "No exnCont for JavaScript.new"
+                                                   )
            | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.CallExp (J.VarExp (J.PredefinedId "_newPromptTag"), vector []), false)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript-CPS backend")
       end
@@ -408,6 +444,36 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                               )
                             :: doCExp ctx env cont
            | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (doValue f, Vector.map doValue (vector args))) ]
+                                    , exnName
+                                    , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                    )
+                     :: doCExp ctx env cont
+      end
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = obj :: name :: args }, result, cont, exnCont = SOME exnCont })
+    = let val exnName = genSym ctx
+      in case result of
+             SOME result => J.LetStat (vector [(result, NONE)])
+                            :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.CallExp (J.IndexExp (doValue obj, doValue name), Vector.map doValue (vector args))) ]
+                                              , exnName
+                                              , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                              )
+                            :: doCExp ctx env cont
+           | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (J.IndexExp (doValue obj, doValue name), Vector.map doValue (vector args))) ]
+                                    , exnName
+                                    , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                    )
+                     :: doCExp ctx env cont
+      end
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, result, cont, exnCont = SOME exnCont })
+    = let val exnName = genSym ctx
+      in case result of
+             SOME result => J.LetStat (vector [(result, NONE)])
+                            :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.NewExp (doValue ctor, Vector.map doValue (vector args))) ]
+                                              , exnName
+                                              , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
+                                              )
+                            :: doCExp ctx env cont
+           | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.NewExp (doValue ctor, Vector.map doValue (vector args))) ]
                                     , exnName
                                     , vector (applyCont (ctx, env, exnCont, [J.VarExp (J.UserDefinedId exnName)]))
                                     )

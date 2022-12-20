@@ -75,8 +75,6 @@ val builtins
                     (* JS interface *)
                     ,(VId_JavaScript_undefined, "undefined")
                     ,(VId_JavaScript_null, "null")
-                    ,(VId_JavaScript_new, "_new")
-                    ,(VId_JavaScript_method, "_method")
                     ,(VId_JavaScript_function, "_function")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
@@ -252,39 +250,15 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
       in dec' @ doExpTo ctx env exp dest
       end
   | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doJsMethod = case (exp1, exp2) of
-                               (F.AppExp (F.VarExp vid_jsmethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp (F.VectorOp, _, xs)) =>
-                                (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
-                                     SOME method =>
-                                     if TypedSyntax.eqVId (vid_jsmethod, InitialEnv.VId_JavaScript_method) andalso JsWriter.isIdentifier method then
-                                         SOME (fn () => doExpCont ctx env self
-                                                                  (fn (stmts1, env, self) =>
-                                                                      mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                              xs
-                                                                              (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                            val zs = Vector.map #2 (vector ys)
-                                                                                        in putImpureTo ctx env dest (stmts1 @ stmts2, J.MethodExp (self, method, zs))
-                                                                                        end
-                                                                              )
-                                                                  )
-                                              )
-                                     else
-                                         NONE
-                                   | NONE => NONE
-                                )
-                              | _ => NONE
-      in case doJsMethod of
-             SOME f => f ()
-           | NONE => doExpCont ctx env exp1
-                               (fn (stmts1, env, e1') =>
-                                   doExpCont ctx env exp2
-                                             (fn (stmts2, env, e2') =>
-                                                 case dest of
-                                                     Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
-                                                   | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
-                                             )
-                               )
-      end
+    = doExpCont ctx env exp1
+                (fn (stmts1, env, e1') =>
+                    doExpCont ctx env exp2
+                              (fn (stmts2, env, e2') =>
+                                  case dest of
+                                      Return => stmts1 @ stmts2 @ [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, e1', e2']))) ]
+                                    | _ => putImpureTo ctx env dest (stmts1 @ stmts2, J.CallExp (e1', vector [e2']))
+                              )
+                )
   | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
     = (case dest of
            Continue cont => let val result = genSym ctx
@@ -643,6 +617,56 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                           )
                                               | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
                                            )
+           | Primitives.JavaScript_method => (case args of
+                                                  [obj, name, F.PrimExp (F.VectorOp, _, args)] =>
+                                                  doExpCont ctx env obj
+                                                            (fn (stmts1, env, obj) =>
+                                                                doExpCont ctx env name
+                                                                          (fn (stmts2, env, name) =>
+                                                                              mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+                                                                                      args
+                                                                                      (fn args => let val stmts3 = List.foldr (fn ((x, _), acc) => x @ acc) [] args
+                                                                                                      val args = Vector.map #2 (vector args)
+                                                                                                  in putImpureTo ctx env dest (stmts1 @ stmts2 @ stmts3, J.CallExp (J.IndexExp (obj, name), args))
+                                                                                                  end
+                                                                                      )
+                                                                          )
+                                                            )
+                                                | [obj, name, args] =>
+                                                  doExpCont ctx env obj
+                                                            (fn (stmts0, env, obj) =>
+                                                                doExpCont ctx env name
+                                                                          (fn (stmts0, env, name) =>
+                                                                              doExpCont ctx env args
+                                                                                        (fn (stmts1, env, args) =>
+                                                                                            putImpureTo ctx env dest (stmts0 @ stmts1, J.MethodExp (J.IndexExp (obj, name), "apply", vector [obj, args]))
+                                                                                        )
+                                                                          )
+                                                            )
+                                                | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+                                             )
+           | Primitives.JavaScript_new => (case args of
+                                               [ctor, F.PrimExp (F.VectorOp, _, args)] =>
+                                               doExpCont ctx env ctor
+                                                         (fn (stmts1, env, ctor) =>
+                                                             mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
+                                                                     args
+                                                                     (fn args => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] args
+                                                                                     val args = Vector.map #2 (vector args)
+                                                                                 in putImpureTo ctx env dest (stmts1 @ stmts2, J.NewExp (ctor, args))
+                                                                                 end
+                                                                     )
+                                                         )
+                                             | [ctor, args] =>
+                                               doExpCont ctx env ctor
+                                                         (fn (stmts0, env, ctor) =>
+                                                             doExpCont ctx env args
+                                                                       (fn (stmts1, env, args) =>
+                                                                           putImpureTo ctx env dest (stmts0 @ stmts1, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args]))
+                                                                       )
+                                                         )
+                                             | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+                                          )
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on JavaScript backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
@@ -668,7 +692,6 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                           )
                             )
   | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, _)) dest = raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, [])) dest = raise CodeGenError "JsCallOp: invalid number of arguments"
   | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, f :: args)) dest
     = doExpCont ctx env f (fn (stmts0, env, f) =>
                               mapCont (fn (a, cont) => doExpCont ctx env a (fn (stmts, env, a) => cont (stmts, a)))
@@ -678,6 +701,31 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                   end
                                       )
                           )
+  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, [])) dest = raise CodeGenError "JsCallOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.JsMethodOp, _, obj :: name :: args)) dest
+    = doExpCont ctx env obj
+                (fn (stmts0, env, obj) =>
+                    doExpCont ctx env name
+                              (fn (stmts1, env, name) =>
+                                  mapCont (fn (a, cont) => doExpCont ctx env a (fn (stmts, env, a) => cont (stmts, a)))
+                                          args
+                                          (fn args => let val (stmts2, args) = ListPair.unzip args
+                                                      in putImpureTo ctx env dest (stmts0 @ stmts1 @ List.concat stmts2, J.CallExp (J.IndexExp (obj, name), vector args))
+                                                      end
+                                          )
+                              )
+                )
+  | doExpTo ctx env (F.PrimExp (F.JsMethodOp, _, _)) dest = raise CodeGenError "JsMethodOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.JsNewOp, _, ctor :: args)) dest
+    = doExpCont ctx env ctor (fn (stmts0, env, ctor) =>
+                                 mapCont (fn (a, cont) => doExpCont ctx env a (fn (stmts, env, a) => cont (stmts, a)))
+                                         args
+                                         (fn args => let val (stmts1, args) = ListPair.unzip args
+                                                     in putImpureTo ctx env dest (stmts0 @ List.concat stmts1, J.NewExp (ctor, vector args))
+                                                     end
+                                         )
+                             )
+  | doExpTo ctx env (F.PrimExp (F.JsNewOp, _, [])) dest = raise CodeGenError "JsNewOp: invalid number of arguments"
 (* doDec : Context -> Env -> F.Dec -> J.Stat list *)
 and doDec ctx env (F.ValDec (vid, _, exp)) : J.Stat list
     = if isHoisted (env, vid) then
