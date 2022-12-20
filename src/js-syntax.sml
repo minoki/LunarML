@@ -69,8 +69,7 @@ datatype Exp = ConstExp of JsConst
              | UnaryExp of UnaryOp * Exp
              | IndexExp of Exp * Exp
              | CondExp of Exp * Exp * Exp (* exp1 ? exp2 : exp3 *)
-     and Stat = VarStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
-              | LetStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
+     and Stat = LetStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
               | ConstStat of (TypedSyntax.VId * Exp) vector (* must not be empty *)
               | ExpStat of Exp
               | IfStat of Exp * Block * Block
@@ -353,10 +352,7 @@ fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
       end
   | doExp (prec, S.CondExp (exp1, exp2, exp3)) = paren (prec < Precedence.ConditionalExpression) (fn rest => doExp (Precedence.LogicalORExpression, exp1) (Fragment " ? " :: doExp (Precedence.AssignmentExpression, exp2) (Fragment " : " :: doExp (Precedence.AssignmentExpression, exp3) rest)))
 and doCommaSepExp elements = commaSepV (Vector.map (fn value => doExp (Precedence.AssignmentExpression, value)) elements)
-and doStat (S.VarStat variables) = (fn rest => Indent :: Fragment "var " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
-                                                                                                  | (id, SOME init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)
-                                                                                                  ) variables) (Fragment ";" :: LineTerminator :: rest))
-  | doStat (S.LetStat variables) = (fn rest => Indent :: Fragment "let " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
+and doStat (S.LetStat variables) = (fn rest => Indent :: Fragment "let " :: commaSepV (Vector.map (fn (id, NONE) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: rest)
                                                                                                   | (id, SOME init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)
                                                                                                   ) variables) (Fragment ";" :: LineTerminator :: rest))
   | doStat (S.ConstStat variables) = (fn rest => Indent :: Fragment "const " :: commaSepV (Vector.map (fn (id, init) => (fn rest => Fragment (idToJs (S.UserDefinedId id)) :: Fragment " = " :: doExp (Precedence.AssignmentExpression, init) rest)) variables) (Fragment ";" :: LineTerminator :: rest))
