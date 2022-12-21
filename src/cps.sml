@@ -58,7 +58,8 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.RaiseOp _, ... }) = false
   | isDiscardable (PrimOp { primOp = F.ListOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.VectorOp, ... }) = true
-  | isDiscardable (PrimOp { primOp = F.DataTagOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.DataTagAsStringOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.DataTagAsString16Op _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.DataPayloadOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ExnPayloadOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.ConstructValOp _, ... }) = true
@@ -213,7 +214,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) { exnCont : C.CVar } (k : cont
                                                      | F.RaiseOp _ => true
                                                      | F.ListOp => false
                                                      | F.VectorOp => false
-                                                     | F.DataTagOp _ => false
+                                                     | F.DataTagAsStringOp _ => false
+                                                     | F.DataTagAsString16Op _ => false
                                                      | F.DataPayloadOp _ => false
                                                      | F.ExnPayloadOp => false
                                                      | F.ConstructValOp _ => false

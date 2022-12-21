@@ -159,7 +159,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            SOME result => ConstStat (result, J.ArrayExp (Vector.map doValue (vector xs))) :: doCExp ctx env cont
          | NONE => doCExp ctx env cont
       )
-  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.DataTagOp info, tyargs = _, args = [exp] }, result, cont, exnCont })
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.DataTagAsString16Op info, tyargs = _, args = [exp] }, result, cont, exnCont })
     = (case result of
            SOME result => ConstStat (result, J.IndexExp (doValue exp, J.ConstExp (J.asciiStringAsWide "tag"))) :: doCExp ctx env cont
          | NONE => doCExp ctx env cont

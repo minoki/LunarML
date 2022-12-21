@@ -23,7 +23,8 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | RaiseOp of SourcePos.span (* type argument: result type, value argument: the exception *)
                 | ListOp (* type argument: element type, value arguments: the elements *)
                 | VectorOp (* type argument: element type, value arguments: the elements *)
-                | DataTagOp of Syntax.ValueConstructorInfo (* value argument: the data *)
+                | DataTagAsStringOp of Syntax.ValueConstructorInfo (* value argument: the data *)
+                | DataTagAsString16Op of Syntax.ValueConstructorInfo (* value argument: the data *)
                 | DataPayloadOp of Syntax.ValueConstructorInfo (* type argument: payload, value argument: the data *)
                 | ExnPayloadOp (* type argument: payload, value argument: the data *)
                 | ConstructValOp of Syntax.ValueConstructorInfo (* type argument: data type *)
@@ -396,7 +397,8 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp (RaiseOp span) = "RaiseOp"
   | print_PrimOp ListOp = "ListOp"
   | print_PrimOp VectorOp = "VectorOp"
-  | print_PrimOp (DataTagOp _) = "DataTagOp"
+  | print_PrimOp (DataTagAsStringOp _) = "DataTagAsStringOp"
+  | print_PrimOp (DataTagAsString16Op _) = "DataTagAsString16Op"
   | print_PrimOp (DataPayloadOp _) = "DataPayloadOp"
   | print_PrimOp ExnPayloadOp = "ExnPayloadOp"
   | print_PrimOp (ConstructValOp _) = "ConstructValOp"

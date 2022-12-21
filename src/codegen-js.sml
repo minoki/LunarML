@@ -386,9 +386,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
               )
   | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
   | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, [exp])) dest
+  | doExpTo ctx env (F.PrimExp (F.DataTagAsString16Op info, _, [exp])) dest
     = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "tag"))))
-  | doExpTo ctx env (F.PrimExp (F.DataTagOp info, _, _)) dest = raise CodeGenError "PrimExp.DataTagOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.DataTagAsString16Op info, _, _)) dest = raise CodeGenError "PrimExp.DataTagAsString16Op: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.DataTagAsStringOp info, _, _)) dest = raise CodeGenError "PrimExp.DataTagAsStringOp: not supported"
   | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, [exp])) dest
     = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, J.IndexExp (exp', J.ConstExp (J.asciiStringAsWide "payload"))))
   | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, _)) dest = raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"

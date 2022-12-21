@@ -107,20 +107,20 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = let val tag = #tag info
                     val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
-                    val equalTag = case #datatypeTag (#targetInfo ctx) of
-                                       TargetInfo.STRING8 => Primitives.String_EQUAL
-                                     | TargetInfo.STRING16 => Primitives.String16_EQUAL
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (F.DataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
+                    val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
+                                                    TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
+                                                  | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
                 end
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
                    | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [exp])
                    | { representation = _, tag, ... } =>
-                     let val equalTag = case #datatypeTag (#targetInfo ctx) of
-                                            TargetInfo.STRING8 => Primitives.String_EQUAL
-                                          | TargetInfo.STRING16 => Primitives.String16_EQUAL
-                     in F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (F.DataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
+                     let val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
+                                                         TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
+                                                       | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
+                     in F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
                      end
                 )
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = SOME (payloadTy, payloadPat) })
@@ -782,7 +782,8 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp (F.RaiseOp _) = false
   | isDiscardablePrimOp F.ListOp = true
   | isDiscardablePrimOp F.VectorOp = true
-  | isDiscardablePrimOp (F.DataTagOp _) = true
+  | isDiscardablePrimOp (F.DataTagAsStringOp _) = true
+  | isDiscardablePrimOp (F.DataTagAsString16Op _) = true
   | isDiscardablePrimOp (F.DataPayloadOp _) = true
   | isDiscardablePrimOp F.ExnPayloadOp = true
   | isDiscardablePrimOp (F.ConstructValOp _) = true
@@ -929,7 +930,7 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                                         F.RecordExp [] => (used, [])
                                                                       | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
                                                                  end
-(* doDec : TypedSyntax.VIdSet.set * F.Dec -> TypedSyntax.VIdSet.set * F.Dec *)
+(* doDec : TypedSyntax.VIdSet.set * F.Dec -> TypedSyntax.VIdSet.set * F.Dec list *)
 and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyntax.VIdSet.set * F.Dec list
     = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
