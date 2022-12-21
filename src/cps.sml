@@ -126,6 +126,10 @@ fun reify (ctx, REIFIED k) f = f k
                                     end
 fun apply (REIFIED k) arg = C.AppCont { applied = k, args = [arg] }
   | apply (META (_, m)) arg = m arg
+val initialEnv = List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
+                            [(InitialEnv.VId_false, C.BoolConst false)
+                            ,(InitialEnv.VId_true, C.BoolConst true)
+                            ]
 (* transformX : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> { exnCont : C.Var } -> cont -> C.Exp *)
 fun transform (ctx, env) exp { exnCont, resultHint } k = transformX (ctx, env) exp { exnCont = exnCont } (META (resultHint, k))
 and transformT (ctx, env) exp { exnCont } k = transformX (ctx, env) exp { exnCont = exnCont } (REIFIED k)
@@ -735,6 +739,30 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
            SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsNewOp, tyargs = [], args = ctor :: args })
          | _ => NOT_SIMPLIFIED
       )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.DataTagAsStringOp _, tyargs, args = [C.Var x] })
+    = (case TypedSyntax.VIdMap.find (env, x) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValOp { tag, ... }, ... }), ... } => VALUE (C.StringConst (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i)))))
+         | SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag, ... }, ... }), ... } => VALUE (C.StringConst (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i)))))
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.DataTagAsString16Op _, tyargs, args = [C.Var x] })
+    = (case TypedSyntax.VIdMap.find (env, x) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValOp { tag, ... }, ... }), ... } => VALUE (C.String16Const (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i))))) (* Assume tag is ASCII *)
+         | SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag, ... }, ... }), ... } => VALUE (C.String16Const (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i))))) (* Assume tag is ASCII *)
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_EQUAL, tyargs, args = [x, C.BoolConst true] }) = VALUE x
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_EQUAL, tyargs, args = [C.BoolConst true, x] }) = VALUE x
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_EQUAL, tyargs, args = [x, C.BoolConst false] }) = SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_not, tyargs = [], args = [x] })
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_EQUAL, tyargs, args = [C.BoolConst false, x] }) = SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_not, tyargs = [], args = [x] })
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_not, tyargs, args = [C.BoolConst x] }) = VALUE (C.BoolConst (not x))
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_not, tyargs, args = [C.Var x] })
+    = (case TypedSyntax.VIdMap.find (env, x) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.PrimFnOp Primitives.Bool_not, tyargs = _, args = [v] }), ... } => VALUE v
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.String_EQUAL, tyargs, args = [C.StringConst x, C.StringConst y] }) = VALUE (C.BoolConst (x = y))
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.String16_EQUAL, tyargs, args = [C.String16Const x, C.String16Const y] }) = VALUE (C.BoolConst (x = y))
   | simplifySimpleExp (env, C.PrimOp { primOp, tyargs, args }) = NOT_SIMPLIFIED (* TODO: constant folding *)
   | simplifySimpleExp (env, C.ExnTag _) = NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.Projection { label, record, fieldTypes })
@@ -846,10 +874,14 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                | _ => C.AppCont { applied = applied, args = args }
           end
         | C.If { cond, thenCont, elseCont } =>
-          C.If { cond = substValue subst cond
-               , thenCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont)
-               , elseCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont)
-               }
+          (case substValue subst cond of
+               C.BoolConst true => simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont)
+             | C.BoolConst false => simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont)
+             | cond => C.If { cond = cond
+                            , thenCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont)
+                            , elseCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont)
+                            }
+          )
         | C.LetRec { defs, cont } =>
           if List.exists (fn (f, _, _, _, _) => case TypedSyntax.VIdMap.find (usage, f) of SOME (ref NEVER) => false | _ => true) defs then
               C.LetRec { defs = List.map (fn (f, k, h, params, body) => (f, k, h, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body))) defs
