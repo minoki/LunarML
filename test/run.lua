@@ -200,6 +200,7 @@ should_not_compile "should_not_compile/" {
   "word-constant-2.sml",
   "inexact-hex-float.sml",
   "inexact-hex-float-2.sml",
+  "unicode-char.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

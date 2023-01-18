@@ -40,21 +40,10 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"." :: xs) = SOME (Tokens.DOT (pos(l,c),pos(l,c)), l, c+1, xs)
               | tokenizeOne (l, c, #"#" :: #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+2, nil, xs)
                                                               val value = case str of
-                                                                              StringElement.CODEUNIT x :: rest => ( if List.null rest then
-                                                                                                                      ()
-                                                                                                                    else
-                                                                                                                        emitError (l, c, "invalid character constant")
-                                                                                                                  ; x
-                                                                                                                  )
-                                                                            | StringElement.UNICODE_SCALAR x :: rest => ( if List.null rest then
-                                                                                                                              ()
-                                                                                                                          else
-                                                                                                                              emitError (l, c, "invalid character constant")
-                                                                                                                        ; x
-                                                                                                                        )
-                                                                            | [] => ( emitError (l, c, "invalid character constant")
-                                                                                    ; 0
-                                                                                    )
+                                                                              [value] => value
+                                                                            | _ => ( emitError (l, c, "invalid character constant")
+                                                                                   ; StringElement.CODEUNIT 0
+                                                                                   )
                                                           in SOME (Tokens.CharacterConst (value, pos (l, c), pos (l', c' - 1)), l', c', rest)
                                                           end
               | tokenizeOne (l, c, #"#" :: #"[" :: xs) = SOME (Tokens.HASHLBRACK (pos(l,c),pos(l,c+1)), l, c+2, xs)

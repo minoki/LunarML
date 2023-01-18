@@ -735,18 +735,28 @@ fun cookRealConstant (ctx : Context, env : Env, span, value : Numeric.float_nota
                                          raise Fail "invalid real constant: type"
          | _ => raise Fail "invalid real constant: type"
       )
-fun cookCharacterConstant (ctx : Context, env : Env, span, value : int, ty)
+fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement.char, ty)
     = (case ty of
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_char) then
-                                         if 0 <= value andalso value <= 255 then
-                                             F.PrimExp (F.CharConstOp value, [toFTy (ctx, env, ty)], [])
-                                         else
-                                             raise Fail "invalid character constant: out of range"
+                                         case value of
+                                             StringElement.CODEUNIT x => if 0 <= x andalso x <= 255 then
+                                                                             F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
+                                                                         else
+                                                                             raise Fail "invalid character constant: out of range"
+                                           | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 127 then
+                                                                                   F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
+                                                                               else
+                                                                                   raise Fail "invalid character constant: out of range"
                                      else if T.eqTyName (tycon, Typing.primTyName_char16) then
-                                         if 0 <= value andalso value <= 0xffff then
-                                             F.PrimExp (F.CharConstOp value, [toFTy (ctx, env, ty)], [])
-                                         else
-                                             raise Fail "invalid character constant: out of range"
+                                         case value of
+                                             StringElement.CODEUNIT x => if 0 <= x andalso x <= 0xffff then
+                                                                             F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
+                                                                         else
+                                                                             raise Fail "invalid character constant: out of range"
+                                           | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 0xffff then
+                                                                                   F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
+                                                                               else
+                                                                                   raise Fail "invalid character constant: out of range"
                                      else
                                          raise Fail "invalid character constant: type"
          | _ => raise Fail "invalid character constant: type"

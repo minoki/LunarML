@@ -46,7 +46,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | RealConst of Numeric.float_notation
     | StringConst of StringElement.char vector
     | AsciiStringConst of string * StringElement.char vector
-    | CharacterConst of int
+    | CharacterConst of StringElement.char
     (* * *)
     | ASTERISK
     (* . *)

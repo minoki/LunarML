@@ -7,7 +7,7 @@ datatype SCon = IntegerConstant of IntInf.int (* decimal / hexadecimal *)
               | WordConstant of IntInf.int (* decimal / hexadecimal *)
               | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
               | StringConstant of StringElement.char vector
-              | CharacterConstant of int
+              | CharacterConstant of StringElement.char
 datatype VId = MkVId of string
              | GeneratedVId of string * int
 datatype TyVar = MkTyVar of string
@@ -370,7 +370,7 @@ fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ IntInf.toString x
   | print_SCon (WordConstant x) = "WordConstant " ^ IntInf.toString x
   | print_SCon (RealConstant x) = "RealConstant " ^ Numeric.Notation.toString "~" x
   | print_SCon (StringConstant x) = "StringConstant \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString c ^ acc) "\"" x
-  | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
+  | print_SCon (CharacterConstant x) = "CharacterConstant \"" ^ StringElement.charToString x ^ "\""
 fun print_VId (MkVId x) = String.toString x
   | print_VId (GeneratedVId (x,i)) = String.toString x ^ "@" ^ Int.toString i
 fun print_TyVar (MkTyVar x) = "MkTyVar \"" ^ String.toString x ^ "\""

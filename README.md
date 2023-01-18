@@ -100,5 +100,11 @@ In short: the (binary) exponent part is optional and use tilde (`~`) for the neg
 
 The hexadecimal floating-point constants must be exact; `0x1.0000_0000_0000_01p0` and `0x1p1024` are examples of invalid constants.
 
-The `\u{}` escape sequence allows you to embed a Unicode scalar value in a string literal.
-The compiler encodes the character in UTF-(8|16|32), depending on the string type.
+The `\u{}` escape sequence allows you to embed a Unicode scalar value in a text constant.
+The compiler encodes the character in UTF-{8,16,32}, depending on the string type.
+
+The scalar value is expressed in hexadecimal format; `\u{3B1}` or `\u{3b1}` for U+03B1 GREEK SMALL LETTEL ALPHA.
+Underscores are not allowed between hexadecimal digits.
+
+When `\u{}` is used in character constant, the character must be encoded as a single code unit in the corresponding UTF.
+`#"\u{80}" : char` and `#"\u{10000}" : Char16.char` are examples of invalid constants.
