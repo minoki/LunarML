@@ -9,6 +9,7 @@ local math_abs = math.abs
 local math_floor = math.floor
 local math_modf = math.modf
 local string = string
+local string_char = string.char
 local string_format = string.format
 local table = table
 local select = select

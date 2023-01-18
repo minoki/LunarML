@@ -11,6 +11,7 @@ local math_maxinteger = math.maxinteger
 local math_mininteger = math.mininteger
 local math_ult = math.ult
 local string = string
+local string_char = string.char
 local string_format = string.format
 local table = table
 local table_pack = table.pack

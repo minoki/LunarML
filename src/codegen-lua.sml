@@ -10,7 +10,7 @@ exception CodeGenError of string
  * word -> integer
  * real -> number
  * string -> string
- * char -> single-character string
+ * char -> 8-bit unsigned integer
  * exn -> ???
  * bool -> boolean
  * ref -> {tag = "ref", payload = <mutable> ...}
@@ -92,6 +92,7 @@ val builtins
                     ,(VId_Lua_Lib_math_maxinteger, "math_maxinteger")
                     ,(VId_Lua_Lib_math_mininteger, "math_mininteger")
                     ,(VId_Lua_Lib_string, "string")
+                    ,(VId_Lua_Lib_string_char, "string_char")
                     ,(VId_Lua_Lib_string_format, "string_format")
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
@@ -167,6 +168,7 @@ val builtinsLuaJIT
                     ,(VId_Lua_Lib_math, "math")
                     ,(VId_Lua_Lib_math_abs, "math_abs")
                     ,(VId_Lua_Lib_string, "string")
+                    ,(VId_Lua_Lib_string_char, "string_char")
                     ,(VId_Lua_Lib_string_format, "string_format")
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
@@ -305,10 +307,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
       end
   | doExpTo ctx env (F.PrimExp (F.StringConstOp x, _, _)) dest = raise CodeGenError "PrimExp.StringConstOp: non-empty argument"
   | doExpTo ctx env (F.PrimExp (F.CharConstOp x, _, [])) dest
-    = let val exp = L.ConstExp (L.LiteralString (String.str (Char.chr x)))
-                    handle Chr => raise CodeGenError "character ordinal too large"
-      in putPureTo ctx env dest ([], exp)
-      end
+    = putPureTo ctx env dest ([], L.ConstExp (L.Numeral (Int.toString x)))
   | doExpTo ctx env (F.PrimExp (F.CharConstOp x, _, _)) dest = raise CodeGenError "PrimExp.CharConstOp: non-empty argument"
   | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua (ctx, vid) of
                                                                           L.PredefinedId "nil" => L.ConstExp L.Nil
@@ -662,10 +661,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
            | Primitives.String_size => doUnary (fn (stmts, env, a) =>
                                                    putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
                                                )
-           | Primitives.String_str => (case args of
-                                           [a] => doExpTo ctx env a dest
-                                         | _ => raise CodeGenError "primop String.str: invalid number of arguments"
-                                      )
+           | Primitives.String_str => doUnary (fn (stmts, env, a) =>
+                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "string_char"), vector [a]))
+                                              )
            | Primitives.Vector_length => doUnary (fn (stmts, env, a) =>
                                                      putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
                                                  )

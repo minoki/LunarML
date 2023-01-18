@@ -77,7 +77,7 @@ fun x > y = _primCall "String.>" (x, y)
 fun x >= y = _primCall "String.>=" (x, y)
 fun x ^ y = _primCall "String.^" (x, y)
 fun size x = _primCall "String.size" (x)
-fun str (x : char) : string = _primCall "Unsafe.cast" (x)
+fun str (x : char) : string = _primCall "String.str" (x)
 end
 _equality string = fn (x, y) => _primCall "String.=" (x, y);
 _overload "String" [string] { < = String.<
@@ -113,7 +113,6 @@ structure Lua : sig
               val fromInt : int -> value
               val fromWord : word -> value
               val fromReal : real -> value
-              val fromChar : char -> value
               val fromString : string -> value
               val unsafeToValue : 'a -> value
               val unsafeFromValue : value -> 'a
@@ -223,7 +222,6 @@ val fromInt : int -> value = unsafeToValue
 val fromWord : word -> value = unsafeToValue
 val fromReal : real -> value = unsafeToValue
 val fromString : string -> value = unsafeToValue
-val fromChar : char -> value = unsafeToValue
 fun sub (t, k) = _primCall "Lua.sub" (t, k)
 fun field (t : value, name : string) = sub (t, fromString name)
 fun set (t, k, v) = _primCall "Lua.set" (t, k, v)
@@ -286,7 +284,7 @@ end
 structure string = struct
 val format = _Prim.Lua.Lib.string.format
 val byte = LunarML.assumeDiscardable field (string, "byte")
-val char = LunarML.assumeDiscardable field (string, "char")
+val char = _Prim.Lua.Lib.string.char
 val find = LunarML.assumeDiscardable field (string, "find")
 val gsub = LunarML.assumeDiscardable field (string, "gsub")
 val match = LunarML.assumeDiscardable field (string, "match")
@@ -1018,7 +1016,7 @@ fun sub (s : string, i : int) : char = if i < 0 orelse size s <= i then
                                            raise Subscript
                                        else
                                            let val i' = i + 1
-                                               val result = Lua.call1 Lua.Lib.string.sub #[Lua.fromString s, Lua.fromInt i', Lua.fromInt i']
+                                               val result = Lua.call1 Lua.Lib.string.byte #[Lua.fromString s, Lua.fromInt i']
                                            in Lua.unsafeFromValue result
                                            end
 fun substring (s : string, i : int, j : int) : string = if i < 0 orelse j < 0 orelse size s < i + j then
@@ -1040,17 +1038,19 @@ fun concat (l : string list) : string = let val result = Lua.call1 Lua.Lib.table
 fun concatWith (s : string) (l : string list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l), Lua.fromString s]
                                                          in Lua.unsafeFromValue result
                                                          end
-fun implode (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList l)]
+fun implode (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.map String.str (Vector.fromList l))]
                                        in Lua.unsafeFromValue result
                                        end
-fun implodeRev (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.fromList (List.rev l))]
+fun implodeRev (l : char list) : string = let val result = Lua.call1 Lua.Lib.table.concat #[Lua.unsafeToValue (Vector.map String.str (Vector.fromList (List.rev l)))]
                                           in Lua.unsafeFromValue result
                                           end
 fun explode (s : string) : char list = Vector.foldr (op ::) [] (Vector.tabulate (size s, fn i => sub (s, i)))
-fun map (f : char -> char) (s : string) : string = let val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+fun map (f : char -> char) (s : string) : string = let fun g (x : string) : string = String.str (f (Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.byte #[Lua.fromString x])))
+                                                       val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue g]
                                                    in Lua.unsafeFromValue result
                                                    end
-fun translate (f : char -> string) (s : string) : string = let val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue f]
+fun translate (f : char -> string) (s : string) : string = let fun g (x : string) : string = f (Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.byte #[Lua.fromString x]))
+                                                               val result = Lua.call1 Lua.Lib.string.gsub #[Lua.fromString s, Lua.fromString ".", Lua.unsafeToValue g]
                                                            in Lua.unsafeFromValue result
                                                            end
 fun tokens f s = let fun go (revTokens, acc, []) = List.rev (if List.null acc then revTokens else implodeRev acc :: revTokens)
@@ -1138,11 +1138,11 @@ type string = string
 val minChar = #"\000"
 val maxChar = #"\255"
 val maxOrd = 255
-val ord : char -> int = Lua.unsafeFromValue Lua.Lib.string.byte
+val ord : char -> int = Unsafe.cast
 val chr : int -> char = fn x => if x < 0 orelse x > 255 then
                                     raise Chr
                                 else
-                                    Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.char #[Lua.fromInt x])
+                                    Unsafe.cast x
 fun succ c = chr (ord c + 1)
 fun pred c = chr (ord c - 1)
 fun compare (x : char, y : char) = if x = y then
@@ -1151,7 +1151,7 @@ fun compare (x : char, y : char) = if x = y then
                                        LESS
                                    else
                                        GREATER
-fun notContains (s : string) (c : char) : bool = let val result = Lua.call1 Lua.Lib.string.find #[Lua.fromString s, Lua.fromChar c, Lua.fromInt 1, Lua.fromBool true]
+fun notContains (s : string) (c : char) : bool = let val result = Lua.call1 Lua.Lib.string.find #[Lua.fromString s, Lua.fromString (String.str c), Lua.fromInt 1, Lua.fromBool true]
                                                  in Lua.isNil result
                                                  end
 fun contains s c = not (notContains s c)
