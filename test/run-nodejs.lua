@@ -193,6 +193,8 @@ should_not_compile "should_not_compile/" {
   "int-constant-2.sml",
   "word-constant.sml",
   "word-constant-2.sml",
+  "inexact-hex-float.sml",
+  "inexact-hex-float-2.sml",
 }
 should_run "mlbasis/should_run/" {
   "general.sml",

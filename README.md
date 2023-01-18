@@ -98,5 +98,7 @@ The syntax of hexadecimal floating-point constants is:
 
 In short: the (binary) exponent part is optional and use tilde (`~`) for the negation symbol.
 
+The hexadecimal floating-point constants must be exact; `0x1.0000_0000_0000_01p0` and `0x1p1024` are examples of invalid constants.
+
 The `\u{}` escape sequence allows you to embed a Unicode scalar value in a string literal.
 The compiler encodes the character in UTF-(8|16|32), depending on the string type.

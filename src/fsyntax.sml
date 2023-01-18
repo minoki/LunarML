@@ -724,6 +724,17 @@ fun cookWordConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                          end
          | _ => raise Fail "invalid word constant: invalid type"
       )
+fun cookRealConstant (ctx : Context, env : Env, span, value : Numeric.float_notation, ty)
+    = (case ty of
+           T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_real) then
+                                         if not (Numeric.checkExactness Numeric.binary64 value) then
+                                             raise Fail "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
+                                         else
+                                             F.PrimExp (F.RealConstOp value, [toFTy (ctx, env, ty)], [])
+                                     else
+                                         raise Fail "invalid real constant: type"
+         | _ => raise Fail "invalid real constant: type"
+      )
 fun cookCharacterConstant (ctx : Context, env : Env, span, value : int, ty)
     = (case ty of
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_char) then
@@ -830,7 +841,7 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
       end
 and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
-  | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = F.PrimExp (F.RealConstOp value, [toFTy (ctx, env, ty)], [])
+  | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = cookRealConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.StringConstant value, ty)) = cookStringConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.CharacterConstant value, ty)) = cookCharacterConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.VarExp (span, longvid as TypedSyntax.MkShortVId vid, _, [(tyarg, cts)]))
