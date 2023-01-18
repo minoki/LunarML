@@ -469,67 +469,67 @@ type Env = { equalityForTyVarMap : TypedSyntax.VId TypedSyntax.TyVarMap.map
            , valMap : FSyntax.Ty TypedSyntax.VIdMap.map
            }
 
-fun LongVarExp (env : Env, TypedSyntax.MkShortVId vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
-                                                              SOME ty => (FSyntax.VarExp vid, ty)
-                                                            | NONE => raise Fail ("vid not found (" ^ TypedSyntax.print_VId vid ^ ")")
-                                                         )
-  | LongVarExp (env, TypedSyntax.MkLongVId (strid0, strids, vid))
+fun LongVarExp (ctx, env : Env, spans, TypedSyntax.MkShortVId vid) = (case TypedSyntax.VIdMap.find (#valMap env, vid) of
+                                                                          SOME ty => (FSyntax.VarExp vid, ty)
+                                                                        | NONE => emitError (ctx, spans, "vid not found (" ^ TypedSyntax.print_VId vid ^ ")")
+                                                                     )
+  | LongVarExp (ctx, env, spans, TypedSyntax.MkLongVId (strid0, strids, vid))
     = let val strid0 = FSyntax.strIdToVId strid0
           val ty0 = case TypedSyntax.VIdMap.find (#valMap env, strid0) of
                         SOME ty => ty
-                      | NONE => raise Fail ("strid not found (longvid / " ^ TypedSyntax.print_VId strid0 ^ ")")
+                      | NONE => emitError (ctx, spans, "strid not found (longvid / " ^ TypedSyntax.print_VId strid0 ^ ")")
           fun go ([], exp, ty) = let val label = FSyntax.ValueLabel vid
                                  in case ty of
                                         FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
                                                                               SOME ty' => (FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
-                                                                            | NONE => raise Fail "non-existent value"
+                                                                            | NONE => emitError (ctx, spans, "non-existent value")
                                                                          )
-                                      | _ => raise Fail "not a record"
+                                      | _ => emitError (ctx, spans, "not a record")
                                  end
             | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
                                               in case ty of
                                                      FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
                                                                                            SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
-                                                                                         | NONE => raise Fail "non-existent substructure"
+                                                                                         | NONE => emitError (ctx, spans, "non-existent substructure")
                                                                                       )
-                                                   | _ => raise Fail "not a record"
+                                                   | _ => emitError (ctx, spans, "not a record")
                                               end
       in go (strids, FSyntax.VarExp strid0, ty0)
       end
-fun LongStrIdExp (env : Env, TypedSyntax.MkLongStrId (strid0, strids)) : FSyntax.Exp * FSyntax.Ty
+fun LongStrIdExp (ctx, env : Env, spans, TypedSyntax.MkLongStrId (strid0, strids)) : FSyntax.Exp * FSyntax.Ty
     = let val strid0 = FSyntax.strIdToVId strid0
           val ty0 = case TypedSyntax.VIdMap.find (#valMap env, strid0) of
                         SOME ty => ty
-                      | NONE => raise Fail ("strid not found (longstrid / " ^ TypedSyntax.print_VId strid0 ^ ")")
+                      | NONE => emitError (ctx, spans, "strid not found (longstrid / " ^ TypedSyntax.print_VId strid0 ^ ")")
           fun go ([], exp, ty) = (exp, ty)
             | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
                                               in case ty of
                                                      FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
                                                                                            SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes}, ty')
-                                                                                         | NONE => raise Fail "non-existent substructure"
+                                                                                         | NONE => emitError (ctx, spans, "non-existent substructure")
                                                                                       )
-                                                   | _ => raise Fail "not a record"
+                                                   | _ => emitError (ctx, spans, "not a record")
                                               end
       in go (strids, FSyntax.VarExp strid0, ty0)
       end
-fun LongVIdToExnTagExp (env : Env, TypedSyntax.MkShortVId vid) = TypedSyntax.VIdMap.find (#exnTagMap env, vid)
-  | LongVIdToExnTagExp (env, TypedSyntax.MkLongVId (strid0, strids, vid))
+fun LongVIdToExnTagExp (ctx, env : Env, spans, TypedSyntax.MkShortVId vid) = TypedSyntax.VIdMap.find (#exnTagMap env, vid)
+  | LongVIdToExnTagExp (ctx, env, spans, TypedSyntax.MkLongVId (strid0, strids, vid))
     = let val strid0 = FSyntax.strIdToVId strid0
           val ty0 = case TypedSyntax.VIdMap.find (#valMap env, strid0) of
                         SOME ty => ty
-                      | NONE => raise Fail ("strid not found (exn / " ^ TypedSyntax.print_VId strid0 ^ ")")
+                      | NONE => emitError (ctx, spans, "strid not found (exn / " ^ TypedSyntax.print_VId strid0 ^ ")")
           fun go ([], exp, ty) = let val label = FSyntax.ExnTagLabel vid
                                  in case ty of
                                         FSyntax.RecordType fieldTypes => SOME (FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes })
-                                      | _ => raise Fail "not a record"
+                                      | _ => emitError (ctx, spans, "not a record")
                                  end
             | go (strid :: strids, exp, ty) = let val label = FSyntax.StructLabel strid
                                               in case ty of
                                                      FSyntax.RecordType fieldTypes => (case Syntax.LabelMap.find (fieldTypes, label) of
                                                                                            SOME ty' => go (strids, FSyntax.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }, ty')
-                                                                                         | NONE => raise Fail "non-existent substructure"
+                                                                                         | NONE => emitError (ctx, spans, "non-existent substructure")
                                                                                       )
-                                                   | _ => raise Fail "not a record"
+                                                   | _ => emitError (ctx, spans, "not a record")
                                               end
       in go (strids, FSyntax.VarExp strid0, ty0)
       end
@@ -602,11 +602,11 @@ local structure T = TypedSyntax
                                     ]
                       end
 in
-fun toFTy (ctx : 'dummy1, env : 'dummy2, T.TyVar (span, tv)) = F.TyVar tv
+fun toFTy (ctx, env : 'dummy, T.TyVar (span, tv)) = F.TyVar tv
   | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = toFTy (ctx, env, ty)
-  | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
+  | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = emitError (ctx, [span], "unexpected anonymous type variable")
   | toFTy (ctx, env, T.RecordType (span, fields)) = F.RecordType (Syntax.LabelMap.map (fn ty => toFTy (ctx, env, ty)) fields)
-  | toFTy (ctx, env, T.RecordExtType (span, fields, baseTy)) = raise Fail "unexpected record extension"
+  | toFTy (ctx, env, T.RecordExtType (span, fields, baseTy)) = emitError (ctx, [span], "unexpected record extension")
   | toFTy (ctx, env, T.TyCon (span, tyargs, tyname)) = F.TyCon (List.map (fn arg => toFTy (ctx, env, arg)) tyargs, tyname)
   | toFTy (ctx, env, T.FnType (span, paramTy, resultTy)) = let fun doTy ty = toFTy (ctx, env, ty)
                                                            in F.FnType (doTy paramTy, doTy resultTy)
@@ -624,33 +624,33 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                          in if lower andalso upper then
                                                 F.IntConstExp (value, toFTy (ctx, env, ty))
                                             else
-                                                raise Fail "integer constant out of range" (* TODO: location information *)
+                                                emitError (ctx, [span], "integer constant out of range")
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_intInf) then
                                          F.IntConstExp (value, toFTy (ctx, env, ty))
                                      else
                                          let val overloadMap = case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                    SOME m => m
-                                                                 | NONE => raise Fail "invalid integer constant"
+                                                                 | NONE => emitError (ctx, [span], "invalid integer constant")
                                              val fromInt = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_fromInt) of
                                                                SOME x => x
-                                                             | NONE => raise Fail "invalid integer constant"
+                                                             | NONE => emitError (ctx, [span], "invalid integer constant")
                                              val PLUS = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_PLUS) of
                                                             SOME x => x
-                                                          | NONE => raise Fail "invalid integer constant"
+                                                          | NONE => emitError (ctx, [span], "invalid integer constant")
                                              val TIMES = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TIMES) of
                                                              SOME x => x
-                                                           | NONE => raise Fail "invalid integer constant"
+                                                           | NONE => emitError (ctx, [span], "invalid integer constant")
                                              val TILDE = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TILDE) of
                                                              SOME x => x
-                                                           | NONE => raise Fail "invalid integer constant"
+                                                           | NONE => emitError (ctx, [span], "invalid integer constant")
                                              val minInt = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_minInt) of
                                                               SOME (F.PrimExp (F.IntConstOp m, _, _)) => SOME m
-                                                            | SOME _ => raise Fail "invalid integer constant"
+                                                            | SOME _ => emitError (ctx, [span], "invalid integer constant")
                                                             | NONE => NONE
                                              val maxInt = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_maxInt) of
                                                               SOME (F.PrimExp (F.IntConstOp m, _, _)) => SOME m
-                                                            | SOME _ => raise Fail "invalid integer constant"
+                                                            | SOME _ => emitError (ctx, [span], "invalid integer constant")
                                                             | NONE => NONE
                                              val lower = case minInt of
                                                              NONE => true
@@ -675,7 +675,7 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                          in if lower andalso upper then
                                                 decompose value
                                             else
-                                                raise Fail "integer constant out of range" (* TODO: location information *)
+                                                emitError (ctx, [span], "integer constant out of range")
                                          end
          | _ => raise Fail "invalid integer constant"
       )
@@ -686,24 +686,24 @@ fun cookWordConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                          in if IntInf.~>> (value, Word.fromInt wordSize) = 0 then
                                                 F.WordConstExp (value, toFTy (ctx, env, ty))
                                             else
-                                                raise Fail "word constant out of range" (* TODO: location information *)
+                                                emitError (ctx, [span], "word constant out of range")
                                          end
                                      else
                                          let val overloadMap = case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                    SOME m => m
-                                                                 | NONE => raise Fail ("invalid word constant for " ^ TypedSyntax.print_TyName tycon)
+                                                                 | NONE => emitError (ctx, [span], "invalid word constant for " ^ TypedSyntax.print_TyName tycon)
                                              val fromWord = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_fromWord) of
                                                                 SOME x => x
-                                                              | NONE => raise Fail "invalid word constant: fromWord is not defined"
+                                                              | NONE => emitError (ctx, [span], "invalid word constant: fromWord is not defined")
                                              val PLUS = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_PLUS) of
                                                             SOME x => x
-                                                          | NONE => raise Fail "invalid word constant: + is not defined"
+                                                          | NONE => emitError (ctx, [span], "invalid word constant: + is not defined")
                                              val TIMES = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_TIMES) of
                                                              SOME x => x
-                                                           | NONE => raise Fail "invalid word constant: * is not defined"
+                                                           | NONE => emitError (ctx, [span], "invalid word constant: * is not defined")
                                              val wordSize = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_wordSize) of
                                                                 SOME (F.PrimExp (F.IntConstOp x, _, _)) => x
-                                                              | _ => raise Fail "invalid word constant: wordSize is not defined"
+                                                              | _ => emitError (ctx, [span], "invalid word constant: wordSize is not defined")
                                              val wordTy = toFTy (ctx, env, Typing.primTy_word)
                                              fun decompose x = if x <= 0xffffffff then
                                                                    F.AppExp (fromWord, F.WordConstExp (x, wordTy))
@@ -720,20 +720,20 @@ fun cookWordConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                          in if IntInf.~>> (value, Word.fromLargeInt wordSize) = 0 then
                                                 decompose value
                                             else
-                                                raise Fail "word constant out of range" (* TODO: location information *)
+                                                emitError (ctx, [span], "word constant out of range")
                                          end
-         | _ => raise Fail "invalid word constant: invalid type"
+         | _ => emitError (ctx, [span], "invalid word constant: invalid type")
       )
 fun cookRealConstant (ctx : Context, env : Env, span, value : Numeric.float_notation, ty)
     = (case ty of
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_real) then
                                          if not (Numeric.checkExactness Numeric.binary64 value) then
-                                             raise Fail "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number"
+                                             emitError (ctx, [span], "the hexadecimal floating-point value cannot be represented as a 64-bit floating-point number")
                                          else
                                              F.PrimExp (F.RealConstOp value, [toFTy (ctx, env, ty)], [])
                                      else
-                                         raise Fail "invalid real constant: type"
-         | _ => raise Fail "invalid real constant: type"
+                                         emitError (ctx, [span], "invalid real constant: type")
+         | _ => emitError (ctx, [span], "invalid real constant: type")
       )
 fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement.char, ty)
     = (case ty of
@@ -742,40 +742,40 @@ fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement
                                              StringElement.CODEUNIT x => if 0 <= x andalso x <= 255 then
                                                                              F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
                                                                          else
-                                                                             raise Fail "invalid character constant: out of range"
+                                                                             emitError (ctx, [span], "invalid character constant: out of range")
                                            | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 127 then
                                                                                    F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
                                                                                else
-                                                                                   raise Fail "invalid character constant: out of range"
+                                                                                   emitError (ctx, [span], "invalid character constant: out of range")
                                      else if T.eqTyName (tycon, Typing.primTyName_char16) then
                                          case value of
                                              StringElement.CODEUNIT x => if 0 <= x andalso x <= 0xffff then
                                                                              F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
                                                                          else
-                                                                             raise Fail "invalid character constant: out of range"
+                                                                             emitError (ctx, [span], "invalid character constant: out of range")
                                            | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 0xffff then
                                                                                    F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
                                                                                else
-                                                                                   raise Fail "invalid character constant: out of range"
+                                                                                   emitError (ctx, [span], "invalid character constant: out of range")
                                      else
-                                         raise Fail "invalid character constant: type"
-         | _ => raise Fail "invalid character constant: type"
+                                         emitError (ctx, [span], "invalid character constant: type")
+         | _ => emitError (ctx, [span], "invalid character constant: type")
       )
 fun cookStringConstant (ctx : Context, env : Env, span, value, ty)
     = (case ty of
            T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_string) then
                                          let val cooked = StringElement.encode8bit value
-                                                          handle Chr => raise Fail "invalid string constant: out of range"
+                                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
                                          in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_string16) then
                                          let val cooked = StringElement.encode16bit value
-                                                          handle Chr => raise Fail "invalid string constant: out of range"
+                                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
                                          in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
                                          end
                                      else
-                                         raise Fail "invalid string constant: type"
-         | _ => raise Fail "invalid string constant: type"
+                                         emitError (ctx, [span], "invalid string constant: type")
+         | _ => emitError (ctx, [span], "invalid string constant: type")
       )
 fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.empty, F.WildcardPat span)
   | toFPat (ctx, env, T.SConPat (span, scon as Syntax.IntegerConstant value, ty))
@@ -792,7 +792,7 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
                                            , cookedValue = cookWordConstant (ctx, env, span, value, ty)
                                            }
       )
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.RealConstant value, ty)) = raise Fail "invalid real constant in pattern"
+  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.RealConstant value, ty)) = emitError (ctx, [span], "invalid real constant in pattern")
   | toFPat (ctx, env, T.SConPat (span, scon as Syntax.CharacterConstant value, ty))
     = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
                                            , scon = scon
@@ -832,9 +832,9 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
           val tyargs = List.map (fn ty => toFTy (ctx, env, ty)) tyargs
       in (m, case valueConstructorInfo of
                  SOME info => F.ValConPat { sourceSpan = span, info = info, payload = payload }
-               | NONE => (case LongVIdToExnTagExp (env, longvid) of
+               | NONE => (case LongVIdToExnTagExp (ctx, env, [span], longvid) of
                               SOME tagExp => F.ExnConPat { sourceSpan = span, tagPath = tagExp, payload = payload }
-                            | NONE => raise Fail "invalid constructor pattern"
+                            | NONE => emitError (ctx, [span], "invalid constructor pattern")
                          )
          )
       end
@@ -860,16 +860,16 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                             T.TyCon (_, [], tycon) => (case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                            SOME m => (case Syntax.OverloadKeyMap.find (m, key) of
                                                                           SOME exp => exp
-                                                                        | NONE => raise Fail ("invalid use of " ^ TypedSyntax.print_VId vid)
+                                                                        | NONE => emitError (ctx, [span], "invalid use of " ^ TypedSyntax.print_VId vid)
                                                                      )
-                                                         | NONE => raise Fail ("invalid use of " ^ TypedSyntax.print_VId vid)
+                                                         | NONE => emitError (ctx, [span], "invalid use of " ^ TypedSyntax.print_VId vid)
                                                       )
-                          | _ => raise Fail ("invalid use of " ^ TypedSyntax.print_VId vid)
+                          | _ => emitError (ctx, [span], "invalid use of " ^ TypedSyntax.print_VId vid)
                        )
          | NONE => if List.exists (fn TypedSyntax.IsEqType => true | _ => false) cts then
-                       F.AppExp (F.TyAppExp (#1 (LongVarExp (env, longvid)), toFTy (ctx, env, tyarg)), getEquality (ctx, env, tyarg))
+                       F.AppExp (F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg)), getEquality (ctx, env, tyarg))
                    else
-                       F.TyAppExp (#1 (LongVarExp (env, longvid)), toFTy (ctx, env, tyarg))
+                       F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg))
       )
   | toFExp (ctx, env, T.VarExp (span, longvid, _, tyargs))
     = List.foldl (fn ((ty, cts), e) =>
@@ -877,7 +877,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                          F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
                      else
                          F.TyAppExp(e, toFTy(ctx, env, ty))
-                 ) (#1 (LongVarExp (env, longvid))) tyargs
+                 ) (#1 (LongVarExp (ctx, env, [span], longvid))) tyargs
   | toFExp (ctx, env, T.RecordExp (span, fields)) = let fun doField (label, e) = (label, toFExp (ctx, env, e))
                                                     in F.RecordExp (List.map doField fields)
                                                     end
@@ -895,7 +895,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
           val baseTy = toFTy (ctx, env, baseTy)
           val baseFieldTypes = case baseTy of
                                    F.RecordType fieldTypes => fieldTypes
-                                 | _ => raise Fail "invalid record type"
+                                 | _ => emitError (ctx, [sourceSpan], "invalid record type")
           val baseDec = F.ValDec (baseVId, SOME baseTy, toFExp (ctx, env, baseExp))
           val baseExp = F.VarExp baseVId
           val baseFields = Syntax.LabelMap.foldri (fn (label, _, fields) =>
@@ -903,7 +903,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                                                   ) [] baseFields
       in List.foldr F.LetExp (F.LetExp (baseDec, F.RecordExp (fields @ baseFields))) decs
       end
-  | toFExp (ctx, env, T.RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = raise Fail ("record extension of non-record type: " ^ T.print_Ty baseTy)
+  | toFExp (ctx, env, T.RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = emitError (ctx, [sourceSpan], "record extension of non-record type: " ^ T.print_Ty baseTy)
   | toFExp (ctx, env, T.LetInExp (span, decs, e))
     = let val (env, decs) = toFDecs(ctx, env, decs)
       in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
@@ -912,7 +912,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
     = let val recordTy = toFTy (ctx, env, recordTy)
           val fieldTypes = case recordTy of
                                F.RecordType fieldTypes => fieldTypes
-                             | _ => raise Fail "invalid record type"
+                             | _ => emitError (ctx, [span], "invalid record type")
       in F.ProjectionExp { label = label, record = toFExp (ctx, env, e2), fieldTypes = fieldTypes }
       end
   | toFExp (ctx, env, T.AppExp (span, e1, e2)) = F.AppExp (toFExp (ctx, env, e1), toFExp (ctx, env, e2))
@@ -935,7 +935,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
           val recordTy = toFTy (ctx, env, recordTy)
           val fieldTypes = case recordTy of
                                F.RecordType fieldTypes => fieldTypes
-                             | _ => raise Fail "invalid record type"
+                             | _ => emitError (ctx, [span], "invalid record type")
       in F.FnExp (vid, recordTy, F.ProjectionExp { label = label, record = F.VarExp vid, fieldTypes = fieldTypes })
       end
   | toFExp (ctx, env, T.HandleExp (span, exp, matches))
@@ -973,7 +973,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                                                                               in F.AppExp (getEquality (ctx, env, tyarg), F.TupleExp [x, y])
                                                                               end
                                                                           else
-                                                                              raise Fail ("invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
+                                                                              emitError (ctx, [span], "invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
   | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimFnOp primOp, Vector.foldr (fn (ty, xs) => toFTy (ctx, env, ty) :: xs) [] tyargs, Vector.foldr (fn (x, xs) => toFExp (ctx, env, x) :: xs) [] args)
 and doValBind ctx env (T.TupleBind (span, vars, exp))
     = let val tupleVId = freshVId (ctx, "tmp")
@@ -982,7 +982,7 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
           val tupleTy = F.TupleType (List.map #2 vars)
           val tupleFieldTypes = case tupleTy of
                                     F.RecordType fieldTypes => fieldTypes
-                                  | _ => raise Fail "invalid tuple"
+                                  | _ => emitError (ctx, [span], "invalid tuple")
           val decs = let fun go (i, []) = []
                            | go (i, (vid, ty) :: xs) = F.ValDec (vid, SOME ty, F.ProjectionExp { label = Syntax.NumericLabel i, record = F.VarExp tupleVId, fieldTypes = tupleFieldTypes }) :: go (i + 1, xs)
                      in go (1, vars)
@@ -996,7 +996,7 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
                                    case cts of
                                        [] => F.ForallType (tv, F.TypeKind, ty1)
                                      | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
-                                     | _ => raise Fail "invalid type constraint"
+                                     | _ => emitError (ctx, [span], "invalid type constraint")
                                ) ty0 tvs
           fun doExp (env', [])
               = toFExp(ctx, env', exp)
@@ -1007,12 +1007,12 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
                                          val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
                                      in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, F.EqualityType (F.TyVar tv), doExp (env'', rest)))
                                      end
-                   | _ => raise Fail "invalid type constraint"
+                   | _ => emitError (ctx, [span], "invalid type constraint")
                 )
           val env' = updateValMap (fn m => T.VIdMap.insert (m, vid, ty'), env)
       in (env', [F.ValDec (vid, SOME ty', doExp (env, tvs))])
       end
-and typeSchemeToTy (ctx : 'dummy1, env : 'dummy2, TypedSyntax.TypeScheme (vars, ty))
+and typeSchemeToTy (ctx, env : 'dummy2, TypedSyntax.TypeScheme (vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
             | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
                                         in F.ForallType(tv, F.TypeKind, go env' xs)
@@ -1020,13 +1020,13 @@ and typeSchemeToTy (ctx : 'dummy1, env : 'dummy2, TypedSyntax.TypeScheme (vars, 
             | go env ((tv, [T.IsEqType]) :: xs) = let val env' = env (* TODO *)
                                                   in F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go env' xs))
                                                   end
-            | go env ((tv, _) :: xs) = raise Fail "invalid type constraint"
+            | go env ((tv, _) :: xs) = emitError (ctx, [T.getSourceSpanOfTy ty], "invalid type constraint")
       in go env vars
       end
 and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
     = (case TypedSyntax.TyNameMap.find (#equalityForTyNameMap env, tyname) of
-           NONE => raise Fail (TypedSyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
-         | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp (exp, toFTy (ctx, env, tyarg))) (#1 (LongVarExp (env, longvid))) tyargs
+           NONE => emitError (ctx, [span], TypedSyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
+         | SOME longvid => let val typesApplied = List.foldl (fn (tyarg, exp) => F.TyAppExp (exp, toFTy (ctx, env, tyarg))) (#1 (LongVarExp (ctx, env, [span], longvid))) tyargs
                            in if Typing.isRefOrArray tyname then
                                   typesApplied
                               else
@@ -1034,11 +1034,11 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                            end
       )
   | getEquality (ctx, env, T.TyVar (span, tv)) = (case TypedSyntax.TyVarMap.find (#equalityForTyVarMap env, tv) of
-                                                      NONE => raise Fail ("equality for the type variable not found: " ^ TypedSyntax.PrettyPrint.print_TyVar tv)
+                                                      NONE => emitError (ctx, [span], "equality for the type variable not found: " ^ TypedSyntax.PrettyPrint.print_TyVar tv)
                                                     | SOME vid => F.VarExp vid
                                                  )
   | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = getEquality (ctx, env, ty)
-  | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = raise Fail ("unexpected anonymous type variable")
+  | getEquality (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = emitError (ctx, [span], "unexpected anonymous type variable")
   | getEquality (ctx, env, recordTy as T.RecordType (span, fields))
     = let val param = freshVId (ctx, "a")
       in if Syntax.LabelMap.isEmpty fields then
@@ -1051,8 +1051,8 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                  val pairTy = F.PairType (recordTy, recordTy)
                  val lhs = freshVId (ctx, "x")
                  val rhs = freshVId (ctx, "y")
-                 val body = F.LetExp ( F.ValDec (lhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => raise Fail "invalid record type" })
-                                     , F.LetExp ( F.ValDec (rhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => raise Fail "invalid record type" })
+                 val body = F.LetExp ( F.ValDec (lhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitError (ctx, [span], "invalid record type") })
+                                     , F.LetExp ( F.ValDec (rhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitError (ctx, [span], "invalid record type") })
                                                 , Syntax.LabelMap.foldli (fn (label, ty, rest) =>
                                                                              F.SimplifyingAndalsoExp ( F.AppExp ( getEquality (ctx, env, ty)
                                                                                                                 , F.TupleExp [ F.ProjectionExp { label = label, record = F.VarExp lhs, fieldTypes = fieldTypes }
@@ -1067,8 +1067,8 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
              in F.FnExp (param, pairTy, body)
              end
       end
-  | getEquality (ctx, env, T.RecordExtType (span, fields, baseTy)) = raise Fail "unexpected record extension"
-  | getEquality (ctx, env, T.FnType _) = raise Fail "functions are not equatable; this should have been a type error"
+  | getEquality (ctx, env, T.RecordExtType (span, fields, baseTy)) = emitError (ctx, [span], "unexpected record extension")
+  | getEquality (ctx, env, T.FnType (span, _, _)) = emitError (ctx, [span], "functions are not equatable; this should have been a type error")
 and toFDecs (ctx, env, []) = (env, [])
   | toFDecs (ctx, env, T.ValDec (span, valbinds) :: decs)
     = let val (env, dec) = List.foldl (fn (valbind, (env, decs)) => let val (env, decs') = doValBind ctx env valbind in (env, decs @ decs') end) (env, []) valbinds
@@ -1076,14 +1076,14 @@ and toFDecs (ctx, env, []) = (env, [])
       in (env, dec @ decs)
       end
   | toFDecs (ctx, env, T.RecValDec (span, valbinds) :: decs)
-    = let val valbinds' = List.map (fn T.TupleBind (span, vars, exp) => raise Fail "unexpected TupleBind in RecValDec"
+    = let val valbinds' = List.map (fn T.TupleBind (span, vars, exp) => emitError (ctx, [span], "unexpected TupleBind in RecValDec")
                                    | T.PolyVarBind (span, vid, T.TypeScheme (tvs, ty), exp) =>
                                      let val ty0 = toFTy (ctx, env, ty)
                                          val ty' = List.foldr (fn ((tv, cts), ty1) =>
                                                                   case cts of
                                                                       [] => F.ForallType (tv, F.TypeKind, ty1)
                                                                     | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
-                                                                    | _ => raise Fail "invalid type constraint"
+                                                                    | _ => emitError (ctx, [span], "invalid type constraint")
                                                               ) ty0 tvs
                                      in (span, vid, ty', tvs, ty, exp)
                                      end
@@ -1101,7 +1101,7 @@ and toFDecs (ctx, env, []) = (env, [])
                                                                           val env'' = updateValMap (fn m => T.VIdMap.insert (m, vid, eqTy), env'')
                                                                       in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, eqTy, doExp (env'', rest)))
                                                                       end
-                                                    | _ => raise Fail "invalid type constraint"
+                                                    | _ => emitError (ctx, [span], "invalid type constraint")
                                                  )
                                        in (vid, ty', doExp (env, tvs))
                                        end) valbinds'
@@ -1161,12 +1161,12 @@ and toFDecs (ctx, env, []) = (env, [])
                                                                )
                                                             end
                                                         | (T.ExReplication (span, vid, longvid, optTy), (env, exnTagMap, revExbinds)) =>
-                                                          (case LongVIdToExnTagExp (env, longvid) of
+                                                          (case LongVIdToExnTagExp (ctx, env, [span], longvid) of
                                                                SOME tagExp => let val conTy = case optTy of
                                                                                                   SOME payloadTy => F.FnType (toFTy (ctx, env, payloadTy), exnTy)
                                                                                                 | NONE => exnTy
                                                                                   val env = updateValMap (fn m => T.VIdMap.insert (m, vid, conTy), env)
-                                                                                  val dec = F.ValDec (vid, SOME conTy, #1 (LongVarExp (env, longvid)))
+                                                                                  val dec = F.ValDec (vid, SOME conTy, #1 (LongVarExp (ctx, env, [span], longvid)))
                                                                               in (env, TypedSyntax.VIdMap.insert (exnTagMap, vid, tagExp), dec :: revExbinds)
                                                                               end
                                                              | NONE => emitError (ctx, [span], "exception not found: " ^ TypedSyntax.print_LongVId longvid)
@@ -1296,28 +1296,28 @@ fun strExpToFExp (ctx, env : Env, T.StructExp { sourceSpan, valMap, tyConMap, st
                                                               let val label = F.ExnTagLabel vid
                                                               in ( Syntax.LabelMap.insert (fieldTypes, label, F.TyCon ([], Typing.primTyName_exntag))
                                                                  , ( label
-                                                                   , case LongVIdToExnTagExp (env, longvid) of
+                                                                   , case LongVIdToExnTagExp (ctx, env, [sourceSpan], longvid) of
                                                                          SOME exp => exp
-                                                                       | NONE => raise Fail ("exception tag not found for " ^ TypedSyntax.print_LongVId longvid)
+                                                                       | NONE => emitError (ctx, [sourceSpan], "exception tag not found for " ^ TypedSyntax.print_LongVId longvid)
                                                                    ) :: fields
                                                                  )
                                                               end
                                                           | (vid, (longvid, _), acc) => acc) (Syntax.LabelMap.empty, []) valMap
           val acc = Syntax.StrIdMap.foldri (fn (strid, longstrid, (fieldTypes, fields)) =>
                                                let val label = F.StructLabel strid
-                                                   val (exp, ty) = LongStrIdExp (env, longstrid)
+                                                   val (exp, ty) = LongStrIdExp (ctx, env, [sourceSpan], longstrid)
                                                in (Syntax.LabelMap.insert (fieldTypes, label, ty), (label, exp) :: fields)
                                                end
                                            ) acc strMap
           val (fieldTypes, fields) = Syntax.VIdMap.foldri (fn (vid, (longvid, ids), (fieldTypes, fields)) =>
                                                               let val label = F.ValueLabel vid
-                                                                  val (exp, ty) = LongVarExp (env, longvid)
+                                                                  val (exp, ty) = LongVarExp (ctx, env, [sourceSpan], longvid)
                                                               in (Syntax.LabelMap.insert (fieldTypes, label, ty), (label, exp) :: fields)
                                                               end
                                                           ) acc valMap
       in (env, [], F.RecordExp fields, F.RecordType fieldTypes)
       end
-  | strExpToFExp (ctx, env, T.StrIdExp (span, longstrid)) = let val (exp, ty) = LongStrIdExp (env, longstrid)
+  | strExpToFExp (ctx, env, T.StrIdExp (span, longstrid)) = let val (exp, ty) = LongStrIdExp (ctx, env, [span], longstrid)
                                                             in (env, [], exp, ty)
                                                             end
   | strExpToFExp (ctx, env, T.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig })
@@ -1351,26 +1351,26 @@ fun strExpToFExp (ctx, env : Env, T.StructExp { sourceSpan, valMap, tyConMap, st
           val exp = F.VarExp funId'
           val ty = case T.VIdMap.find (#valMap env, funId') of
                        SOME ty => ty
-                     | NONE => raise Fail "undefined functor"
+                     | NONE => emitError (ctx, [sourceSpan], "undefined functor")
           val exp = List.foldl (fn ({ typeFunction = T.TypeFunction (tyvars, ty), admitsEquality = _ }, exp) =>
                                    let val ty = List.foldr (fn (tv, ty) => F.TypeFn (tv, F.TypeKind, ty)) (toFTy (ctx, env', ty)) tyvars
                                    in F.TyAppExp (exp, ty)
                                    end
                                ) exp argumentTypes (* apply the types *)
           val ty = List.foldl (fn (_, F.ForallType (_, _, ty)) => ty
-                              | (_, _) => raise Fail "invalid functor type"
+                              | (_, _) => emitError (ctx, [sourceSpan], "invalid functor type")
                               ) ty argumentTypes (* apply the types *)
           val exp = List.foldl (fn ({ typeFunction, admitsEquality = true }, exp) => F.AppExp (exp, getEqualityForTypeFunction (ctx, env, typeFunction))
                                | ({ typeFunction = _, admitsEquality = false }, exp) => exp
                                ) exp argumentTypes (* apply the equalities *)
           val ty = List.foldl (fn ({ typeFunction, admitsEquality = true }, F.FnType (_, ty)) => ty
-                              | ({ typeFunction, admitsEquality = true }, _) => raise Fail "invalid functor type"
+                              | ({ typeFunction, admitsEquality = true }, _) => emitError (ctx, [sourceSpan], "invalid functor type")
                               | ({ typeFunction = _, admitsEquality = false }, ty) => ty
                               ) ty argumentTypes (* apply the equalities *)
           val exp = F.AppExp (exp, argumentStr) (* apply the structure *)
           val ty = case ty of
                        F.FnType (_, ty) => ty
-                     | _ => raise Fail "invalid functor type"
+                     | _ => emitError (ctx, [sourceSpan], "invalid functor type")
       in (env (* What to do? *), decs, exp, ty)
       end
   | strExpToFExp (ctx, env, T.LetInStrExp (span, strdecs, strexp)) = let val (env', decs) = strDecsToFDecs (ctx, env, strdecs)
@@ -1394,11 +1394,11 @@ and strDecToFDecs (ctx, env : Env, T.CoreDec (span, dec)) = toFDecs (ctx, env, [
                                                                         val equalityVId = freshVId (ctx, "eq")
                                                                         val equalityTy = case Syntax.LabelMap.find (fieldTypes, Syntax.NumericLabel 1) of
                                                                                              SOME ty => ty
-                                                                                           | NONE => raise Fail "invalid record"
+                                                                                           | NONE => emitError (ctx, [span], "invalid record")
                                                                         val strVId = freshVId (ctx, case vid of T.MkVId (name,_) => name)
                                                                         val strTy = case Syntax.LabelMap.find (fieldTypes, Syntax.NumericLabel 2) of
                                                                                              SOME ty => ty
-                                                                                           | NONE => raise Fail "invalid record"
+                                                                                           | NONE => emitError (ctx, [span], "invalid record")
                                                                         val env = updateEqualityForTyNameMap (fn m => T.TyNameMap.insert (m, tyname, T.MkShortVId equalityVId), env)
                                                                         val env = updateValMap (fn m => T.VIdMap.insert (T.VIdMap.insert (T.VIdMap.insert (m, packageVId, payloadTy), equalityVId, equalityTy), strVId, strTy), env)
                                                                     in ( F.ValDec (equalityVId, SOME equalityTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp packageVId, fieldTypes = fieldTypes })
@@ -1410,13 +1410,13 @@ and strDecToFDecs (ctx, env : Env, T.CoreDec (span, dec)) = toFDecs (ctx, env, [
                                                                        , env
                                                                        )
                                                                     end
-                                                                  | _ => raise Fail "expected RecordType"
+                                                                  | _ => emitError (ctx, [span], "expected RecordType")
                                                             else
                                                                 let val vid = freshVId (ctx, case vid of T.MkVId (name, _) => name)
                                                                     val env = updateValMap (fn m => T.VIdMap.insert (m, vid, payloadTy), env)
                                                                 in (F.UnpackDec (F.tyNameToTyVar tyname, F.arityToKind arity, vid, payloadTy, exp) :: revDecs, F.VarExp vid, payloadTy, env)
                                                                 end
-                                                          | _ => raise Fail ("expected ExistsType, but got " ^ F.PrettyPrint.print_Ty packageTy)
+                                                          | _ => emitError (ctx, [span], "expected ExistsType, but got " ^ F.PrettyPrint.print_Ty packageTy)
                                                     ) ([], exp, packageTy, env'') bound
           (* ty and ty' should be the same *)
       in (env, [F.GroupDec(NONE, decs0 @ List.rev (F.ValDec (vid, SOME ty, exp) :: revDecs))])
@@ -1473,16 +1473,16 @@ fun programToFDecs(ctx, env : Env, []) = (env, [])
 fun isAlphaNumName name = List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
 fun addExport (ctx, tenv : Typing.Env, toFEnv : Env, decs)
     = case (Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export"), Syntax.StrIdMap.find (#strMap tenv, Syntax.MkStrId "export")) of
-          (NONE, NONE) => raise Fail "No value to export was found."
-        | (SOME (_, _, longvid), NONE) => decs @ [ F.ExportValue (#1 (LongVarExp (toFEnv, longvid))) ]
+          (NONE, NONE) => emitError (ctx, [], "No value to export was found.")
+        | (SOME (_, _, longvid), NONE) => decs @ [ F.ExportValue (#1 (LongVarExp (ctx, toFEnv, [], longvid))) ]
         | (NONE, SOME ({ valMap, ... }, T.MkLongStrId (strid0, strids))) =>
           let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (vid, _) => let val name = Syntax.getVIdName vid
                                                                                               in if isAlphaNumName name then
-                                                                                                     SOME (name, #1 (LongVarExp (toFEnv, T.MkLongVId (strid0, strids, vid))))
+                                                                                                     SOME (name, #1 (LongVarExp (ctx, toFEnv, [], T.MkLongVId (strid0, strids, vid))))
                                                                                                  else if String.isSuffix "'" name then
                                                                                                      let val name' = String.substring (name, 0, String.size name - 1)
                                                                                                      in if isAlphaNumName name' andalso not (Syntax.VIdMap.inDomain (valMap, Syntax.MkVId name')) then
-                                                                                                            SOME (name', #1 (LongVarExp (toFEnv, T.MkLongVId (strid0, strids, vid))))
+                                                                                                            SOME (name', #1 (LongVarExp (ctx, toFEnv, [], T.MkLongVId (strid0, strids, vid))))
                                                                                                         else
                                                                                                             NONE
                                                                                                      end
@@ -1492,7 +1492,7 @@ fun addExport (ctx, tenv : Typing.Env, toFEnv : Env, decs)
                                                                               ) valMap)
           in decs @ [ F.ExportModule (Vector.fromList fields) ]
           end
-        | (SOME _, SOME _) => raise Fail "The value to export is ambiguous."
+        | (SOME _, SOME _) => emitError (ctx, [], "The value to export is ambiguous.")
 
 val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                        , equalityForTyNameMap = TypedSyntax.TyNameMap.empty
@@ -1511,8 +1511,9 @@ val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                        , overloadMap = TypedSyntax.TyNameMap.empty
                        , valMap = let open InitialEnv
                                       val initialValMap = #valMap initialEnv
+                                      val dummyContext : Context = { nextVId = ref 0, nextTyVar = ref 0, targetInfo = { datatypeTag = TargetInfo.STRING8, minInt = NONE, maxInt = NONE, wordSize = 0 } }
                                       val initialValMap = Syntax.VIdMap.foldl (fn ((tysc, ids, vid), m) => case vid of
-                                                                                                               TypedSyntax.MkShortVId vid => TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy ((), (), tysc))
+                                                                                                               TypedSyntax.MkShortVId vid => TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy (dummyContext, (), tysc))
                                                                                                              | TypedSyntax.MkLongVId _ => raise Fail "unexpected longvid") TypedSyntax.VIdMap.empty initialValMap
                                   in List.foldl TypedSyntax.VIdMap.insert' initialValMap
                                                 [(VId_Match_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
