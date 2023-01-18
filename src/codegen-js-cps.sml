@@ -101,7 +101,7 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
                                     J.ConstExp (J.Numeral (LargeInt.toString x ^ "n"))
   | doValue (C.Word32Const x) = J.ConstExp (J.Numeral ("0x" ^ Word32.fmt StringCvt.HEX x))
   | doValue (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
-  | doValue (C.Char16Const x) = J.ConstExp (J.WideString (vector [x]))
+  | doValue (C.Char16Const x) = J.ConstExp (J.Numeral (Int.toString x))
   | doValue (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
   | doValue (C.String16Const x) = J.ConstExp (J.WideString x)
 
@@ -316,7 +316,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            | Primitives.String16_GE => doBinaryOp (J.GE, true)
            | Primitives.String16_HAT => doBinaryOp (J.PLUS, true)
            | Primitives.String16_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
-           | Primitives.String16_str => doUnaryExp (fn a => a, true)
+           | Primitives.String16_str => doUnaryExp (fn a => J.MethodExp (J.VarExp (J.PredefinedId "String"), "fromCharCode", vector [a]), true)
            | Primitives.IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.IntInf_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.IntInf_MINUS => doBinaryOp (J.MINUS, true)

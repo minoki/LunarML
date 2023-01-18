@@ -10,6 +10,8 @@ exception CodeGenError of string
  * real -> number (64-bit floating-point number)
  * string -> immutable Uint8Array
  * char -> 8-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
+ * String16.string (WideString.string) -> 16-bit string
+ * Char16.char (WideChar.char) -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
  * exn -> object
  * bool -> boolean
  * ref -> { tag: "ref", payload: <mutable> }
@@ -211,7 +213,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                         [F.TyVar tv] => if tv = F.tyNameToTyVar Typing.primTyName_char then
                                             J.ConstExp (J.Numeral (Int.toString x))
                                         else if tv = F.tyNameToTyVar Typing.primTyName_char16 then
-                                            J.ConstExp (J.WideString (vector [x]))
+                                            J.ConstExp (J.Numeral (Int.toString x))
                                         else
                                             raise CodeGenError "PrimExp.CharConstOp: invalid type"
                       | _ => raise CodeGenError "PrimExp.CharConstOp: invalid type"
@@ -529,10 +531,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
            | Primitives.String16_GE => doBinaryOp (J.GE, true)
            | Primitives.String16_HAT => doBinaryOp (J.PLUS, true)
            | Primitives.String16_size => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "length")), true)
-           | Primitives.String16_str => (case args of
-                                             [a] => doExpTo ctx env a dest
-                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-                                        )
+           | Primitives.String16_str => doUnaryExp (fn a => J.MethodExp (J.VarExp (J.PredefinedId "String"), "fromCharCode", vector [a]), true)
            | Primitives.IntInf_EQUAL => doBinaryOp (J.EQUAL, true)
            | Primitives.IntInf_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.IntInf_MINUS => doBinaryOp (J.MINUS, true)

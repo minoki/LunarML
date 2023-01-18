@@ -7,7 +7,7 @@ fun x > y = _primCall "String16.>" (x, y)
 fun x >= y = _primCall "String16.>=" (x, y)
 fun x ^ y = _primCall "String16.^" (x, y)
 fun size x = _primCall "String16.size" (x)
-fun str (x : char) : string = _primCall "Unsafe.cast" (x)
+fun str (x : char) : string = _primCall "String16.str" (x)
 end
 _equality WideString.string = fn (x, y) => _primCall "String16.=" (x, y);
 _overload "String" [WideString.string] { < = WideString.<
