@@ -91,8 +91,8 @@ validate-lua: bin/lunarml
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
 
 validate-luajit: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2-luajit.lua LunarML.mlb
-	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile -o lunarml.gen3-luajit.lua LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2-luajit.lua --luajit LunarML.mlb
+	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile -o lunarml.gen3-luajit.lua --luajit LunarML.mlb
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: bin/lunarml

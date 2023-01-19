@@ -29,8 +29,12 @@ jobs:
       - name: Prepare third-party libraries
         run: make -C thirdparty install
       - name: Compile myself (Lua)
-        run: bin/lunarml compile LunarML.mlb
+        run: |
+          bin/lunarml compile LunarML.mlb
+          luac -p LunarML.lua
       - name: Compile myself (LuaJIT)
-        run: bin/lunarml compile --luajit LunarML.mlb
+        run: |
+          bin/lunarml compile --luajit LunarML.mlb
+          luajit -bl LunarML.lua > /dev/null
       - name: Compile myself and validate (JavaScript)
         run: make validate-js
