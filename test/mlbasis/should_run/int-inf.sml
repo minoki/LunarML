@@ -39,3 +39,12 @@ val () = List.app (fn (s, x, expected) =>
                   ,("2^1000", IntInf.<< (1, 0w1000), VALUE 1000)
                   ,("2^1000+1", IntInf.<< (1, 0w1000) + 1, VALUE 1000)
                   ];
+val () = List.app (fn x =>
+                      List.app (fn amount =>
+                                   let val y = IntInf.~>> (x, amount)
+                                   in print (IntInf.toString x ^ " ~>> " ^ Word.fmt StringCvt.DEC amount ^ " = " ^ IntInf.toString y ^ "\n")
+                                   end
+                               )
+                               [0w0, 0w1, 0w2, 0w31, 0w32, 0w63, 0w64, 0w127, 0w128, 0w192, 0wxFFFF_FFFF]
+                  )
+                  [0, 1, 2, 3, ~1, ~2, ~3, 37, ~42, 999, ~999, IntInf.<< (1, 0w64), IntInf.<< (~1, 0w100) + 3377, IntInf.<< (1, 0w256) + IntInf.<< (1, 0w128)];

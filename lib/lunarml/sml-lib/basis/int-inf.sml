@@ -572,7 +572,9 @@ fun LShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wor
 fun RShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wordSize
                                     val minor = amount mod Word.fromInt Word.wordSize
                                     val n = Vector.length words - Word.toInt major
-                                in if minor = 0w0 then
+                                in if n <= 0 then
+                                       (#[], true) (* Assume words is not empty *)
+                                   else if minor = 0w0 then
                                        ( Vector.tabulate (n, fn i => Vector.sub (words, i + Word.toInt major))
                                        , VectorSlice.exists (fn x => x <> 0w0) (VectorSlice.slice (words, 0, SOME (Word.toInt major)))
                                        )
@@ -599,7 +601,12 @@ fun << (z as ZERO, _) = z
   | << (NEGATIVE words, amount) = NEGATIVE (LShiftAbs (words, amount))
 
 fun ~>> (z as ZERO, _) = z
-  | ~>> (POSITIVE words, amount) = POSITIVE (#1 (RShiftAbs (words, amount)))
+  | ~>> (POSITIVE words, amount) = let val (x, _) = RShiftAbs (words, amount)
+                                   in if Vector.length x > 0 then
+                                          POSITIVE x
+                                      else
+                                          ZERO
+                                   end
   | ~>> (NEGATIVE words, amount) = NEGATIVE (let val (x, y) = RShiftAbs (words, amount)
                                              in if y then
                                                     addAbs (x, #[0w1])
