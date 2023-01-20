@@ -123,7 +123,7 @@ and substStat map (L.LocalStat (lhs, rhs)) = let val rhs = List.map (substExp ma
                                                                   val map'' = Vector.foldl (fn (id, map) => if L.IdMap.inDomain (map, id) then
                                                                                                                 #1 (L.IdMap.remove (map, id))
                                                                                                             else
-                                                                                                                map) map params
+                                                                                                                map) map' params
                                                               in (map', L.LocalFunctionStat (vid, params, substBlock map'' body))
                                                               end
   | substStat map (L.ReturnStat xs) = (map, L.ReturnStat (Vector.map (substExp map) xs))
@@ -193,25 +193,17 @@ and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx
 and doBlock ctx block = Vector.map (doStat ctx) block
 end
 structure ProcessUpvalue = struct
-type Env = { valMap : Variable TypedSyntax.VIdMap.map
-           , bound : L.VarAttr L.IdMap.map
+type Env = { bound : L.VarAttr L.IdMap.map
            , dynamic : L.VarAttr L.IdMap.map
            }
-val initialEnv : Env = { valMap = TypedSyntax.VIdMap.empty
-                       , bound = mlinit_lua
+val initialEnv : Env = { bound = mlinit_lua
                        , dynamic = mlinit_lua
                        }
-val initialEnvForLuaJIT : Env = { valMap = TypedSyntax.VIdMap.empty
-                                , bound = mlinit_luajit
+val initialEnvForLuaJIT : Env = { bound = mlinit_luajit
                                 , dynamic = mlinit_luajit
                                 }
 fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = ([], exp)
-  | doExp ctx env (exp as L.VarExp (L.PredefinedId _)) = ([], exp)
-  | doExp ctx env (exp as L.VarExp (L.UserDefinedId vid)) = ([], case TypedSyntax.VIdMap.find (#valMap env, vid) of
-                                                                     NONE => exp
-                                                                   | SOME (Plain vid) => L.VarExp (L.UserDefinedId vid)
-                                                                   | SOME (Index (locals, n)) => L.IndexExp (L.VarExp (L.UserDefinedId locals), L.ConstExp (L.Numeral (Int.toString n)))
-                                                            )
+  | doExp ctx env (exp as L.VarExp _) = ([], exp)
   | doExp ctx env (L.TableExp fields) = let val (decs, fields) = Vector.foldr (fn ((key, value), (decs, fields)) => let val (decs', value) = doExp ctx env value
                                                                                                                     in (decs' @ decs, (key, value) :: fields)
                                                                                                                     end) ([], []) fields
@@ -230,10 +222,7 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = ([], exp)
                                                        in (decs @ decs', L.MethodExp (self, method, vector args))
                                                        end
   | doExp ctx env (L.FunctionExp (params, body))
-    = let val innerEnv = { valMap = Vector.foldl (fn (L.PredefinedId param, valMap) => valMap
-                                                 | (L.UserDefinedId vid, valMap) => TypedSyntax.VIdMap.insert (valMap, vid, Plain vid)
-                                                 ) (#valMap env) params
-                         , bound = Vector.foldl (fn (p, bound) => L.IdMap.insert (bound, p, L.CONST)) (#bound env) params
+    = let val innerEnv = { bound = Vector.foldl (fn (p, bound) => L.IdMap.insert (bound, p, L.CONST)) (#bound env) params
                          , dynamic = Vector.foldl (fn (p, dynamic) => L.IdMap.insert (dynamic, p, L.CONST)) (#dynamic env) params
                          }
           val paramSet = Vector.foldl (fn (p, bound) => L.IdSet.add (bound, p)) L.IdSet.empty params
@@ -250,7 +239,10 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = ([], exp)
                  val vid = genSym (ctx, "UPVAL")
                  val dec = L.LocalStat ([(vid, L.CONST)], [L.TableExp (vector (List.rev (#2 (List.foldl (fn ((id, _), (i, acc)) => (i + 1, (L.IntKey i, L.VarExp id) :: acc)) (1, []) escapeList))))])
                  val (_, subst) = List.foldl (fn ((id, _), (i, map)) => (i + 1, L.IdMap.insert (map, id, L.IndexExp (L.VarExp (L.UserDefinedId vid), L.ConstExp (L.Numeral (Int.toString i)))))) (1, L.IdMap.empty) escapeList
-                 val (_, body') = doBlock ctx innerEnv (substBlock subst body)
+                 val innerEnv' = { bound = L.IdMap.insert (#bound innerEnv, L.UserDefinedId vid, L.CONST)
+                                 , dynamic = L.IdMap.insert (#dynamic innerEnv, L.UserDefinedId vid, L.CONST)
+                                 }
+                 val (_, body') = doBlock ctx innerEnv' (substBlock subst body)
              in ([dec], L.FunctionExp (params, body'))
              end
          else
@@ -273,8 +265,7 @@ fun doExp (ctx : Context) (env : Env) (exp as L.ConstExp ct) = ([], exp)
                                          in (decs, L.SingleValueExp a)
                                          end
 and doStat ctx env (L.LocalStat (vars, exps))
-    = let val newEnv = { valMap = #valMap env
-                       , bound = List.foldl (fn ((vid, attr), m) => L.IdMap.insert (m, L.UserDefinedId vid, attr)) (#bound env) vars
+    = let val newEnv = { bound = List.foldl (fn ((vid, attr), m) => L.IdMap.insert (m, L.UserDefinedId vid, attr)) (#bound env) vars
                        , dynamic = List.foldl (fn ((vid, attr), m) => L.IdMap.insert (m, L.UserDefinedId vid, attr)) (#dynamic env) vars
                        }
           val (decs, exps) = List.foldr (fn (x, (decs, xs)) => let val (decs', x) = doExp ctx env x
@@ -290,8 +281,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                      val (decs', exps) = List.foldr (fn (x, (decs, xs)) => let val (decs', x) = doExp ctx env x
                                                                                                            in (decs' @ decs, x :: xs)
                                                                                                            end) ([], []) exps
-                                                     val newEnv = { valMap = #valMap env
-                                                                  , bound = #bound env
+                                                     val newEnv = { bound = #bound env
                                                                   , dynamic = List.foldl (fn (L.VarExp id, dynamic) => (case L.IdMap.find (dynamic, id) of
                                                                                                                             NONE => dynamic
                                                                                                                           | SOME L.LATE_INIT => L.IdMap.insert (dynamic, id, L.CONST)
@@ -316,8 +306,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
   | doStat ctx env (L.IfStat (cond, thenPart, elsePart)) = let val (decs, cond) = doExp ctx env cond
                                                                val (dynamic1, thenPart) = doBlock ctx env thenPart
                                                                val (dynamic2, elsePart) = doBlock ctx env elsePart
-                                                               val newEnv = { valMap = #valMap env
-                                                                            , bound = #bound env
+                                                               val newEnv = { bound = #bound env
                                                                             , dynamic = L.IdMap.mapi (fn (id, attr as L.CONST) => attr
                                                                                                      | (id, attr as L.MUTABLE) => attr
                                                                                                      | (id, attr as L.LATE_INIT) => (case L.IdMap.find (dynamic1, id) of
@@ -348,8 +337,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                             in (env, decs @ [L.ReturnStat (vector results)])
                                             end
   | doStat ctx env (L.DoStat block) = let val (dynamic, block) = doBlock ctx env block
-                                          val newEnv = { valMap = #valMap env
-                                                       , bound = #bound env
+                                          val newEnv = { bound = #bound env
                                                        , dynamic = L.IdMap.mapi (fn (id, attr as L.CONST) => attr
                                                                                 | (id, attr as L.MUTABLE) => attr
                                                                                 | (id, attr as L.LATE_INIT) => (case L.IdMap.find (dynamic, id) of
@@ -377,8 +365,7 @@ and doStats ctx env [] acc = (env, List.concat (List.rev acc))
                                           end
 and takeFunctionAssignments ctx env (stats as (L.AssignStat ([L.VarExp v], [f as L.FunctionExp (params, body)]) :: stats')) revAcc
     = (case L.IdMap.find (#dynamic env, v) of
-           SOME L.LATE_INIT => let val newEnv = { valMap = #valMap env
-                                                , bound = #bound env
+           SOME L.LATE_INIT => let val newEnv = { bound = #bound env
                                                 , dynamic = L.IdMap.insert (#dynamic env, v, L.CONST)
                                                 }
                                in takeFunctionAssignments ctx newEnv stats' ((v, f) :: revAcc)
