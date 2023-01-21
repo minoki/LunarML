@@ -239,6 +239,10 @@ fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
 structure F = FSyntax
 structure L = LuaSyntax
 
+datatype purity = PURE
+                | DISCARDABLE
+                | IMPURE
+
 datatype Destination = Return
                      | AssignTo of TypedSyntax.VId
                      | DeclareAndAssignTo of { level : int, destination : TypedSyntax.VId }
@@ -258,6 +262,17 @@ fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vect
                                                                                      raise CodeGenError "invalid DeclareAndAssignTo"
   | putPureTo ctx env Discard (stmts, exp) = stmts
   | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
+and putDiscardableTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
+  | putDiscardableTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
+  | putDiscardableTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
+                                                                                       stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
+                                                                                   else
+                                                                                       raise CodeGenError "invalid DeclareAndAssignTo"
+  | putDiscardableTo ctx env Discard (stmts, exp) = stmts
+  | putDiscardableTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
+                                                                val env = addSymbol (env, dest)
+                                                            in cont (stmts @ [ L.LocalStat ([(dest, L.CONST)], [exp]) ], env, L.VarExp (L.UserDefinedId dest))
+                                                            end
 and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
   | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
   | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
@@ -540,6 +555,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
     = let fun doUnary cont = case args of
                                  [a] => doExpCont ctx env a cont
                                | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
+          fun doUnaryExp (f, purity) = doUnary (fn (stmts, env, a) =>
+                                                   case purity of
+                                                       PURE => putPureTo ctx env dest (stmts, f a)
+                                                     | DISCARDABLE => putDiscardableTo ctx env dest (stmts, f a)
+                                                     | IMPURE => putImpureTo ctx env dest (stmts, f a)
+                                               )
           fun doBinary cont = case args of
                                   [a, b] => doExpCont ctx env a
                                                       (fn (stmts0, env, a) =>
@@ -549,12 +570,13 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                                     )
                                                       )
                                 | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-          fun doBinaryOp (binop, pure) = doBinary (fn (stmts, env, (a, b)) =>
-                                                      if pure then
-                                                          putPureTo ctx env dest (stmts, L.BinExp (binop, a, b))
-                                                      else
-                                                          putImpureTo ctx env dest (stmts, L.BinExp (binop, a, b))
-                                                  )
+          fun doBinaryExp (f, purity) = doBinary (fn (stmts, env, ab) =>
+                                                     case purity of
+                                                         PURE => putPureTo ctx env dest (stmts, f ab)
+                                                       | DISCARDABLE => putDiscardableTo ctx env dest (stmts, f ab)
+                                                       | IMPURE => putImpureTo ctx env dest (stmts, f ab)
+                                                 )
+          fun doBinaryOp (binop, purity) = doBinaryExp (fn (a, b) => L.BinExp (binop, a, b), purity)
           fun doTernary cont = case args of
                                    [a, b, c] => doExpCont ctx env a
                                                           (fn (stmts0, env, a) =>
@@ -587,153 +609,121 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                                    )
                                     | _ => raise CodeGenError "primop call3: invalid number of arguments"
                                  )
-           | Primitives.List_cons => doBinary (fn (stmts, env, (x, xs)) =>
-                                                  putPureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "::"))
-                                                                                                    ,(L.StringKey "payload", L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]))
-                                                                                                    ]
-                                                                                            )
-                                                                         )
+           | Primitives.List_cons => doBinaryExp ( fn (x, xs) =>
+                                                      L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "::"))
+                                                                         ,(L.StringKey "payload", L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]))
+                                                                         ]
+                                                                 )
+                                                 , PURE
+                                                 )
+           | Primitives.Ref_ref => doUnaryExp ( fn x =>
+                                                   (* REPRESENTATION_OF_REF *)
+                                                   L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "ref"))
+                                                                      ,(L.StringKey "payload", x)
+                                                                      ]
+                                                              )
+                                              , DISCARDABLE
                                               )
-           | Primitives.Ref_ref => doUnary (fn (stmts, env, x) =>
-                                               (* REPRESENTATION_OF_REF *)
-                                               putImpureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "ref"))
-                                                                                                   ,(L.StringKey "payload", x)
-                                                                                                   ]
-                                                                                           )
-                                                                        )
-                                           )
-           | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, true)
+           | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, PURE)
            | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
                                                 (* REPRESENTATION_OF_REF *)
                                                 let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], [b]) ]
                                                 in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                 end
                                             )
-           | Primitives.Ref_read => doUnary (fn (stmts, env, a) =>
-                                                (* REPRESENTATION_OF_REF *)
-                                                putImpureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "payload")))
-                                            )
-           | Primitives.Bool_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.Bool_not => doUnary (fn (stmts, env, a) =>
-                                                putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
-                                            )
-           | Primitives.Int_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.Int_LT => doBinaryOp (L.LT, true)
-           | Primitives.Int_GT => doBinaryOp (L.GT, true)
-           | Primitives.Int_LE => doBinaryOp (L.LE, true)
-           | Primitives.Int_GE => doBinaryOp (L.GE, true)
-           | Primitives.Word_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.Word_PLUS => doBinaryOp (L.PLUS, true)
-           | Primitives.Word_MINUS => doBinaryOp (L.MINUS, true)
-           | Primitives.Word_TIMES => doBinaryOp (L.TIMES, true)
-           | Primitives.Word_TILDE => doUnary (fn (stmts, env, a) =>
-                                                  putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                              )
-           | Primitives.Real_PLUS => doBinaryOp (L.PLUS, true)
-           | Primitives.Real_MINUS => doBinaryOp (L.MINUS, true)
-           | Primitives.Real_TIMES => (case #targetLuaVersion ctx of
-                                           LUA5_3 => doBinaryOp (L.TIMES, true)
-                                         | LUAJIT => doBinary (fn (stmts, env, (a, b)) =>
-                                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "__Real_mul"), vector [a, b]))
-                                                              )
-                                      )
-           | Primitives.Real_DIVIDE => doBinaryOp (L.DIV, true)
-           | Primitives.Real_TILDE => doUnary (fn (stmts, env, a) =>
-                                                  case #targetLuaVersion ctx of
-                                                      LUA5_3 => putPureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                                    | LUAJIT => putPureTo ctx env dest (stmts, L.BinExp (L.MINUS, L.VarExp (L.PredefinedId "NEGATIVE_ZERO"),  a))
-                                              )
-           | Primitives.Real_LT => doBinaryOp (L.LT, true)
-           | Primitives.Real_GT => doBinaryOp (L.GT, true)
-           | Primitives.Real_LE => doBinaryOp (L.LE, true)
-           | Primitives.Real_GE => doBinaryOp (L.GE, true)
-           | Primitives.Char_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.Char_LT => doBinaryOp (L.LT, true)
-           | Primitives.Char_GT => doBinaryOp (L.GT, true)
-           | Primitives.Char_LE => doBinaryOp (L.LE, true)
-           | Primitives.Char_GE => doBinaryOp (L.GE, true)
-           | Primitives.String_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.String_LT => doBinaryOp (L.LT, true)
-           | Primitives.String_GT => doBinaryOp (L.GT, true)
-           | Primitives.String_LE => doBinaryOp (L.LE, true)
-           | Primitives.String_GE => doBinaryOp (L.GE, true)
-           | Primitives.String_HAT => doBinaryOp (L.CONCAT, true)
-           | Primitives.String_size => doUnary (fn (stmts, env, a) =>
-                                                   putPureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
+           | Primitives.Ref_read => doUnaryExp ( fn a =>
+                                                    (* REPRESENTATION_OF_REF *)
+                                                    L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))
+                                               , DISCARDABLE
                                                )
-           | Primitives.String_str => doUnary (fn (stmts, env, a) =>
-                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "string_char"), vector [a]))
-                                              )
-           | Primitives.Vector_length => doUnary (fn (stmts, env, a) =>
-                                                     putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
+           | Primitives.Bool_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.Bool_not => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
+           | Primitives.Int_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.Int_LT => doBinaryOp (L.LT, PURE)
+           | Primitives.Int_GT => doBinaryOp (L.GT, PURE)
+           | Primitives.Int_LE => doBinaryOp (L.LE, PURE)
+           | Primitives.Int_GE => doBinaryOp (L.GE, PURE)
+           | Primitives.Word_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.Word_PLUS => doBinaryOp (L.PLUS, PURE) (* not used on LuaJIT *)
+           | Primitives.Word_MINUS => doBinaryOp (L.MINUS, PURE) (* not used on LuaJIT *)
+           | Primitives.Word_TIMES => doBinaryOp (L.TIMES, PURE) (* not used on LuaJIT *)
+           | Primitives.Word_TILDE => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE) (* not used on LuaJIT *)
+           | Primitives.Real_PLUS => doBinaryOp (L.PLUS, PURE)
+           | Primitives.Real_MINUS => doBinaryOp (L.MINUS, PURE)
+           | Primitives.Real_TIMES => (case #targetLuaVersion ctx of
+                                           LUA5_3 => doBinaryOp (L.TIMES, PURE)
+                                         | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "__Real_mul"), vector [a, b]), PURE)
+                                      )
+           | Primitives.Real_DIVIDE => doBinaryOp (L.DIV, PURE)
+           | Primitives.Real_TILDE => doUnaryExp ( fn a =>
+                                                      case #targetLuaVersion ctx of
+                                                          LUA5_3 => L.UnaryExp (L.NEGATE, a)
+                                                        | LUAJIT => L.BinExp (L.MINUS, L.VarExp (L.PredefinedId "NEGATIVE_ZERO"), a)
+                                                 , PURE
                                                  )
-           | Primitives.Vector_unsafeFromListRevN => doBinary (fn (stmts, env, (n, xs)) =>
-                                                                  putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]))
-                                                              )
-           | Primitives.Array_EQUAL => doBinaryOp (L.EQUAL, true)
-           | Primitives.Array_length => doUnary (fn (stmts, env, a) =>
-                                                    putPureTo ctx env dest (stmts, L.IndexExp (a, L.ConstExp (L.LiteralString "n")))
-                                                )
+           | Primitives.Real_LT => doBinaryOp (L.LT, PURE)
+           | Primitives.Real_GT => doBinaryOp (L.GT, PURE)
+           | Primitives.Real_LE => doBinaryOp (L.LE, PURE)
+           | Primitives.Real_GE => doBinaryOp (L.GE, PURE)
+           | Primitives.Char_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.Char_LT => doBinaryOp (L.LT, PURE)
+           | Primitives.Char_GT => doBinaryOp (L.GT, PURE)
+           | Primitives.Char_LE => doBinaryOp (L.LE, PURE)
+           | Primitives.Char_GE => doBinaryOp (L.GE, PURE)
+           | Primitives.String_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.String_LT => doBinaryOp (L.LT, PURE)
+           | Primitives.String_GT => doBinaryOp (L.GT, PURE)
+           | Primitives.String_LE => doBinaryOp (L.LE, PURE)
+           | Primitives.String_GE => doBinaryOp (L.GE, PURE)
+           | Primitives.String_HAT => doBinaryOp (L.CONCAT, PURE)
+           | Primitives.String_size => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), PURE)
+           | Primitives.String_str => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "string_char"), vector [a]), PURE)
+           | Primitives.Vector_length => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
+           | Primitives.Vector_unsafeFromListRevN => doBinaryExp (fn (n, xs) => L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), PURE)
+           | Primitives.Array_EQUAL => doBinaryOp (L.EQUAL, PURE)
+           | Primitives.Array_length => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
            | Primitives.Unsafe_cast => (case args of
                                             [a] => doExpTo ctx env a dest
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
                                        )
-           | Primitives.Unsafe_Vector_sub => doBinary (fn (stmts, env, (vec, i)) =>
-                                                          putPureTo ctx env dest (stmts, L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
-                                                      )
-           | Primitives.Unsafe_Array_sub => doBinary (fn (stmts, env, (arr, i)) =>
-                                                         putImpureTo ctx env dest (stmts, L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))))
-                                                     )
+           | Primitives.Unsafe_Vector_sub => doBinaryExp (fn (vec, i) => L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), PURE)
+           | Primitives.Unsafe_Array_sub => doBinaryExp (fn (arr, i) => L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), IMPURE)
            | Primitives.Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
                                                              let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]) ]
                                                              in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                              end
                                                          )
-           | Primitives.Exception_instanceof => doBinary (fn (stmts, env, (e, tag)) =>
-                                                             putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [e, tag]))
-                                                         )
-           | Primitives.Lua_sub => doBinary (fn (stmts, env, (a, b)) =>
-                                                putImpureTo ctx env dest (stmts, L.IndexExp (a, b))
-                                            )
+           | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [e, tag]), PURE)
+           | Primitives.Lua_sub => doBinaryExp (fn (a, b) => L.IndexExp (a, b), IMPURE)
            | Primitives.Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
                                                  let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, b)], [c]) ]
                                                  in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
                                                  end
                                              )
-           | Primitives.Lua_isNil => doUnary (fn (stmts, env, a) =>
-                                                 putPureTo ctx env dest (stmts, L.BinExp (L.EQUAL, a, L.ConstExp L.Nil))
-                                             )
-           | Primitives.Lua_EQUAL => doBinaryOp (L.EQUAL, false)
-           | Primitives.Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, false)
-           | Primitives.Lua_LT => doBinaryOp (L.LT, false)
-           | Primitives.Lua_GT => doBinaryOp (L.GT, false)
-           | Primitives.Lua_LE => doBinaryOp (L.LE, false)
-           | Primitives.Lua_GE => doBinaryOp (L.GE, false)
-           | Primitives.Lua_PLUS => doBinaryOp (L.PLUS, false)
-           | Primitives.Lua_MINUS => doBinaryOp (L.MINUS, false)
-           | Primitives.Lua_TIMES => doBinaryOp (L.TIMES, false)
-           | Primitives.Lua_DIVIDE => doBinaryOp (L.DIV, false)
-           | Primitives.Lua_INTDIV => doBinaryOp (L.INTDIV, false)
-           | Primitives.Lua_MOD => doBinaryOp (L.MOD, false)
-           | Primitives.Lua_pow => doBinaryOp (L.POW, false)
-           | Primitives.Lua_unm => doUnary (fn (stmts, env, a) =>
-                                               putImpureTo ctx env dest (stmts, L.UnaryExp (L.NEGATE, a))
-                                           )
-           | Primitives.Lua_andb => doBinaryOp (L.BITAND, false)
-           | Primitives.Lua_orb => doBinaryOp (L.BITOR, false)
-           | Primitives.Lua_xorb => doBinaryOp (L.BITXOR, false)
-           | Primitives.Lua_notb => doUnary (fn (stmts, env, a) =>
-                                                putImpureTo ctx env dest (stmts, L.UnaryExp (L.BITNOT, a))
-                                            )
-           | Primitives.Lua_LSHIFT => doBinaryOp (L.LSHIFT, false)
-           | Primitives.Lua_RSHIFT => doBinaryOp (L.RSHIFT, false)
-           | Primitives.Lua_concat => doBinaryOp (L.CONCAT, false)
-           | Primitives.Lua_length => doUnary (fn (stmts, env, a) =>
-                                                  putImpureTo ctx env dest (stmts, L.UnaryExp (L.LENGTH, a))
-                                              )
-           | Primitives.Lua_isFalsy => doUnary (fn (stmts, env, a) =>
-                                                   putPureTo ctx env dest (stmts, L.UnaryExp (L.NOT, a))
-                                               )
+           | Primitives.Lua_isNil => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
+           | Primitives.Lua_EQUAL => doBinaryOp (L.EQUAL, IMPURE)
+           | Primitives.Lua_NOTEQUAL => doBinaryOp (L.NOTEQUAL, IMPURE)
+           | Primitives.Lua_LT => doBinaryOp (L.LT, IMPURE)
+           | Primitives.Lua_GT => doBinaryOp (L.GT, IMPURE)
+           | Primitives.Lua_LE => doBinaryOp (L.LE, IMPURE)
+           | Primitives.Lua_GE => doBinaryOp (L.GE, IMPURE)
+           | Primitives.Lua_PLUS => doBinaryOp (L.PLUS, IMPURE)
+           | Primitives.Lua_MINUS => doBinaryOp (L.MINUS, IMPURE)
+           | Primitives.Lua_TIMES => doBinaryOp (L.TIMES, IMPURE)
+           | Primitives.Lua_DIVIDE => doBinaryOp (L.DIV, IMPURE)
+           | Primitives.Lua_INTDIV => doBinaryOp (L.INTDIV, IMPURE)
+           | Primitives.Lua_MOD => doBinaryOp (L.MOD, IMPURE)
+           | Primitives.Lua_pow => doBinaryOp (L.POW, IMPURE)
+           | Primitives.Lua_unm => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), IMPURE)
+           | Primitives.Lua_andb => doBinaryOp (L.BITAND, IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_orb => doBinaryOp (L.BITOR, IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_xorb => doBinaryOp (L.BITXOR, IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_notb => doUnaryExp (fn a => L.UnaryExp (L.BITNOT, a), IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_LSHIFT => doBinaryOp (L.LSHIFT, IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_RSHIFT => doBinaryOp (L.RSHIFT, IMPURE) (* not used on LuaJIT *)
+           | Primitives.Lua_concat => doBinaryOp (L.CONCAT, IMPURE)
+           | Primitives.Lua_length => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), IMPURE)
+           | Primitives.Lua_isFalsy => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
            | Primitives.Lua_call0 => doBinary (fn (stmts, env, (f, args)) =>
                                                   let val (v, stmts') = case args of
                                                                             L.VarExp _ => (args, stmts)
@@ -783,26 +773,18 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                               )
            | Primitives.DelimCont_newPromptTag => putImpureTo ctx env dest ([], L.TableExp (vector []))
            | Primitives.DelimCont_pushPrompt => if #hasDelimitedContinuations ctx then
-                                                    doBinary (fn (stmts, env, (promptTag, action)) =>
-                                                                 putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_pushPrompt"), vector [promptTag, action]))
-                                                             )
+                                                    doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushPrompt"), vector [promptTag, action]), IMPURE)
                                                 else
                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
            | Primitives.DelimCont_withSubCont => if #hasDelimitedContinuations ctx then
-                                                     doBinary (fn (stmts, env, (promptTag, action)) =>
-                                                                  putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_withSubCont"), vector [promptTag, action]))
-                                                              )
+                                                     doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_withSubCont"), vector [promptTag, action]), IMPURE)
                                                  else
                                                      raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
            | Primitives.DelimCont_pushSubCont => if #hasDelimitedContinuations ctx then
-                                                     doBinary (fn (stmts, env, (subcont, action)) =>
-                                                                  putImpureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_pushSubCont"), vector [subcont, action]))
-                                                              )
+                                                     doBinaryExp (fn (subcont, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushSubCont"), vector [subcont, action]), IMPURE)
                                                  else
                                                      raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
-           | Primitives.assumeDiscardable => doBinary (fn (stmts, env, (f, arg)) =>
-                                                          putImpureTo ctx env dest (stmts, L.CallExp (f, vector [arg]))
-                                                      )
+           | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
       end
   | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
