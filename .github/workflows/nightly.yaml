@@ -1,0 +1,65 @@
+on:
+  schedule:
+    - cron: '10 17 * * *'
+name: nightly-ci
+jobs:
+  # See https://stackoverflow.com/questions/63014786/how-to-schedule-a-github-actions-nightly-build-but-run-it-only-when-there-where
+  check_date:
+    runs-on: ubuntu-20.04
+    name: Check latest commit
+    outputs:
+      should_run: ${{ steps.should_run.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: print latest_commit
+        run: echo ${{ github.sha }}
+      - id: should_run
+        continue-on-error: true
+        name: check latest commit is less than a day
+        if: ${{ github.event_name == 'schedule' }}
+        run: test -z $(git rev-list --after="24 hours" ${{ github.sha }}) && echo "::set-output name=should_run::false"
+
+  validate:
+    name: validate
+    needs: check_date
+    if: ${{ needs.check_date.outputs.should_run != 'false' }}
+    runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install mlton lua5.3 liblua5.3-dev luajit libluajit-5.1-dev
+      - name: Install LuaFileSystem
+        run: |
+          curl -LO "https://github.com/lunarmodules/luafilesystem/archive/refs/tags/v1_8_0.tar.gz"
+          tar xf v1_8_0.tar.gz
+          cd luafilesystem-1_8_0
+          sudo make LUA_VERSION=5.3 install
+          sudo make LUA_VERSION=5.1 LUA_INC=-I/usr/include/luajit-2.1 install
+      - name: Build
+        run: make
+      - name: Test (Lua)
+        run: make test
+      - name: Test (LuaJIT)
+        run: make test-luajit
+        env:
+          # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859
+          LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
+      - name: Test (JS)
+        run: make test-nodejs
+      - name: Test (JS-CPS)
+        run: make test-nodejs-cps
+      - name: Test (Lua-continuations)
+        run: make test-lua-continuations
+      - name: Prepare third-party libraries
+        run: make -C thirdparty install
+      - name: Compile myself and validate (Lua)
+        run: make validate-lua
+      - name: Compile myself and validate(LuaJIT)
+        run: make validate-luajit
+        env:
+          # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859
+          LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
+      - name: Compile myself and validate (JavaScript)
+        run: make validate-js
