@@ -35,7 +35,10 @@ jobs:
           curl -LO "https://github.com/lunarmodules/luafilesystem/archive/refs/tags/v1_8_0.tar.gz"
           tar xf v1_8_0.tar.gz
           cd luafilesystem-1_8_0
+          make LUA_VERSION=5.3
           sudo make LUA_VERSION=5.3 install
+          make clean
+          make LUA_VERSION=5.1 LUA_INC=-I/usr/include/luajit-2.1
           sudo make LUA_VERSION=5.1 LUA_INC=-I/usr/include/luajit-2.1 install
       - name: Build
         run: make
