@@ -18,7 +18,7 @@ val builtins
                      (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
-                    ,(VId_nil, "_nil")
+                    ,(VId_nil, "null")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -152,7 +152,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
       end
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result, cont })
     = (case result of
-           SOME result => ConstStat (result, J.VarExp (J.PredefinedId "_nil")) :: doCExp ctx env cont
+           SOME result => ConstStat (result, J.ConstExp J.Null) :: doCExp ctx env cont
          | NONE => doCExp ctx env cont
       )
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result, cont })
@@ -246,15 +246,10 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                               :: doCExp ctx env cont
                                                end
                                            )
-           | Primitives.List_cons => doBinary (fn (x, xs) =>
-                                                  case result of
-                                                      SOME result => ConstStat (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "::"))
-                                                                                                            ,(J.StringKey "payload", J.ArrayExp (vector [x, xs]))
-                                                                                                            ]
-                                                                                                    )
-                                                                               ) :: doCExp ctx env cont
-                                                    | NONE => doCExp ctx env cont
-                                              )
+           | Primitives.List_cons => doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), true)
+           | Primitives.List_null => doUnaryExp (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), true)
+           | Primitives.List_unsafeHead => doUnaryExp (fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "0")), true)
+           | Primitives.List_unsafeTail => doUnaryExp (fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1")), true)
            | Primitives.Ref_ref => doUnary (fn x =>
                                                (* REPRESENTATION_OF_REF *)
                                                case result of

@@ -14,7 +14,7 @@ exception CodeGenError of string
  * exn -> ???
  * bool -> boolean
  * ref -> {tag = "ref", payload = <mutable> ...}
- * list -> {tag = "nil"} | {tag = "::", payload = ...}
+ * list -> nil | { [1] = <head>, [2] = <tail> }
  * record { label1 = ..., label2 = ... } -> table
  * function -> function
  *)
@@ -32,7 +32,7 @@ val builtins
                      (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
-                    ,(VId_nil, "_nil")
+                    ,(VId_nil, "nil")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -106,7 +106,7 @@ val builtinsLuaJIT
                      (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
-                    ,(VId_nil, "_nil")
+                    ,(VId_nil, "nil")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -519,7 +519,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                                                                                         in putPureTo ctx env dest (stmts, L.IndexExp (record', label))
                                                                                                         end
                                                                                                     )
-  | doExpTo ctx env (F.PrimExp (F.ListOp, _, [])) dest = putPureTo ctx env dest ([], L.VarExp (L.PredefinedId "_nil"))
+  | doExpTo ctx env (F.PrimExp (F.ListOp, _, [])) dest = putPureTo ctx env dest ([], L.ConstExp L.Nil)
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
               xs
@@ -610,12 +610,12 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
                                     | _ => raise CodeGenError "primop call3: invalid number of arguments"
                                  )
            | Primitives.List_cons => doBinaryExp ( fn (x, xs) =>
-                                                      L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "::"))
-                                                                         ,(L.StringKey "payload", L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]))
-                                                                         ]
-                                                                 )
+                                                      L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)])
                                                  , PURE
                                                  )
+           | Primitives.List_null => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
+           | Primitives.List_unsafeHead => doUnaryExp (fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "1")), PURE)
+           | Primitives.List_unsafeTail => doUnaryExp (fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "2")), PURE)
            | Primitives.Ref_ref => doUnaryExp ( fn x =>
                                                    (* REPRESENTATION_OF_REF *)
                                                    L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "ref"))

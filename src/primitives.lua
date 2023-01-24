@@ -84,6 +84,27 @@ do
       discardable = true,
     },
     {
+      name = "List.null",
+      srcname = "List_null",
+      type = { vars = {TV.a}, args = {list(TV.a)}, result = bool },
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "List.unsafeHead",
+      srcname = "List_unsafeHead",
+      type = { vars = {TV.a}, args = {list(TV.a)}, result = TV.a },
+      mayraise = false, -- partial
+      discardable = true,
+    },
+    {
+      name = "List.unsafeTail",
+      srcname = "List_unsafeTail",
+      type = { vars = {TV.a}, args = {list(TV.a)}, result = list(TV.a) },
+      mayraise = false, -- partial
+      discardable = true,
+    },
+    {
       name = "Ref.ref",
       srcname = "Ref_ref",
       type = { vars = {TV.a}, args = {TV.a}, result = ref(TV.a) },

@@ -204,11 +204,10 @@ end
 local __Word_LT = math_ult
 
 -- List
-local _nil = { tag = "nil" }
 local function _list(t)
-  local xs = _nil
+  local xs = nil
   for i = t.n, 1, -1 do
-    xs = { tag = "::", payload = { t[i], xs } }
+    xs = { t[i], xs }
   end
   return xs
 end
@@ -228,19 +227,19 @@ end
 local function _VectorOrArray_fromList(xs)
   local t = {}
   local n = 0
-  while xs.tag == "::" do
+  while xs ~= nil do
     n = n + 1
-    t[n] = xs.payload[1]
-    xs = xs.payload[2]
+    t[n] = xs[1]
+    xs = xs[2]
   end
   t.n = n
   return t
 end
 local function _Vector_unsafeFromListRevN(n, xs)
   local t = { n = n }
-  while xs.tag == "::" do
-    t[n] = xs.payload[1]
-    xs = xs.payload[2]
+  while xs ~= nil do
+    t[n] = xs[1]
+    xs = xs[2]
     n = n - 1
   end
   -- n must be 0
@@ -262,15 +261,14 @@ end
 local function _Vector_concat(xs)
   local n = 0
   local t = {}
-  while xs.tag == "::" do
-    local p = xs.payload
-    local u = p[1]
+  while xs ~= nil do
+    local u = xs[1]
     local m = u.n
     for i = 1,m do
       t[n + i] = u[i]
     end
     n = n + m
-    xs = p[2]
+    xs = xs[2]
   end
   t.n = n
   return t

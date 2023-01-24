@@ -15,7 +15,7 @@ exception CodeGenError of string
  * exn -> object
  * bool -> boolean
  * ref -> { tag: "ref", payload: <mutable> }
- * list -> { tag: "nil" } | { tag: "::", payload: ... }
+ * list -> null | [<head>, <tail>]
  * tuple -> immutable Array
  * non-tuple record -> immutable object, with integer index starting with 0
  * vector -> immutable Array
@@ -29,7 +29,7 @@ val builtins
                      (VId_true, "true") (* boolean literal *)
                     ,(VId_false, "false") (* boolean literal *)
                     (* list *)
-                    ,(VId_nil, "_nil")
+                    ,(VId_nil, "null")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -371,7 +371,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                                                                         end
                                                                                                     )
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, [])) dest
-    = putPureTo ctx env dest ([], J.VarExp (J.PredefinedId "_nil"))
+    = putPureTo ctx env dest ([], J.ConstExp J.Null)
   | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
     = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
               xs
@@ -461,13 +461,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                                                    )
                                     | _ => raise CodeGenError "primop call3: invalid number of arguments"
                                  )
-           | Primitives.List_cons => doBinary (fn (stmts, env, (x, xs)) =>
-                                                  putPureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "::"))
-                                                                                                     ,(J.StringKey "payload", J.ArrayExp (vector [x, xs]))
-                                                                                                     ]
-                                                                                             )
-                                                                         )
-                                              )
+           | Primitives.List_cons => doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), true)
+           | Primitives.List_null => doUnaryExp (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), true)
+           | Primitives.List_unsafeHead => doUnaryExp (fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "0")), true)
+           | Primitives.List_unsafeTail => doUnaryExp (fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1")), true)
            | Primitives.Ref_ref => doUnary (fn (stmts, env, x) =>
                                                (* REPRESENTATION_OF_REF *)
                                                putImpureTo ctx env dest (stmts, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "ref"))

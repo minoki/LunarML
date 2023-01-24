@@ -105,17 +105,34 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                 end
             | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
-              = let val tag = #tag info
-                    val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
-                    val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
-                                                    TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
-                                                  | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
-                end
+              = (case info of
+                     { representation = Syntax.REP_LIST, tag = "::", ... } =>
+                     let val elemTy = case ty of
+                                          F.AppType { applied, arg } => arg
+                                        | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
+                         val hdExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeHead, [elemTy], [exp])
+                         val tlExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeTail, [elemTy], [exp])
+                         val payload = genMatcher (F.TupleExp [hdExp, tlExp]) payloadTy payloadPat
+                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])]), payload)
+                     end
+                   | { tag, ... } =>
+                     let val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
+                         val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
+                                                         TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
+                                                       | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
+                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
+                     end
+                )
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
                    | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [exp])
+                   | { representation = Syntax.REP_LIST, tag = "nil", ... } =>
+                     let val elemTy = case ty of
+                                          F.AppType { applied, arg } => arg
+                                        | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
+                     in F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])
+                     end
                    | { representation = _, tag, ... } =>
                      let val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
                                                          TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
@@ -156,6 +173,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
                      { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
+                   | { representation = Syntax.REP_LIST, tag = "::", ... } =>
+                     let val elemTy = case ty of
+                                          F.AppType { applied, arg } => arg
+                                        | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
+                         val hdExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeHead, [elemTy], [exp])
+                         val tlExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeTail, [elemTy], [exp])
+                     in genBinders (F.TupleExp [hdExp, tlExp]) payloadTy payloadPat
+                     end
                    | _ => genBinders (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                 )
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = NONE }) = []

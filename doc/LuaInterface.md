@@ -119,6 +119,7 @@ Primitives
 * `Word64.word`:
     * Lua 5.3 or later: Lua's native integer, assuming the width is 64-bit.
     * LuaJIT: Boxed 64-bit unsigned integer: `uint64_t`.
+* `'a list`: `nil` for `nil` and `{[1] = <head>, [2] = <tail>}` for `::`.
 * `'a vector`: `{ n = <length>, [1] = <0th element>, [2] = <1st element>, ... }`; compatible with `table.pack`.
 * `'a array`: Same as `'a vector`, but mutable.
 * `'a ref`: `{ tag = "ref", payload = <the payload> }`.
@@ -135,8 +136,7 @@ datatype 'a option = NONE | SOME of 'a
 datatype 'a list = nil | :: of 'a * 'a list
 ```
 
-the values for `'a option` will be `{ tag = "NONE" }` or `{ tag = "SOME", payload = x }`
-and the values for `'a list` will be `{ tag = "nil" }` or `{ tag = "::", payload = { [1] = <head>, [2] = <tail> } }`.
+the values for `'a option` will be `{ tag = "NONE" }` or `{ tag = "SOME", payload = x }`.
 
 Functions:
 
