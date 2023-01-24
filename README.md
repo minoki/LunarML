@@ -6,7 +6,7 @@ A Standard ML compiler that produces Lua/JavaScript.
 
 You need a recent version of MLton to build the executable, and Lua 5.3+ or recent Node.js to run the compiled script.
 
-```
+```sh-session
 $ make
 $ make test
 $ make test-lua-continuations
@@ -103,7 +103,7 @@ The hexadecimal floating-point constants must be exact; `0x1.0000_0000_0000_01p0
 The `\u{}` escape sequence allows you to embed a Unicode scalar value in a text constant.
 The compiler encodes the character in UTF-{8,16,32}, depending on the string type.
 
-The scalar value is expressed in hexadecimal format; `\u{3B1}` or `\u{3b1}` for U+03B1 GREEK SMALL LETTEL ALPHA.
+The scalar value is expressed in hexadecimal format; `\u{3B1}` or `\u{3b1}` for U+03B1 GREEK SMALL LETTER ALPHA.
 Underscores are not allowed between hexadecimal digits.
 
 When `\u{}` is used in character constant, the character must be encoded as a single code unit in the corresponding UTF.
