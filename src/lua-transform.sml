@@ -149,7 +149,7 @@ fun genSym (ctx : Context, name) = let val n = !(#nextId ctx)
                                    in TypedSyntax.MkVId (name, n)
                                    end
 structure LuaJITFixup = struct
-val BODY_SIZE_THRESHOLD = 1000
+val BODY_SIZE_THRESHOLD = 500
 fun doExp ctx (x as L.ConstExp _) = x
   | doExp ctx (x as L.VarExp _) = x
   | doExp ctx (L.TableExp fields) = L.TableExp (Vector.map (fn (key, value) => (key, doExp ctx value)) fields)
