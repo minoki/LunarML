@@ -19,10 +19,11 @@ jobs:
         if: ${{ github.event_name == 'schedule' }}
         run: test -z $(git rev-list --after="24 hours" ${{ github.sha }}) && echo "::set-output name=should_run::false"
 
+  # Disabled for now, because validate-lua consumes memory too much
   validate:
     name: validate
     needs: check_date
-    if: ${{ needs.check_date.outputs.should_run != 'false' }}
+    if: ${{ false && needs.check_date.outputs.should_run != 'false' }}
     runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
     steps:
       - uses: actions/checkout@v3
@@ -66,3 +67,51 @@ jobs:
           LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
       - name: Compile myself and validate (JavaScript)
         run: make validate-js
+
+  validate-macos:
+    name: validate (macOS)
+    needs: check_date
+    if: ${{ needs.check_date.outputs.should_run != 'false' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install mlton lua@5.3 luajit
+      - name: Install LuaFileSystem
+        run: |
+          curl -LO "https://github.com/lunarmodules/luafilesystem/archive/refs/tags/v1_8_0.tar.gz"
+          tar xf v1_8_0.tar.gz
+          cd luafilesystem-1_8_0
+          make LUA_VERSION=5.3 LUA_INC=-I/usr/local/opt/lua@5.3/include/lua LIB_OPTION="-bundle -undefined dynamic_lookup"
+          sudo make LUA_VERSION=5.3 install
+          make clean
+          make LUA_VERSION=5.1 LUA_INC=-I/usr/local/include/luajit-2.1 LIB_OPTION="-bundle -undefined dynamic_lookup"
+          sudo make LUA_VERSION=5.1 install
+      - name: Build
+        run: make LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Test (Lua)
+        run: make test LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Test (LuaJIT)
+        run: make test-luajit LUA=/usr/local/opt/lua@5.3/bin/lua
+        env:
+          # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859
+          LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
+      - name: Test (JS)
+        run: make test-nodejs LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Test (JS-CPS)
+        run: make test-nodejs-cps LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Test (Lua-continuations)
+        run: make test-lua-continuations LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Prepare third-party libraries
+        run: make -C thirdparty install LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Compile myself (Lua)
+        run: make validate-lua LUA=/usr/local/opt/lua@5.3/bin/lua
+      - name: Compile myself (LuaJIT)
+        run: make validate-luajit LUA=/usr/local/opt/lua@5.3/bin/lua
+        env:
+          # LuaJIT: Workaround https://github.com/LuaJIT/LuaJIT/issues/859
+          LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
+      - name: Compile myself and validate (JavaScript)
+        run: make validate-js LUA=/usr/local/opt/lua@5.3/bin/lua
