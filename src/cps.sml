@@ -24,8 +24,10 @@ structure CVarMap = RedBlackMapFn (CVar)
 datatype Value = Var of Var
                | Unit
                | BoolConst of bool
+               | NativeIntConst of IntInf.int
                | Int32Const of Int32.int
                | IntInfConst of IntInf.int
+               | NativeWordConst of IntInf.int
                | Word32Const of Word32.word
                | CharConst of char
                | Char16Const of int
@@ -101,6 +103,32 @@ fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
   | mayRaise (ExnTag _) = false
   | mayRaise (Projection _) = false
   | mayRaise (Abs _) = false
+
+(*
+fun freeCVars (bound : CVarSet.set, Let { exp, result, cont }, acc : CVarSet.set) = acc
+  | freeCVars (bound, App { applied, cont, args }, acc) = if CVarSet.member (bound, cont) then
+                                                              acc
+                                                          else
+                                                              CVarSet.add (acc, cont)
+  | freeCVars (bound, AppCont { applied, args }, acc) = if CVarSet.member (bound, applied) then
+                                                            acc
+                                                        else
+                                                            CVarSet.add (acc, applied)
+  | freeCVars (bound, If { cond, thenCont, elseCont }, acc) = freeCVars (bound, elseCont, freeCVars (bound, thenCont, acc))
+  | freeCVars (bound, LetRec { defs, cont }, acc) = freeCVars (bound, cont, acc)
+  | freeCVars (bound, LetCont { name, params, body, cont }, acc) = freeCVars (bound, body, freeCVars (CVarSet.add (bound, name), body, acc))
+  | freeCVars (bound, LetRecCont { defs, cont }, acc) = let val bound' = List.foldl (fn ((name, _, _), b) => CVarSet.add (b, name)) bound defs
+                                                        in freeCVars (bound', cont, List.foldl (fn ((_, _, body), acc) => freeCVars (bound', body, acc)) acc defs)
+                                                        end
+  | freeCVars (bound, Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc)
+    = let val acc = if CVarSet.member (bound, successfulExitOut) then
+                        acc
+                    else
+                        CVarSet.add (acc, successfulExitOut)
+          val acc = freeCVars (CVarSet.add (bound, successfulExitIn), body, acc)
+      in freeCVars (bound, h, acc)
+      end
+*)
 end
 end
 
@@ -109,7 +137,9 @@ local structure F = FSyntax
       structure C = CSyntax
 in
 
-type Context = { nextVId : int ref }
+type Context = { targetInfo : TargetInfo.target_info
+               , nextVId : int ref
+               }
 
 fun genContSym (ctx : Context) : CSyntax.CVar
     = let val n = !(#nextVId ctx)
@@ -198,7 +228,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                        case primOp of
                            F.IntConstOp x => (case tyargs of
                                                   [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
-                                                                      apply k (C.Int32Const (Int32.fromLarge x))
+                                                                      case #defaultInt (#targetInfo ctx) of
+                                                                          TargetInfo.NATIVE_INT => apply k (C.NativeIntConst x)
+                                                                        | TargetInfo.INT32 => apply k (C.Int32Const (Int32.fromLarge x))
                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
                                                                       apply k (C.IntInfConst x)
                                                                   else
@@ -207,7 +239,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                              )
                          | F.WordConstOp x => (case tyargs of
                                                    [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
-                                                                       apply k (C.Word32Const (Word32.fromLargeInt x))
+                                                                       case #defaultWord (#targetInfo ctx) of
+                                                                           TargetInfo.NATIVE_WORD => apply k (C.NativeWordConst x)
+                                                                         | TargetInfo.WORD32 => apply k (C.Word32Const (Word32.fromLargeInt x))
                                                                    else
                                                                        raise Fail "WordConstOp: invalid type"
                                                  | _ => raise Fail "WordConstOp: invalid type"
@@ -445,8 +479,10 @@ fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
                                  )
   | usageInValue env C.Unit = ()
   | usageInValue env (C.BoolConst _) = ()
+  | usageInValue env (C.NativeIntConst _) = ()
   | usageInValue env (C.Int32Const _) = ()
   | usageInValue env (C.IntInfConst _) = ()
+  | usageInValue env (C.NativeWordConst _) = ()
   | usageInValue env (C.Word32Const _) = ()
   | usageInValue env (C.CharConst _) = ()
   | usageInValue env (C.Char16Const _) = ()
@@ -463,8 +499,10 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
                                          )
   | usageInValueAsCallee env C.Unit = ()
   | usageInValueAsCallee env (C.BoolConst _) = ()
+  | usageInValueAsCallee env (C.NativeIntConst _) = ()
   | usageInValueAsCallee env (C.Int32Const _) = ()
   | usageInValueAsCallee env (C.IntInfConst _) = ()
+  | usageInValueAsCallee env (C.NativeWordConst _) = ()
   | usageInValueAsCallee env (C.Word32Const _) = ()
   | usageInValueAsCallee env (C.CharConst _) = ()
   | usageInValueAsCallee env (C.Char16Const _) = ()

@@ -7,6 +7,7 @@ datatype TableKey = IntKey of int
                   | StringKey of string
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
+type Label = Id
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -71,7 +72,14 @@ datatype Exp = ConstExp of LuaConst
               | LocalFunctionStat of TypedSyntax.VId * Id vector * Block (* function and function parameters are implicitly const *)
               | ReturnStat of Exp vector (* must be the last statement in a block *)
               | DoStat of Block
+              | GotoStat of Label
+              | LabelStat of Label
 withtype Block = Stat vector
+
+fun makeDoStat (stats : Stat list) = if List.exists (fn LocalStat _ => true | LocalFunctionStat _ => true | ReturnStat _ => true | _ => false) stats then
+                                         [DoStat (vector stats)]
+                                     else
+                                         stats
 end;
 
 structure LuaWriter = struct
@@ -312,6 +320,8 @@ and doStat (LuaSyntax.LocalStat (vars, [])) = Indent :: Fragment "local " :: com
                                          else
                                              Indent :: Fragment "return " :: commaSepV (Vector.map (#exp o doExp) exps) @ [ OptSemicolon ]
   | doStat (LuaSyntax.DoStat block) = Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent :: doBlock block @ [ DecreaseIndent, Indent, Fragment "end", LineTerminator ]
+  | doStat (LuaSyntax.GotoStat label) = Indent :: Fragment "goto " :: idToFragment label @ [ LineTerminator ]
+  | doStat (LuaSyntax.LabelStat label) = Indent :: Fragment "::" :: idToFragment label @ [ Fragment "::", LineTerminator ]
 and doBlock stats = Vector.foldr (fn (stat, xs) => doStat stat @ xs) [] stats
 
 fun doChunk chunk = buildProgram (doBlock chunk)

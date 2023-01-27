@@ -25,6 +25,7 @@ src/cps.sml
 src/lua-syntax.sml
 src/lua-transform.sml
 src/codegen-lua.sml
+src/codegen-lua-via-cps.sml
 src/js-syntax.sml
 src/js-transform.sml
 src/codegen-js.sml

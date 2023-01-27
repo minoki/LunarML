@@ -1511,7 +1511,7 @@ val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                        , overloadMap = TypedSyntax.TyNameMap.empty
                        , valMap = let open InitialEnv
                                       val initialValMap = #valMap initialEnv
-                                      val dummyContext : Context = { nextVId = ref 0, nextTyVar = ref 0, targetInfo = { datatypeTag = TargetInfo.STRING8, minInt = NONE, maxInt = NONE, wordSize = 0 } }
+                                      val dummyContext : Context = { nextVId = ref 0, nextTyVar = ref 0, targetInfo = { defaultInt = TargetInfo.NATIVE_INT, defaultWord = TargetInfo.NATIVE_WORD, datatypeTag = TargetInfo.STRING8, minInt = NONE, maxInt = NONE, wordSize = 0 } }
                                       val initialValMap = Syntax.VIdMap.foldl (fn ((tysc, ids, vid), m) => case vid of
                                                                                                                TypedSyntax.MkShortVId vid => TypedSyntax.VIdMap.insert (m, vid, typeSchemeToTy (dummyContext, (), tysc))
                                                                                                              | TypedSyntax.MkLongVId _ => raise Fail "unexpected longvid") TypedSyntax.VIdMap.empty initialValMap

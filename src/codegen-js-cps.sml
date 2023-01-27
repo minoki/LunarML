@@ -91,6 +91,7 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
   | doValue C.Unit = J.UndefinedExp
   | doValue (C.BoolConst false) = J.ConstExp J.False
   | doValue (C.BoolConst true) = J.ConstExp J.True
+  | doValue (C.NativeIntConst x) = raise Fail "NativeIntConst is not supported by JavaScript backend"
   | doValue (C.Int32Const x) = if x < 0 then
                                    J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
                                else
@@ -99,6 +100,7 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
                                     J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ "n")))
                                 else
                                     J.ConstExp (J.Numeral (LargeInt.toString x ^ "n"))
+  | doValue (C.NativeWordConst x) = raise Fail "NativeWordConst is not supported by JavaScript backend"
   | doValue (C.Word32Const x) = J.ConstExp (J.Numeral ("0x" ^ Word32.fmt StringCvt.HEX x))
   | doValue (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
   | doValue (C.Char16Const x) = J.ConstExp (J.Numeral (Int.toString x))

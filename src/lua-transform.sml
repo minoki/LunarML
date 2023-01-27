@@ -23,6 +23,8 @@ fun hasInnerFunctionStat (L.LocalStat (_, xs)) = List.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.LocalFunctionStat _) = true
   | hasInnerFunctionStat (L.ReturnStat xs) = Vector.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.DoStat block) = hasInnerFunctionBlock block
+  | hasInnerFunctionStat (L.GotoStat label) = false
+  | hasInnerFunctionStat (L.LabelStat label) = false
 and hasInnerFunctionBlock block = Vector.exists hasInnerFunctionStat block
 
 fun sizeOfStat (L.LocalStat (_, xs), acc) = acc + List.length xs
@@ -33,6 +35,8 @@ fun sizeOfStat (L.LocalStat (_, xs), acc) = acc + List.length xs
   | sizeOfStat (L.LocalFunctionStat _, acc) = acc + 1
   | sizeOfStat (L.ReturnStat xs, acc) = acc + Vector.length xs
   | sizeOfStat (L.DoStat xs, acc) = sizeOfBlock (xs, acc)
+  | sizeOfStat (L.GotoStat label, acc) = acc + 1
+  | sizeOfStat (L.LabelStat label, acc) = acc
 and sizeOfBlock (xs, acc) = Vector.foldl sizeOfStat acc xs
 
 fun freeVarsExp (_, L.ConstExp _) acc = acc
@@ -79,6 +83,8 @@ and freeVarsStat (bound, L.LocalStat (vids, exps)) acc = let val acc = List.fold
   | freeVarsStat (bound, L.DoStat block) acc = let val acc = freeVarsBlock (bound, block) acc
                                                in (bound, acc)
                                                end
+  | freeVarsStat (bound, L.GotoStat label) acc = (bound, acc)
+  | freeVarsStat (bound, L.LabelStat label) acc = (bound, acc)
 and freeVarsBlock (bound, block) acc = let val (_, acc) = Vector.foldl (fn (stat, (bound, acc)) => freeVarsStat (bound, stat) acc) (bound, acc) block
                                        in acc
                                        end
@@ -128,6 +134,8 @@ and substStat map (L.LocalStat (lhs, rhs)) = let val rhs = List.map (substExp ma
                                                               end
   | substStat map (L.ReturnStat xs) = (map, L.ReturnStat (Vector.map (substExp map) xs))
   | substStat map (L.DoStat block) = (map, L.DoStat (substBlock map block))
+  | substStat map (stat as L.GotoStat _) = (map, stat)
+  | substStat map (stat as L.LabelStat _) = (map, stat)
 and substBlock map block = let val (_, revStats) = Vector.foldl (fn (stat, (map, revStats)) =>
                                                                     let val (map, stat) = substStat map stat
                                                                     in (map, stat :: revStats)
@@ -190,6 +198,8 @@ and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx
           f
   | doStat ctx (L.ReturnStat xs) = L.ReturnStat (Vector.map (doExp ctx) xs)
   | doStat ctx (L.DoStat block) = L.DoStat (doBlock ctx block)
+  | doStat ctx (stat as L.GotoStat _) = stat
+  | doStat ctx (stat as L.LabelStat _) = stat
 and doBlock ctx block = Vector.map (doStat ctx) block
 end
 structure ProcessUpvalue = struct
@@ -348,6 +358,8 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                        }
                                       in (newEnv, [L.DoStat block])
                                       end
+  | doStat ctx env (stat as L.GotoStat _) = (env, [stat])
+  | doStat ctx env (stat as L.LabelStat _) = (env, [stat])
 and doStats ctx env [] acc = (env, List.concat (List.rev acc))
   | doStats ctx env (stats as (L.AssignStat ([L.VarExp _], [L.FunctionExp (_, _)]) :: _)) acc
     = let val (env', defs, stats') = takeFunctionAssignments ctx env stats []
@@ -459,6 +471,8 @@ and doStat ctx env (L.LocalStat (vars, exps))
       end
   | doStat ctx env (L.ReturnStat results) = (env, [L.ReturnStat (Vector.map (doExp ctx env) results)])
   | doStat ctx env (L.DoStat block) = (env, [L.DoStat (doBlock ctx env block)])
+  | doStat ctx env (stat as L.GotoStat _) = (env, [stat])
+  | doStat ctx env (stat as L.LabelStat _) = (env, [stat])
 and doBlock ctx env stats = vector (List.concat (List.rev (#2 (Vector.foldl (fn (stat, (env, acc)) => let val (env, stat) = doStat ctx env stat
                                                                                                       in (env, stat :: acc)
                                                                                                       end
