@@ -206,7 +206,20 @@ and doBlock (numOuter, block)
             | goForward ((live, L.IfStat (cond, thenBlock, elseBlock)) :: rest, declared, numOuter, revStats)
               = let val n = numOuter + L.IdSet.numItems declared
                     val stat = L.IfStat (doExp cond, doBlock (n, thenBlock), doBlock (n, elseBlock))
-                in goForward (rest, declared, numOuter, stat :: revStats)
+                    val dead = L.IdSet.difference (declared, live)
+                    val numDead = L.IdSet.numItems dead
+                    val shouldInsertDo = numDead >= 5 andalso numOuter + L.IdSet.numItems declared <= 190
+                in if shouldInsertDo then
+                       let val (hoistedVars, stats) = List.foldl (hoist live) ([], []) revStats
+                           val dec = if List.null hoistedVars then
+                                         [] (* should not occur *)
+                                     else
+                                         [L.LocalStat (hoistedVars, [])]
+                           val doStat = L.DoStat (vector stats)
+                       in dec @ doStat :: goForward (rest, declared, numOuter + List.length hoistedVars, [stat])
+                       end
+                   else
+                       goForward (rest, declared, numOuter, stat :: revStats)
                 end
             | goForward ((live, L.ReturnStat exps) :: rest, declared, numOuter, revStats)
               = let val stat = L.ReturnStat (Vector.map doExp exps)
