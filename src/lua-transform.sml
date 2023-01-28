@@ -20,7 +20,6 @@ fun hasInnerFunctionStat (L.LocalStat (_, xs)) = List.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.CallStat (x, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
   | hasInnerFunctionStat (L.MethodStat (x, _, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
   | hasInnerFunctionStat (L.IfStat (x, then', else')) = hasInnerFunction x orelse hasInnerFunctionBlock then' orelse hasInnerFunctionBlock else'
-  | hasInnerFunctionStat (L.LocalFunctionStat _) = true
   | hasInnerFunctionStat (L.ReturnStat xs) = Vector.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.DoStat block) = hasInnerFunctionBlock block
   | hasInnerFunctionStat (L.GotoStat label) = false
@@ -32,7 +31,6 @@ fun sizeOfStat (L.LocalStat (_, xs), acc) = acc + List.length xs
   | sizeOfStat (L.CallStat _, acc) = acc + 1
   | sizeOfStat (L.MethodStat _, acc) = acc + 1
   | sizeOfStat (L.IfStat (_, then', else'), acc) = sizeOfBlock (then', sizeOfBlock (else', acc + 1))
-  | sizeOfStat (L.LocalFunctionStat _, acc) = acc + 1
   | sizeOfStat (L.ReturnStat xs, acc) = acc + Vector.length xs
   | sizeOfStat (L.DoStat xs, acc) = sizeOfBlock (xs, acc)
   | sizeOfStat (L.GotoStat label, acc) = acc + 1
@@ -74,11 +72,6 @@ and freeVarsStat (bound, L.LocalStat (vids, exps)) acc = let val acc = List.fold
                                                                val acc = freeVarsBlock (bound, else') acc
                                                            in (bound, acc)
                                                            end
-  | freeVarsStat (bound, L.LocalFunctionStat (vid, params, body)) acc = let val bound' = L.IdSet.add (bound, L.UserDefinedId vid)
-                                                                            val bound'' = Vector.foldl (fn (id, bound) => L.IdSet.add (bound, id)) bound' params
-                                                                            val acc = freeVarsBlock (bound'', body) acc
-                                                                        in (bound', acc)
-                                                                        end
   | freeVarsStat (bound, L.ReturnStat xs) acc = (bound, Vector.foldl (fn (x, acc) => freeVarsExp (bound, x) acc) acc xs)
   | freeVarsStat (bound, L.DoStat block) acc = let val acc = freeVarsBlock (bound, block) acc
                                                in (bound, acc)
@@ -120,18 +113,6 @@ and substStat map (L.LocalStat (lhs, rhs)) = let val rhs = List.map (substExp ma
   | substStat map (L.CallStat (x, ys)) = (map, L.CallStat (substExp map x, Vector.map (substExp map) ys))
   | substStat map (L.MethodStat (x, name, ys)) = (map, L.MethodStat (substExp map x, name, Vector.map (substExp map) ys))
   | substStat map (L.IfStat (exp, then', else')) = (map, L.IfStat (substExp map exp, substBlock map then', substBlock map else'))
-  | substStat map (L.LocalFunctionStat (vid, params, body)) = let val map' = let val vid = L.UserDefinedId vid
-                                                                             in if L.IdMap.inDomain (map, vid) then
-                                                                                    #1 (L.IdMap.remove (map, vid))
-                                                                                else
-                                                                                    map
-                                                                             end
-                                                                  val map'' = Vector.foldl (fn (id, map) => if L.IdMap.inDomain (map, id) then
-                                                                                                                #1 (L.IdMap.remove (map, id))
-                                                                                                            else
-                                                                                                                map) map' params
-                                                              in (map', L.LocalFunctionStat (vid, params, substBlock map'' body))
-                                                              end
   | substStat map (L.ReturnStat xs) = (map, L.ReturnStat (Vector.map (substExp map) xs))
   | substStat map (L.DoStat block) = (map, L.DoStat (substBlock map block))
   | substStat map (stat as L.GotoStat _) = (map, stat)
@@ -184,18 +165,6 @@ and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx
   | doStat ctx (L.CallStat (x, ys)) = L.CallStat (doExp ctx x, Vector.map (doExp ctx) ys)
   | doStat ctx (L.MethodStat (x, name, ys)) = L.MethodStat (doExp ctx x, name, Vector.map (doExp ctx) ys)
   | doStat ctx (L.IfStat (x, then', else')) = L.IfStat (doExp ctx x, doBlock ctx then', doBlock ctx else')
-  | doStat ctx (f as L.LocalFunctionStat (name, params, body))
-    = if hasInnerFunctionBlock body then
-          if sizeOfBlock (body, 0) >= BODY_SIZE_THRESHOLD then
-              let val body = Vector.foldr (op ::) [] (doBlock ctx body)
-                  val dummy = genSym (ctx, "DUMMY")
-                  val body = L.IfStat (L.ConstExp L.True, vector [], vector [L.LocalStat ([(dummy, L.CONST)], [L.FunctionExp (vector [], vector [])])]) :: body
-              in L.LocalFunctionStat (name, params, Vector.fromList body)
-              end
-          else
-              L.LocalFunctionStat (name, params, doBlock ctx body)
-      else
-          f
   | doStat ctx (L.ReturnStat xs) = L.ReturnStat (Vector.map (doExp ctx) xs)
   | doStat ctx (L.DoStat block) = L.DoStat (doBlock ctx block)
   | doStat ctx (stat as L.GotoStat _) = stat
@@ -330,17 +299,6 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                                             }
                                                            in (newEnv, decs @ [L.IfStat (cond, thenPart, elsePart)])
                                                            end
-  | doStat ctx env (L.LocalFunctionStat (name, params, body))
-    = let val (env', stat0) = doStat ctx env (L.LocalStat ([(name, L.LATE_INIT)], []))
-          val (env'', stat1) = doStat ctx env' (L.AssignStat ([L.VarExp (L.UserDefinedId name)], [L.FunctionExp (params, body)]))
-      in case (stat0, stat1) of
-             ([L.LocalStat ([(name', L.LATE_INIT)], [])], [L.AssignStat ([L.VarExp (L.UserDefinedId name'')], [L.FunctionExp (params', body')])]) =>
-             if name' = name'' then
-                 (env'', [L.LocalFunctionStat (name', params', body')])
-             else
-                 (env'', stat0 @ stat1)
-           | _ => (env'', stat0 @ stat1)
-      end
   | doStat ctx env (L.ReturnStat results) = let val (decs, results) = Vector.foldr (fn (x, (decs, xs)) => let val (decs', x) = doExp ctx env x
                                                                                                           in (decs' @ decs, x :: xs)
                                                                                                           end) ([], []) results
@@ -458,17 +416,6 @@ and doStat ctx env (L.LocalStat (vars, exps))
   | doStat ctx env (L.CallStat (exp, args)) = (env, [L.CallStat (doExp ctx env exp, Vector.map (doExp ctx env) args)])
   | doStat ctx env (L.MethodStat (self, method, args)) = (env, [L.MethodStat (doExp ctx env self, method, Vector.map (doExp ctx env) args)])
   | doStat ctx env (L.IfStat (cond, thenPart, elsePart)) = (env, [L.IfStat (doExp ctx env cond, doBlock ctx env thenPart, doBlock ctx env elsePart)])
-  | doStat ctx env (L.LocalFunctionStat (name, params, body))
-    = let val (env', stat0) = doStat ctx env (L.LocalStat ([(name, L.LATE_INIT)], []))
-          val (env'', stat1) = doStat ctx env' (L.AssignStat ([L.VarExp (L.UserDefinedId name)], [L.FunctionExp (params, body)]))
-      in case (stat0, stat1) of
-             ([L.LocalStat (vars as [(name', L.LATE_INIT)], exps as [])], [L.AssignStat (lhs as [L.VarExp (L.UserDefinedId name'')], rhs as [L.FunctionExp (params', body')])]) =>
-             if name' = name'' then
-                 (env'', [L.LocalFunctionStat (name', params', body')])
-             else
-                 (env'', stat0 @ stat1)
-           | _ => (env'', stat0 @ stat1)
-      end
   | doStat ctx env (L.ReturnStat results) = (env, [L.ReturnStat (Vector.map (doExp ctx env) results)])
   | doStat ctx env (L.DoStat block) = (env, [L.DoStat (doBlock ctx env block)])
   | doStat ctx env (stat as L.GotoStat _) = (env, [stat])
