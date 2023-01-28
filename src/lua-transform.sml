@@ -137,6 +137,94 @@ fun genSym (ctx : Context, name) = let val n = !(#nextId ctx)
                                        val _ = #nextId ctx := n + 1
                                    in TypedSyntax.MkVId (name, n)
                                    end
+structure InsertDo = struct
+fun annotateStat (stat : L.Stat, (live : L.IdSet.set, rest : (L.IdSet.set * L.Stat) list))
+    = case stat of
+          L.LocalStat (vars, exps) => let val live' = List.foldl (fn ((var, _), live) => L.IdSet.subtract (live, L.UserDefinedId var)) live vars
+                                          val live'' = List.foldl (fn (exp, live) => freeVarsExp (L.IdSet.empty, exp) live) live' exps
+                                      in (live'', (live'', stat) :: rest)
+                                      end
+        | _ => let val (_, live') = freeVarsStat (L.IdSet.empty, stat) live
+               in (live', (live', stat) :: rest)
+               end
+fun hoist targets ((stat as L.LocalStat (vars, exps)), (hoistedAcc, acc))
+    = let val (hoisted, keep) = List.partition (fn (v, _) => L.IdSet.member (targets, L.UserDefinedId v)) vars
+          val hoistedAcc' = List.foldl (fn ((v, L.CONST), vars) => (v, L.LATE_INIT) :: vars | (va, vars) => va :: vars) hoistedAcc hoisted
+      in case (hoisted, keep, exps) of
+             ([], _, _) => (hoistedAcc, stat :: acc)
+           | (_, [], []) => (hoistedAcc', acc)
+           | (_, _, []) => (hoistedAcc', L.LocalStat (keep, exps) :: acc)
+           | (_, [], _) => (hoistedAcc', L.AssignStat (List.map (fn (v, _) => L.VarExp (L.UserDefinedId v)) vars, exps) :: acc)
+           | (_, _, _) => let val keep' = List.map (fn (v, L.CONST) => (v, L.LATE_INIT) | va => va) keep
+                          in (hoistedAcc', L.LocalStat (keep', []) :: L.AssignStat (List.map (fn (v, _) => L.VarExp (L.UserDefinedId v)) vars, exps) :: acc)
+                          end
+      end
+  | hoist targets (stat, (hoistedAcc, acc)) = (hoistedAcc, stat :: acc)
+fun doExp (e as L.ConstExp _) = e
+  | doExp (e as L.VarExp _) = e
+  | doExp (L.TableExp fields) = L.TableExp (Vector.map (fn (key, e) => (key, doExp e)) fields)
+  | doExp (L.CallExp (f, args)) = L.CallExp (doExp f, Vector.map doExp args)
+  | doExp (L.MethodExp (self, name, args)) = L.MethodExp (doExp self, name, Vector.map doExp args)
+  | doExp (L.FunctionExp (params, block)) = L.FunctionExp (params, doBlock (Vector.length params, block))
+  | doExp (L.BinExp (p, x, y)) = L.BinExp (p, doExp x, doExp y)
+  | doExp (L.UnaryExp (p, x)) = L.UnaryExp (p, doExp x)
+  | doExp (L.IndexExp (x, y)) = L.IndexExp (doExp x, doExp y)
+  | doExp (L.SingleValueExp x) = L.SingleValueExp (doExp x)
+and doBlock (numOuter, block)
+    = let val (_, annotatedBlock) = Vector.foldr annotateStat (L.IdSet.empty, []) block
+          fun goForward ([], declared : L.IdSet.set, numOuter : int, revStats) = List.rev revStats
+            | goForward ((live, L.LocalStat (vars, exps)) :: rest, declared, numOuter, revStats)
+              = let val stat = L.LocalStat (vars, List.map doExp exps)
+                    val dead = L.IdSet.difference (declared, live)
+                    val numDead = L.IdSet.numItems dead
+                    val shouldInsertDo = numDead >= 10 andalso numOuter + L.IdSet.numItems declared <= 190
+                in if shouldInsertDo then
+                       let val (hoistedVars, stats) = List.foldl (hoist live) ([], []) revStats
+                           val dec = if List.null hoistedVars then
+                                         [] (* should not occur *)
+                                     else
+                                         [L.LocalStat (hoistedVars, [])]
+                           val doStat = L.DoStat (vector stats)
+                           val declared' = List.foldl (fn ((v, _), acc) => L.IdSet.add (acc, L.UserDefinedId v)) L.IdSet.empty vars
+                       in dec @ doStat :: goForward (rest, declared', numOuter + List.length hoistedVars, [stat])
+                       end
+                   else
+                       goForward (rest, List.foldl (fn ((v, _), acc) => L.IdSet.add (acc, L.UserDefinedId v)) declared vars, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.AssignStat (lhs, rhs)) :: rest, declared, numOuter, revStats)
+              = let val stat = L.AssignStat (List.map doExp lhs, List.map doExp rhs)
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.CallStat (f, args)) :: rest, declared, numOuter, revStats)
+              = let val stat = L.CallStat (doExp f, Vector.map doExp args)
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.MethodStat (self, name, args)) :: rest, declared, numOuter, revStats)
+              = let val stat = L.MethodStat (doExp self, name, Vector.map doExp args)
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.IfStat (cond, thenBlock, elseBlock)) :: rest, declared, numOuter, revStats)
+              = let val n = numOuter + L.IdSet.numItems declared
+                    val stat = L.IfStat (doExp cond, doBlock (n, thenBlock), doBlock (n, elseBlock))
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.ReturnStat exps) :: rest, declared, numOuter, revStats)
+              = let val stat = L.ReturnStat (Vector.map doExp exps)
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, L.DoStat block) :: rest, declared, numOuter, revStats)
+              = let val n = numOuter + L.IdSet.numItems declared
+                    val stat = L.DoStat (doBlock (n, block))
+                in goForward (rest, declared, numOuter, stat :: revStats)
+                end
+            | goForward ((live, stat as L.GotoStat _) :: rest, declared, numOuter, revStats) = goForward (rest, declared, numOuter, stat :: revStats)
+            | goForward ((live, stat as L.LabelStat _) :: rest, declared, numOuter, revStats)
+              = let val rest' = goForward (rest, L.IdSet.empty, numOuter + L.IdSet.numItems declared, [])
+                in List.revAppend (revStats, stat :: rest')
+                end
+      in vector (goForward (annotatedBlock, L.IdSet.empty, numOuter, []))
+      end
+end
 structure LuaJITFixup = struct
 val BODY_SIZE_THRESHOLD = 500
 fun doExp ctx (x as L.ConstExp _) = x

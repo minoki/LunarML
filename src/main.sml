@@ -156,6 +156,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val lua = case runtime of
                         LUA_PLAIN => CodeGenLuaViaCps.doProgram luactx cont cexp
                       | LUA_CONTINUATIONS => CodeGenLuaViaCps.doProgramWithContinuations luactx cont cexp
+          val lua = LuaTransform.InsertDo.doBlock (0, lua) (* TODO: pre-declared locals *)
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
           val lua = LuaWriter.doChunk lua
