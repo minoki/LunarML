@@ -172,10 +172,8 @@ fun doExp (e as L.ConstExp _) = e
   | doExp (L.SingleValueExp x) = L.SingleValueExp (doExp x)
 and doBlock (numOuter, block)
     = let val (_, annotatedBlock) = Vector.foldr annotateStat (L.IdSet.empty, []) block
-          fun goForward ([], declared : L.IdSet.set, numOuter : int, revStats) = List.rev revStats
-            | goForward ((live, L.LocalStat (vars, exps)) :: rest, declared, numOuter, revStats)
-              = let val stat = L.LocalStat (vars, List.map doExp exps)
-                    val dead = L.IdSet.difference (declared, live)
+          fun insertDo (vars, live, stat, rest, declared, numOuter, revStats)
+              = let val dead = L.IdSet.difference (declared, live)
                     val numDead = L.IdSet.numItems dead
                     val shouldInsertDo = numDead >= 10 andalso numOuter + L.IdSet.numItems declared <= 190
                 in if shouldInsertDo then
@@ -191,6 +189,9 @@ and doBlock (numOuter, block)
                    else
                        goForward (rest, List.foldl (fn ((v, _), acc) => L.IdSet.add (acc, L.UserDefinedId v)) declared vars, numOuter, stat :: revStats)
                 end
+          and goForward ([], declared : L.IdSet.set, numOuter : int, revStats) = List.rev revStats
+            | goForward ((live, L.LocalStat (vars, exps)) :: rest, declared, numOuter, revStats)
+              = insertDo (vars, live, L.LocalStat (vars, List.map doExp exps), rest, declared, numOuter, revStats)
             | goForward ((live, L.AssignStat (lhs, rhs)) :: rest, declared, numOuter, revStats)
               = let val stat = L.AssignStat (List.map doExp lhs, List.map doExp rhs)
                 in goForward (rest, declared, numOuter, stat :: revStats)
@@ -205,21 +206,7 @@ and doBlock (numOuter, block)
                 end
             | goForward ((live, L.IfStat (cond, thenBlock, elseBlock)) :: rest, declared, numOuter, revStats)
               = let val n = numOuter + L.IdSet.numItems declared
-                    val stat = L.IfStat (doExp cond, doBlock (n, thenBlock), doBlock (n, elseBlock))
-                    val dead = L.IdSet.difference (declared, live)
-                    val numDead = L.IdSet.numItems dead
-                    val shouldInsertDo = numDead >= 5 andalso numOuter + L.IdSet.numItems declared <= 190
-                in if shouldInsertDo then
-                       let val (hoistedVars, stats) = List.foldl (hoist live) ([], []) revStats
-                           val dec = if List.null hoistedVars then
-                                         [] (* should not occur *)
-                                     else
-                                         [L.LocalStat (hoistedVars, [])]
-                           val doStat = L.DoStat (vector stats)
-                       in dec @ doStat :: goForward (rest, declared, numOuter + List.length hoistedVars, [stat])
-                       end
-                   else
-                       goForward (rest, declared, numOuter, stat :: revStats)
+                in insertDo ([], live, L.IfStat (doExp cond, doBlock (n, thenBlock), doBlock (n, elseBlock)), rest, declared, numOuter, revStats)
                 end
             | goForward ((live, L.ReturnStat exps) :: rest, declared, numOuter, revStats)
               = let val stat = L.ReturnStat (Vector.map doExp exps)
@@ -232,8 +219,22 @@ and doBlock (numOuter, block)
                 end
             | goForward ((live, stat as L.GotoStat _) :: rest, declared, numOuter, revStats) = goForward (rest, declared, numOuter, stat :: revStats)
             | goForward ((live, stat as L.LabelStat _) :: rest, declared, numOuter, revStats)
-              = let val rest' = goForward (rest, L.IdSet.empty, numOuter + L.IdSet.numItems declared, [])
-                in List.revAppend (revStats, stat :: rest')
+              = let val dead = L.IdSet.difference (declared, live)
+                    val numDead = L.IdSet.numItems dead
+                    val shouldInsertDo = numDead >= 1 andalso numOuter + L.IdSet.numItems declared <= 190
+                    val (stats', numOuter') = if shouldInsertDo then
+                                                  let val (hoistedVars, stats) = List.foldl (hoist live) ([], []) revStats
+                                                      val dec = if List.null hoistedVars then
+                                                                    [] (* should not occur *)
+                                                                else
+                                                                    [L.LocalStat (hoistedVars, [])]
+                                                      val doStat = L.DoStat (vector stats)
+                                                  in (dec @ [ doStat ], numOuter + List.length hoistedVars)
+                                                  end
+                                              else
+                                                  (List.rev revStats, numOuter + L.IdSet.numItems declared)
+                    val rest' = goForward (rest, L.IdSet.empty, numOuter', [])
+                in stats' @ stat :: rest'
                 end
       in vector (goForward (annotatedBlock, L.IdSet.empty, numOuter, []))
       end
