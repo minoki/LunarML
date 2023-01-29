@@ -75,7 +75,7 @@ datatype Exp = ConstExp of LuaConst
               | LabelStat of Label
 withtype Block = Stat vector
 
-fun makeDoStat (stats : Stat list) = if List.exists (fn LocalStat _ => true | ReturnStat _ => true | _ => false) stats then
+fun makeDoStat (stats : Stat list) = if List.exists (fn LocalStat _ => true | ReturnStat _ => true | LabelStat _ => true | _ => false) stats then
                                          [DoStat (vector stats)]
                                      else
                                          stats
