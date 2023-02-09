@@ -96,12 +96,17 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
                                    J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
                                else
                                    J.ConstExp (J.Numeral (Int32.toString x))
+  | doValue (C.Int64Const x) = if x < 0 then
+                                   J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int64.toLarge x)) ^ "n")))
+                               else
+                                   J.ConstExp (J.Numeral (Int64.toString x ^ "n"))
   | doValue (C.IntInfConst x) = if x < 0 then
                                     J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ "n")))
                                 else
                                     J.ConstExp (J.Numeral (LargeInt.toString x ^ "n"))
   | doValue (C.NativeWordConst x) = raise Fail "NativeWordConst is not supported by JavaScript backend"
   | doValue (C.Word32Const x) = J.ConstExp (J.Numeral ("0x" ^ Word32.fmt StringCvt.HEX x))
+  | doValue (C.Word64Const x) = J.ConstExp (J.Numeral ("0x" ^ Word64.fmt StringCvt.HEX x ^ "n"))
   | doValue (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
   | doValue (C.Char16Const x) = J.ConstExp (J.Numeral (Int.toString x))
   | doValue (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)

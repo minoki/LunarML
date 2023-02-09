@@ -302,7 +302,9 @@ val initialEnv : Typing.Env
                                  ,("vector", { typeFunction = TypeFunction ([tyVarA], vectorOf tyA), valEnv = emptyValEnv })
                                  ,("_Prim.Char16.char", { typeFunction = TypeFunction ([], primTy_char16), valEnv = emptyValEnv })
                                  ,("_Prim.String16.string", { typeFunction = TypeFunction ([], primTy_string16), valEnv = emptyValEnv })
+                                 ,("_Prim.Int64.int", { typeFunction = TypeFunction ([], primTy_int64), valEnv = emptyValEnv })
                                  ,("_Prim.IntInf.int", { typeFunction = TypeFunction ([], primTy_intInf), valEnv = emptyValEnv })
+                                 ,("_Prim.Word64.word", { typeFunction = TypeFunction ([], primTy_word64), valEnv = emptyValEnv })
                                  ,("_Prim.Function2.function2", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC)), valEnv = emptyValEnv })
                                  ,("_Prim.Function3.function3", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD)), valEnv = emptyValEnv })
                                  ,("_Prim.Lua.value", { typeFunction = TypeFunction ([], primTy_Lua_value), valEnv = emptyValEnv })
@@ -314,13 +316,15 @@ val initialEnv : Typing.Env
                                   TypedSyntax.TyNameMap.empty
                                   [(primTyName_bool, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_int, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_int64, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_intInf, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
+                                  ,(primTyName_word64, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
                                   ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = NONE (* SOME Syntax.CLASS_REAL *) })
                                   ,(primTyName_char, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
                                   ,(primTyName_char16, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
                                   ,(primTyName_string, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
                                   ,(primTyName_string16, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_STRING *) })
-                                  ,(primTyName_intInf, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_list, { arity = 1, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_ref, { arity = 1, admitsEquality = false (* must be handled specially *), overloadClass = NONE })
                                   ,(primTyName_exn, { arity = 0, admitsEquality = false, overloadClass = NONE })
@@ -378,13 +382,15 @@ val primOverloadEnv : Typing.Env
 val initialTyNameSet = let open Typing
                        in TypedSyntax.TyNameSet.fromList
                               [primTyName_int
+                              ,primTyName_int64
+                              ,primTyName_intInf
                               ,primTyName_word
+                              ,primTyName_word64
                               ,primTyName_real
                               ,primTyName_char
                               ,primTyName_char16
                               ,primTyName_string
                               ,primTyName_string16
-                              ,primTyName_intInf
                               ,primTyName_exn
                               ,primTyName_bool
                               ,primTyName_ref

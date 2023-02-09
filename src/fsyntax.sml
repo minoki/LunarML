@@ -626,6 +626,14 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                             else
                                                 emitError (ctx, [span], "integer constant out of range")
                                          end
+                                     else if T.eqTyName (tycon, Typing.primTyName_int64) then
+                                         let val lower = ~0x8000000000000000 <= value
+                                             val upper = value <= 0x7fffffffffffffff
+                                         in if lower andalso upper then
+                                                F.IntConstExp (value, toFTy (ctx, env, ty))
+                                            else
+                                                emitError (ctx, [span], "integer constant out of range")
+                                         end
                                      else if T.eqTyName (tycon, Typing.primTyName_intInf) then
                                          F.IntConstExp (value, toFTy (ctx, env, ty))
                                      else
@@ -688,6 +696,11 @@ fun cookWordConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                             else
                                                 emitError (ctx, [span], "word constant out of range")
                                          end
+                                     else if T.eqTyName (tycon, Typing.primTyName_word64) then
+                                         if IntInf.~>> (value, 0w64) = 0 then
+                                             F.WordConstExp (value, toFTy (ctx, env, ty))
+                                         else
+                                             emitError (ctx, [span], "word constant out of range")
                                      else
                                          let val overloadMap = case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
                                                                    SOME m => m

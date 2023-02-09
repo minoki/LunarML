@@ -128,318 +128,309 @@ _overload "Int" [Int32.int] { + = Int32.+
 local
     val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
     val int64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "int64_t"]) () (* ffi.typeof("int64_t") *)
-    fun IntToInt64 (x : int) : Lua.value = Lua.call1 int64_t #[Lua.fromInt x]
-    fun Int64ToInt (x : Lua.value) : int = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x])
-    structure Int64Impl :> sig
+    val unsafeFromValue : Lua.value -> _Prim.Int64.int = Lua.unsafeFromValue
+    val toValue : _Prim.Int64.int -> Lua.value = Lua.unsafeToValue
+    structure UncheckedInt64 : sig
                   type int
-                  val EQ : int * int -> bool
-                  val toLarge : int -> LargeInt.int
-                  val fromLarge : LargeInt.int -> int
-                  val toInt : int -> Int.int
-                  val fromInt : Int.int -> int
-                  val precision : Int.int option
-                  val minInt : int option
-                  val maxInt : int option
                   val + : int * int -> int
                   val - : int * int -> int
                   val * : int * int -> int
-                  val div : int * int -> int
-                  val mod : int * int -> int
                   val quot : int * int -> int
                   val rem : int * int -> int
-                  val compare : int * int -> order
+                  val ~ : int -> int
                   val < : int * int -> bool
                   val <= : int * int -> bool
                   val > : int * int -> bool
                   val >= : int * int -> bool
-                  val ~ : int -> int
-                  val abs : int -> int
-                  val min : int * int -> int
-                  val max : int * int -> int
-                  val sign : int -> Int.int
-                  val sameSign : int * int -> bool
-                  val fmt : StringCvt.radix -> int -> string
-                  val toString : int -> string
-                  val scan : StringCvt.radix -> (char, 'a) StringCvt.reader -> (int, 'a) StringCvt.reader
-                  val fromString : string -> int option
               end = struct
-    type int = Lua.value
-    val EQ = Lua.==
-    val ZERO = IntToInt64 0
-    val ONE = IntToInt64 1
-    val MINUS_ONE = IntToInt64 ~1
-    val MIN_INT32_AS_INT64 = IntToInt64 ~0x8000_0000
-    val MAX_INT32_AS_INT64 = IntToInt64 0x7FFF_FFFF
-    val MIN = Lua.* (IntToInt64 ~2, Lua.* (MIN_INT32_AS_INT64, MIN_INT32_AS_INT64)) (* -2^63 *)
-    val MAX = Lua.+ (Lua.* (Lua.+ (MIN_INT32_AS_INT64, IntToInt64 ~0x7FFFFFFF), MIN_INT32_AS_INT64), IntToInt64 0x7FFFFFFF) (* 2^63-1 *)
-    val precision = SOME 64
-    val minInt = SOME MIN
-    val maxInt = SOME MAX
-    fun ADD (x, y) = let val z = Lua.+ (x, y)
-                     in if Lua.> (y, ZERO) andalso Lua.< (z, x) then
-                            raise Overflow
-                        else if Lua.< (y, ZERO) andalso Lua.> (z, x) then
-                            raise Overflow
+    type int = _Prim.Int64.int
+    val op + = fn (x, y) => unsafeFromValue (Lua.+ (toValue x, toValue y))
+    val op - = fn (x, y) => unsafeFromValue (Lua.- (toValue x, toValue y))
+    val op * = fn (x, y) => unsafeFromValue (Lua.* (toValue x, toValue y))
+    val quot = fn (x, y) => unsafeFromValue (Lua./ (toValue x, toValue y))
+    val rem = fn (x, y) => unsafeFromValue (Lua.% (toValue x, toValue y))
+    val ~ = fn x => unsafeFromValue (Lua.unm (toValue x))
+    val op < = fn (x, y) => Lua.< (toValue x, toValue y)
+    val op <= = fn (x, y) => Lua.<= (toValue x, toValue y)
+    val op > = fn (x, y) => Lua.> (toValue x, toValue y)
+    val op >= = fn (x, y) => Lua.>= (toValue x, toValue y)
+    end
+    fun Int64_EQUAL (x, y) = Lua.== (toValue x, toValue y);
+in
+_equality _Prim.Int64.int = Int64_EQUAL;
+structure Int64 :> INTEGER where type int = _Prim.Int64.int = struct
+type int = _Prim.Int64.int
+fun IntToInt64 (x : Int.int) : int = unsafeFromValue (Lua.call1 int64_t #[Lua.fromInt x])
+fun Int64ToInt (x : int) : Int.int = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[toValue x])
+val MIN_INT32_AS_INT64 : int = ~0x8000_0000
+val MAX_INT32_AS_INT64 : int = 0x7FFF_FFFF
+val MIN : int = ~0x8000_0000_0000_0000 (* -2^63 *)
+val MAX : int = 0x7FFF_FFFF_FFFF_FFFF (* 2^63-1 *)
+val precision = SOME 64
+val minInt = SOME MIN
+val maxInt = SOME MAX
+fun ADD (x, y) = let val z = UncheckedInt64.+ (x, y)
+                 in if UncheckedInt64.> (y, 0) andalso UncheckedInt64.< (z, x) then
+                        raise Overflow
+                    else if UncheckedInt64.< (y, 0) andalso UncheckedInt64.> (z, x) then
+                        raise Overflow
+                    else
+                        z
+                 end
+fun SUB (x, y) = let val z = UncheckedInt64.- (x, y)
+                 in if UncheckedInt64.< (y, 0) andalso UncheckedInt64.< (z, x) then
+                        raise Overflow
+                    else if UncheckedInt64.> (y, 0) andalso UncheckedInt64.> (z, x) then
+                        raise Overflow
+                    else
+                        z
+                 end
+fun MUL (x, y) = let val z = UncheckedInt64.* (x, y)
+                 in if (x <> 0 andalso UncheckedInt64.quot (z, x) <> y) orelse (y <> 0 andalso UncheckedInt64.quot (z, y) <> x) then
+                        raise Overflow
+                    else
+                        z
+                 end
+fun NEGATE x = if x = MIN then
+                   raise Overflow
+               else
+                   UncheckedInt64.~ x
+fun ABS x = if x = MIN then
+                raise Overflow
+            else if UncheckedInt64.< (x, 0) then
+                UncheckedInt64.~ x
+            else
+                x
+fun quot (x, y) = if y = 0 then
+                      raise Div
+                  else if x = MIN andalso y = ~1 then
+                      raise Overflow
+                  else
+                      UncheckedInt64.quot (x, y)
+fun rem (x, y) = if y = 0 then
+                     raise Div
+                 else
+                     UncheckedInt64.rem (x, y)
+fun DIV (x, y) = if y = 0 then
+                     raise Div
+                 else if x = MIN andalso y = ~1 then
+                     raise Overflow
+                 else if (UncheckedInt64.>= (x, 0) andalso UncheckedInt64.> (y, 0)) orelse (UncheckedInt64.<= (x, 0) andalso UncheckedInt64.< (y, 0)) then
+                     UncheckedInt64.quot (x, y) (* same as quot *)
+                 else
+                     let val q = UncheckedInt64.quot (x, y)
+                         val r = UncheckedInt64.rem (x, y)
+                     in if r = 0 then
+                            q
                         else
-                            z
+                            UncheckedInt64.- (q, 1)
                      end
-    fun SUB (x, y) = let val z = Lua.- (x, y)
-                     in if Lua.< (y, ZERO) andalso Lua.< (z, x) then
-                            raise Overflow
-                        else if Lua.> (y, ZERO) andalso Lua.> (z, x) then
-                            raise Overflow
+fun MOD (x, y) = if y = 0 then
+                     raise Div
+                 else if (UncheckedInt64.>= (x, 0) andalso UncheckedInt64.> (y, 0)) orelse (UncheckedInt64.<= (x, 0) andalso UncheckedInt64.< (y, 0)) then
+                     UncheckedInt64.rem (x, y) (* same as rem *)
+                 else
+                     let val r = UncheckedInt64.rem (x, y)
+                     in if r = 0 then
+                            r
                         else
-                            z
+                            UncheckedInt64.+ (r, y)
                      end
-    fun MUL (x, y) = let val z = Lua.* (x, y)
-                     in if (Lua.~= (x, ZERO) andalso Lua.~= (Lua./ (z, x), y)) orelse (Lua.~= (y, ZERO) andalso Lua.~= (Lua./ (z, y), x)) then
-                            raise Overflow
-                        else
-                            z
-                     end
-    fun NEGATE x = if Lua.== (x, MIN) then
-                       raise Overflow
-                   else
-                       Lua.unm x
-    fun ABS x = if Lua.== (x, MIN) then
-                    raise Overflow
-                else if Lua.< (x, ZERO) then
-                    Lua.unm x
-                else
-                    x
-    fun quot (x, y) = if Lua.== (y, ZERO) then
-                          raise Div
-                      else if Lua.== (x, MIN) andalso Lua.== (y, MINUS_ONE) then
-                          raise Overflow
-                      else
-                          Lua./ (x, y)
-    fun rem (x, y) = if Lua.== (y, ZERO) then
-                         raise Div
-                     else
-                         Lua.% (x, y)
-    fun DIV (x, y) = if Lua.== (y, ZERO) then
-                         raise Div
-                     else if Lua.== (x, MIN) andalso Lua.== (y, MINUS_ONE) then
-                         raise Overflow
-                     else if (Lua.>= (x, ZERO) andalso Lua.> (y, ZERO)) orelse (Lua.<= (x, ZERO) andalso Lua.< (y, ZERO)) then
-                         Lua./ (x, y) (* same as quot *)
-                     else
-                         let val q = Lua./ (x, y)
-                             val r = Lua.% (x, y)
-                         in if Lua.== (r, ZERO) then
-                                q
-                            else
-                                Lua.- (q, Lua.fromInt 1)
-                         end
-    fun MOD (x, y) = if Lua.== (y, ZERO) then
-                         raise Div
-                     else if (Lua.>= (x, ZERO) andalso Lua.> (y, ZERO)) orelse (Lua.<= (x, ZERO) andalso Lua.< (y, ZERO)) then
-                         Lua.% (x, y) (* same as rem *)
-                     else
-                         let val r = Lua.% (x, y)
-                         in if Lua.== (r, ZERO) then
-                                r
-                            else
-                                Lua.+ (r, y)
-                         end
-    fun toLarge x = let val d = MIN_INT32_AS_INT64 (* -2^31 *)
-                        val q = Lua./ (x, d) (* ~0xffff_ffff <= q <= 0x1_0000_0000 *)
-                        val r = Lua.% (x, d) (* ~0x7fff_ffff <= r <= 0x7fff_ffff *)
-                        val q2 = Lua./ (q, d)
-                        val r2 = Lua.% (q, d)
-                        (* x = (q2 * d + r2) * d + r *)
-                        val q2' = IntInf.fromInt (Int64ToInt q2)
-                        val r2' = IntInf.fromInt (Int64ToInt r2)
-                        val r' = IntInf.fromInt (Int64ToInt r)
-                        val d' = ~0x80000000 : IntInf.int
-                    in (q2' * d' + r2') * d' + r'
-                    end
-    fun fromLarge x = if ~0x8000_0000_0000_0000 <= x andalso x <= 0x7fff_ffff_ffff_ffff then
-                          let val d = ~0x8000_0000
-                              val (q, r) = IntInf.divMod (x, d)
-                              val (q2, r2) = IntInf.divMod (q, d)
-                              val q2' = IntToInt64 (IntInf.toInt q2)
-                              val r2' = IntToInt64 (IntInf.toInt r2)
-                              val r' = IntToInt64 (IntInf.toInt r)
-                              val d' = MIN_INT32_AS_INT64
-                          in Lua.+ (Lua.* (Lua.+ (Lua.* (q2', d'), r2'), d'), r')
-                          end
-                      else
-                          raise Overflow
-    fun toInt x = if Lua.<= (MIN_INT32_AS_INT64, x) andalso Lua.<= (x, MAX_INT32_AS_INT64) then
-                      Int64ToInt x
+fun toLarge x = let val d = MIN_INT32_AS_INT64 (* -2^31 *)
+                    val q = UncheckedInt64.quot (x, d) (* ~0xffff_ffff <= q <= 0x1_0000_0000 *)
+                    val r = UncheckedInt64.rem (x, d) (* ~0x7fff_ffff <= r <= 0x7fff_ffff *)
+                    val q2 = UncheckedInt64.quot (q, d)
+                    val r2 = UncheckedInt64.rem (q, d)
+                    (* x = (q2 * d + r2) * d + r *)
+                    val q2' = IntInf.fromInt (Int64ToInt q2)
+                    val r2' = IntInf.fromInt (Int64ToInt r2)
+                    val r' = IntInf.fromInt (Int64ToInt r)
+                    val d' = ~0x80000000 : IntInf.int
+                in (q2' * d' + r2') * d' + r'
+                end
+fun fromLarge x = if ~0x8000_0000_0000_0000 <= x andalso x <= 0x7fff_ffff_ffff_ffff then
+                      let val d = ~0x8000_0000
+                          val (q, r) = IntInf.divMod (x, d)
+                          val (q2, r2) = IntInf.divMod (q, d)
+                          val q2' = IntToInt64 (IntInf.toInt q2)
+                          val r2' = IntToInt64 (IntInf.toInt r2)
+                          val r' = IntToInt64 (IntInf.toInt r)
+                          val d' = MIN_INT32_AS_INT64
+                      in UncheckedInt64.+ (UncheckedInt64.* (UncheckedInt64.+ (UncheckedInt64.* (q2', d'), r2'), d'), r')
+                      end
                   else
                       raise Overflow
-    val fromInt = IntToInt64
-    fun compare (x, y) = if Lua.< (x, y) then
-                             LESS
-                         else if Lua.> (x, y) then
-                             GREATER
-                         else
-                             EQUAL
-    fun min (x, y) = if Lua.< (x, y) then
-                         x
+fun toInt x = if UncheckedInt64.<= (MIN_INT32_AS_INT64, x) andalso UncheckedInt64.<= (x, MAX_INT32_AS_INT64) then
+                  Int64ToInt x
+              else
+                  raise Overflow
+val fromInt = IntToInt64
+fun compare (x, y) = if UncheckedInt64.< (x, y) then
+                         LESS
+                     else if UncheckedInt64.> (x, y) then
+                         GREATER
                      else
-                         y
-    fun max (x, y) = if Lua.> (x, y) then
-                         x
-                     else
-                         y
-    fun sign x : Int.int = if Lua.< (x, ZERO) then
-                               ~1
-                           else if Lua.> (x, ZERO) then
-                               1
-                           else
-                               0
-    fun sameSign (x, y) = sign x = sign y
-    (* Newer LuaJIT (after https://github.com/LuaJIT/LuaJIT/commit/1b7171c339a8d33cb1fd332e31787ebc23266f10):
-    fun toString x = if Lua.>= (x, ZERO) then
-                         Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", x]) : string
-                     else
-                         Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%u", Lua.unm x]) : string
-    fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-      | fmt StringCvt.OCT x = if Lua.>= (x, ZERO) then
-                                  Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", x]) : string
-                              else
-                                  Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm x]) : string
-      | fmt StringCvt.DEC x = toString x
-      | fmt StringCvt.HEX x = if Lua.>= (x, ZERO) then
-                                  Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x]) : string
-                              else
-                                  Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm x]) : string
-     *)
-    fun toStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
-                            Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromInt (Int64ToInt x)]) : string
-                        else
-                            let val d = IntToInt64 1000000000
-                                val q = Lua./ (x, d)
-                                val r = Lua.% (x, d)
-                            in toStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromInt (Int64ToInt r)])
-                            end
-    fun toString x = if Lua.>= (x, ZERO) then
-                         toStringAbs x
-                     else
-                         "~" ^ toStringAbs (Lua.unm x) (* overflow is fine *)
-    fun toOctStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
-                               Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt (Int64ToInt x)]) : string
-                           else
-                               let val d = IntToInt64 0x40000000 (* 2^30 = 0o10000000000 *)
-                                   val q = Lua./ (x, d)
-                                   val r = Lua.% (x, d)
-                               in toOctStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromInt (Int64ToInt r)])
-                               end
-    fun toOctString x = if Lua.>= (x, ZERO) then
-                            toOctStringAbs x
-                        else
-                            "~" ^ toOctStringAbs (Lua.unm x) (* overflow is fine *)
-    fun toHexStringAbs x = if Lua.<= (x, IntToInt64 0x7fff_ffff) then (* small or -2^63 *)
-                               Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt (Int64ToInt x)]) : string
-                           else
-                               let val d = IntToInt64 0x10000000 (* 2^28 *)
-                                   val q = Lua./ (x, d)
-                                   val r = Lua.% (x, d)
-                               in toHexStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromInt (Int64ToInt r)])
-                               end
-    fun toHexString x = if Lua.>= (x, ZERO) then
-                            toHexStringAbs x
-                        else
-                            "~" ^ toHexStringAbs (Lua.unm x) (* overflow is fine *)
-    fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
-      | fmt StringCvt.OCT = toOctString
-      | fmt StringCvt.DEC = toString
-      | fmt StringCvt.HEX = toHexString
-    local
-        open ScanNumUtils
-        fun scanDigits (radix, isDigit, getc)
-            = let fun go1 (x, strm) = case getc strm of
-                                          SOME (c, strm') => if isDigit c then
-                                                                 go1 (Lua.+ (Lua.* (Lua.fromInt radix, x), Lua.fromInt (digitToInt c)), strm')
-                                                             else
-                                                                 SOME (x, strm)
-                                        | NONE => SOME (x, strm)
-              in fn strm => case getc strm of
-                                SOME (c, strm') => if isDigit c then
-                                                       go1 (IntToInt64 (digitToInt c), strm')
-                                                   else
-                                                       NONE
-                              | NONE => NONE
-              end
-        fun scanNegativeDigits (radix, isDigit, getc)
-            = let fun go1 (x, strm) = case getc strm of
-                                          SOME (c, strm') => if isDigit c then
-                                                                 go1 (Lua.- (Lua.* (Lua.fromInt radix, x), Lua.fromInt (digitToInt c)), strm')
-                                                             else
-                                                                 SOME (x, strm)
-                                        | NONE => SOME (x, strm)
-              in fn strm => case getc strm of
-                                SOME (c, strm') => if isDigit c then
-                                                       go1 (IntToInt64 (~ (digitToInt c)), strm')
-                                                   else
-                                                       NONE
-                              | NONE => NONE
-              end
-    in
-    fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                           val (isNegative, strm) = scanSign (getc, strm)
-                                       in if isNegative then
-                                              scanNegativeDigits (2, isBinDigit, getc) strm
-                                          else
-                                              scanDigits (2, isBinDigit, getc) strm
-                                       end
-      | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                           val (isNegative, strm) = scanSign (getc, strm)
-                                       in if isNegative then
-                                              scanNegativeDigits (8, isOctDigit, getc) strm
-                                          else
-                                              scanDigits (8, isOctDigit, getc) strm
-                                       end
-      | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                           val (isNegative, strm) = scanSign (getc, strm)
-                                       in if isNegative then
-                                              scanNegativeDigits (10, Char.isDigit, getc) strm
-                                          else
-                                              scanDigits (10, Char.isDigit, getc) strm
-                                       end
-      | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
-                                           val (isNegative, strm) = scanSign (getc, strm)
-                                           val strm = case getc strm of
-                                                          SOME (#"0", strm') =>
-                                                          (case getc strm' of
-                                                               SOME (c, strm'') =>
-                                                               if c = #"x" orelse c = #"X" then
-                                                                   case getc strm'' of
-                                                                       SOME (c, _) => if Char.isHexDigit c then
-                                                                                          strm''
-                                                                                      else
-                                                                                          strm
-                                                                     | NONE => strm
-                                                               else
-                                                                   strm
-                                                             | NONE => strm
-                                                          )
-                                                        | _ => strm
-                                       in if isNegative then
-                                              scanNegativeDigits (16, Char.isHexDigit, getc) strm
-                                          else
-                                              scanDigits (16, Char.isHexDigit, getc) strm
-                                       end
-    fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
-    end
-    val op + = ADD
-    val op - = SUB
-    val op * = MUL
-    val op div = DIV
-    val op mod = MOD
-    val ~ = NEGATE
-    val abs = ABS
-    val op < = Lua.<
-    val op <= = Lua.<=
-    val op > = Lua.>
-    val op >= = Lua.>=
-    end
+                         EQUAL
+fun min (x, y) = if UncheckedInt64.< (x, y) then
+                     x
+                 else
+                     y
+fun max (x, y) = if UncheckedInt64.> (x, y) then
+                     x
+                 else
+                     y
+fun sign x : Int.int = if UncheckedInt64.< (x, 0) then
+                           ~1
+                       else if UncheckedInt64.> (x, 0) then
+                           1
+                       else
+                           0
+fun sameSign (x, y) = sign x = sign y
+(* Newer LuaJIT (after https://github.com/LuaJIT/LuaJIT/commit/1b7171c339a8d33cb1fd332e31787ebc23266f10):
+fun toString x = if UncheckedInt64.>= (x, 0) then
+                     Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", toValue x]) : string
+                 else
+                     Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%u", toValue (UncheckedInt64.~ x)]) : string
+fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
+  | fmt StringCvt.OCT x = if UncheckedInt64.>= (x, 0) then
+                              Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", toValue x]) : string
+                          else
+                              Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", toValue (UncheckedInt64.~ x)]) : string
+  | fmt StringCvt.DEC x = toString x
+  | fmt StringCvt.HEX x = if UncheckedInt64.>= (x, 0) then
+                              Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", toValue x]) : string
+                          else
+                              Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", toValue (UncheckedInt64.~ x)]) : string
+ *)
+fun toStringAbs x = if UncheckedInt64.<= (x, 0x7fff_ffff) then (* small or -2^63 *)
+                        Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromInt (Int64ToInt x)]) : string
+                    else
+                        let val d = 1000000000
+                            val q = UncheckedInt64.quot (x, d)
+                            val r = UncheckedInt64.rem (x, d)
+                        in toStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromInt (Int64ToInt r)])
+                        end
+fun toString x = if UncheckedInt64.>= (x, 0) then
+                     toStringAbs x
+                 else
+                     "~" ^ toStringAbs (UncheckedInt64.~ x) (* overflow is fine *)
+fun toOctStringAbs x = if UncheckedInt64.<= (x, 0x7fff_ffff) then (* small or -2^63 *)
+                           Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt (Int64ToInt x)]) : string
+                       else
+                           let val d = 0x40000000 (* 2^30 = 0o10000000000 *)
+                               val q = UncheckedInt64.quot (x, d)
+                               val r = UncheckedInt64.rem (x, d)
+                           in toOctStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromInt (Int64ToInt r)])
+                           end
+fun toOctString x = if UncheckedInt64.>= (x, 0) then
+                        toOctStringAbs x
+                    else
+                        "~" ^ toOctStringAbs (UncheckedInt64.~ x) (* overflow is fine *)
+fun toHexStringAbs x = if UncheckedInt64.<= (x, 0x7fff_ffff) then (* small or -2^63 *)
+                           Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt (Int64ToInt x)]) : string
+                       else
+                           let val d = 0x10000000 (* 2^28 *)
+                               val q = UncheckedInt64.quot (x, d)
+                               val r = UncheckedInt64.rem (x, d)
+                           in toHexStringAbs q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromInt (Int64ToInt r)])
+                           end
+fun toHexString x = if UncheckedInt64.>= (x, 0) then
+                        toHexStringAbs x
+                    else
+                        "~" ^ toHexStringAbs (UncheckedInt64.~ x) (* overflow is fine *)
+fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
+  | fmt StringCvt.OCT = toOctString
+  | fmt StringCvt.DEC = toString
+  | fmt StringCvt.HEX = toHexString
+local
+    open ScanNumUtils
+    fun scanDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (unsafeFromValue (Lua.+ (Lua.* (Lua.fromInt radix, toValue x), Lua.fromInt (digitToInt c))), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (IntToInt64 (digitToInt c), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
+    fun scanNegativeDigits (radix, isDigit, getc)
+        = let fun go1 (x, strm) = case getc strm of
+                                      SOME (c, strm') => if isDigit c then
+                                                             go1 (unsafeFromValue (Lua.- (Lua.* (Lua.fromInt radix, toValue x), Lua.fromInt (digitToInt c))), strm')
+                                                         else
+                                                             SOME (x, strm)
+                                    | NONE => SOME (x, strm)
+          in fn strm => case getc strm of
+                            SOME (c, strm') => if isDigit c then
+                                                   go1 (IntToInt64 (~ (digitToInt c)), strm')
+                                               else
+                                                   NONE
+                          | NONE => NONE
+          end
 in
-_equality Int64Impl.int = Int64Impl.EQ
-structure Int64 :> INTEGER where type int = Int64Impl.int = Int64Impl
+fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (2, isBinDigit, getc) strm
+                                      else
+                                          scanDigits (2, isBinDigit, getc) strm
+                                   end
+  | scan StringCvt.OCT getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (8, isOctDigit, getc) strm
+                                      else
+                                          scanDigits (8, isOctDigit, getc) strm
+                                   end
+  | scan StringCvt.DEC getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                   in if isNegative then
+                                          scanNegativeDigits (10, Char.isDigit, getc) strm
+                                      else
+                                          scanDigits (10, Char.isDigit, getc) strm
+                                   end
+  | scan StringCvt.HEX getc strm = let val strm = skipInitialWhitespace (getc, strm)
+                                       val (isNegative, strm) = scanSign (getc, strm)
+                                       val strm = case getc strm of
+                                                      SOME (#"0", strm') =>
+                                                      (case getc strm' of
+                                                           SOME (c, strm'') =>
+                                                           if c = #"x" orelse c = #"X" then
+                                                               case getc strm'' of
+                                                                   SOME (c, _) => if Char.isHexDigit c then
+                                                                                      strm''
+                                                                                  else
+                                                                                      strm
+                                                                 | NONE => strm
+                                                           else
+                                                               strm
+                                                         | NONE => strm
+                                                      )
+                                                    | _ => strm
+                                   in if isNegative then
+                                          scanNegativeDigits (16, Char.isHexDigit, getc) strm
+                                      else
+                                          scanDigits (16, Char.isHexDigit, getc) strm
+                                   end
+fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+end
+val op + = ADD
+val op - = SUB
+val op * = MUL
+val op div = DIV
+val op mod = MOD
+val ~ = NEGATE
+val abs = ABS
+val op < = UncheckedInt64.<
+val op <= = UncheckedInt64.<=
+val op > = UncheckedInt64.>
+val op >= = UncheckedInt64.>=
+end
 end;
 _overload "Int" [Int64.int] { + = Int64.+
                             , - = Int64.-

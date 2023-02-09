@@ -165,7 +165,7 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
     = (case tys of
            [F.TyVar tv] => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
                                                 ""
-                                            else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
+                                            else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) orelse TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
                                                 "n"
                                             else
                                                 raise CodeGenError "PrimExp.IntConstOp: invalid type"
@@ -178,10 +178,17 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
          | _ => raise CodeGenError "PrimExp.IntConstOp: invalid type"
       )
   | doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, _)) dest = raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, [])) dest
-    = let val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-      in putPureTo ctx env dest ([], exp)
-      end
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, tys, [])) dest
+    = (case tys of
+           [F.TyVar tv] => let val suffix = if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
+                                                "n"
+                                            else
+                                                ""
+                               val exp = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
+                           in putPureTo ctx env dest ([], exp)
+                           end
+         | _ => raise CodeGenError "PrimExp.WordConstOp: invalid type"
+      )
   | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, _)) dest = raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
   | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, [])) dest
     = let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x

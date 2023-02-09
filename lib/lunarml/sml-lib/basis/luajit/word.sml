@@ -1,11 +1,43 @@
 local
     val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
+    val int64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "int64_t"]) () (* ffi.typeof("int64_t") *)
     val uint64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "uint64_t"]) () (* ffi.typeof("uint64_t") *)
-    fun WordToUint64 (x : word) : Lua.value = Lua.call1 uint64_t #[Lua.fromWord x]
-    fun Uint64ToWord (x : Lua.value) : word = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x])
+    structure UncheckedWord64 : sig
+                  type word
+                  val unsafeFromValue : Lua.value -> word
+                  val toValue : word -> Lua.value
+                  val + : word * word -> word
+                  val - : word * word -> word
+                  val * : word * word -> word
+                  val div : word * word -> word
+                  val mod : word * word -> word
+                  val ~ : word -> word
+                  val < : word * word -> bool
+                  val <= : word * word -> bool
+                  val > : word * word -> bool
+                  val >= : word * word -> bool
+              end = struct
+    type word = _Prim.Word64.word
+    val unsafeFromValue : Lua.value -> _Prim.Word64.word = Lua.unsafeFromValue
+    val toValue : _Prim.Word64.word -> Lua.value = Lua.unsafeToValue
+    val op + = fn (x, y) => unsafeFromValue (Lua.+ (toValue x, toValue y))
+    val op - = fn (x, y) => unsafeFromValue (Lua.- (toValue x, toValue y))
+    val op * = fn (x, y) => unsafeFromValue (Lua.* (toValue x, toValue y))
+    val op div = fn (x, y) => unsafeFromValue (Lua./ (toValue x, toValue y))
+    val op mod = fn (x, y) => unsafeFromValue (Lua.% (toValue x, toValue y))
+    val ~ = fn x => unsafeFromValue (Lua.unm (toValue x))
+    val op < = fn (x, y) => Lua.< (toValue x, toValue y)
+    val op <= = fn (x, y) => Lua.<= (toValue x, toValue y)
+    val op > = fn (x, y) => Lua.> (toValue x, toValue y)
+    val op >= = fn (x, y) => Lua.>= (toValue x, toValue y)
+    end
+    fun Word64_EQUAL (x, y) = Lua.== (UncheckedWord64.toValue x, UncheckedWord64.toValue y);
+    _equality _Prim.Word64.word = Word64_EQUAL;
+    fun WordToUint64 (x : word) : _Prim.Word64.word = UncheckedWord64.unsafeFromValue (Lua.call1 uint64_t #[Lua.fromWord x])
+    fun Uint64ToWord (x : _Prim.Word64.word) : word = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[UncheckedWord64.toValue x])
     structure WordImpl :> sig
                   structure LargeWord : sig
-                                (*eq*)type word
+                                eqtype word
                                 val wordSize : int
                                 val toLarge : word -> word
                                 val toLargeX : word -> word
@@ -145,7 +177,7 @@ local
                                 val toString : word -> string
                             end
                   structure Word64 : sig
-                                (*eq*)type word
+                                eqtype word
                                 val wordSize : int
                                 val toLarge : word -> LargeWord.word
                                 val toLargeX : word -> LargeWord.word
@@ -180,7 +212,6 @@ local
                                 val toString : word -> string
                             end
                   sharing type LargeWord.word = Word64.word
-                  val Word64_eq : Word64.word * Word64.word -> bool
                   val wordToWord8 : Word.word -> Word8.word
                   val wordToWord16 : Word.word -> Word16.word
                   val wordToWord32 : Word.word -> Word32.word
@@ -190,7 +221,7 @@ local
                   val wordFromLarge : LargeWord.word -> Word.word
               end = struct
     structure Word64 = struct
-    type word = Lua.value
+    type word = UncheckedWord64.word
     val wordSize = 64
     fun toLarge x = x
     fun toLargeX x = x
@@ -198,92 +229,92 @@ local
     val toLargeWord = toLarge
     val toLargeWordX = toLargeX
     val fromLargeWord = fromLarge
-    fun toInt x = if Lua.>= (x, WordToUint64 0wx80000000) then
+    fun toInt x = if UncheckedWord64.>= (x, 0wx80000000) then
                       raise Overflow
                   else
-                      Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[x]) : int
+                      Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[UncheckedWord64.toValue x]) : int
     val toIntX = toInt
-    fun fromInt (x : int) = Lua.call1 uint64_t #[Lua.fromInt x]
-    val andb = Lua.andb
-    val orb = Lua.orb
-    val xorb = Lua.xorb
-    val notb = Lua.notb
+    fun fromInt (x : int) = UncheckedWord64.unsafeFromValue (Lua.call1 uint64_t #[Lua.call1 int64_t #[Lua.fromInt x]])
+    fun andb (x, y) = UncheckedWord64.unsafeFromValue (Lua.andb (UncheckedWord64.toValue x, UncheckedWord64.toValue y))
+    fun orb (x, y) = UncheckedWord64.unsafeFromValue (Lua.orb (UncheckedWord64.toValue x, UncheckedWord64.toValue y))
+    fun xorb (x, y) = UncheckedWord64.unsafeFromValue (Lua.xorb (UncheckedWord64.toValue x, UncheckedWord64.toValue y))
+    fun notb x = UncheckedWord64.unsafeFromValue (Lua.notb (UncheckedWord64.toValue x))
     fun << (x, y) = if y >= 0w64 then
-                        WordToUint64 0w0
+                        0w0
                     else
-                        Lua.<< (x, Lua.fromWord y)
+                        UncheckedWord64.unsafeFromValue (Lua.<< (UncheckedWord64.toValue x, Lua.fromWord y))
     fun >> (x, y) = if y >= 0w64 then
-                        WordToUint64 0w0
+                        0w0
                     else
-                        Lua.>> (x, Lua.fromWord y)
+                        UncheckedWord64.unsafeFromValue (Lua.>> (UncheckedWord64.toValue x, Lua.fromWord y))
     fun ~>> (x, y) = let val y = Word.min (y, 0w63)
-                     in Lua.call1 Lua.Lib.bit.arshift #[x, Lua.fromWord y]
+                     in UncheckedWord64.unsafeFromValue (Lua.call1 Lua.Lib.bit.arshift #[UncheckedWord64.toValue x, Lua.fromWord y])
                      end
-    val op + = Lua.+
-    val op - = Lua.-
-    val op * = Lua.*
-    fun x div y = if Lua.== (y, WordToUint64 0w0) then
+    val op + = UncheckedWord64.+
+    val op - = UncheckedWord64.-
+    val op * = UncheckedWord64.*
+    fun x div y = if y = 0w0 then
                       raise Div
                   else
-                      Lua./ (x, y)
-    fun x mod y = if Lua.== (y, WordToUint64 0w0) then
+                      UncheckedWord64.div (x, y)
+    fun x mod y = if y = 0w0 then
                       raise Div
                   else
-                      Lua.% (x, y)
-    fun compare (x, y) = if Lua.< (x, y) then
+                      UncheckedWord64.mod (x, y)
+    fun compare (x, y) = if UncheckedWord64.< (x, y) then
                              LESS
-                         else if Lua.> (x, y) then
+                         else if UncheckedWord64.> (x, y) then
                              GREATER
                          else
                              EQUAL
-    val op < = Lua.<
-    val op <= = Lua.<=
-    val op > = Lua.>
-    val op >= = Lua.>=
-    val ~ = Lua.unm
-    fun min (x, y) = if Lua.< (x, y) then
+    val op < = UncheckedWord64.<
+    val op <= = UncheckedWord64.<=
+    val op > = UncheckedWord64.>
+    val op >= = UncheckedWord64.>=
+    val ~ = UncheckedWord64.~
+    fun min (x, y) = if UncheckedWord64.< (x, y) then
                          x
                      else
                          y
-    fun max (x, y) = if Lua.< (x, y) then
+    fun max (x, y) = if UncheckedWord64.< (x, y) then
                          y
                      else
                          x
     (* Newer LuaJIT (after https://github.com/LuaJIT/LuaJIT/commit/1b7171c339a8d33cb1fd332e31787ebc23266f10):
     fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-      | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", x]
+      | fmt StringCvt.OCT x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", UncheckedWord64.toValue x]
                               in Lua.unsafeFromValue result
                               end
-      | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", x]
+      | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", UncheckedWord64.toValue x]
                               in Lua.unsafeFromValue result
                               end
-      | fmt StringCvt.HEX x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x]
+      | fmt StringCvt.HEX x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", UncheckedWord64.toValue x]
                               in Lua.unsafeFromValue result
                               end
     val toString : word -> string = fn x => Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", x])
      *)
-    fun toOctString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+    fun toOctString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
                             Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromWord (Uint64ToWord x)]) : string
                         else
-                            let val d = WordToUint64 0wx40000000 (* 2^30 = 0o10000000000 *)
-                                val q = Lua./ (x, d)
-                                val r = Lua.% (x, d)
+                            let val d = 0wx40000000 (* 2^30 = 0o10000000000 *)
+                                val q = UncheckedWord64.div (x, d)
+                                val r = UncheckedWord64.mod (x, d)
                             in toOctString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%010o", Lua.fromWord (Uint64ToWord r)])
                             end
-    fun toDecString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+    fun toDecString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
                             Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%u", Lua.fromWord (Uint64ToWord x)]) : string
                         else
-                            let val d = WordToUint64 0w1000000000
-                                val q = Lua./ (x, d)
-                                val r = Lua.% (x, d)
+                            let val d = 0w1000000000
+                                val q = UncheckedWord64.div (x, d)
+                                val r = UncheckedWord64.mod (x, d)
                             in toDecString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%09u", Lua.fromWord (Uint64ToWord r)])
                             end
-    fun toString x = if Lua.<= (x, WordToUint64 0wxffff_ffff) then (* small *)
+    fun toString x = if UncheckedWord64.<= (x, 0wxffff_ffff) then (* small *)
                          Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromWord (Uint64ToWord x)]) : string
                      else
-                         let val d = WordToUint64 0wx10000000 (* 2^28 *)
-                             val q = Lua./ (x, d)
-                             val r = Lua.% (x, d)
+                         let val d = 0wx10000000 (* 2^28 *)
+                             val q = UncheckedWord64.div (x, d)
+                             val r = UncheckedWord64.mod (x, d)
                          in toString q ^ Lua.unsafeFromValue (Lua.call1 Lua.Lib.string.format #[Lua.fromString "%07X", Lua.fromWord (Uint64ToWord r)])
                          end
     fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
@@ -291,7 +322,6 @@ local
       | fmt StringCvt.DEC = toDecString
       | fmt StringCvt.HEX = toString
     end
-    val Word64_eq = Lua.==
     fun wordToWord64 x = WordToUint64 x
     fun wordToLarge x = WordToUint64 x
     fun wordToLargeX x = if x >= 0wx80000000 then
@@ -408,7 +438,6 @@ local
     fun wordToWord32 x = Word.andb (x, Word32.FULL)
     end
 in
-_equality WordImpl.Word64.word = WordImpl.Word64_eq
 structure LargeWord = WordImpl.LargeWord
 structure Word8 = WordImpl.Word8
 structure Word16 = WordImpl.Word16

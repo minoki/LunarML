@@ -225,9 +225,25 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                        L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
                                    else
                                        L.ConstExp (L.Numeral (Int32.toString x))
+  | doValue ctx (C.Int64Const x) = let val suffix = case #targetLuaVersion ctx of
+                                                        LUA5_3 => ""
+                                                      | LUAJIT => "LL"
+                                   in if x < 0 then
+                                          if x = ~0x800000000000 then
+                                              L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
+                                          else
+                                              L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x) ^ suffix)))
+                                      else
+                                          L.ConstExp (L.Numeral (Int64.toString x ^ suffix))
+                                   end
   | doValue ctx (C.IntInfConst x) = raise CodeGenError "IntInfConst is not supported by Lua backend"
   | doValue ctx (C.NativeWordConst x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
   | doValue ctx (C.Word32Const x) = L.ConstExp (L.Numeral ("0x" ^ Word32.toString x))
+  | doValue ctx (C.Word64Const x) = let val suffix = case #targetLuaVersion ctx of
+                                                         LUA5_3 => ""
+                                                       | LUAJIT => "ULL"
+                                    in L.ConstExp (L.Numeral ("0x" ^ Word64.toString x ^ suffix))
+                                    end
   | doValue ctx (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
   | doValue ctx (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
   | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString (CharVector.tabulate (Vector.length s, fn i => Char.chr (Vector.sub (s, i)))))

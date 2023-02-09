@@ -289,19 +289,37 @@ and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (ve
                                                        in cont (stmts @ [ L.LocalStat ([(dest, L.CONST)], [exp]) ], env, L.VarExp (L.UserDefinedId dest))
                                                        end
 and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, [])) dest : L.Stat list
-    = let val exp = if x < 0 then
+and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
+    = let val suffix = case #targetLuaVersion ctx of
+                           LUA5_3 => ""
+                         | LUAJIT => (case tys of
+                                          [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
+                                                              "LL"
+                                                          else
+                                                              ""
+                                        | _ => "" (* invalid type *)
+                                     )
+          val exp = if x < 0 then
                         if x = ~0x800000000000 then
-                            L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
+                            L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
                         else
-                            L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                            L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x) ^ suffix)))
                     else
-                        L.ConstExp (L.Numeral (LargeInt.toString x))
+                        L.ConstExp (L.Numeral (LargeInt.toString x ^ suffix))
       in putPureTo ctx env dest ([], exp)
       end
   | doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, _)) dest = raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, [])) dest
-    = let val exp = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, tys, [])) dest
+    = let val suffix = case #targetLuaVersion ctx of
+                           LUA5_3 => ""
+                         | LUAJIT => (case tys of
+                                          [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
+                                                              "ULL"
+                                                          else
+                                                              ""
+                                        | _ => "" (* invalid type *)
+                                     )
+          val exp = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
       in putPureTo ctx env dest ([], exp)
       end
   | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, _)) dest = raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
