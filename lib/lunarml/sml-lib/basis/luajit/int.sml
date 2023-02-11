@@ -504,8 +504,8 @@ fun toLarge x = let val d = MIN_INT32_AS_INT64 (* -2^31 *)
                 end
 fun fromLarge x = if ~0x8000_0000_0000_0000 <= x andalso x <= 0x7fff_ffff_ffff_ffff then
                       let val d = ~0x8000_0000
-                          val (q, r) = IntInf.divMod (x, d)
-                          val (q2, r2) = IntInf.divMod (q, d)
+                          val (q, r) = IntInf.quotRem (x, d)
+                          val (q2, r2) = IntInf.quotRem (q, d)
                           val q2' = IntToInt64 (IntInf.toInt q2)
                           val r2' = IntToInt64 (IntInf.toInt r2)
                           val r' = IntToInt64 (IntInf.toInt r)
