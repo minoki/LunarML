@@ -1,0 +1,8 @@
+SCRIPT="$(dirname $0)/GenIntTest.hs"
+DEST="$(dirname $0)/../test/mlbasis/should_run"
+cabal run "$SCRIPT" Int8 "$DEST/int8.sml" "$DEST/int8.stdout"
+cabal run "$SCRIPT" Int16 "$DEST/int16.sml" "$DEST/int16.stdout"
+cabal run "$SCRIPT" Int32 "$DEST/int32.sml" "$DEST/int32.stdout"
+cabal run "$SCRIPT" Int54 "$DEST/int54.sml" "$DEST/int54.stdout"
+cabal run "$SCRIPT" Int64 "$DEST/int64.sml" "$DEST/int64.stdout"
+cabal run "$SCRIPT" IntInf "$DEST/int-inf-rand.sml" "$DEST/int-inf-rand.stdout"
