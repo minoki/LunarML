@@ -808,7 +808,7 @@ fun divMod (_, ZERO) = raise Div
                                                       (mkNonPositive q, ZERO)
                                                end
   | divMod (NEGATIVE words, NEGATIVE words') = let val (q, r) = quotRemAbs (words, words')
-                                               in (mkNonPositive q, mkNonNegative r)
+                                               in (mkNonNegative q, mkNonPositive r)
                                                end
 
 fun quot (_, ZERO) = raise Div
