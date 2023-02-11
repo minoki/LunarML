@@ -41,7 +41,11 @@ function compile_and_run(file)
   end
   local h = assert(io.popen(string.format("\"%s\" \"%s\"", lua_interpreter, luafile), "r"))
   local actual_output = normalize_line_ending(h:read("a"))
-  h:close()
+  local succ = h:close()
+  assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
+  if not succ then
+    return false, ""
+  end
   local expected_output_file = file:gsub("%.sml$", ".stdout"):gsub("%.mlb$", ".stdout")
   local h = assert(io.open(expected_output_file, "r"))
   local expected_output = normalize_line_ending(h:read("a"))
@@ -49,14 +53,22 @@ function compile_and_run(file)
   if actual_output == expected_output then
     return true
   else
-    if expected_output:sub(-1) ~= "\n" then
-      expected_output = expected_output .. "[EOF]\n"
+    if #expected_output < 10000 and #actual_output < 10000 then
+      if expected_output:sub(-1) ~= "\n" then
+        expected_output = expected_output .. "[EOF]\n"
+      end
+      if actual_output:sub(-1) ~= "\n" then
+        actual_output = actual_output .. "[EOF]\n"
+      end
+      io.stderr:write(string.format("%s:\n--- Expected output:\n%s--- Actual output:\n%s---\n", file, expected_output, actual_output))
+    else
+      local actual_output_file = file:gsub("%.sml$", outext .. ".stdout"):gsub("%.mlb$", outext .. ".stdout")
+      local h = assert(io.open(actual_output_file, "wb"))
+      h:write(actual_output)
+      h:close()
+      os.execute(string.format("diff %s %s", expected_output_file, actual_output_file))
     end
-    if actual_output:sub(-1) ~= "\n" then
-      actual_output = actual_output .. "[EOF]\n"
-    end
-    io.stderr:write(string.format("%s:\n--- Expected output:\n%s--- Actual output:\n%s---\n", file, expected_output, actual_output))
-    return false
+    return false, ""
   end
 end
 function should_run(dir)
@@ -66,7 +78,9 @@ function should_run(dir)
       print("Running " .. dir .. f .. "...")
       local succ, output = compile_and_run(file)
       if not succ then
-        io.stderr:write(string.format("%s failed to compile with:\n%s", file, output))
+        if output ~= "" then
+          io.stderr:write(string.format("%s failed with:\n%s", file, output))
+        end
         os.exit(1)
       end
     end
