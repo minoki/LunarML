@@ -157,7 +157,7 @@ end
 structure Bool :> BOOL
 ```
 
-## signature INTEGER (structure Int, LargeInt) / structure IntInf - complete
+## signature INTEGER (structure Int, Int8, Int16, Int32, Int54, Int64, LargeInt) / structure IntInf - complete
 
 ```sml
 signature INTEGER = sig
@@ -209,6 +209,7 @@ structure Int :> INTEGER where type int = int
 structure Int8 :> INTEGER
 structure Int16 :> INTEGER
 structure Int32 :> INTEGER
+structure Int54 :> INTEGER
 structure Int64 :> INTEGER
 structure IntInf :> INT_INF
 structure LargeInt : INTEGER = IntInf

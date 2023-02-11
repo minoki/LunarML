@@ -26,6 +26,7 @@ datatype Value = Var of Var
                | BoolConst of bool
                | NativeIntConst of IntInf.int
                | Int32Const of Int32.int
+               | Int54Const of Int64.int
                | Int64Const of Int64.int
                | IntInfConst of IntInf.int
                | NativeWordConst of IntInf.int
@@ -233,6 +234,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                                                       case #defaultInt (#targetInfo ctx) of
                                                                           TargetInfo.NATIVE_INT => apply k (C.NativeIntConst x)
                                                                         | TargetInfo.INT32 => apply k (C.Int32Const (Int32.fromLarge x))
+                                                                  else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int54) then
+                                                                      apply k (C.Int54Const (Int64.fromLarge x))
                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
                                                                       apply k (C.Int64Const (Int64.fromLarge x))
                                                                   else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
@@ -487,6 +490,7 @@ fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
   | usageInValue env (C.BoolConst _) = ()
   | usageInValue env (C.NativeIntConst _) = ()
   | usageInValue env (C.Int32Const _) = ()
+  | usageInValue env (C.Int54Const _) = ()
   | usageInValue env (C.Int64Const _) = ()
   | usageInValue env (C.IntInfConst _) = ()
   | usageInValue env (C.NativeWordConst _) = ()
@@ -509,6 +513,7 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
   | usageInValueAsCallee env (C.BoolConst _) = ()
   | usageInValueAsCallee env (C.NativeIntConst _) = ()
   | usageInValueAsCallee env (C.Int32Const _) = ()
+  | usageInValueAsCallee env (C.Int54Const _) = ()
   | usageInValueAsCallee env (C.Int64Const _) = ()
   | usageInValueAsCallee env (C.IntInfConst _) = ()
   | usageInValueAsCallee env (C.NativeWordConst _) = ()

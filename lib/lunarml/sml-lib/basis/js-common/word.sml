@@ -212,6 +212,8 @@ local
                                 val toWord64 : int -> Word64.word
                                 val fromIntegralReal : real -> int
                                 val toReal : int -> real
+                                val fromInt54 : _Prim.Int54.int -> int
+                                val unsafeToInt54 : int -> _Prim.Int54.int
                             end where type int = IntInf.int
               end = struct
     structure Word8 = struct

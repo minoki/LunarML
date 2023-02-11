@@ -240,6 +240,7 @@ val primTyName_Lua_value = TypedSyntax.MkTyName ("Lua.value", 17)
 val primTyName_JavaScript_value = TypedSyntax.MkTyName ("JavaScript.value", 18)
 val primTyName_prompt_tag = TypedSyntax.MkTyName ("DelimCont.prompt_tag", 19)
 val primTyName_subcont = TypedSyntax.MkTyName ("DelimCont.subcont", 20)
+val primTyName_int54 = TypedSyntax.MkTyName ("Int54.int", 21)
 val primTyName_int64 = TypedSyntax.MkTyName ("Int64.int", 22)
 val primTyName_word64 = TypedSyntax.MkTyName ("Word64.word", 22)
 val primTy_unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
@@ -256,6 +257,7 @@ val primTy_string16 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_stri
 val primTy_intInf = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_intInf)
 val primTy_Lua_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_Lua_value)
 val primTy_JavaScript_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_JavaScript_value)
+val primTy_int54 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int54)
 val primTy_int64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int64)
 val primTy_word64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word64)
 val VId_Bind = TypedSyntax.MkVId ("Bind", ~1)
@@ -291,6 +293,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                val string = primTy_string
                                                val string16 = primTy_string16
                                                val intInf = primTy_intInf
+                                               val int54 = primTy_int54
                                                val int64 = primTy_int64
                                                val word64 = primTy_word64
                                                val exn = primTy_exn
@@ -627,6 +630,8 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
            if TypedSyntax.eqTyName (tyname, primTyName_int) then
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_intInf) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else if TypedSyntax.eqTyName (tyname, primTyName_int54) then
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_int64) then
                unify(ctx, env, ctrs) (* do nothing *)

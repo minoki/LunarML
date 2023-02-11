@@ -86,6 +86,7 @@ structure IO
 structure Int
 structure Int16
 structure Int32
+structure Int54
 structure Int64
 structure Int8
 structure IntInf

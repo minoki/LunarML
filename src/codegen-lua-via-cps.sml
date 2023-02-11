@@ -225,6 +225,10 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                        L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
                                    else
                                        L.ConstExp (L.Numeral (Int32.toString x))
+  | doValue ctx (C.Int54Const x) = if x < 0 then
+                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x))))
+                                   else
+                                       L.ConstExp (L.Numeral (Int64.toString x))
   | doValue ctx (C.Int64Const x) = let val suffix = case #targetLuaVersion ctx of
                                                         LUA5_3 => ""
                                                       | LUAJIT => "LL"

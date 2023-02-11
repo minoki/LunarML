@@ -70,7 +70,8 @@ Primitives
 * `WideChar.char`: 16-bit unsigned integer. The sign of zero must be positive.
 * `WideString.string`: 16-bit string (JavaScript's native String).
 * `IntInf.int`: BigInt.
-* `Int64.int`: BigInt.
+* `Int54.int`: 54-bit signed integer, as a subset of Number (close to "safe integer"). The range is `[-(2**53),2**53-1]`. The sign of zero may be negative. Overflows are always checked.
+* `Int64.int`: BigInt. Overflows are always checked.
 * `Word64.word`: BigInt.
 * `'a vector`: Array. Must not be modified.
 * `'a array`: Array.

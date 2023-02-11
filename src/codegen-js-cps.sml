@@ -96,6 +96,10 @@ fun doValue (C.Var vid) = (case VIdToJs vid of
                                    J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
                                else
                                    J.ConstExp (J.Numeral (Int32.toString x))
+  | doValue (C.Int54Const x) = if x < 0 then
+                                   J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (Int64.toString (~ x))))
+                               else
+                                   J.ConstExp (J.Numeral (Int64.toString x))
   | doValue (C.Int64Const x) = if x < 0 then
                                    J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ (Int64.toLarge x)) ^ "n")))
                                else

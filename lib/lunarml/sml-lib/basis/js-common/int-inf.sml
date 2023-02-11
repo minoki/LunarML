@@ -48,6 +48,8 @@ structure IntInfImpl : sig
               include INT_INF
               val fromIntegralReal : real -> int (* the input must be integral *)
               val toReal : int -> real (* use roundTiesToEven *)
+              val fromInt54 : _Prim.Int54.int -> int
+              val unsafeToInt54 : int -> _Prim.Int54.int
           end = struct
 type int = _Prim.IntInf.int
 _equality int = fn (x, y) => _primCall "IntInf.=" (x, y);
@@ -67,6 +69,8 @@ fun toInt (x : int) : Int.int = if LE (minSmallInt, x) andalso LE (x, maxSmallIn
 fun fromInt (x : Int.int) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
 fun toReal (x : int) : real = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
 fun fromIntegralReal (x : real) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.fromReal x])
+fun unsafeToInt54 (x : int) : _Prim.Int54.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
+fun fromInt54 (x : _Prim.Int54.int) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
 val precision : Int.int option = NONE
 val minInt : int option = NONE
 val maxInt : int option = NONE

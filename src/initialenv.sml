@@ -302,6 +302,7 @@ val initialEnv : Typing.Env
                                  ,("vector", { typeFunction = TypeFunction ([tyVarA], vectorOf tyA), valEnv = emptyValEnv })
                                  ,("_Prim.Char16.char", { typeFunction = TypeFunction ([], primTy_char16), valEnv = emptyValEnv })
                                  ,("_Prim.String16.string", { typeFunction = TypeFunction ([], primTy_string16), valEnv = emptyValEnv })
+                                 ,("_Prim.Int54.int", { typeFunction = TypeFunction ([], primTy_int54), valEnv = emptyValEnv })
                                  ,("_Prim.Int64.int", { typeFunction = TypeFunction ([], primTy_int64), valEnv = emptyValEnv })
                                  ,("_Prim.IntInf.int", { typeFunction = TypeFunction ([], primTy_intInf), valEnv = emptyValEnv })
                                  ,("_Prim.Word64.word", { typeFunction = TypeFunction ([], primTy_word64), valEnv = emptyValEnv })
@@ -316,6 +317,7 @@ val initialEnv : Typing.Env
                                   TypedSyntax.TyNameMap.empty
                                   [(primTyName_bool, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_int, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_int54, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_int64, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_intInf, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
@@ -382,6 +384,7 @@ val primOverloadEnv : Typing.Env
 val initialTyNameSet = let open Typing
                        in TypedSyntax.TyNameSet.fromList
                               [primTyName_int
+                              ,primTyName_int54
                               ,primTyName_int64
                               ,primTyName_intInf
                               ,primTyName_word

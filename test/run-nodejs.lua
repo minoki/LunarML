@@ -218,6 +218,7 @@ should_run "mlbasis/should_run/" {
   "int8.sml",
   "int16.sml",
   "int32.sml",
+  "int54.sml",
   "int64.sml",
   "int-inf.sml",
   "int-inf-fib-hex.sml",

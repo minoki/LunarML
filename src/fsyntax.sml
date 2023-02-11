@@ -626,6 +626,14 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                             else
                                                 emitError (ctx, [span], "integer constant out of range")
                                          end
+                                     else if T.eqTyName (tycon, Typing.primTyName_int54) then
+                                         let val lower = ~0x20000000000000 <= value
+                                             val upper = value <= 0x1fffffffffffff
+                                         in if lower andalso upper then
+                                                F.IntConstExp (value, toFTy (ctx, env, ty))
+                                            else
+                                                emitError (ctx, [span], "integer constant out of range")
+                                         end
                                      else if T.eqTyName (tycon, Typing.primTyName_int64) then
                                          let val lower = ~0x8000000000000000 <= value
                                              val upper = value <= 0x7fffffffffffffff

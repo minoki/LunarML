@@ -164,6 +164,62 @@ _overload "Int" [Int32.int] { + = Int32.+
                             };
 
 (* Assume Int is 64-bit *)
+structure Int54 :> INTEGER = struct
+type int = int
+val MAX = 0x1f_ffff_ffff_ffff
+val MIN = ~0x20_0000_0000_0000
+val precision = SOME 54
+val minInt = SOME MIN
+val maxInt = SOME MAX
+fun toInt (x : int) = x
+fun fromInt (x : Int.int) = if MIN <= x andalso x <= MAX then
+                                x
+                            else
+                                raise Overflow
+fun toLarge x = Int.toLarge (toInt x)
+fun fromLarge x = fromInt (Int.fromLarge x)
+val op + = fn (x, y) => fromInt (x + y)
+val op - = fn (x, y) => fromInt (x - y)
+val op * = fn (x, y) => fromInt (x * y)
+val op div = fn (x, y) => fromInt (x div y)
+val op mod = fn (x, y) => fromInt (x mod y)
+val quot = fn (x, y) => fromInt (Int.quot (x, y))
+val rem = fn (x, y) => fromInt (Int.rem (x, y))
+val compare = Int.compare
+val op < = Int.<
+val op <= = Int.<=
+val op > = Int.>
+val op >= = Int.>=
+val ~ = fn x => fromInt (~ x)
+val abs = fn x => fromInt (abs x)
+val min = Int.min
+val max = Int.max
+val sign = Int.sign
+val sameSign = Int.sameSign
+val fmt = Int.fmt
+val toString = Int.toString
+fun scan radix getc strm = case Int.scan radix getc strm of
+                               SOME (x, strm') => SOME (fromInt x, strm')
+                             | NONE => NONE
+fun fromString s = Option.map fromInt (Int.fromString s)
+end;
+_overload "Int" [Int54.int] { + = Int54.+
+                            , - = Int54.-
+                            , * = Int54.*
+                            , div = Int54.div
+                            , mod = Int54.mod
+                            , ~ = Int54.~
+                            , abs = Int54.abs
+                            , < = Int54.<
+                            , <= = Int54.<=
+                            , > = Int54.>
+                            , >= = Int54.>=
+                            , fromInt = Int54.fromInt
+                            , minInt = ~0x20_0000_0000_0000
+                            , maxInt = 0x1f_ffff_ffff_ffff
+                            };
+
+(* Assume Int is 64-bit *)
 structure Int64 :> INTEGER = Int;
 _overload "Int" [Int64.int] { + = Int64.+
                             , - = Int64.-
