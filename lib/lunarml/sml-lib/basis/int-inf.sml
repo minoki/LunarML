@@ -883,7 +883,7 @@ local
 in
 fun toStringAbs words = if Vector.length words = 0 then
                             ""
-                        else if Vector.length words = 1 andalso Vector.sub (words, 0) < ten_to_9 then
+                        else if Vector.length words = 1 then
                             stringFmt ("%u", Vector.sub (words, 0))
                         else
                             let val (q, r) = quotRemAbsSingle (words, ten_to_9)
@@ -894,27 +894,39 @@ fun toString ZERO = "0"
   | toString (POSITIVE words) = toStringAbs words
   | toString (NEGATIVE words) = "~" ^ toStringAbs words
 
-(* precondition: Vector.length words > 0 *)
-fun fmtHexAbs words = let val n = Vector.length words
-                          val last = Vector.sub (words, n - 1)
-                          val lasts = stringFmt ("%X", last)
-                          val middlefmt = "%0" ^ Int.toString (Word.wordSize div 4) ^ "X"
-                          fun loop (xs, i) = if i >= n - 1 then
-                                                 lasts :: xs
-                                             else
-                                                 loop (stringFmt (middlefmt, Vector.sub (words, i)) :: xs, i + 1)
-                      in String.concat (loop ([], 0))
-                      end
+fun toOctStringAbs words = if Vector.length words = 0 then
+                               ""
+                           else if Vector.length words = 1 then
+                               stringFmt ("%o", Vector.sub (words, 0))
+                           else
+                               let val (q, _) = RShiftAbs (words, 0w30)
+                                   val r = Word.andb (Vector.sub (words, 0), 0wx3fffffff)
+                               in toOctStringAbs q ^ stringFmt ("%010o", r)
+                               end
+fun toOctString ZERO = "0"
+  | toOctString (POSITIVE words) = toOctStringAbs words
+  | toOctString (NEGATIVE words) = "~" ^ toOctStringAbs words
+
+(* precondition: Vector.length words > 0, Word.wordSize mod 4 = 0 *)
+fun toHexStringAbs words = let val n = Vector.length words
+                               val last = Vector.sub (words, n - 1)
+                               val lasts = stringFmt ("%X", last)
+                               val middlefmt = "%0" ^ Int.toString (Word.wordSize div 4) ^ "X"
+                               fun loop (xs, i) = if i >= n - 1 then
+                                                      lasts :: xs
+                                                  else
+                                                      loop (stringFmt (middlefmt, Vector.sub (words, i)) :: xs, i + 1)
+                           in String.concat (loop ([], 0))
+                           end
+fun toHexString ZERO = "0"
+  | toHexString (POSITIVE words) = toHexStringAbs words
+  | toHexString (NEGATIVE words) = "~" ^ toHexStringAbs words
 end
 
-fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-  | fmt StringCvt.OCT x = raise Fail "StringCvt.OCT: not implemented yet"
-  | fmt StringCvt.DEC x = toString x
-  | fmt StringCvt.HEX x = (case x of
-                               ZERO => "0"
-                             | POSITIVE words => fmtHexAbs words
-                             | NEGATIVE words => "~" ^ fmtHexAbs words
-                          )
+fun fmt StringCvt.BIN = raise Fail "StringCvt.BIN: not implemented yet"
+  | fmt StringCvt.OCT = toOctString
+  | fmt StringCvt.DEC = toString
+  | fmt StringCvt.HEX = toHexString
 
 local
     open ScanNumUtils
