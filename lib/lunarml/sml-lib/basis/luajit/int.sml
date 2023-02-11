@@ -601,7 +601,7 @@ local
     fun scanDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
                                       SOME (c, strm') => if isDigit c then
-                                                             go1 (unsafeFromValue (Lua.+ (Lua.* (Lua.fromInt radix, toValue x), Lua.fromInt (digitToInt c))), strm')
+                                                             go1 (ADD (MUL (fromInt radix, x), fromInt (digitToInt c)), strm')
                                                          else
                                                              SOME (x, strm)
                                     | NONE => SOME (x, strm)
@@ -615,7 +615,7 @@ local
     fun scanNegativeDigits (radix, isDigit, getc)
         = let fun go1 (x, strm) = case getc strm of
                                       SOME (c, strm') => if isDigit c then
-                                                             go1 (unsafeFromValue (Lua.- (Lua.* (Lua.fromInt radix, toValue x), Lua.fromInt (digitToInt c))), strm')
+                                                             go1 (SUB (MUL (fromInt radix, x), fromInt (digitToInt c)), strm')
                                                          else
                                                              SOME (x, strm)
                                     | NONE => SOME (x, strm)
