@@ -378,6 +378,21 @@ val op > = UncheckedInt54.>
 val op >= = UncheckedInt54.>=
 end
 end;
+_overload "Int" [Int54.int] { + = Int54.+
+                            , - = Int54.-
+                            , * = Int54.*
+                            , div = Int54.div
+                            , mod = Int54.mod
+                            , ~ = Int54.~
+                            , abs = Int54.abs
+                            , < = Int54.<
+                            , <= = Int54.<=
+                            , > = Int54.>
+                            , >= = Int54.>=
+                            , fromInt = Int54.fromInt
+                            , minInt = ~0x20_0000_0000_0000
+                            , maxInt = 0x1f_ffff_ffff_ffff
+                            };
 
 local
     val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
