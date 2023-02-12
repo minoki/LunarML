@@ -40,6 +40,7 @@ js-common/unsafe-extra.sml
 byte.sml
 scan-bool.sml
 scan-text.sml
+js-common/time.sml
 io.sml
 vector-slice.sml
 array-slice.sml
@@ -101,6 +102,7 @@ structure Real
 structure String
 structure StringCvt
 structure Substring
+structure Time
 structure Vector
 structure VectorSlice
 structure WideChar

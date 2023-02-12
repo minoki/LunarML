@@ -103,6 +103,10 @@ structure JavaScript : sig
                                           val asUintN : value
                                       end
                             val Uint8Array : value
+                            val Date : value
+                            structure Date : sig
+                                          val now : value
+                                      end
                         end
           end = struct
 type value = _Prim.JavaScript.value
@@ -209,6 +213,10 @@ val asIntN = LunarML.assumeDiscardable field (BigInt, "asIntN")
 val asUintN = LunarML.assumeDiscardable field (BigInt, "asUintN")
 end
 val Uint8Array = LunarML.assumeDiscardable global "Uint8Array"
+val Date = LunarML.assumeDiscardable global "Date"
+structure Date = struct
+val now = LunarML.assumeDiscardable field (Date, "now")
+end
 end
 fun newObject () = new Lib.Object #[]
 end;

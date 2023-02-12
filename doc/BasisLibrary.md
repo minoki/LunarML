@@ -1080,6 +1080,63 @@ structure CommandLine : sig
 end
 ```
 
+## structure Time - partial
+
+```
+signature TIME = sig
+    eqtype time
+    exception Time
+    val zeroTime : time
+    val fromReal : LargeReal.real -> time
+    val toReal : time -> LargeReal.real
+    val toSeconds : time -> LargeInt.int
+    val toMilliseconds : time -> LargeInt.int
+    val toMicroseconds : time -> LargeInt.int
+    val toNanoseconds : time -> LargeInt.int
+    val fromSeconds : LargeInt.int -> time
+    val fromMilliseconds : LargeInt.int -> time
+    val fromMicroseconds : LargeInt.int -> time
+    val fromNanoseconds : LargeInt.int -> time
+    val + : time * time -> time
+    val - : time * time -> time
+    val compare : time * time -> order
+    val < : time * time -> bool
+    val <= : time * time -> bool
+    val > : time * time -> bool
+    val >= : time * time -> bool
+    val now : unit -> time
+    val fmt : int -> time -> string
+    val toString : time -> string
+    (*
+    val scan : (char, 'a) StringCvt.reader -> (time, 'a) StringCvt.reader
+    val fromString : string -> time option
+    *)
+end
+structure Time :> TIME
+```
+
+## structure Timer - complete
+
+```
+signature TIMER = sig
+    type cpu_timer
+    type real_timer
+    val startCPUTimer : unit -> cpu_timer
+    val checkCPUTimes : cpu_timer -> { nongc : { usr : Time.time, sys : Time.time }
+                                     , gc : { usr : Time.time, sys : Time.time }
+                                     }
+    val checkCPUTimer : cpu_timer -> { usr : Time.time, sys : Time.time }
+    val checkGCTime : cpu_timer -> Time.time
+    val totalCPUTimer : unit -> cpu_timer
+    val startRealTimer : unit -> real_timer
+    val checkRealTimer : real_timer -> Time.time
+    val totalRealTimer : unit -> real_timer
+end
+structure Timer :> TIMER
+```
+
+The GC time returned by this structure is always zero.
+
 ## Not implemented yet
 
 ```sml
@@ -1103,8 +1160,4 @@ structure WideText :> TEXT where ...
 signature TEXT_IO
 structure WideTextIO :> TEXT_IO
 signature TEXT_STREAM_IO
-signature Time
-structure Time :> TIME
-signature TIMER
-structure Timer :> TIMER
 ```

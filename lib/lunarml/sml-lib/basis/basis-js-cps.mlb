@@ -3,6 +3,7 @@ local
 ann "allowPrim true" "allowOverload true" in
 delim-cont.sml
 js-cps/javascript-callback.sml
+nodejs/timer.sml
 nodejs/text-io-async.sml
 nodejs/os-async.sml
 nodejs/command-line.sml
@@ -65,6 +66,8 @@ structure String
 structure StringCvt
 structure Substring
 structure TextIO
+structure Time
+structure Timer
 structure Vector
 structure VectorSlice
 structure WideChar

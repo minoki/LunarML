@@ -2,6 +2,7 @@ basis-js-common.mlb
 local
 ann "allowPrim true" "allowOverload true" in
 js/javascript-callback.sml
+nodejs/timer.sml
 nodejs/text-io.sml
 nodejs/os.sml
 nodejs/command-line.sml
@@ -64,6 +65,8 @@ structure String
 structure StringCvt
 structure Substring
 structure TextIO
+structure Time
+structure Timer
 structure Vector
 structure VectorSlice
 structure WideChar

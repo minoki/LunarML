@@ -39,6 +39,8 @@ real.sml
 lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml
+luajit/time.sml
+lua/timer.sml
 lua/text-io.sml
 lua/os.sml
 lua/command-line.sml
@@ -102,6 +104,8 @@ structure String
 structure StringCvt
 structure Substring
 structure TextIO
+structure Time
+structure Timer
 structure Vector
 structure VectorSlice
 structure Word
