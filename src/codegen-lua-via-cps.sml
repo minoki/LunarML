@@ -603,6 +603,12 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                ) ([], []) defs
       in L.LocalStat (decs, []) :: assignments @ doCExp ctx env cont
       end
+  | doCExp ctx env (C.LetCont { name, params, body, cont = app as C.App { applied, cont, args } })
+    = if cont = name then
+          L.LocalStat (List.map (fn p => (p, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+          :: doCExp ctx env body
+      else
+          doCExp ctx env app (* dead continuation elimination *)
   | doCExp ctx env (C.LetCont { name, params, body, cont })
     = let val label = doLabel name
           val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (fn p => VIdToLua (ctx, p)) params })

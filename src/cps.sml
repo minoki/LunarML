@@ -6,7 +6,7 @@ structure CSyntax = struct
 type Var = TypedSyntax.VId
 type Tag = string
 structure CVar :> sig
-              type t
+              eqtype t
               type ord_key = t
               val compare : ord_key * ord_key -> order
               val fromInt : int -> t
