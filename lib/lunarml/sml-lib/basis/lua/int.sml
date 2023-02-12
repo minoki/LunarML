@@ -236,3 +236,9 @@ _overload "Int" [Int64.int] { + = Int64.+
                             , minInt = ~0x8000_0000_0000_0000
                             , maxInt = 0x7fff_ffff_ffff_ffff
                             };
+
+structure Lua = struct
+open Lua
+val fromInt54 : Int54.int -> value = unsafeToValue
+val fromInt64 : Int64.int -> value = unsafeToValue
+end;

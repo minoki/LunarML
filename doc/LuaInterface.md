@@ -22,6 +22,8 @@ structure Lua : sig
   val isFalsy : value -> bool  (* not x *)
   val fromBool : bool -> value
   val fromInt : int -> value
+  val fromInt54 : Int54.int -> value
+  val fromInt64 : Int64.int -> value
   val fromWord : word -> value
   val fromReal : real -> value
   val fromString : string -> value
