@@ -113,7 +113,12 @@ fun optimizeCps (ctx : { nextVId : int ref }) cexp 0 = cexp
                                  val cusage = ref CSyntax.CVarMap.empty
                                  val crusage = ref CSyntax.CVarMap.empty
                                  val () = CpsSimplify.usageInCExp (usage, rusage, cusage, crusage, cexp)
-                             in optimizeCps ctx (CpsSimplify.simplifyCExp (ctx, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, !usage, !rusage, !cusage, !crusage, cexp)) (n - 1)
+                                 val ctx' = { nextVId = #nextVId ctx, simplificationOccurred = ref false }
+                                 val cexp = CpsSimplify.simplifyCExp (ctx', TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, !usage, !rusage, !cusage, !crusage, cexp)
+                             in if !(#simplificationOccurred ctx') then
+                                    optimizeCps ctx cexp (n - 1)
+                                else
+                                    cexp
                              end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName nextId decs
     = let val base = OS.Path.base fileName
@@ -143,7 +148,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      end
           val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId }, cexp)
+          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -202,7 +207,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      end
           val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId }, cexp)
+          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
           val cexp = optimizeCps { nextVId = nextId } cexp (3 * (#optimizationLevel opts + 3))
           val contEscapeMap = CpsAnalyze.contEscape cexp
           val base = OS.Path.base fileName

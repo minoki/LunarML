@@ -448,17 +448,17 @@ structure CpsSimplify = struct
 local structure F = FSyntax
       structure C = CSyntax
 in
-type Context = { nextVId : int ref }
+type Context = { nextVId : int ref, simplificationOccurred : bool ref }
 fun genContSym (ctx : Context) : CSyntax.CVar
     = let val n = !(#nextVId ctx)
           val _ = #nextVId ctx := n + 1
       in CSyntax.CVar.fromInt n
       end
-fun renewVId ({ nextVId } : Context, TypedSyntax.MkVId (name, _))
+fun renewVId ({ nextVId, ... } : Context, TypedSyntax.MkVId (name, _))
     = let val n = !nextVId
       in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
       end
-fun renewCVar ({ nextVId } : Context, _ : C.CVar)
+fun renewCVar ({ nextVId, ... } : Context, _ : C.CVar)
     = let val n = !nextVId
       in C.CVar.fromInt n before (nextVId := n + 1)
       end
@@ -835,13 +835,18 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
           C.Let { exp, result, cont } =>
           let val exp = substSimpleExp (subst, csubst, exp)
           in case simplifySimpleExp (env, exp) of
-                 VALUE v => let val subst = case result of
+                 VALUE v => let val () = #simplificationOccurred ctx := true
+                                val subst = case result of
                                                 SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
                                               | NONE => subst
                             in simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
                             end
                | simplified =>
-                 let val exp = case simplified of
+                 let val () = case simplified of
+                                  SIMPLE_EXP _ => #simplificationOccurred ctx := true
+                                | VALUE _ => #simplificationOccurred ctx := true (* shoud not occur *)
+                                | NOT_SIMPLIFIED => ()
+                     val exp = case simplified of
                                    SIMPLE_EXP exp => exp
                                  | _ => exp
                  in case (exp, result) of
@@ -891,7 +896,8 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                  C.Var applied =>
                  (case TypedSyntax.VIdMap.find (env, applied) of
                       SOME { exp = SOME (C.Abs { contParam, params, body }), ... } =>
-                      let val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
+                      let val () = #simplificationOccurred ctx := true
+                          val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
                           val csubst = C.CVarMap.insert (csubst, contParam, cont)
                       in case TypedSyntax.VIdMap.find (usage, applied) of
                              SOME (ref ONCE_AS_CALLEE) => substCExp (subst, csubst, body) (* no alpha conversion *)
@@ -900,7 +906,9 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                     | SOME { exp, isDiscardableFunction = true } =>
                       (case C.CVarMap.find (cenv, cont) of
                            SOME (params, _) => if List.all (fn p => case TypedSyntax.VIdMap.find (usage, p) of SOME (ref NEVER) => true | _ => false) params then
-                                                   C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
+                                                   ( #simplificationOccurred ctx := true
+                                                   ; C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
+                                                   )
                                                else
                                                    C.App { applied = C.Var applied, cont = cont, args = args }
                          | _ => C.App { applied = C.Var applied, cont = cont, args = args }
@@ -914,7 +922,8 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
               val args = List.map (substValue subst) args
           in case C.CVarMap.find (cenv, applied) of
                  SOME (params, SOME body) =>
-                 let val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
+                 let val () = #simplificationOccurred ctx := true
+                     val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
                  in case C.CVarMap.find (cusage, applied) of
                         SOME (ref C_ONCE_DIRECT) => substCExp (subst, csubst, body) (* no alpha conversion *)
                       | _ => alphaConvert (ctx, subst, csubst, body)
@@ -923,8 +932,8 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
           end
         | C.If { cond, thenCont, elseCont } =>
           (case substValue subst cond of
-               C.BoolConst true => simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont)
-             | C.BoolConst false => simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont)
+               C.BoolConst true => (#simplificationOccurred ctx := true; simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont))
+             | C.BoolConst false => (#simplificationOccurred ctx := true; simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont))
              | cond => C.If { cond = cond
                             , thenCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, thenCont)
                             , elseCont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, elseCont)
@@ -936,11 +945,16 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                        , cont = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
                        }
           else
-              simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
+              ( #simplificationOccurred ctx := true
+              ; simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
+              )
         | C.LetCont { name, params, body, cont } =>
           (case C.CVarMap.find (cusage, name) of
-               SOME (ref C_NEVER) => simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
-             | SOME (ref C_ONCE_DIRECT) => let val body' = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body)
+               SOME (ref C_NEVER) => ( #simplificationOccurred ctx := true
+                                     ; simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
+                                     )
+             | SOME (ref C_ONCE_DIRECT) => let val () = #simplificationOccurred ctx := true
+                                               val body' = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body)
                                                val cenv' = C.CVarMap.insert (cenv, name, (params, SOME body'))
                                            in simplifyCExp (ctx, env, cenv', subst, csubst, usage, rusage, cusage, crusage, cont)
                                            end
@@ -964,7 +978,9 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                               }
               end
           else
-              simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
+              ( #simplificationOccurred ctx := true
+              ; simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, cont)
+              )
         | C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut } =>
           C.Handle { body = simplifyCExp (ctx, env, C.CVarMap.empty (* do not inline across 'handle' *), subst, csubst, usage, rusage, cusage, crusage, body)
                    , handler = (e, simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, h))
