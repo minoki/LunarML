@@ -462,19 +462,29 @@ fun renewCVar ({ nextVId, ... } : Context, _ : C.CVar)
     = let val n = !nextVId
       in C.CVar.fromInt n before (nextVId := n + 1)
       end
-fun sizeOfSimpleExp (C.PrimOp { primOp = _, tyargs = _, args }) = List.length args
-  | sizeOfSimpleExp (C.Record fields) = Syntax.LabelMap.numItems fields
-  | sizeOfSimpleExp (C.ExnTag _) = 1
-  | sizeOfSimpleExp (C.Projection _) = 1
-  | sizeOfSimpleExp (C.Abs { contParam, params, body }) = sizeOfCExp body
-and sizeOfCExp (C.Let { exp, result = _, cont }) = sizeOfSimpleExp exp + sizeOfCExp cont
-  | sizeOfCExp (C.App { applied, cont, args }) = List.length args
-  | sizeOfCExp (C.AppCont { applied, args }) = List.length args
-  | sizeOfCExp (C.If { cond, thenCont, elseCont }) = 1 + sizeOfCExp thenCont + sizeOfCExp elseCont
-  | sizeOfCExp (C.LetRec { defs, cont }) = List.foldl (fn ((_, _, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
-  | sizeOfCExp (C.LetCont { name, params, body, cont }) = sizeOfCExp body + sizeOfCExp cont
-  | sizeOfCExp (C.LetRecCont { defs, cont }) = List.foldl (fn ((_, _, body), acc) => acc + sizeOfCExp body) (sizeOfCExp cont) defs
-  | sizeOfCExp (C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut }) = 1 + sizeOfCExp body + sizeOfCExp h
+fun sizeOfSimpleExp (e, threshold)
+    = if threshold < 0 then
+          threshold
+      else
+          case e of
+              C.PrimOp { primOp = _, tyargs = _, args } => threshold - List.length args
+            | C.Record fields => threshold - Syntax.LabelMap.numItems fields
+            | C.ExnTag _ => threshold - 1
+            | C.Projection _ => threshold - 1
+            | C.Abs { contParam, params, body } => sizeOfCExp (body, threshold)
+and sizeOfCExp (e, threshold)
+    = if threshold < 0 then
+          threshold
+      else
+          case e of
+              C.Let { exp, result = _, cont } => sizeOfCExp (cont, sizeOfSimpleExp (exp, threshold))
+            | C.App { applied, cont, args } => threshold - List.length args
+            | C.AppCont { applied, args } => threshold - List.length args
+            | C.If { cond, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
+            | C.LetRec { defs, cont } => List.foldl (fn ((_, _, _, body), t) => sizeOfCExp (body, t)) (sizeOfCExp (cont, threshold)) defs
+            | C.LetCont { name, params, body, cont } => sizeOfCExp (body, sizeOfCExp (cont, threshold))
+            | C.LetRecCont { defs, cont } => List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) (sizeOfCExp (cont, threshold)) defs
+            | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
 datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
 datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
 fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
@@ -859,7 +869,7 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                                                           end
                            | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body)
                                       val exp = C.Abs { contParam = contParam, params = params, body = body }
-                                      val env = if sizeOfCExp body <= 10 then (* Inline small functions *)
+                                      val env = if sizeOfCExp (body, 10) >= 0 then (* Inline small functions *)
                                                     TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp, isDiscardableFunction = isDiscardableExp (env, body) })
                                                 else
                                                     TypedSyntax.VIdMap.insert (env, result, { exp = NONE, isDiscardableFunction = isDiscardableExp (env, body) })
@@ -959,7 +969,7 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                                            in simplifyCExp (ctx, env, cenv', subst, csubst, usage, rusage, cusage, crusage, cont)
                                            end
              | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body)
-                        val cenv = if sizeOfCExp body <= 3 then (* Inline small continuations *)
+                        val cenv = if sizeOfCExp (body, 3) >= 0 then (* Inline small continuations *)
                                        C.CVarMap.insert (cenv, name, (params, SOME body))
                                    else
                                        C.CVarMap.insert (cenv, name, (params, NONE))
