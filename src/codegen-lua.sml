@@ -54,6 +54,10 @@ val builtins
                     ,(VId_Array_array, "_Array_array")
                     ,(VId_Array_fromList, "_VectorOrArray_fromList")
                     ,(VId_Array_tabulate, "_VectorOrArray_tabulate")
+                    (* Delimited continuations *)
+                    ,(VId_DelimCont_pushPrompt, "_pushPrompt")
+                    ,(VId_DelimCont_withSubCont, "_withSubCont")
+                    ,(VId_DelimCont_pushSubCont, "_pushSubCont")
                     (* Lua interface *)
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
@@ -215,7 +219,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue ctx (C.BoolConst false) = L.ConstExp L.False
   | doValue ctx (C.BoolConst true) = L.ConstExp L.True
   | doValue ctx (C.NativeIntConst x) = if x < 0 then
-                                           if x = ~0x800000000000 then
+                                           if x = ~0x8000000000000000 then
                                                L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
                                            else
                                                L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
@@ -233,7 +237,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                                         LUA5_3 => ""
                                                       | LUAJIT => "LL"
                                    in if x < 0 then
-                                          if x = ~0x800000000000 then
+                                          if x = ~0x8000000000000000 then
                                               L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
                                           else
                                               L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x) ^ suffix)))
@@ -524,18 +528,6 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                   end
                                               )
            | Primitives.DelimCont_newPromptTag => ConstStatOrExpStat (L.TableExp (vector [])) @ doCExp ctx env cont
-           | Primitives.DelimCont_pushPrompt => if #hasDelimitedContinuations ctx then
-                                                    doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushPrompt"), vector [promptTag, action]), IMPURE)
-                                                else
-                                                    raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
-           | Primitives.DelimCont_withSubCont => if #hasDelimitedContinuations ctx then
-                                                     doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_withSubCont"), vector [promptTag, action]), IMPURE)
-                                                 else
-                                                     raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
-           | Primitives.DelimCont_pushSubCont => if #hasDelimitedContinuations ctx then
-                                                     doBinaryExp (fn (subcont, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushSubCont"), vector [subcont, action]), IMPURE)
-                                                 else
-                                                     raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
            | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on Lua backend")
       end
