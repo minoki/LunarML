@@ -413,6 +413,19 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
          | F.PackExp { payloadTy, exp, packageTy } => transformX (ctx, env) exp k
 fun transformDecs (ctx : Context, env) ([] : F.Dec list) (k : C.CVar) : C.CExp
     = C.AppCont { applied = k, args = [] } (* apply continuation *)
+  | transformDecs (ctx, env) [F.ExportValue exp] k
+    = transform (ctx, env) exp { resultHint = NONE (* "export"? *) }
+                (fn v => C.AppCont { applied = k, args = [v] })
+  | transformDecs (ctx, env) [F.ExportModule items] k
+    = mapCont (fn ((name, exp), cont) => transform (ctx, env) exp { resultHint = NONE (* name? *) } (fn v => cont (name, v)))
+              (Vector.foldr (op ::) [] items)
+              (fn items => let val result = genSym ctx (* "export"? *)
+                           in C.Let { exp = C.Record (List.foldl (fn ((name, v), m) => Syntax.LabelMap.insert (m, Syntax.IdentifierLabel name, v)) Syntax.LabelMap.empty items)
+                                    , result = SOME result
+                                    , cont = C.AppCont { applied = k, args = [C.Var result] }
+                                    }
+                           end
+              )
   | transformDecs (ctx, env) (dec :: decs) k
     = (case dec of
            F.ValDec (vid, _, exp) => transform (ctx, env) exp { resultHint = SOME vid }
@@ -437,8 +450,8 @@ fun transformDecs (ctx : Context, env) ([] : F.Dec list) (k : C.CVar) : C.CExp
                                                                 , result = SOME tagName
                                                                 , cont = transformDecs (ctx, env) decs k
                                                                 }
-         | F.ExportValue _ => raise Fail "ExportValue in CPS: not supported"
-         | F.ExportModule _ => raise Fail "ExportModule in CPS: not supported"
+         | F.ExportValue exp => raise Fail "ExportValue must be the last declaration"
+         | F.ExportModule _ => raise Fail "ExportModule must be the last declaration"
          | F.GroupDec (_, decs') => transformDecs (ctx, env) (decs' @ decs) k
       )
 end
