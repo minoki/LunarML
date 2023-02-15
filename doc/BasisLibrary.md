@@ -82,7 +82,7 @@ val o : ('b -> 'c) * ('a -> 'b) -> 'a -> c = General.o
 val ord : char -> int = Char.ord
 val print : string -> unit = TextIO.print
 val real : int -> real = Real.fromInt
-(* val ref *)
+(* val ref : defined as a constructor *)
 val rev : 'a list -> 'a list = List.rev
 val round : real -> int = Real.round
 val size : string -> int = String.size
@@ -978,13 +978,13 @@ structure OS : sig
     (* val readDir : dirstream -> string option *)
     (* val rewindDir : dirstream -> unit *)
     (* val closeDir : dirstream -> unit *)
-    val chDir : string -> unit (* requires LuaFileSystem *)
-    val getDir : unit -> string (* requires LuaFileSystem *)
-    val mkDir : string -> unit (* requires LuaFileSystem *)
-    val rmDir : string -> unit (* requires LuaFileSystem *)
-    val isDir : string -> bool (* requires LuaFileSystem *)
-    val isLink : string -> bool (* requires LuaFileSystem *)
-    val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
+    val chDir : string -> unit (* Lua backend: requires LuaFileSystem *)
+    val getDir : unit -> string (* Lua backend: requires LuaFileSystem *)
+    val mkDir : string -> unit (* Lua backend: requires LuaFileSystem *)
+    val rmDir : string -> unit (* Lua backend: requires LuaFileSystem *)
+    val isDir : string -> bool (* Lua backend: requires LuaFileSystem *)
+    val isLink : string -> bool (* Lua backend: requires LuaFileSystem *)
+    val readLink : string -> string (* Lua backend: requires LuaFileSystem 1.7.0 or later *)
     (* val fullPath : string -> string *)
     (* val realPath : string -> string *)
     (* val modTime : string -> Time.time *)
@@ -1082,55 +1082,53 @@ end
 
 ## structure Time - partial
 
-```
+```sml
 signature TIME = sig
-    eqtype time
-    exception Time
-    val zeroTime : time
-    val fromReal : LargeReal.real -> time
-    val toReal : time -> LargeReal.real
-    val toSeconds : time -> LargeInt.int
-    val toMilliseconds : time -> LargeInt.int
-    val toMicroseconds : time -> LargeInt.int
-    val toNanoseconds : time -> LargeInt.int
-    val fromSeconds : LargeInt.int -> time
-    val fromMilliseconds : LargeInt.int -> time
-    val fromMicroseconds : LargeInt.int -> time
-    val fromNanoseconds : LargeInt.int -> time
-    val + : time * time -> time
-    val - : time * time -> time
-    val compare : time * time -> order
-    val < : time * time -> bool
-    val <= : time * time -> bool
-    val > : time * time -> bool
-    val >= : time * time -> bool
-    val now : unit -> time
-    val fmt : int -> time -> string
-    val toString : time -> string
-    (*
-    val scan : (char, 'a) StringCvt.reader -> (time, 'a) StringCvt.reader
-    val fromString : string -> time option
-    *)
+  eqtype time
+  exception Time
+  val zeroTime : time
+  val fromReal : LargeReal.real -> time
+  val toReal : time -> LargeReal.real
+  val toSeconds : time -> LargeInt.int
+  val toMilliseconds : time -> LargeInt.int
+  val toMicroseconds : time -> LargeInt.int
+  val toNanoseconds : time -> LargeInt.int
+  val fromSeconds : LargeInt.int -> time
+  val fromMilliseconds : LargeInt.int -> time
+  val fromMicroseconds : LargeInt.int -> time
+  val fromNanoseconds : LargeInt.int -> time
+  val + : time * time -> time
+  val - : time * time -> time
+  val compare : time * time -> order
+  val < : time * time -> bool
+  val <= : time * time -> bool
+  val > : time * time -> bool
+  val >= : time * time -> bool
+  val now : unit -> time
+  val fmt : int -> time -> string
+  val toString : time -> string
+  (* val scan : (char, 'a) StringCvt.reader -> (time, 'a) StringCvt.reader *)
+  (* val fromString : string -> time option *)
 end
 structure Time :> TIME
 ```
 
 ## structure Timer - complete
 
-```
+```sml
 signature TIMER = sig
-    type cpu_timer
-    type real_timer
-    val startCPUTimer : unit -> cpu_timer
-    val checkCPUTimes : cpu_timer -> { nongc : { usr : Time.time, sys : Time.time }
-                                     , gc : { usr : Time.time, sys : Time.time }
-                                     }
-    val checkCPUTimer : cpu_timer -> { usr : Time.time, sys : Time.time }
-    val checkGCTime : cpu_timer -> Time.time
-    val totalCPUTimer : unit -> cpu_timer
-    val startRealTimer : unit -> real_timer
-    val checkRealTimer : real_timer -> Time.time
-    val totalRealTimer : unit -> real_timer
+  type cpu_timer
+  type real_timer
+  val startCPUTimer : unit -> cpu_timer
+  val checkCPUTimes : cpu_timer -> { nongc : { usr : Time.time, sys : Time.time }
+                                   , gc : { usr : Time.time, sys : Time.time }
+                                   }
+  val checkCPUTimer : cpu_timer -> { usr : Time.time, sys : Time.time }
+  val checkGCTime : cpu_timer -> Time.time
+  val totalCPUTimer : unit -> cpu_timer
+  val startRealTimer : unit -> real_timer
+  val checkRealTimer : real_timer -> Time.time
+  val totalRealTimer : unit -> real_timer
 end
 structure Timer :> TIMER
 ```
