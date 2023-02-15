@@ -8,15 +8,12 @@ else
 end
 local compiler = arg[1] or "../bin/lunarml"
 local lua_interpreter = arg[2] or "lua"
-local via_cps = arg[3] == "via-cps"
 local continuations_mode = arg[3] == "continuations"
 local luajit_mode = arg[3] == "luajit"
-local outext = via_cps and ".via-cps.lua" or (continuations_mode and ".continuations.lua" or (luajit_mode and ".luajit.lua" or ".lua"))
+local outext = (continuations_mode and ".continuations.lua" or (luajit_mode and ".luajit.lua" or ".lua"))
 function compile(file, outfile)
   local h
-  if via_cps then
-    h = io.popen(string.format("\"%s\" compile --lua-via-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
-  elseif continuations_mode then
+  if continuations_mode then
     h = io.popen(string.format("\"%s\" compile --lua-continuations --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   elseif luajit_mode then
     h = io.popen(string.format("\"%s\" compile --luajit --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")

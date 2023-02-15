@@ -39,7 +39,6 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
 datatype dump_mode = NO_DUMP | DUMP_INITIAL | DUMP_FINAL
 datatype lua_runtime = LUA_PLAIN | LUA_CONTINUATIONS
 datatype backend = BACKEND_LUA of lua_runtime
-                 | BACKEND_LUA_VIA_CPS of lua_runtime
                  | BACKEND_LUAJIT
                  | BACKEND_JS
                  | BACKEND_JS_CPS
@@ -68,13 +67,6 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
                             , maxInt = SOME 0x7fffffffffffffff
                             , wordSize = 64
                             }
-         | BACKEND_LUA_VIA_CPS _ => { defaultInt = TargetInfo.NATIVE_INT
-                                    , defaultWord = TargetInfo.NATIVE_WORD
-                                    , datatypeTag = TargetInfo.STRING8
-                                    , minInt = SOME ~0x8000000000000000
-                                    , maxInt = SOME 0x7fffffffffffffff
-                                    , wordSize = 64
-                                    }
          | BACKEND_LUAJIT => { defaultInt = TargetInfo.INT32
                              , defaultWord = TargetInfo.WORD32
                              , datatypeTag = TargetInfo.STRING8
@@ -132,27 +124,6 @@ fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                     cexp
                              end
 fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName nextId decs
-    = let val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
-                                               , file = case runtime of
-                                                            LUA_PLAIN => "mlinit.lua"
-                                                          | LUA_CONTINUATIONS => "mlinit-continuations.lua"
-                                               }
-          val mlinit = readFile mlinit_lua
-          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3, hasDelimitedContinuations = runtime = LUA_CONTINUATIONS }
-          val lua = case runtime of
-                        LUA_PLAIN => CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
-                      | LUA_CONTINUATIONS => CodeGenLua.doProgramWithContinuations luactx CodeGenLua.initialEnv decs
-          val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
-          val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
-          val lua = LuaWriter.doChunk lua
-          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
-          val () = TextIO.output (outs, mlinit)
-          val () = TextIO.output (outs, lua)
-          val () = TextIO.closeOut outs
-      in ()
-      end
-  | emit (opts as { backend = BACKEND_LUA_VIA_CPS runtime, ... } : options) targetInfo fileName nextId decs
     = let val cont = let val n = !nextId
                          val _ = nextId := n + 1
                      in CSyntax.CVar.fromInt n
@@ -175,10 +146,10 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                                                           | LUA_CONTINUATIONS => "mlinit-continuations.lua"
                                                }
           val mlinit = readFile mlinit_lua
-          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLuaViaCps.LUA5_3, hasDelimitedContinuations = runtime = LUA_CONTINUATIONS }
+          val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3, hasDelimitedContinuations = runtime = LUA_CONTINUATIONS }
           val lua = case runtime of
-                        LUA_PLAIN => CodeGenLuaViaCps.doProgram luactx cont cexp
-                      | LUA_CONTINUATIONS => CodeGenLuaViaCps.doProgramWithContinuations luactx cont cexp
+                        LUA_PLAIN => CodeGenLua.doProgram luactx cont cexp
+                      | LUA_CONTINUATIONS => CodeGenLua.doProgramWithContinuations luactx cont cexp
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val lua = LuaTransform.InsertDo.doBlock (0, lua) (* TODO: pre-declared locals *)
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
@@ -200,19 +171,47 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
       in ()
       end
   | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName nextId decs
-    = let val base = OS.Path.base fileName
-          val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-luajit.lua" }
+    = let val cont = let val n = !nextId
+                         val _ = nextId := n + 1
+                     in CSyntax.CVar.fromInt n
+                     end
+          val timer = Timer.startCPUTimer ()
+          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
+          val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val () = if #printTimings opts then
+                       print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
+                   else
+                       ()
+          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
+          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
+          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
+          val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val base = OS.Path.base fileName
+          val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
+                                               , file = "mlinit-luajit.lua"
+                                               }
           val mlinit = readFile mlinit_lua
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT, hasDelimitedContinuations = false }
-          val lua = CodeGenLua.doProgram luactx CodeGenLua.initialEnv decs
+          val lua = CodeGenLua.doProgram luactx cont cexp
+          val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val lua = LuaTransform.LuaJITFixup.doBlock { nextId = nextId, maxUpvalue = 60 } lua
+          val lua = LuaTransform.InsertDo.doBlock (0, lua) (* TODO: pre-declared locals *)
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
+          val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val lua = LuaWriter.doChunk lua
+          val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
           val () = TextIO.output (outs, mlinit)
           val () = TextIO.output (outs, lua)
           val () = TextIO.closeOut outs
+          val () = if #printTimings opts then
+                       print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n\
+                              \[TIME] Lua codegen: " ^ LargeInt.toString (codegenTime - optTime) ^ " us\n\
+                              \[TIME] Lua transformation: " ^ LargeInt.toString (codetransTime - codegenTime) ^ " us\n\
+                              \[TIME] Lua writer: " ^ LargeInt.toString (writeTime - codetransTime) ^ " us\n")
+                   else
+                       ()
       in ()
       end
   | emit (opts as { backend = BACKEND_JS, ... }) targetInfo fileName nextId decs
@@ -271,8 +270,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
 fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Code)
     = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUA_VIA_CPS _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
-                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_LUA_VIA_CPS LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
+                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
+                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
                                    ]
           val targetInfo = getTargetInfo opts
           val ctx = { driverContext = Driver.newContext targetInfo
@@ -319,7 +318,6 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                  ; OS.Process.exit OS.Process.failure
                  )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
-               | CodeGenLuaViaCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJsCps.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 fun handleInputFile opts [file] = if String.isSuffix ".sml" file then
@@ -381,7 +379,6 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_LIB (* --lib *)
                 | OPT_TARGET_LUA (* --lua *)
                 | OPT_TARGET_LUA_CONTINUATIONS (* --lua-continuations *)
-                | OPT_TARGET_LUA_VIA_CPS (* --lua-via-cps *)
                 | OPT_TARGET_LUAJIT (* --luajit *)
                 | OPT_TARGET_JS (* --js *)
                 | OPT_TARGET_JS_CPS (* --js-cps *)
@@ -398,7 +395,6 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--exe", SIMPLE OPT_EXE)
                   ,(LONG "--lib", SIMPLE OPT_LIB)
                   ,(LONG "--lua", SIMPLE OPT_TARGET_LUA)
-                  ,(LONG "--lua-via-cps", SIMPLE OPT_TARGET_LUA_VIA_CPS)
                   ,(LONG "--lua-continuations", SIMPLE OPT_TARGET_LUA_CONTINUATIONS)
                   ,(LONG "--luajit", SIMPLE OPT_TARGET_LUAJIT)
                   ,(LONG "--js", SIMPLE OPT_TARGET_JS)
@@ -432,7 +428,6 @@ fun parseArgs (opts : options) args
                                      | SOME _ => showMessageAndFail "--exe or --lib was given multiple times.\n"
                                   )
         | SOME (OPT_TARGET_LUA, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
-        | SOME (OPT_TARGET_LUA_VIA_CPS, args) => parseArgs (S.set.backend (BACKEND_LUA_VIA_CPS LUA_PLAIN) opts) args
         | SOME (OPT_TARGET_LUA_CONTINUATIONS, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
         | SOME (OPT_TARGET_LUAJIT, args) => parseArgs (S.set.backend BACKEND_LUAJIT opts) args
         | SOME (OPT_TARGET_JS, args) => parseArgs (S.set.backend BACKEND_JS opts) args

@@ -14,8 +14,6 @@ jobs:
         run: make
       - name: Test (Lua)
         run: make test
-      - name: Test (Lua via CPS)
-        run: make test-lua-via-cps
       - name: Test (LuaJIT)
         run: make test-luajit
         env:

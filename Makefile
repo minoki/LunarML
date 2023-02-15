@@ -35,7 +35,6 @@ sources = \
   src/lua-syntax.sml \
   src/lua-transform.sml \
   src/codegen-lua.sml \
-  src/codegen-lua-via-cps.sml \
   src/js-syntax.sml \
   src/js-transform.sml \
   src/codegen-js.sml \
@@ -74,9 +73,6 @@ src/command-line-settings.sml: util/record.lua Makefile
 test: bin/lunarml
 	$(LUA) test/run.lua bin/lunarml $(LUA)
 
-test-lua-via-cps: bin/lunarml
-	$(LUA) test/run.lua bin/lunarml $(LUA) via-cps
-
 test-lua-continuations: bin/lunarml
 	$(LUA) test/run.lua bin/lunarml $(LUA) continuations
 
@@ -93,11 +89,6 @@ validate-lua: bin/lunarml
 	bin/lunarml compile -o lunarml.gen2.lua --print-timings LunarML.mlb
 	$(LUA) lunarml.gen2.lua -Blib/lunarml compile -o lunarml.gen3.lua --print-timings LunarML.mlb
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
-
-validate-lua-via-cps: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2-via-cps.lua --lua-via-cps --print-timings LunarML.mlb
-	$(LUA) lunarml.gen2-via-cps.lua -Blib/lunarml compile -o lunarml.gen3-via-cps.lua --lua-via-cps --print-timings LunarML.mlb
-	diff --report-identical-files lunarml.gen2-via-cps.lua lunarml.gen3-via-cps.lua
 
 validate-luajit: bin/lunarml
 	bin/lunarml compile -o lunarml.gen2-luajit.lua --luajit --print-timings LunarML.mlb

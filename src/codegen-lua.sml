@@ -1,23 +1,9 @@
 (*
- * Copyright (c) 2022 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure CodeGenLua = struct
 exception CodeGenError of string
-(* Mapping of types:
- * SML -> Lua
- * int -> integer
- * word -> integer
- * real -> number
- * string -> string
- * char -> 8-bit unsigned integer
- * exn -> ???
- * bool -> boolean
- * ref -> {tag = "ref", payload = <mutable> ...}
- * list -> nil | { [1] = <head>, [2] = <tail> }
- * record { label1 = ..., label2 = ... } -> table
- * function -> function
- *)
 
 datatype target_lua_version = LUA5_3 | LUAJIT
 type Context = { nextLuaId : int ref
@@ -28,11 +14,8 @@ type Context = { nextLuaId : int ref
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* boolean *)
-                     (VId_true, "true") (* boolean literal *)
-                    ,(VId_false, "false") (* boolean literal *)
-                    (* list *)
-                    ,(VId_nil, "nil")
+                    [(* list *)
+                     (VId_nil, "nil")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -102,11 +85,8 @@ val builtins
 val builtinsLuaJIT
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* boolean *)
-                     (VId_true, "true") (* boolean literal *)
-                    ,(VId_false, "false") (* boolean literal *)
-                    (* list *)
-                    ,(VId_nil, "nil")
+                    [(* list *)
+                     (VId_nil, "nil")
                     (* exn *)
                     ,(VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
@@ -189,448 +169,214 @@ fun VIdToLua (ctx : Context, vid as TypedSyntax.MkVId (name, n))
       else
           LuaSyntax.UserDefinedId vid
 
-structure StringSet = RedBlackSetFn(struct open String; type ord_key = string end)
-val LuaKeywords = StringSet.fromList
-                      ["and", "break", "do", "else", "elseif", "end",
-                       "false", "for", "function", "goto", "if", "in",
-                       "local", "nil", "not", "or", "repeat", "return",
-                       "then", "true", "until", "while"]
-fun isLuaIdentifier name = case String.explode name of
-                               [] => false
-                             | x0 :: xs => (Char.isAlpha x0 orelse x0 = #"_")
-                                           andalso (List.all (fn c => Char.isAlphaNum c orelse c = #"_") xs)
-                                           andalso (not (StringSet.member(LuaKeywords, name)))
 fun LabelToTableKey (Syntax.NumericLabel n) = LuaSyntax.IntKey n
   | LabelToTableKey (Syntax.IdentifierLabel s) = LuaSyntax.StringKey s
-
-type Env = { hoistedSymbols : TypedSyntax.VIdSet.set
-           , level : int
-           }
-val initialEnv : Env = { hoistedSymbols = TypedSyntax.VIdSet.empty
-                       , level = 0
-                       }
-fun addSymbol ({ hoistedSymbols, level } : Env, s)
-    = { hoistedSymbols = hoistedSymbols
-      , level = level
-      }
-fun addHoistedSymbol ({ hoistedSymbols, level } : Env, s : TypedSyntax.VId)
-    = { hoistedSymbols = TypedSyntax.VIdSet.add (hoistedSymbols, s)
-      , level = level
-      }
-fun isHoisted ({ hoistedSymbols, ... } : Env, s : TypedSyntax.VId)
-    = TypedSyntax.VIdSet.member (hoistedSymbols, s)
-fun declareIfNotHoisted (env : Env, vars : TypedSyntax.VId list) : Env * LuaSyntax.Stat list
-    = let val (env, vars) = List.foldr (fn (v, (env, xs)) => if isHoisted (env, v) then
-                                                                 (env, xs)
-                                                             else
-                                                                 (addHoistedSymbol (env, v), (v, LuaSyntax.LATE_INIT) :: xs)) (env, []) vars
-      in (env, case vars of
-                   [] => []
-                 | _ => [ LuaSyntax.LocalStat (vars, []) ]
-         )
-      end
-fun increaseLevel ({ hoistedSymbols, level } : Env) = { hoistedSymbols = hoistedSymbols, level = level + 1 }
 
 fun genSym (ctx: Context) = let val n = !(#nextLuaId ctx)
                                 val _ = #nextLuaId ctx := n + 1
                             in TypedSyntax.MkVId ("tmp", n)
                             end
+fun genSymWithName (ctx : Context, name : string)
+    = let val n = !(#nextLuaId ctx)
+          val _ = #nextLuaId ctx := n + 1
+      in TypedSyntax.MkVId (name, n)
+      end
 
 structure F = FSyntax
-structure L = LuaSyntax
+structure C = CSyntax
+structure L = struct
+fun ConstStat (vid : TypedSyntax.VId, e : LuaSyntax.Exp) = LuaSyntax.LocalStat ([(vid, LuaSyntax.CONST)], [e])
+open LuaSyntax
+end
 
-datatype purity = PURE
-                | DISCARDABLE
-                | IMPURE
+datatype cont_type = GOTO of { label : L.Id, params : L.Id list }
+                   | RETURN
+type Env = { continuations : cont_type C.CVarMap.map
+           }
 
-datatype Destination = Return
-                     | AssignTo of TypedSyntax.VId
-                     | DeclareAndAssignTo of { level : int, destination : TypedSyntax.VId }
-                     | Discard
-                     | Continue of (* statements *) L.Stat list * Env * (* pure expression *) L.Exp -> L.Stat list (* the continuation should be called exactly once, and the expression should be used only once *)
+datatype purity = PURE | DISCARDABLE | IMPURE
 
-(* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
-fun mapCont f [] cont = cont []
-  | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
+fun applyCont (ctx : Context, env : Env, cont : C.CVar, args : L.Exp list)
+    = case C.CVarMap.find (#continuations env, cont) of
+          SOME (GOTO { label, params = [] }) => [L.GotoStat label]
+        | SOME (GOTO { label, params }) => [L.AssignStat (List.map L.VarExp params, args), L.GotoStat label]
+        | SOME RETURN => [L.ReturnStat (vector args)]
+        | NONE => raise CodeGenError "undefined continuation"
 
-(* doExpTo : Context -> Env -> F.Exp -> Destination -> L.Stat list *)
-fun putPureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
-  | putPureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
-  | putPureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                     stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
-                                                                                 else
-                                                                                     raise CodeGenError "invalid DeclareAndAssignTo"
-  | putPureTo ctx env Discard (stmts, exp) = stmts
-  | putPureTo ctx env (Continue cont) (stmts, exp) = cont (stmts, env, exp)
-and putDiscardableTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
-  | putDiscardableTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
-  | putDiscardableTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
-                                                                                   else
-                                                                                       raise CodeGenError "invalid DeclareAndAssignTo"
-  | putDiscardableTo ctx env Discard (stmts, exp) = stmts
-  | putDiscardableTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
-                                                                val env = addSymbol (env, dest)
-                                                            in cont (stmts @ [ L.LocalStat ([(dest, L.CONST)], [exp]) ], env, L.VarExp (L.UserDefinedId dest))
-                                                            end
-and putImpureTo ctx env Return (stmts, exp : L.Exp) = stmts @ [ L.ReturnStat (vector [exp]) ]
-  | putImpureTo ctx env (AssignTo v) (stmts, exp) = stmts @ [ L.AssignStat ([L.VarExp (L.UserDefinedId v)], [exp]) ]
-  | putImpureTo ctx env (DeclareAndAssignTo { level, destination }) (stmts, exp) = if #level env = level then
-                                                                                       stmts @ [ L.LocalStat ([(destination, L.CONST)], [exp]) ]
-                                                                                   else
-                                                                                       raise CodeGenError "invalid DeclareAndAssignTo"
-  | putImpureTo ctx env Discard (stmts, exp) = stmts @ [ case exp of
-                                                             L.CallExp (f, args) => L.CallStat (f, args)
-                                                           | L.MethodExp (self, name, args) => L.MethodStat (self, name, args)
-                                                           | _ => L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [exp])
-                                                       ]
-  | putImpureTo ctx env (Continue cont) (stmts, exp) = let val dest = genSym ctx
-                                                           val env = addSymbol (env, dest)
-                                                       in cont (stmts @ [ L.LocalStat ([(dest, L.CONST)], [exp]) ], env, L.VarExp (L.UserDefinedId dest))
-                                                       end
-and doExpCont ctx env exp (cont : L.Stat list * Env * L.Exp -> L.Stat list) = doExpTo ctx env exp (Continue cont)
-and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
-    = let val suffix = case #targetLuaVersion ctx of
-                           LUA5_3 => ""
-                         | LUAJIT => (case tys of
-                                          [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
-                                                              "LL"
-                                                          else
-                                                              ""
-                                        | _ => "" (* invalid type *)
-                                     )
-          val exp = if x < 0 then
-                        if x = ~0x800000000000 then
-                            L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
-                        else
-                            L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x) ^ suffix)))
-                    else
-                        L.ConstExp (L.Numeral (LargeInt.toString x ^ suffix))
-      in putPureTo ctx env dest ([], exp)
-      end
-  | doExpTo ctx env (F.PrimExp (F.IntConstOp x, _, _)) dest = raise CodeGenError "PrimExp.IntConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, tys, [])) dest
-    = let val suffix = case #targetLuaVersion ctx of
-                           LUA5_3 => ""
-                         | LUAJIT => (case tys of
-                                          [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
-                                                              "ULL"
-                                                          else
-                                                              ""
-                                        | _ => "" (* invalid type *)
-                                     )
-          val exp = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
-      in putPureTo ctx env dest ([], exp)
-      end
-  | doExpTo ctx env (F.PrimExp (F.WordConstOp x, _, _)) dest = raise CodeGenError "PrimExp.WordConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, [])) dest
+fun doLabel cname = L.UserDefinedId (TypedSyntax.MkVId ("cont", C.CVar.toInt cname))
+
+fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
+                                   L.PredefinedId "nil" => L.ConstExp L.Nil
+                                 | L.PredefinedId "false" => L.ConstExp L.False
+                                 | L.PredefinedId "true" => L.ConstExp L.True
+                                 | id => L.VarExp id
+                              )
+  | doValue ctx C.Unit = L.ConstExp L.Nil
+  | doValue ctx (C.BoolConst false) = L.ConstExp L.False
+  | doValue ctx (C.BoolConst true) = L.ConstExp L.True
+  | doValue ctx (C.NativeIntConst x) = if x < 0 then
+                                           if x = ~0x800000000000 then
+                                               L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
+                                           else
+                                               L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                       else
+                                           L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue ctx (C.Int32Const x) = if x < 0 then
+                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
+                                   else
+                                       L.ConstExp (L.Numeral (Int32.toString x))
+  | doValue ctx (C.Int54Const x) = if x < 0 then
+                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x))))
+                                   else
+                                       L.ConstExp (L.Numeral (Int64.toString x))
+  | doValue ctx (C.Int64Const x) = let val suffix = case #targetLuaVersion ctx of
+                                                        LUA5_3 => ""
+                                                      | LUAJIT => "LL"
+                                   in if x < 0 then
+                                          if x = ~0x800000000000 then
+                                              L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
+                                          else
+                                              L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x) ^ suffix)))
+                                      else
+                                          L.ConstExp (L.Numeral (Int64.toString x ^ suffix))
+                                   end
+  | doValue ctx (C.IntInfConst x) = raise CodeGenError "IntInfConst is not supported by Lua backend"
+  | doValue ctx (C.NativeWordConst x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doValue ctx (C.Word32Const x) = L.ConstExp (L.Numeral ("0x" ^ Word32.toString x))
+  | doValue ctx (C.Word64Const x) = let val suffix = case #targetLuaVersion ctx of
+                                                         LUA5_3 => ""
+                                                       | LUAJIT => "ULL"
+                                    in L.ConstExp (L.Numeral ("0x" ^ Word64.toString x ^ suffix))
+                                    end
+  | doValue ctx (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
+  | doValue ctx (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
+  | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString (CharVector.tabulate (Vector.length s, fn i => Char.chr (Vector.sub (s, i)))))
+  | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
+
+fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result, cont })
     = let val exp = if Numeric.Notation.isNegative x then
                         case (#targetLuaVersion ctx, Numeric.Notation.isNegativeZero x) of
                             (LUAJIT, true) => L.VarExp (L.PredefinedId "NEGATIVE_ZERO")
                           | _ => L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Numeric.Notation.toString "-" (Numeric.Notation.abs x))))
                     else
                         L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
-      in putPureTo ctx env dest ([], exp)
+      in case result of
+             SOME result => L.ConstStat (result, exp) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.PrimExp (F.RealConstOp x, _, _)) dest = raise CodeGenError "PrimExp.RealConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, _, [])) dest
-    = let val exp = L.ConstExp (L.LiteralString (CharVector.tabulate (Vector.length x, fn i => Char.chr (Vector.sub (x, i)))))
-                    handle Chr => raise CodeGenError "character ordinal too large"
-      in putPureTo ctx env dest ([], exp)
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result, cont })
+    = (case result of
+           SOME result => L.ConstStat (result, L.ConstExp L.Nil) :: doCExp ctx env cont
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result, cont })
+    = (case result of
+           SOME result => let fun doFields (i, []) = []
+                                | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
+                          in L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "_list"), vector [L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs)))])) :: doCExp ctx env cont
+                          end
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result, cont })
+    = (case result of
+           SOME result => let fun doFields (i, []) = []
+                                | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
+                          in L.ConstStat (result, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs)))) :: doCExp ctx env cont
+                          end
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.DataTagAsStringOp info, tyargs = _, args = [exp] }, result, cont })
+    = (case result of
+           SOME result => L.ConstStat (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "tag"))) :: doCExp ctx env cont
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result, cont })
+    = (case result of
+           SOME result => L.ConstStat (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload"))) :: doCExp ctx env cont
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result, cont })
+    = (case result of
+           SOME result => L.ConstStat (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload"))) :: doCExp ctx env cont
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result, cont })
+    = let val tag = #tag info
+      in case result of
+             SOME result => L.ConstStat (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))])) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.PrimExp (F.StringConstOp x, _, _)) dest = raise CodeGenError "PrimExp.StringConstOp: non-empty argument"
-  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, _, [])) dest
-    = putPureTo ctx env dest ([], L.ConstExp (L.Numeral (Int.toString x)))
-  | doExpTo ctx env (F.PrimExp (F.CharConstOp x, _, _)) dest = raise CodeGenError "PrimExp.CharConstOp: non-empty argument"
-  | doExpTo ctx env (F.VarExp vid) dest = putPureTo ctx env dest ([], case VIdToLua (ctx, vid) of
-                                                                          L.PredefinedId "nil" => L.ConstExp L.Nil
-                                                                        | L.PredefinedId "false" => L.ConstExp L.False
-                                                                        | L.PredefinedId "true" => L.ConstExp L.True
-                                                                        | id => L.VarExp id
-                                                                 )
-  | doExpTo ctx env (F.RecordExp []) dest = putPureTo ctx env dest ([], L.ConstExp L.Nil)
-  | doExpTo ctx env (F.RecordExp fields) Discard = List.concat (List.map (fn (_, exp) => doExpTo ctx env exp Discard) fields)
-  | doExpTo ctx env (F.RecordExp fields) dest
-    = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-              fields
-              (fn ys => let val (stmts, fields') = ListPair.unzip ys
-                        in putPureTo ctx env dest ( List.concat stmts
-                                                  , L.TableExp (vector (List.map (fn (label, exp) => (LabelToTableKey label, exp)) fields'))
-                                                  )
-                        end
-              )
-  | doExpTo ctx env (F.LetExp (dec, exp)) (Continue cont)
-    = let val dec' = doDec ctx env dec
-      in doExpCont ctx env exp (fn (stmts, env, exp) => cont (dec' @ stmts, env, exp)) (* TODO: modify environment *)
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result, cont })
+    = let val tag = #tag info
+          val payload = doValue ctx payload
+      in case result of
+             SOME result => L.ConstStat (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag)), (L.StringKey "payload", payload)])) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.LetExp (dec, exp)) dest
-    = let val dec' = doDec ctx env dec
-      in dec' @ doExpTo ctx env exp dest
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result, cont })
+    = let val tag = doValue ctx tag
+      in case result of
+             SOME result => L.ConstStat (result, L.TableExp (vector [(L.StringKey "tag", tag)])) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.AppExp (exp1, exp2)) dest
-    = let val doLuaCall = case (exp1, exp2) of
-                              (F.AppExp (F.VarExp vid_luacall, f), F.PrimExp (F.VectorOp, _, xs)) =>
-                              if TypedSyntax.eqVId (vid_luacall, InitialEnv.VId_Lua_call) then
-                                  SOME (fn () => doExpCont ctx env f
-                                                           (fn (stmts1, env, f) =>
-                                                               mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                       xs
-                                                                       (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                     val zs = Vector.map #2 (vector ys)
-                                                                                 in case dest of
-                                                                                        Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (f, zs))
-                                                                                      | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, zs)]))
-                                                                                 end
-                                                                       )
-                                                           )
-                                       )
-                              else
-                                  NONE
-                            | _ => NONE
-          val doLuaMethod = case (exp1, exp2) of
-                                (F.AppExp (F.VarExp vid_luamethod, F.RecordExp [(Syntax.NumericLabel 1, self), (Syntax.NumericLabel 2, F.PrimExp (F.StringConstOp method, _, _))]), F.PrimExp (F.VectorOp, _, xs)) =>
-                                (case SOME (CharVector.tabulate (Vector.length method, fn i => Char.chr (Vector.sub (method, i)))) handle Chr => NONE of
-                                     SOME method =>
-                                     if TypedSyntax.eqVId (vid_luamethod, InitialEnv.VId_Lua_method) andalso isLuaIdentifier method then
-                                         SOME (fn () => doExpCont ctx env self
-                                                                  (fn (stmts1, env, self) =>
-                                                                      mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-                                                                              xs
-                                                                              (fn ys => let val stmts2 = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                                                                            val zs = Vector.map #2 (vector ys)
-                                                                                        in case dest of
-                                                                                               Discard => putImpureTo ctx env dest (stmts1 @ stmts2, L.MethodExp (self, method, zs))
-                                                                                             | _ => putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (self, method, zs)]))
-                                                                                        end
-                                                                              )
-                                                                  )
-                                              )
-                                     else
-                                         NONE
-                                   | NONE => NONE
-                                )
-                              | _ => NONE
-          (* doLuaGlobal: VId_Lua_global *)
-      in case List.mapPartial (fn x => x) [doLuaCall, doLuaMethod] of
-             f :: _ => f ()
-           | [] => doExpCont ctx env exp1
-                             (fn (stmts1, env, e1') =>
-                                 doExpCont ctx env exp2
-                                           (fn (stmts2, env, e2') =>
-                                               putImpureTo ctx env dest (stmts1 @ stmts2, L.CallExp (e1', vector [e2']))
-                                           )
-                             )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, result, cont })
+    = let val tag = doValue ctx tag
+          val payload = doValue ctx payload
+      in case result of
+             SOME result => L.ConstStat (result, L.TableExp (vector [(L.StringKey "tag", tag), (L.StringKey "payload", payload)])) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.HandleExp { body, exnName, handler }) dest
-    = let val status = genSym ctx
-          val result = genSym ctx
-          val exnName = exnName
-          val env' = addSymbol (addSymbol (env, status), result)
-          val env'' = addSymbol (env', exnName)
-          val stmts = [ L.LocalStat ([(status, L.CONST), (result, L.CONST)], [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [L.FunctionExp (vector [], vector (doExpTo ctx (increaseLevel env') body Return))])])
-                      , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
-                                 , vector ( L.LocalStat ([(exnName, L.CONST)], [L.VarExp (L.UserDefinedId result)])
-                                            :: doExpTo ctx (increaseLevel env'') handler (AssignTo result) (* TODO: tail call *)
-                                          )
-                                 , vector []
-                                 )
-                      ]
-      in putPureTo ctx env dest (stmts, L.VarExp (L.UserDefinedId result))
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result, cont })
+    = let val exp = doValue ctx exp
+          val locationInfo = if start = SourcePos.nullPos then
+                                 L.ConstExp L.Nil
+                             else
+                                 L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
+      in [L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo])]
       end
-  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, [exp])) dest
-    = doExpCont ctx env exp
-                (fn (stmts, env, exp') =>
-                    let val locationInfo = if start = SourcePos.nullPos then
-                                               L.ConstExp L.Nil
-                                           else
-                                               L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
-                    in case dest of
-                           Continue cont => cont (stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', locationInfo]) ], env, L.ConstExp L.Nil)
-                         | _ => stmts @ [ L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp', locationInfo]) ]
-                    end
-                )
-  | doExpTo ctx env (F.PrimExp (F.RaiseOp (span as { start as { file, line, column }, ... }), _, _)) dest = raise CodeGenError "PrimExp.RaiseOp: invalid number of arguments"
-  | doExpTo ctx env (F.IfThenElseExp (exp1, exp2, exp3)) dest
-    = doExpCont ctx env exp1
-                (fn (stmts1, env, exp1') =>
-                    let fun tryCondExp (exp1', L.ConstExp L.True, L.ConstExp L.False) = SOME exp1'
-                          | tryCondExp (exp1', L.ConstExp L.False, L.ConstExp L.True) = SOME (L.UnaryExp (L.NOT, exp1'))
-                          | tryCondExp (exp1', L.ConstExp L.True, exp3'') = SOME (L.BinExp (L.OR, exp1', exp3''))
-                          | tryCondExp (exp1', L.ConstExp L.False, exp3'') = SOME (L.BinExp (L.AND, L.UnaryExp (L.NOT, exp1'), exp3''))
-                          | tryCondExp (exp1', exp2'', L.ConstExp L.True) = SOME (L.BinExp (L.OR, L.UnaryExp (L.NOT, exp1'), exp2''))
-                          | tryCondExp (exp1', exp2'', L.ConstExp L.False) = SOME (L.BinExp (L.AND, exp1', exp2''))
-                          | tryCondExp (exp1', exp2'', exp3'') = NONE
-                        fun tryAssignToCondExp (destination, [L.AssignStat ([L.VarExp (L.UserDefinedId id2)], [exp2])], [L.AssignStat ([L.VarExp (L.UserDefinedId id3)], [exp3])])
-                            = if id2 = destination andalso id3 = destination then
-                                  tryCondExp (exp1', exp2, exp3)
-                              else
-                                  NONE
-                          | tryAssignToCondExp _ = NONE
-                    in case dest of
-                           Continue cont => let val result = genSym ctx
-                                                val env' = addSymbol (env, result)
-                                                val exp2' = doExpTo ctx (increaseLevel env') exp2 (AssignTo result)
-                                                val exp3' = doExpTo ctx (increaseLevel env') exp3 (AssignTo result)
-                                            in cont ( stmts1
-                                                      @ (case tryAssignToCondExp (result, exp2', exp3') of
-                                                             SOME condExp => [ L.LocalStat ([(result, L.CONST)], [condExp]) ]
-                                                           | NONE => [ L.LocalStat ([(result, L.LATE_INIT)], [])
-                                                                     , L.IfStat (exp1', vector exp2', vector exp3')
-                                                                     ]
-                                                        )
-                                                    , env'
-                                                    , L.VarExp (L.UserDefinedId result)
-                                                    )
-                                            end
-                         | DeclareAndAssignTo { level, destination } => let val exp2' = doExpTo ctx (increaseLevel env) exp2 (AssignTo destination)
-                                                                            val exp3' = doExpTo ctx (increaseLevel env) exp3 (AssignTo destination)
-                                                                        in stmts1
-                                                                           @ (case tryAssignToCondExp (destination, exp2', exp3') of
-                                                                                  SOME condExp => [ L.LocalStat ([(destination, L.CONST)], [condExp]) ]
-                                                                                | NONE => [ L.LocalStat ([(destination, L.LATE_INIT)], [])
-                                                                                          , L.IfStat (exp1', vector exp2', vector exp3')
-                                                                                          ]
-                                                                             )
-                                                                        end
-                         | dest as AssignTo destination => let val exp2' = doExpTo ctx (increaseLevel env) exp2 dest
-                                                               val exp3' = doExpTo ctx (increaseLevel env) exp3 dest
-                                                           in stmts1
-                                                              @ (case tryAssignToCondExp (destination, exp2', exp3') of
-                                                                     SOME condExp => [ L.AssignStat ([L.VarExp (L.UserDefinedId destination)], [condExp]) ]
-                                                                   | NONE => [ L.IfStat (exp1', vector exp2', vector exp3') ]
-                                                                )
-                                                           end
-                         | Return => let fun containsLocalStat (L.LocalStat _ :: _) = true
-                                           | containsLocalStat (_ :: xs) = containsLocalStat xs
-                                           | containsLocalStat [] = false
-                                     in if containsLocalStat stmts1 then
-                                            L.DoStat (vector (stmts1
-                                                              @ [ L.IfStat ( exp1'
-                                                                           , vector (doExpTo ctx (increaseLevel env) exp2 Return)
-                                                                           , vector []
-                                                                           )
-                                                                ]
-                                                             )
-                                                     ) :: doExpTo ctx (increaseLevel env) exp3 dest
-                                        else
-                                            stmts1
-                                            @ [ L.IfStat ( exp1'
-                                                         , vector (doExpTo ctx (increaseLevel env) exp2 Return)
-                                                         , vector []
-                                                         )
-                                              ] @ doExpTo ctx (increaseLevel env) exp3 dest
-                                     end
-                         | Discard => stmts1
-                                      @ [ L.IfStat ( exp1'
-                                                   , vector (doExpTo ctx (increaseLevel env) exp2 dest)
-                                                   , vector (doExpTo ctx (increaseLevel env) exp3 dest)
-                                                   )
-                                        ]
-                    end
-                )
-  | doExpTo ctx env (F.CaseExp _) dest = raise Fail "Lua codegen: CaseExp should have been desugared earlier"
-  | doExpTo ctx env (F.FnExp (vid, _, exp)) dest = putPureTo ctx env dest ([], L.FunctionExp (vector [VIdToLua (ctx, vid)], vector (doExpTo ctx (increaseLevel env) exp Return))) (* TODO: update environment *)
-  | doExpTo ctx env (F.ProjectionExp { label, record, fieldTypes }) dest = doExpCont ctx env record (fn (stmts, env, record') =>
-                                                                                                        let val label = case label of
-                                                                                                                            Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
-                                                                                                                          | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
-                                                                                                        in putPureTo ctx env dest (stmts, L.IndexExp (record', label))
-                                                                                                        end
-                                                                                                    )
-  | doExpTo ctx env (F.PrimExp (F.ListOp, _, [])) dest = putPureTo ctx env dest ([], L.ConstExp L.Nil)
-  | doExpTo ctx env (F.PrimExp (F.ListOp, _, xs)) dest
-    = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-              xs
-              (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                            fun doFields (i, []) = []
-                              | doFields (i, (_, y) :: ys) = (L.IntKey i, y) :: doFields (i + 1, ys)
-                        in putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "_list"), vector [L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, ys)))]))
-                        end
-              )
-  | doExpTo ctx env (F.PrimExp (F.VectorOp, _, xs)) dest
-    = mapCont (fn (e, cont) => doExpCont ctx env e (fn (x, _, e) => cont (x, e)))
-              xs
-              (fn ys => let val stmts = List.foldr (fn ((x, _), acc) => x @ acc) [] ys
-                                fun doFields (i, []) = []
-                                  | doFields (i, (_, y) :: ys) = (L.IntKey i, y) :: doFields (i + 1, ys)
-                        in putPureTo ctx env dest (stmts, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, ys))))
-                        end
-              )
-  | doExpTo ctx env (F.TyAbsExp (_, _, exp)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.TyAppExp (exp, _)) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.DataTagAsStringOp info, _, [exp])) dest
-    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString "tag"))))
-  | doExpTo ctx env (F.PrimExp (F.DataTagAsStringOp info, _, _)) dest = raise CodeGenError "PrimExp.DataTagAsStringOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.DataTagAsString16Op info, _, _)) dest = raise CodeGenError "PrimExp.DataTagAsString16Op: not supported"
-  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, [exp])) dest
-    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString "payload"))))
-  | doExpTo ctx env (F.PrimExp (F.DataPayloadOp info, _, _)) dest = raise CodeGenError "PrimExp.DataPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, [exp])) dest
-    = doExpCont ctx env exp (fn (stmts, env, exp') => putPureTo ctx env dest (stmts, L.IndexExp (exp', L.ConstExp (L.LiteralString "payload"))))
-  | doExpTo ctx env (F.PrimExp (F.ExnPayloadOp, _, _)) dest = raise CodeGenError "PrimExp.ExnPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PackExp { payloadTy, exp, packageTy }) dest = doExpTo ctx env exp dest
-  | doExpTo ctx env (F.PrimExp (F.PrimFnOp primOp, _, args)) dest
-    = let fun doUnary cont = case args of
-                                 [a] => doExpCont ctx env a cont
-                               | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-          fun doUnaryExp (f, purity) = doUnary (fn (stmts, env, a) =>
-                                                   case purity of
-                                                       PURE => putPureTo ctx env dest (stmts, f a)
-                                                     | DISCARDABLE => putDiscardableTo ctx env dest (stmts, f a)
-                                                     | IMPURE => putImpureTo ctx env dest (stmts, f a)
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args }, result, cont })
+    = let fun ExpStat (L.CallExp (f, args)) = [L.CallStat (f, args)]
+            | ExpStat (L.MethodExp (self, name, args)) = [L.MethodStat (self, name, args)]
+            | ExpStat (L.ConstExp _) = []
+            | ExpStat e = [L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [e])]
+          fun ConstStatOrExpStat e = case result of
+                                         SOME result => [L.ConstStat (result, e)]
+                                       | NONE => ExpStat e
+          fun doUnary f = case args of
+                              [a] => f (doValue ctx a)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+          fun doUnaryExp (f, purity) = doUnary (fn a =>
+                                                   let val stmt = case result of
+                                                                      SOME result => [L.ConstStat (result, f a)]
+                                                                    | NONE => case purity of
+                                                                                  PURE => []
+                                                                                | DISCARDABLE => []
+                                                                                | IMPURE => ExpStat (f a)
+                                                   in stmt @ doCExp ctx env cont
+                                                   end
                                                )
-          fun doBinary cont = case args of
-                                  [a, b] => doExpCont ctx env a
-                                                      (fn (stmts0, env, a) =>
-                                                          doExpCont ctx env b
-                                                                    (fn (stmts1, env, b) =>
-                                                                        cont (stmts0 @ stmts1, env, (a, b))
-                                                                    )
-                                                      )
-                                | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-          fun doBinaryExp (f, purity) = doBinary (fn (stmts, env, ab) =>
-                                                     case purity of
-                                                         PURE => putPureTo ctx env dest (stmts, f ab)
-                                                       | DISCARDABLE => putDiscardableTo ctx env dest (stmts, f ab)
-                                                       | IMPURE => putImpureTo ctx env dest (stmts, f ab)
+          fun doBinary f = case args of
+                               [a, b] => f (doValue ctx a, doValue ctx b)
+                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+          fun doBinaryExp (f, purity) = doBinary (fn (a, b) =>
+                                                     let val stmt = case result of
+                                                                        SOME result => [L.ConstStat (result, f (a, b))]
+                                                                      | NONE => case purity of
+                                                                                    PURE => []
+                                                                                  | DISCARDABLE => []
+                                                                                  | IMPURE => ExpStat (f (a, b))
+                                                     in stmt @ doCExp ctx env cont
+                                                     end
                                                  )
           fun doBinaryOp (binop, purity) = doBinaryExp (fn (a, b) => L.BinExp (binop, a, b), purity)
-          fun doTernary cont = case args of
-                                   [a, b, c] => doExpCont ctx env a
-                                                          (fn (stmts0, env, a) =>
-                                                              doExpCont ctx env b
-                                                                        (fn (stmts1, env, b) =>
-                                                                            doExpCont ctx env c
-                                                                                      (fn (stmts2, env, c) =>
-                                                                                          cont (stmts0 @ stmts1 @ stmts2, env, (a, b, c))
-                                                                                      )
-                                                                        )
-                                                          )
-                                 | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-      in case primOp of
-             Primitives.call2 => doTernary (fn (stmts, env, (f, a0, a1)) =>
-                                               putImpureTo ctx env dest (stmts, L.CallExp (f, vector [a0, a1]))
+          fun doTernary f = case args of
+                                [a, b, c] => f (doValue ctx a, doValue ctx b, doValue ctx c)
+                              | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+      in case prim of
+             Primitives.call2 => doTernary (fn (f, a0, a1) =>
+                                               ConstStatOrExpStat (L.CallExp (f, vector [a0, a1])) @ doCExp ctx env cont
                                            )
-           | Primitives.call3 => (case args of
-                                      [f, a0, a1, a2] => doExpCont ctx env f
-                                                                   (fn (stmts0, env, f) =>
-                                                                       doExpCont ctx env a0
-                                                                                 (fn (stmts1, env, a0) =>
-                                                                                     doExpCont ctx env a1
-                                                                                               (fn (stmts2, env, a1) =>
-                                                                                                   doExpCont ctx env a2
-                                                                                                             (fn (stmts3, env, a2) =>
-                                                                                                                 putImpureTo ctx env dest (stmts0 @ stmts1 @ stmts2 @ stmts3, L.CallExp (f, vector [a0, a1, a2]))
-                                                                                                             )
-                                                                                               )
-                                                                                 )
-                                                                   )
-                                    | _ => raise CodeGenError "primop call3: invalid number of arguments"
-                                 )
-           | Primitives.List_cons => doBinaryExp ( fn (x, xs) =>
-                                                      L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)])
-                                                 , PURE
-                                                 )
+           | Primitives.List_cons => doBinaryExp (fn (x, xs) => L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]), PURE)
            | Primitives.List_null => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
            | Primitives.List_unsafeHead => doUnaryExp (fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "1")), PURE)
            | Primitives.List_unsafeTail => doUnaryExp (fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "2")), PURE)
@@ -643,10 +389,10 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
                                               , DISCARDABLE
                                               )
            | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, PURE)
-           | Primitives.Ref_set => doBinary (fn (stmts, env, (a, b)) =>
+           | Primitives.Ref_set => doBinary (fn (a, b) =>
                                                 (* REPRESENTATION_OF_REF *)
-                                                let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], [b]) ]
-                                                in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+                                                let val stmt = L.AssignStat ([L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], [b])
+                                                in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
                                                 end
                                             )
            | Primitives.Ref_read => doUnaryExp ( fn a =>
@@ -673,10 +419,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
                                          | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "__Real_mul"), vector [a, b]), PURE)
                                       )
            | Primitives.Real_DIVIDE => doBinaryOp (L.DIV, PURE)
-           | Primitives.Real_TILDE => doUnaryExp ( fn a =>
-                                                      case #targetLuaVersion ctx of
-                                                          LUA5_3 => L.UnaryExp (L.NEGATE, a)
-                                                        | LUAJIT => L.BinExp (L.MINUS, L.VarExp (L.PredefinedId "NEGATIVE_ZERO"), a)
+           | Primitives.Real_TILDE => doUnaryExp ( fn a => case #targetLuaVersion ctx of
+                                                               LUA5_3 => L.UnaryExp (L.NEGATE, a)
+                                                             | LUAJIT => L.BinExp (L.MINUS, L.VarExp (L.PredefinedId "NEGATIVE_ZERO"), a)
                                                  , PURE
                                                  )
            | Primitives.Real_LT => doBinaryOp (L.LT, PURE)
@@ -700,22 +445,18 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
            | Primitives.Vector_unsafeFromListRevN => doBinaryExp (fn (n, xs) => L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), PURE)
            | Primitives.Array_EQUAL => doBinaryOp (L.EQUAL, PURE)
            | Primitives.Array_length => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
-           | Primitives.Unsafe_cast => (case args of
-                                            [a] => doExpTo ctx env a dest
-                                          | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ ": invalid number of arguments")
-                                       )
            | Primitives.Unsafe_Vector_sub => doBinaryExp (fn (vec, i) => L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), PURE)
            | Primitives.Unsafe_Array_sub => doBinaryExp (fn (arr, i) => L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), IMPURE)
-           | Primitives.Unsafe_Array_update => doTernary (fn (stmts, env, (arr, i, v)) =>
-                                                             let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]) ]
-                                                             in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+           | Primitives.Unsafe_Array_update => doTernary (fn (arr, i, v) =>
+                                                             let val stmt = L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v])
+                                                             in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
                                                              end
                                                          )
            | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [e, tag]), PURE)
            | Primitives.Lua_sub => doBinaryExp (fn (a, b) => L.IndexExp (a, b), IMPURE)
-           | Primitives.Lua_set => doTernary (fn (stmts, env, (a, b, c)) =>
-                                                 let val stmts = stmts @ [ L.AssignStat ([L.IndexExp (a, b)], [c]) ]
-                                                 in putPureTo ctx env dest (stmts, L.ConstExp L.Nil)
+           | Primitives.Lua_set => doTernary (fn (a, b, c) =>
+                                                 let val stmt = L.AssignStat ([L.IndexExp (a, b)], [c])
+                                                 in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
                                                  end
                                              )
            | Primitives.Lua_isNil => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
@@ -742,143 +483,183 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : L.Stat list
            | Primitives.Lua_concat => doBinaryOp (L.CONCAT, IMPURE)
            | Primitives.Lua_length => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), IMPURE)
            | Primitives.Lua_isFalsy => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
-           | Primitives.Lua_call0 => doBinary (fn (stmts, env, (f, args)) =>
-                                                  let val (v, stmts') = case args of
-                                                                            L.VarExp _ => (args, stmts)
-                                                                          | _ => let val v = genSym ctx
-                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
-                                                                                 end
-                                                      val stmts'' = stmts'
-                                                                    @ [ L.CallStat (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])]) ]
-                                                  in putPureTo ctx env dest (stmts'', L.ConstExp L.Nil)
+           | Primitives.Lua_call0 => doBinary (fn (f, args) =>
+                                                  let val stmt = L.CallStat (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])])
+                                                  in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
                                                   end
                                               )
-           | Primitives.Lua_call1 => doBinary (fn (stmts, env, (f, args)) =>
-                                                  let val (v, stmts') = case args of
-                                                                            L.VarExp _ => (args, stmts)
-                                                                          | _ => let val v = genSym ctx
-                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
-                                                                                 end
-                                                  in putImpureTo ctx env dest (stmts', L.SingleValueExp (L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])))
+           | Primitives.Lua_call1 => doBinary (fn (f, args) =>
+                                                  let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                      val stmt = case result of
+                                                                     NONE => L.CallStat (f, arg)
+                                                                   | SOME result => L.ConstStat (result, L.CallExp (f, arg))
+                                                  in stmt :: doCExp ctx env cont
                                                   end
                                               )
-           | Primitives.Lua_call2 => doBinary (fn (stmts, env, (f, args)) =>
-                                                  let val (v, stmts') = case args of
-                                                                            L.VarExp _ => (args, stmts)
-                                                                          | _ => let val v = genSym ctx
-                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
-                                                                                 end
-                                                      val r0 = genSym ctx
-                                                      val r1 = genSym ctx
-                                                      val stmts'' = stmts'
-                                                                    @ [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])]) ]
-                                                  in putPureTo ctx env dest (stmts'', L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
+           | Primitives.Lua_call2 => doBinary (fn (f, args) =>
+                                                  let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                      val stmts = case result of
+                                                                     NONE => [L.CallStat (f, arg)]
+                                                                   | SOME result => let val r0 = genSym ctx
+                                                                                        val r1 = genSym ctx
+                                                                                    in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (f, arg)])
+                                                                                       , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
+                                                                                       ]
+                                                                                    end
+                                                  in stmts @ doCExp ctx env cont
                                                   end
                                               )
-           | Primitives.Lua_call3 => doBinary (fn (stmts, env, (f, args)) =>
-                                                  let val (v, stmts') = case args of
-                                                                            L.VarExp _ => (args, stmts)
-                                                                          | _ => let val v = genSym ctx
-                                                                                 in (L.VarExp (L.UserDefinedId v), stmts @ [L.LocalStat ([(v, L.CONST)], [args])])
-                                                                                 end
-                                                      val r0 = genSym ctx
-                                                      val r1 = genSym ctx
-                                                      val r2 = genSym ctx
-                                                      val stmts'' = stmts'
-                                                                    @ [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [v, L.ConstExp (L.Numeral "1"), L.IndexExp (v, L.ConstExp (L.LiteralString "n"))])])]) ]
-                                                  in putPureTo ctx env dest (stmts'', L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
+           | Primitives.Lua_call3 => doBinary (fn (f, args) =>
+                                                  let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                      val stmts = case result of
+                                                                     NONE => [L.CallStat (f, arg)]
+                                                                   | SOME result => let val r0 = genSym ctx
+                                                                                        val r1 = genSym ctx
+                                                                                        val r2 = genSym ctx
+                                                                                    in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (f, arg)])
+                                                                                       , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
+                                                                                       ]
+                                                                                    end
+                                                  in stmts @ doCExp ctx env cont
                                                   end
                                               )
-           | Primitives.DelimCont_newPromptTag => putImpureTo ctx env dest ([], L.TableExp (vector []))
+           | Primitives.DelimCont_newPromptTag => ConstStatOrExpStat (L.TableExp (vector [])) @ doCExp ctx env cont
            | Primitives.DelimCont_pushPrompt => if #hasDelimitedContinuations ctx then
                                                     doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushPrompt"), vector [promptTag, action]), IMPURE)
                                                 else
-                                                    raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+                                                    raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
            | Primitives.DelimCont_withSubCont => if #hasDelimitedContinuations ctx then
                                                      doBinaryExp (fn (promptTag, action) => L.CallExp (L.VarExp (L.PredefinedId "_withSubCont"), vector [promptTag, action]), IMPURE)
                                                  else
-                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+                                                     raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
            | Primitives.DelimCont_pushSubCont => if #hasDelimitedContinuations ctx then
                                                      doBinaryExp (fn (subcont, action) => L.CallExp (L.VarExp (L.PredefinedId "_pushSubCont"), vector [subcont, action]), IMPURE)
                                                  else
-                                                     raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+                                                     raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on Lua backend")
            | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
-           | _ => raise CodeGenError ("primop " ^ Primitives.toString primOp ^ " is not supported on Lua backend")
+           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on Lua backend")
       end
-  | doExpTo ctx env (F.PrimExp (F.ConstructValOp info, _, _)) dest
-    = let val tag = #tag info
-      in putPureTo ctx env dest ([], L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))]))
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result, cont })
+    = raise CodeGenError "JsCallOp is not supported on Lua backend"
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result, cont })
+    = raise CodeGenError "JsMethodOp is not supported on Lua backend"
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = _ }, result, cont })
+    = raise CodeGenError "JsNewOp is not supported on Lua backend"
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result, cont })
+    = raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")
+  | doCExp ctx env (C.Let { exp = C.Record fields, result, cont }) (* non-empty record *)
+    = let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (LabelToTableKey label, doValue ctx v) :: acc) [] fields
+          val exp = L.TableExp (vector fields)
+      in case result of
+             SOME result => L.ConstStat (result, exp) :: doCExp ctx env cont
+           | NONE => doCExp ctx env cont
       end
-  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, [payload])) dest
-    = let val tag = #tag info
-      in doExpCont ctx env payload (fn (stmts, env, payload) =>
-                                       putPureTo ctx env dest (stmts, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag)), (L.StringKey "payload", payload)]))
-                                   )
+  | doCExp ctx env (C.Let { exp = C.ExnTag { name, payloadTy }, result, cont })
+    = (case result of
+           SOME result => L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])) :: doCExp ctx env cont
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.Projection { label, record, fieldTypes }, result, cont })
+    = (case result of
+           SOME result => let val label = case label of
+                                              Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
+                                            | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
+                          in L.ConstStat (result, L.IndexExp (doValue ctx record, label)) :: doCExp ctx env cont
+                          end
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.App { applied, cont, args })
+    = (case C.CVarMap.find (#continuations env, cont) of
+           SOME (GOTO { label, params }) =>
+           let val callAndAssign = case params of
+                                       [] => L.CallStat (doValue ctx applied, Vector.map (doValue ctx) (vector args))
+                                     | _ => L.AssignStat (List.map L.VarExp params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+           in [callAndAssign, L.GotoStat label]
+           end
+         | SOME RETURN => [L.ReturnStat (vector [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])] (* tail call *)
+         | NONE => raise CodeGenError "undefined continuation"
+      )
+  | doCExp ctx env (C.AppCont { applied, args }) = applyCont (ctx, env, applied, List.map (doValue ctx) args)
+  | doCExp ctx env (C.If { cond, thenCont, elseCont })
+    = let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
+          val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
+      in if C.containsApp thenCont then
+             L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat (doCExp ctx env thenCont) @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+         else
+             L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont (* ad hoc *)
       end
-  | doExpTo ctx env (F.PrimExp (F.ConstructValWithPayloadOp info, _, _)) dest = raise CodeGenError "ConstructValWithPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, [tag])) dest
-    = doExpCont ctx env tag (fn (stmts, env, tag) =>
-                                putPureTo ctx env dest (stmts, L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", tag)]), L.VarExp (L.PredefinedId "_exn_meta")]))
-                            )
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnOp, _, _)) dest = raise CodeGenError "ConstructExnOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, [tag, payload])) dest
-    = doExpCont ctx env tag (fn (stmts0, env, tag) =>
-                                doExpCont ctx env payload (fn (stmts1, env, payload) =>
-                                                              putPureTo ctx env dest (stmts0 @ stmts1, L.CallExp (L.VarExp (L.PredefinedId "setmetatable"), vector [L.TableExp (vector [(L.StringKey "tag", tag), (L.StringKey "payload", payload)]), L.VarExp (L.PredefinedId "_exn_meta")]))
-                                                          )
-                            )
-  | doExpTo ctx env (F.PrimExp (F.ConstructExnWithPayloadOp, _, _)) dest = raise CodeGenError "ConstructExnWithPayloadOp: invalid number of arguments"
-  | doExpTo ctx env (F.PrimExp (F.JsCallOp, _, _)) dest = raise CodeGenError "JsCallOp: not supported"
-  | doExpTo ctx env (F.PrimExp (F.JsMethodOp, _, _)) dest = raise CodeGenError "JsMethodOp: not supported"
-  | doExpTo ctx env (F.PrimExp (F.JsNewOp, _, _)) dest = raise CodeGenError "JsNewOp: not supported"
-(* doDec : Context -> Env -> F.Dec -> L.Stat list *)
-and doDec ctx env (F.ValDec (vid, _, exp)) : L.Stat list
-    = if isHoisted (env, vid) then
-          doExpTo ctx env exp (AssignTo vid)
+  | doCExp ctx env (C.Let { exp = C.Abs { contParam, params, body }, result, cont })
+    = (case result of
+           SOME result => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
+                          in L.ConstStat (result, L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp ctx env' body))) :: doCExp ctx env cont
+                          end
+         | NONE => doCExp ctx env cont
+      )
+  | doCExp ctx env (C.LetRec { defs, cont })
+    = let val (decs, assignments) = List.foldr (fn ((name, contParam, params, body), (decs, assignments)) =>
+                                                   let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
+                                                       val dec = (name, L.LATE_INIT)
+                                                       val assignment = L.AssignStat ([L.VarExp (VIdToLua (ctx, name))], [L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp ctx env' body))])
+                                                   in (dec :: decs, assignment :: assignments)
+                                                   end
+                                               ) ([], []) defs
+      in L.LocalStat (decs, []) :: assignments @ doCExp ctx env cont
+      end
+  | doCExp ctx env (C.LetCont { name, params, body, cont = app as C.App { applied, cont, args } })
+    = if cont = name then
+          L.LocalStat (List.map (fn p => (p, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+          :: doCExp ctx env body
       else
-          doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
-  | doDec ctx env (F.RecValDec valbinds)
-    = let val (decs, assignments) = List.foldr (fn ((vid, _, exp), (decs, assignments)) => let val (env, dec) = declareIfNotHoisted (env, [vid])
-                                                                                           in (dec @ decs, doExpTo ctx env exp (AssignTo vid) @ assignments)
-                                                                                           end
-                                               ) ([], []) valbinds
-      in decs @ assignments
+          doCExp ctx env app (* dead continuation elimination *)
+  | doCExp ctx env (C.LetCont { name, params, body, cont })
+    = let val label = doLabel name
+          val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (fn p => VIdToLua (ctx, p)) params })
+                     }
+          val decs = if List.null params then
+                         []
+                     else
+                         [L.LocalStat (List.map (fn p => (p, L.LATE_INIT)) params, [])]
+      in decs @ L.makeDoStat (doCExp ctx env' cont) @ L.LabelStat label :: doCExp ctx env body (* enclose with do statement? *)
       end
-  | doDec ctx env (F.UnpackDec (tv, kind, vid, ty, exp))
-    = if isHoisted (env, vid) then
-          doExpTo ctx env exp (AssignTo vid)
-      else
-          doExpTo ctx env exp (DeclareAndAssignTo { level = #level env, destination = vid })
-  | doDec ctx env (F.IgnoreDec exp) = doExpTo ctx env exp Discard
-  | doDec ctx env (F.DatatypeDec datbinds) = [] (* no runtime counterpart *)
-  | doDec ctx env (F.ExceptionDec { name, tagName, payloadTy })
-    = [ if isHoisted (env, tagName) then
-            L.AssignStat ([L.VarExp (L.UserDefinedId tagName)], [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
-        else
-            L.LocalStat ([(tagName, L.CONST)], [L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))])])
-      ]
-  | doDec ctx env (F.ExportValue _) = raise Fail "internal error: ExportValue must be the last statement"
-  | doDec ctx env (F.ExportModule _) = raise Fail "internal error: ExportModule must be the last statement"
-  | doDec ctx env (F.GroupDec (SOME hoist, decs)) = let val (env, dec) = declareIfNotHoisted (env, TypedSyntax.VIdSet.toList hoist)
-                                                    in dec
-                                                       @ [ L.DoStat (vector (doDecs ctx (increaseLevel env) decs)) ]
-                                                    end
-  | doDec ctx env (F.GroupDec (NONE, decs)) = doDecs ctx env decs (* should be an error? *)
-and doDecs ctx env [F.ExportValue exp] = doExpTo ctx env exp Return
-  | doDecs ctx env [F.ExportModule fields] = mapCont (fn ((label, exp), cont) => doExpCont ctx env exp (fn (stmts, env, e) => cont (stmts, (label, e))))
-                                                     (Vector.foldr (op ::) [] fields)
-                                                     (fn ys => let val (stmts, fields') = ListPair.unzip ys
-                                                               in putPureTo ctx env Return ( List.concat stmts
-                                                                                           , L.TableExp (vector (List.map (fn (label, e) => (L.StringKey label, e)) fields'))
-                                                                                           )
-                                                               end
-                                                     )
-  | doDecs ctx env (dec :: decs) = doDec ctx env dec @ doDecs ctx env decs
-  | doDecs ctx env [] = []
+  | doCExp ctx env (C.LetRecCont { defs, cont })
+    = let val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
+          val commonParams = List.tabulate (maxParams, fn _ => genSym ctx)
+          val decs = if maxParams > 0 then
+                         [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, [])]
+                     else
+                         []
+          val env' = { continuations = List.foldl (fn ((name, params, body), m) => C.CVarMap.insert (m, name, GOTO { label = doLabel name, params = List.map L.UserDefinedId (List.take (commonParams, List.length params)) })) (#continuations env) defs
+                     }
+          val conts = List.map (fn (name, params, body) =>
+                                   let val dec = if List.null params then
+                                                     []
+                                                 else
+                                                     [L.LocalStat (List.map (fn v => (v, L.CONST)) params, List.map (fn v => L.VarExp (L.UserDefinedId v)) (List.take (commonParams, List.length params)))]
+                                   in L.LabelStat (doLabel name) :: L.makeDoStat (dec @ doCExp ctx env' body)
+                                   end
+                               ) defs
+      in decs @ L.makeDoStat (doCExp ctx env' cont) @ List.concat conts
+      end
+  | doCExp ctx env (C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
+    = let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, RETURN) }
+          val status = genSymWithName (ctx, "status")
+          val resultOrError = e
+          val functionExp = L.FunctionExp (vector [], vector (doCExp ctx env' body))
+      in [ L.LocalStat ([(status, L.CONST), (resultOrError, L.CONST)], [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [functionExp])])
+         , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
+                    , vector (doCExp ctx env h)
+                    , vector (applyCont (ctx, env, successfulExitOut, [L.VarExp (L.UserDefinedId e)]))
+                    )
+         ]
+      end
 
-fun doProgram ctx env decs = vector (doDecs ctx env decs)
-fun doProgramWithContinuations ctx env decs = let val func = L.FunctionExp (vector [], vector (doDecs ctx env decs))
-                                              in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
-                                              end
-
-end (* structure CodeGenLua *)
+fun doProgram ctx cont cexp
+    = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }
+      in vector (doCExp ctx env cexp)
+      end
+fun doProgramWithContinuations ctx cont cexp
+    = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }
+          val func = L.FunctionExp (vector [], vector (doCExp ctx env cexp))
+      in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
+      end
+end;
