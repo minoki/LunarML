@@ -107,6 +107,15 @@ fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
   | mayRaise (Projection _) = false
   | mayRaise (Abs _) = false
 
+fun containsApp (Let { cont, ... }) = containsApp cont
+  | containsApp (App _) = true
+  | containsApp (AppCont _) = false
+  | containsApp (If { cond, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
+  | containsApp (LetRec { defs, cont }) = containsApp cont
+  | containsApp (LetCont { name, params, body, cont }) = containsApp body orelse containsApp cont
+  | containsApp (LetRecCont { defs, cont }) = containsApp cont orelse List.exists (fn (_, _, body) => containsApp body) defs
+  | containsApp (Handle { body, handler = (_, h), ... }) = containsApp body orelse containsApp h
+
 (*
 fun freeCVars (bound : CVarSet.set, Let { exp, result, cont }, acc : CVarSet.set) = acc
   | freeCVars (bound, App { applied, cont, args }, acc) = if CVarSet.member (bound, cont) then

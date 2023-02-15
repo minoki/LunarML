@@ -583,8 +583,10 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
   | doCExp ctx env (C.If { cond, thenCont, elseCont })
     = let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
           val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
-      in (* L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont (* ad hoc *) *)
-          L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat (doCExp ctx env thenCont) @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+      in if C.containsApp thenCont then
+             L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat (doCExp ctx env thenCont) @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+         else
+             L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont (* ad hoc *)
       end
   | doCExp ctx env (C.Let { exp = C.Abs { contParam, params, body }, result, cont })
     = (case result of
