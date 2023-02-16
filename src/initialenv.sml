@@ -91,7 +91,6 @@ val VId_Array_tabulate = newVId "_Prim.Array.tabulate"
 
 (* Lua interface *)
 val VId_Lua_NIL = newVId "_Prim.Lua.NIL"
-val VId_Lua_newTable = newVId "_Prim.Lua.newTable"
 val VId_Lua_function = newVId "_Prim.Lua.function"
 val VId_Lua_Lib_assert = newVId "_Prim.Lua.Lib.assert"
 val VId_Lua_Lib_error = newVId "_Prim.Lua.Lib.error"
@@ -239,7 +238,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Array.fromList", VId_Array_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
                                            ,("_Prim.Array.tabulate", VId_Array_tabulate, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, primTy_int --> tyA) --> arrayOf tyA))
                                            ,("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], primTy_Lua_value))
-                                           ,("_Prim.Lua.newTable", VId_Lua_newTable, TypeScheme ([], primTy_unit --> primTy_Lua_value))
                                            ,("_Prim.Lua.function", VId_Lua_function, TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.assert", VId_Lua_Lib_assert, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.error", VId_Lua_Lib_error, TypeScheme ([], primTy_Lua_value))

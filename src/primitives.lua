@@ -920,6 +920,13 @@ do
       mayraise = false, -- may not be true if __index is set on the global table
       discardable = true, -- may not be true if __index is set on the global table
     },
+    {
+      name = "Lua.newTable",
+      srcname = "Lua_newTable",
+      type = { vars = {}, args = {}, result = LuaValue },
+      mayraise = false,
+      discardable = true,
+    },
 
     --
     -- JavaScript backend

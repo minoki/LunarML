@@ -62,7 +62,6 @@ val builtins
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_NIL, "nil") (* literal *)
-                    ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
                     ,(VId_Lua_Lib_assert, "assert")
                     ,(VId_Lua_Lib_error, "error")
@@ -135,7 +134,6 @@ val builtinsLuaJIT
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_NIL, "nil") (* literal *)
-                    ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
                     ,(VId_Lua_Lib_assert, "assert")
                     ,(VId_Lua_Lib_error, "error")
@@ -549,6 +547,10 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                              | LUAJIT => L.IndexExp (L.VarExp (L.PredefinedId "_G"), x)
                                                  , DISCARDABLE
                                                  )
+           | Primitives.Lua_newTable => (case result of
+                                             NONE => doCExp ctx env cont
+                                           | SOME result => L.ConstStat (result, L.TableExp (vector [])) :: doCExp ctx env cont
+                                        )
            | Primitives.DelimCont_newPromptTag => ConstStatOrExpStat (L.TableExp (vector [])) @ doCExp ctx env cont
            | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on Lua backend")

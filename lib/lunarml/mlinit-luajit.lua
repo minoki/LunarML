@@ -287,9 +287,6 @@ local function _Vector_concat(xs)
 end
 
 -- Lua interface
-local function _Lua_newTable()
-  return {}
-end
 local function _Lua_function(f)
   return function(...)
     local r = f(table_pack(...))
