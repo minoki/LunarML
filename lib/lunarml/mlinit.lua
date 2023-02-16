@@ -275,9 +275,6 @@ local function _Vector_concat(xs)
 end
 
 -- Lua interface
-local function _Lua_global(name)
-  return _ENV[name]
-end
 local function _Lua_newTable()
   return {}
 end

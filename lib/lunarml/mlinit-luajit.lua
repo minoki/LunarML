@@ -1,3 +1,4 @@
+local _G = _G
 local assert = assert
 local error = error
 local getmetatable = getmetatable
@@ -286,9 +287,6 @@ local function _Vector_concat(xs)
 end
 
 -- Lua interface
-local function _Lua_global(name)
-  return _G[name]
-end
 local function _Lua_newTable()
   return {}
 end

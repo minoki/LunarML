@@ -193,7 +193,7 @@ structure Lua : sig
           end = struct
 type value = _Prim.Lua.value
 exception LuaError = _Prim.Lua.LuaError
-val global = _Prim.Lua.global
+fun global name = _primCall "Lua.global" (name)
 fun call f args = _primCall "Lua.call" (f, args)
 fun call0 f args = (_primCall "Lua.call" (f, args); ())
 fun call1 f args = _primCall "Lua.call1" (f, args)

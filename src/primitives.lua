@@ -913,6 +913,13 @@ do
       mayraise = true,
       discardable = false,
     },
+    {
+      name = "Lua.global",
+      srcname = "Lua_global",
+      type = { vars = {}, args = {string}, result = LuaValue },
+      mayraise = false, -- may not be true if __index is set on the global table
+      discardable = true, -- may not be true if __index is set on the global table
+    },
 
     --
     -- JavaScript backend

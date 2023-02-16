@@ -90,7 +90,6 @@ val VId_Array_fromList = newVId "_Prim.Array.fromList"
 val VId_Array_tabulate = newVId "_Prim.Array.tabulate"
 
 (* Lua interface *)
-val VId_Lua_global = newVId "_Prim.Lua.global"
 val VId_Lua_NIL = newVId "_Prim.Lua.NIL"
 val VId_Lua_newTable = newVId "_Prim.Lua.newTable"
 val VId_Lua_function = newVId "_Prim.Lua.function"
@@ -239,7 +238,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Array.array", VId_Array_array, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, tyA) --> arrayOf tyA))
                                            ,("_Prim.Array.fromList", VId_Array_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> arrayOf tyA))
                                            ,("_Prim.Array.tabulate", VId_Array_tabulate, TypeScheme ([(tyVarA, [])], mkPairType (primTy_int, primTy_int --> tyA) --> arrayOf tyA))
-                                           ,("_Prim.Lua.global", VId_Lua_global, TypeScheme ([], primTy_string --> primTy_Lua_value))
                                            ,("_Prim.Lua.NIL", VId_Lua_NIL, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.newTable", VId_Lua_newTable, TypeScheme ([], primTy_unit --> primTy_Lua_value))
                                            ,("_Prim.Lua.function", VId_Lua_function, TypeScheme ([], (vectorOf primTy_Lua_value --> vectorOf primTy_Lua_value) --> primTy_Lua_value))
