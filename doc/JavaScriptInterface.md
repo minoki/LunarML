@@ -12,6 +12,7 @@ structure JavaScript : sig
   val sub : value * value -> value
   val field : value * WideString.string -> value
   val set : value * value * value -> unit
+  val setField : value * WideString.string * value -> unit
   val global : WideString.string -> value
   val setGlobal : WideString.string * value -> unit
   val call : value -> value vector -> value
