@@ -294,6 +294,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                                         | F.PrimFnOp Primitives.Lua_set => true
                                                         | F.PrimFnOp Primitives.Lua_setGlobal => true
                                                         | F.PrimFnOp Primitives.JavaScript_set => true
+                                                        | F.PrimFnOp Primitives.JavaScript_setGlobal => true
                                                         | _ => false
                                     val exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
                                 in if returnsUnit then

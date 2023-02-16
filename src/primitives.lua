@@ -1114,6 +1114,13 @@ do
       discardable = false,
     },
     {
+      name = "JavaScript.setGlobal",
+      srcname = "JavaScript_setGlobal",
+      type = { vars = {}, args = {string16, JSValue}, result = unit },
+      mayraise = true,
+      discardable = false,
+    },
+    {
       name = "JavaScript.call",
       srcname = "JavaScript_call",
       type = { vars = {}, args = {JSValue, vector(JSValue)}, result = JSValue },

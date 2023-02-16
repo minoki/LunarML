@@ -151,6 +151,7 @@ datatype PrimOp = EQUAL (* = *)
                 | JavaScript_isFalsy (* JavaScript.isFalsy *)
                 | JavaScript_typeof (* JavaScript.typeof *)
                 | JavaScript_global (* JavaScript.global *)
+                | JavaScript_setGlobal (* JavaScript.setGlobal *)
                 | JavaScript_call (* JavaScript.call *)
                 | JavaScript_method (* JavaScript.method *)
                 | JavaScript_new (* JavaScript.new *)
@@ -304,6 +305,7 @@ fun toString EQUAL = "="
   | toString JavaScript_isFalsy = "JavaScript.isFalsy"
   | toString JavaScript_typeof = "JavaScript.typeof"
   | toString JavaScript_global = "JavaScript.global"
+  | toString JavaScript_setGlobal = "JavaScript.setGlobal"
   | toString JavaScript_call = "JavaScript.call"
   | toString JavaScript_method = "JavaScript.method"
   | toString JavaScript_new = "JavaScript.new"
@@ -457,6 +459,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "JavaScript.isFalsy" = SOME JavaScript_isFalsy
   | fromString "JavaScript.typeof" = SOME JavaScript_typeof
   | fromString "JavaScript.global" = SOME JavaScript_global
+  | fromString "JavaScript.setGlobal" = SOME JavaScript_setGlobal
   | fromString "JavaScript.call" = SOME JavaScript_call
   | fromString "JavaScript.method" = SOME JavaScript_method
   | fromString "JavaScript.new" = SOME JavaScript_new
@@ -611,6 +614,7 @@ fun mayRaise EQUAL = false
   | mayRaise JavaScript_isFalsy = false
   | mayRaise JavaScript_typeof = false
   | mayRaise JavaScript_global = true
+  | mayRaise JavaScript_setGlobal = true
   | mayRaise JavaScript_call = true
   | mayRaise JavaScript_method = true
   | mayRaise JavaScript_new = true
@@ -764,6 +768,7 @@ fun isDiscardable EQUAL = true
   | isDiscardable JavaScript_isFalsy = true
   | isDiscardable JavaScript_typeof = true
   | isDiscardable JavaScript_global = false
+  | isDiscardable JavaScript_setGlobal = false
   | isDiscardable JavaScript_call = false
   | isDiscardable JavaScript_method = false
   | isDiscardable JavaScript_new = false
@@ -961,6 +966,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], result = bool }
   | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = string16 }
   | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], result = JavaScriptValue }
+  | typeOf Primitives.JavaScript_setGlobal = { vars = [], args = vector [string16, JavaScriptValue], result = unit }
   | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }

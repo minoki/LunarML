@@ -383,6 +383,13 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            | Primitives.JavaScript_isFalsy => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), false)
            | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), true)
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
+           | Primitives.JavaScript_setGlobal => doBinary (fn (name, value) =>
+                                                             J.AssignStat (J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), name), value)
+                                                             :: (case result of
+                                                                     SOME result => ConstStat (result, J.UndefinedExp) :: doCExp ctx env cont
+                                                                   | NONE => doCExp ctx env cont
+                                                                )
+                                                         )
            | Primitives.JavaScript_call => doBinary (fn (f, args) =>
                                                         let val exnName = genSym ctx
                                                         in case result of

@@ -6,6 +6,7 @@ structure JavaScript : sig
               val field : value * WideString.string -> value
               val set : value * value * value -> unit
               val global : WideString.string -> value
+              val setGlobal : WideString.string * value -> unit
               val call : value -> value vector -> value
               val new : value -> value vector -> value
               val method : value * WideString.string -> value vector -> value
@@ -130,6 +131,7 @@ fun sub (obj, key) = _primCall "JavaScript.sub" (obj, key)
 fun field (obj, key : WideString.string) = _primCall "JavaScript.sub" (obj, _primCall "Unsafe.cast" (key))
 fun set (obj, key, value) = _primCall "JavaScript.set" (obj, key, value)
 fun global name = _primCall "JavaScript.global" (name)
+fun setGlobal (name, value) = _primCall "JavaScript.setGlobal" (name, value)
 fun isFalsy x = _primCall "JavaScript.isFalsy" (x)
 fun x + y = _primCall "JavaScript.+" (x, y)
 fun x - y = _primCall "JavaScript.-" (x, y)

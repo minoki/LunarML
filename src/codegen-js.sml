@@ -599,6 +599,11 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
            | Primitives.JavaScript_isFalsy => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), false)
            | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), true)
            | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), false)
+           | Primitives.JavaScript_setGlobal => doBinary (fn (stmts, env, (name, value)) =>
+                                                             let val stmts = stmts @ [ J.AssignStat (J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), name), value) ]
+                                                             in putPureTo ctx env dest (stmts, J.UndefinedExp)
+                                                             end
+                                                         )
            | Primitives.JavaScript_call => (case args of
                                                 [f, F.PrimExp (F.VectorOp, _, args)] =>
                                                 doExpCont ctx env f
