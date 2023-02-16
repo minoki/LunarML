@@ -278,17 +278,6 @@ end
 local function _Lua_global(name)
   return _ENV[name]
 end
-local function _Lua_call(f)
-  return function(v)
-    return table_pack(f(table_unpack(v, 1, v.n)))
-  end
-end
-local function _Lua_method(t)
-  local self, name = t[1], t[2]
-  return function(v)
-    return table_pack(self[name](self, table_unpack(v, 1, v.n)))
-  end
-end
 local function _Lua_newTable()
   return {}
 end

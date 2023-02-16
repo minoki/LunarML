@@ -76,6 +76,9 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.JsCallOp, ... }) = false
   | isDiscardable (PrimOp { primOp = F.JsMethodOp, ... }) = false
   | isDiscardable (PrimOp { primOp = F.JsNewOp, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaCallOp, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaCall1Op, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaMethodOp _, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true
@@ -101,6 +104,9 @@ fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
                                            | F.JsCallOp => true
                                            | F.JsMethodOp => true
                                            | F.JsNewOp => true
+                                           | F.LuaCallOp => true
+                                           | F.LuaCall1Op => true
+                                           | F.LuaMethodOp _ => true
                                         )
   | mayRaise (Record _) = false
   | mayRaise (ExnTag _) = false
@@ -286,7 +292,6 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                                           F.PrimFnOp Primitives.Ref_set => true
                                                         | F.PrimFnOp Primitives.Unsafe_Array_update => true
                                                         | F.PrimFnOp Primitives.Lua_set => true
-                                                        | F.PrimFnOp Primitives.Lua_call0 => true
                                                         | F.PrimFnOp Primitives.JavaScript_set => true
                                                         | _ => false
                                     val exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
@@ -824,6 +829,25 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
            SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsNewOp, tyargs = [], args = ctor :: args })
          | _ => NOT_SIMPLIFIED
       )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Lua_call, tyargs, args = [ctor, C.Var args] })
+    = (case TypedSyntax.VIdMap.find (env, args) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaCallOp, tyargs = [], args = ctor :: args })
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Lua_call1, tyargs, args = [ctor, C.Var args] })
+    = (case TypedSyntax.VIdMap.find (env, args) of
+           SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaCall1Op, tyargs = [], args = ctor :: args })
+         | _ => NOT_SIMPLIFIED
+      )
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Lua_method, tyargs, args = [ctor, C.StringConst name, C.Var args] })
+    = let val name = CharVector.tabulate (Vector.length name, fn i => Char.chr (Vector.sub (name, i)))
+      in if LuaWriter.isLuaIdentifier name then
+             case TypedSyntax.VIdMap.find (env, args) of
+                 SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethodOp name, tyargs = [], args = ctor :: args })
+               | _ => NOT_SIMPLIFIED
+         else
+             NOT_SIMPLIFIED
+      end
   | simplifySimpleExp (env, C.PrimOp { primOp = F.DataTagAsStringOp _, tyargs, args = [C.Var x] })
     = (case TypedSyntax.VIdMap.find (env, x) of
            SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValOp { tag, ... }, ... }), ... } => VALUE (C.StringConst (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i)))))

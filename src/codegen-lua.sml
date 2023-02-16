@@ -62,8 +62,6 @@ val builtins
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_global, "_Lua_global")
-                    ,(VId_Lua_call, "_Lua_call")
-                    ,(VId_Lua_method, "_Lua_method")
                     ,(VId_Lua_NIL, "nil") (* literal *)
                     ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
@@ -138,8 +136,6 @@ val builtinsLuaJIT
                     ,(VId_Lua_LuaError, "_LuaError")
                     ,(VId_Lua_LuaError_tag, "_LuaError_tag")
                     ,(VId_Lua_global, "_Lua_global")
-                    ,(VId_Lua_call, "_Lua_call")
-                    ,(VId_Lua_method, "_Lua_method")
                     ,(VId_Lua_NIL, "nil") (* literal *)
                     ,(VId_Lua_newTable, "_Lua_newTable")
                     ,(VId_Lua_function, "_Lua_function")
@@ -487,11 +483,13 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            | Primitives.Lua_concat => doBinaryOp (L.CONCAT, IMPURE)
            | Primitives.Lua_length => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), IMPURE)
            | Primitives.Lua_isFalsy => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
-           | Primitives.Lua_call0 => doBinary (fn (f, args) =>
-                                                  let val stmt = L.CallStat (f, vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])])
-                                                  in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
-                                                  end
-                                              )
+           | Primitives.Lua_call => doBinary (fn (f, args) =>
+                                                 let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                 in case result of
+                                                        SOME result => L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, arg)])) :: doCExp ctx env cont
+                                                      | NONE => L.CallStat (f, arg) :: doCExp ctx env cont
+                                                 end
+                                             )
            | Primitives.Lua_call1 => doBinary (fn (f, args) =>
                                                   let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
                                                       val stmt = case result of
@@ -527,10 +525,46 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                   in stmts @ doCExp ctx env cont
                                                   end
                                               )
+           | Primitives.Lua_method => doTernary (fn (obj, rawName, args) =>
+                                                   let val name' = case rawName of
+                                                                       L.ConstExp (L.LiteralString name) =>
+                                                                       if LuaWriter.isLuaIdentifier name then
+                                                                           SOME name
+                                                                       else
+                                                                           NONE
+                                                                     | _ => NONE
+                                                   in case name' of
+                                                          SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                                       in case result of
+                                                                              SOME result => L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (obj, name, arg)])) :: doCExp ctx env cont
+                                                                            | NONE => L.MethodStat (obj, name, arg) :: doCExp ctx env cont
+                                                                       end
+                                                        | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
+                                                                  in case result of
+                                                                         SOME result => L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (L.IndexExp (obj, rawName), arg)])) :: doCExp ctx env cont
+                                                                       | NONE => L.CallStat (L.IndexExp (obj, rawName), arg) :: doCExp ctx env cont
+                                                                  end
+                                                   end
+                                             )
            | Primitives.DelimCont_newPromptTag => ConstStatOrExpStat (L.TableExp (vector [])) @ doCExp ctx env cont
            | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on Lua backend")
       end
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.LuaCallOp, tyargs = _, args = f :: args }, result, cont })
+    = (case result of
+           NONE => L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: doCExp ctx env cont
+         | SOME result => L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])) :: doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.LuaCall1Op, tyargs = _, args = f :: args }, result, cont })
+    = (case result of
+           NONE => L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: doCExp ctx env cont
+         | SOME result => L.ConstStat (result, L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
+      )
+  | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.LuaMethodOp name, tyargs = _, args = obj :: args }, result, cont })
+    = (case result of
+           NONE => L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: doCExp ctx env cont
+         | SOME result => L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])) :: doCExp ctx env cont
+      )
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result, cont })
     = raise CodeGenError "JsCallOp is not supported on Lua backend"
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result, cont })

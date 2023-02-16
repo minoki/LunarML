@@ -118,10 +118,11 @@ datatype PrimOp = EQUAL (* = *)
                 | Lua_concat (* Lua.concat *)
                 | Lua_length (* Lua.length *)
                 | Lua_isFalsy (* Lua.isFalsy *)
-                | Lua_call0 (* Lua.call0 *)
+                | Lua_call (* Lua.call *)
                 | Lua_call1 (* Lua.call1 *)
                 | Lua_call2 (* Lua.call2 *)
                 | Lua_call3 (* Lua.call3 *)
+                | Lua_method (* Lua.method *)
                 | JavaScript_sub (* JavaScript.sub *)
                 | JavaScript_set (* JavaScript.set *)
                 | JavaScript_EQUAL (* JavaScript.=== *)
@@ -267,10 +268,11 @@ fun toString EQUAL = "="
   | toString Lua_concat = "Lua.concat"
   | toString Lua_length = "Lua.length"
   | toString Lua_isFalsy = "Lua.isFalsy"
-  | toString Lua_call0 = "Lua.call0"
+  | toString Lua_call = "Lua.call"
   | toString Lua_call1 = "Lua.call1"
   | toString Lua_call2 = "Lua.call2"
   | toString Lua_call3 = "Lua.call3"
+  | toString Lua_method = "Lua.method"
   | toString JavaScript_sub = "JavaScript.sub"
   | toString JavaScript_set = "JavaScript.set"
   | toString JavaScript_EQUAL = "JavaScript.==="
@@ -416,10 +418,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "Lua.concat" = SOME Lua_concat
   | fromString "Lua.length" = SOME Lua_length
   | fromString "Lua.isFalsy" = SOME Lua_isFalsy
-  | fromString "Lua.call0" = SOME Lua_call0
+  | fromString "Lua.call" = SOME Lua_call
   | fromString "Lua.call1" = SOME Lua_call1
   | fromString "Lua.call2" = SOME Lua_call2
   | fromString "Lua.call3" = SOME Lua_call3
+  | fromString "Lua.method" = SOME Lua_method
   | fromString "JavaScript.sub" = SOME JavaScript_sub
   | fromString "JavaScript.set" = SOME JavaScript_set
   | fromString "JavaScript.===" = SOME JavaScript_EQUAL
@@ -566,10 +569,11 @@ fun mayRaise EQUAL = false
   | mayRaise Lua_concat = true
   | mayRaise Lua_length = true
   | mayRaise Lua_isFalsy = false
-  | mayRaise Lua_call0 = true
+  | mayRaise Lua_call = true
   | mayRaise Lua_call1 = true
   | mayRaise Lua_call2 = true
   | mayRaise Lua_call3 = true
+  | mayRaise Lua_method = true
   | mayRaise JavaScript_sub = true
   | mayRaise JavaScript_set = true
   | mayRaise JavaScript_EQUAL = false
@@ -715,10 +719,11 @@ fun isDiscardable EQUAL = true
   | isDiscardable Lua_concat = false
   | isDiscardable Lua_length = false
   | isDiscardable Lua_isFalsy = true
-  | isDiscardable Lua_call0 = false
+  | isDiscardable Lua_call = false
   | isDiscardable Lua_call1 = false
   | isDiscardable Lua_call2 = false
   | isDiscardable Lua_call3 = false
+  | isDiscardable Lua_method = false
   | isDiscardable JavaScript_sub = false
   | isDiscardable JavaScript_set = false
   | isDiscardable JavaScript_EQUAL = true
@@ -908,10 +913,11 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Lua_concat = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_length = { vars = [], args = vector [LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_isFalsy = { vars = [], args = vector [LuaValue], result = bool }
-  | typeOf Primitives.Lua_call0 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = unit }
+  | typeOf Primitives.Lua_call = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = vectorOf (LuaValue) }
   | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = LuaValue }
   | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = pairOf (LuaValue, LuaValue) }
   | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = tupleOf [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = vectorOf (LuaValue) }
   | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], result = unit }
   | typeOf Primitives.JavaScript_EQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }

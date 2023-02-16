@@ -35,6 +35,9 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | JsCallOp (* value argument: function, arguments *)
                 | JsMethodOp (* value argument: object, name, arguments *)
                 | JsNewOp (* value argument: constructor, arguments *)
+                | LuaCallOp (* value argument: function, arguments *)
+                | LuaCall1Op (* value argument: function, arguments *)
+                | LuaMethodOp of string (* value argument: object, arguments *)
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of { sourceSpan : SourcePos.span
                           , scon : Syntax.SCon
@@ -409,6 +412,9 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp JsCallOp = "JsCallOp"
   | print_PrimOp JsMethodOp = "JsMethodOp"
   | print_PrimOp JsNewOp = "JsNewOp"
+  | print_PrimOp LuaCallOp = "LuaCallOp"
+  | print_PrimOp LuaCall1Op = "LuaCall1Op"
+  | print_PrimOp (LuaMethodOp _) = "LuaMethodOp"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat { sourceSpan, scon, equality, cookedValue }) = "SConPat(" ^ Syntax.print_SCon scon ^ ")"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"

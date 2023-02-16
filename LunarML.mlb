@@ -21,8 +21,8 @@ src/printer.sml
 src/fsyntax.sml
 src/fprinter.sml
 src/ftransform.sml
-src/cps.sml
 src/lua-syntax.sml
+src/cps.sml
 src/lua-transform.sml
 src/codegen-lua.sml
 src/js-syntax.sml

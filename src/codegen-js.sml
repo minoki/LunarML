@@ -730,6 +730,9 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
                                          )
                              )
   | doExpTo ctx env (F.PrimExp (F.JsNewOp, _, [])) dest = raise CodeGenError "JsNewOp: invalid number of arguments"
+  | doExpTo ctx env (F.PrimExp (F.LuaCallOp, _, args)) dest = raise CodeGenError "LuaCallOp is not supported on JS backend"
+  | doExpTo ctx env (F.PrimExp (F.LuaCall1Op, _, args)) dest = raise CodeGenError "LuaCall1Op is not supported on JS backend"
+  | doExpTo ctx env (F.PrimExp (F.LuaMethodOp _, _, args)) dest = raise CodeGenError "LuaMethodOp is not supported on JS backend"
 (* doDec : Context -> Env -> F.Dec -> J.Stat list *)
 and doDec ctx env (F.ValDec (vid, _, exp)) : J.Stat list
     = if isHoisted (env, vid) then

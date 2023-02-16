@@ -819,6 +819,9 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp F.JsCallOp = false
   | isDiscardablePrimOp F.JsMethodOp = false
   | isDiscardablePrimOp F.JsNewOp = false
+  | isDiscardablePrimOp F.LuaCallOp = false
+  | isDiscardablePrimOp F.LuaCall1Op = false
+  | isDiscardablePrimOp (F.LuaMethodOp _) = false
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso List.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields

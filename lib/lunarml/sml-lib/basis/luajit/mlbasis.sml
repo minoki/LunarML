@@ -206,12 +206,12 @@ structure Lua : sig
 type value = _Prim.Lua.value
 exception LuaError = _Prim.Lua.LuaError
 val global = _Prim.Lua.global
-val call = _Prim.Lua.call
-fun call0 f args = _primCall "Lua.call0" (f, args)
+fun call f args = _primCall "Lua.call" (f, args)
+fun call0 f args = (_primCall "Lua.call" (f, args); ())
 fun call1 f args = _primCall "Lua.call1" (f, args)
 fun call2 f args = _primCall "Lua.call2" (f, args)
 fun call3 f args = _primCall "Lua.call3" (f, args)
-val method = _Prim.Lua.method
+fun method (obj, name) args = _primCall "Lua.method" (obj, name, args)
 val NIL = _Prim.Lua.NIL
 val newTable = _Prim.Lua.newTable
 val function = _Prim.Lua.function
