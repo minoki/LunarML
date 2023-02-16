@@ -100,6 +100,7 @@ structure Lua : sig
               val field : value * string -> value  (* t[k] *)
               val set : value * value * value -> unit  (* t[k] = v *)
               val global : string -> value  (* _ENV[name] *)
+              val setGlobal : string * value -> unit (* _ENV[name] = v *)
               val call : value -> value vector -> value vector  (* f(args) *)
               val call0 : value -> value vector -> unit  (* f(args) *)
               val call1 : value -> value vector -> value  (* f(args) *)
@@ -194,6 +195,7 @@ structure Lua : sig
 type value = _Prim.Lua.value
 exception LuaError = _Prim.Lua.LuaError
 fun global name = _primCall "Lua.global" (name)
+fun setGlobal (name, value) = _primCall "Lua.setGlobal" (name, value)
 fun call f args = _primCall "Lua.call" (f, args)
 fun call0 f args = (_primCall "Lua.call" (f, args); ())
 fun call1 f args = _primCall "Lua.call1" (f, args)

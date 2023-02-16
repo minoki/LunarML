@@ -547,6 +547,14 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                              | LUAJIT => L.IndexExp (L.VarExp (L.PredefinedId "_G"), x)
                                                  , DISCARDABLE
                                                  )
+           | Primitives.Lua_setGlobal => doBinary (fn (name, value) =>
+                                                      let val t = case #targetLuaVersion ctx of
+                                                                      LUA5_3 => L.IndexExp (L.VarExp (L.PredefinedId "_ENV"), name)
+                                                                    | LUAJIT => L.IndexExp (L.VarExp (L.PredefinedId "_G"), name)
+                                                          val stmt = L.AssignStat ([t], [value])
+                                                      in stmt :: ConstStatOrExpStat (L.ConstExp L.Nil) @ doCExp ctx env cont
+                                                      end
+                                                  )
            | Primitives.Lua_newTable => (case result of
                                              NONE => doCExp ctx env cont
                                            | SOME result => L.ConstStat (result, L.TableExp (vector [])) :: doCExp ctx env cont

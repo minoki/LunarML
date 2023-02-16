@@ -124,6 +124,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Lua_call3 (* Lua.call3 *)
                 | Lua_method (* Lua.method *)
                 | Lua_global (* Lua.global *)
+                | Lua_setGlobal (* Lua.setGlobal *)
                 | Lua_newTable (* Lua.newTable *)
                 | JavaScript_sub (* JavaScript.sub *)
                 | JavaScript_set (* JavaScript.set *)
@@ -276,6 +277,7 @@ fun toString EQUAL = "="
   | toString Lua_call3 = "Lua.call3"
   | toString Lua_method = "Lua.method"
   | toString Lua_global = "Lua.global"
+  | toString Lua_setGlobal = "Lua.setGlobal"
   | toString Lua_newTable = "Lua.newTable"
   | toString JavaScript_sub = "JavaScript.sub"
   | toString JavaScript_set = "JavaScript.set"
@@ -428,6 +430,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Lua.call3" = SOME Lua_call3
   | fromString "Lua.method" = SOME Lua_method
   | fromString "Lua.global" = SOME Lua_global
+  | fromString "Lua.setGlobal" = SOME Lua_setGlobal
   | fromString "Lua.newTable" = SOME Lua_newTable
   | fromString "JavaScript.sub" = SOME JavaScript_sub
   | fromString "JavaScript.set" = SOME JavaScript_set
@@ -581,6 +584,7 @@ fun mayRaise EQUAL = false
   | mayRaise Lua_call3 = true
   | mayRaise Lua_method = true
   | mayRaise Lua_global = false
+  | mayRaise Lua_setGlobal = false
   | mayRaise Lua_newTable = false
   | mayRaise JavaScript_sub = true
   | mayRaise JavaScript_set = true
@@ -733,6 +737,7 @@ fun isDiscardable EQUAL = true
   | isDiscardable Lua_call3 = false
   | isDiscardable Lua_method = false
   | isDiscardable Lua_global = true
+  | isDiscardable Lua_setGlobal = false
   | isDiscardable Lua_newTable = true
   | isDiscardable JavaScript_sub = false
   | isDiscardable JavaScript_set = false
@@ -929,6 +934,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = tupleOf [LuaValue, LuaValue, LuaValue] }
   | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = vectorOf (LuaValue) }
   | typeOf Primitives.Lua_global = { vars = [], args = vector [string], result = LuaValue }
+  | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], result = unit }
   | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], result = LuaValue }
   | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
   | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], result = unit }

@@ -292,6 +292,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                                           F.PrimFnOp Primitives.Ref_set => true
                                                         | F.PrimFnOp Primitives.Unsafe_Array_update => true
                                                         | F.PrimFnOp Primitives.Lua_set => true
+                                                        | F.PrimFnOp Primitives.Lua_setGlobal => true
                                                         | F.PrimFnOp Primitives.JavaScript_set => true
                                                         | _ => false
                                     val exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }

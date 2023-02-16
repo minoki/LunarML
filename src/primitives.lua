@@ -917,8 +917,15 @@ do
       name = "Lua.global",
       srcname = "Lua_global",
       type = { vars = {}, args = {string}, result = LuaValue },
-      mayraise = false, -- may not be true if __index is set on the global table
-      discardable = true, -- may not be true if __index is set on the global table
+      mayraise = false, -- assume that __index is not set on the global table
+      discardable = true, -- assume that __index is not set on the global table
+    },
+    {
+      name = "Lua.setGlobal",
+      srcname = "Lua_setGlobal",
+      type = { vars = {}, args = {string, LuaValue}, result = unit },
+      mayraise = false, -- assume that __newindex is not set on the global table
+      discardable = false,
     },
     {
       name = "Lua.newTable",
