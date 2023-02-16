@@ -33,10 +33,10 @@ local
     val os_difftime = LunarML.assumeDiscardable Lua.field (oslib, "difftime")
     val epoch = LunarML.assumeDiscardable (fn () =>
                                               let val t = Lua.newTable ()
-                                              in Lua.set (t, Lua.fromString "year", Lua.fromInt 1970)
-                                               ; Lua.set (t, Lua.fromString "month", Lua.fromInt 1)
-                                               ; Lua.set (t, Lua.fromString "day", Lua.fromInt 1)
-                                               ; Lua.set (t, Lua.fromString "hour", Lua.fromInt 0)
+                                              in Lua.setField (t, "year", Lua.fromInt 1970)
+                                               ; Lua.setField (t, "month", Lua.fromInt 1)
+                                               ; Lua.setField (t, "day", Lua.fromInt 1)
+                                               ; Lua.setField (t, "hour", Lua.fromInt 0)
                                                ; Lua.call1 os_time #[t]
                                               end
                                           ) () (* local time; depends on time zone *)
@@ -64,12 +64,12 @@ fun toLuaTime (x : int) : Lua.value
           val hour = hour' mod 60
           val day' = hour' div 24
           val t = Lua.newTable ()
-      in Lua.set (t, Lua.fromString "year", Lua.fromInt 1970)
-       ; Lua.set (t, Lua.fromString "month", Lua.fromInt 1)
-       ; Lua.set (t, Lua.fromString "day", Lua.fromInt (day' + 1))
-       ; Lua.set (t, Lua.fromString "hour", Lua.fromInt hour)
-       ; Lua.set (t, Lua.fromString "min", Lua.fromInt min)
-       ; Lua.set (t, Lua.fromString "sec", Lua.fromInt sec)
+      in Lua.setField (t, "year", Lua.fromInt 1970)
+       ; Lua.setField (t, "month", Lua.fromInt 1)
+       ; Lua.setField (t, "day", Lua.fromInt (day' + 1))
+       ; Lua.setField (t, "hour", Lua.fromInt hour)
+       ; Lua.setField (t, "min", Lua.fromInt min)
+       ; Lua.setField (t, "sec", Lua.fromInt sec)
        ; Lua.call1 os_time #[t]
       end
 structure Time = struct

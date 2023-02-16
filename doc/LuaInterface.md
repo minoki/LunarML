@@ -10,6 +10,7 @@ structure Lua : sig
   val sub : value * value -> value  (* t[k] *)
   val field : value * string -> value  (* t[k] *)
   val set : value * value * value -> unit  (* t[k] = v *)
+  val setField : value * string * value -> unit  (* t[k] = v *)
   val global : string -> value  (* _ENV[name] or _G[name] *)
   val setGlobal : string * value -> unit  (* _ENV[name] = v or _G[name] = v *)
   val call : value -> value vector -> value vector  (* f(args...) *)
