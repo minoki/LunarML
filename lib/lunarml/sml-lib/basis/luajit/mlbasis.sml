@@ -6,10 +6,10 @@ fun x - y = _primCall "call2" (_Prim.Word.-, x, y)
 fun x * y = _primCall "call2" (_Prim.Word.*, x, y)
 fun x div y = _primCall "call2" (_Prim.Word.div, x, y)
 fun x mod y = _primCall "call2" (_Prim.Word.mod, x, y)
-fun x < y = _primCall "call2" (_Prim.Word.<, x, y)
-fun x > y = y < x
-fun x <= y = Bool.not (y < x)
-fun x >= y = Bool.not (x < y)
+fun x < y = _primCall "Word.<" (x, y)
+fun x > y = _primCall "Word.>" (x, y)
+fun x <= y = _primCall "Word.<=" (x, y)
+fun x >= y = _primCall "Word.>=" (x, y)
 end
 local
 fun fromWord (x : word) = x

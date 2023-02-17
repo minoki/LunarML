@@ -44,7 +44,6 @@ val builtins
                     (* word *)
                     ,(VId_Word_div_bin, "__Word_div")
                     ,(VId_Word_mod_bin, "__Word_mod")
-                    ,(VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     (* Vector and Array *)
@@ -120,7 +119,6 @@ val builtinsLuaJIT
                     ,(VId_Word_div_bin, "__Word_div")
                     ,(VId_Word_mod_bin, "__Word_mod")
                     ,(VId_Word_TILDE, "_Word_negate")
-                    ,(VId_Word_LT_bin, "__Word_LT")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     (* Vector and Array *)
@@ -408,6 +406,22 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            | Primitives.Word_MINUS => doBinaryOp (L.MINUS, PURE) (* not used on LuaJIT *)
            | Primitives.Word_TIMES => doBinaryOp (L.TIMES, PURE) (* not used on LuaJIT *)
            | Primitives.Word_TILDE => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE) (* not used on LuaJIT *)
+           | Primitives.Word_LT => (case #targetLuaVersion ctx of
+                                        LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b]), PURE)
+                                      | LUAJIT => doBinaryOp (L.LT, PURE)
+                                   )
+           | Primitives.Word_LE => (case #targetLuaVersion ctx of
+                                        LUA5_3 => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a])), PURE)
+                                      | LUAJIT => doBinaryOp (L.LE, PURE)
+                                   )
+           | Primitives.Word_GT => (case #targetLuaVersion ctx of
+                                        LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a]), PURE)
+                                      | LUAJIT => doBinaryOp (L.GT, PURE)
+                                   )
+           | Primitives.Word_GE => (case #targetLuaVersion ctx of
+                                        LUA5_3 => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b])), PURE)
+                                      | LUAJIT => doBinaryOp (L.GE, PURE)
+                                   )
            | Primitives.Real_PLUS => doBinaryOp (L.PLUS, PURE)
            | Primitives.Real_MINUS => doBinaryOp (L.MINUS, PURE)
            | Primitives.Real_TIMES => (case #targetLuaVersion ctx of

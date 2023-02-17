@@ -134,7 +134,6 @@ val VId_Word_sub_bin = newVId "_Prim.Word.-"
 val VId_Word_mul_bin = newVId "_Prim.Word.*"
 val VId_Word_div_bin = newVId "_Prim.Word.div"
 val VId_Word_mod_bin = newVId "_Prim.Word.mod"
-val VId_Word_LT_bin = newVId "_Prim.Word.<"
 
 val VId_String_concat = newVId "_Prim.String.concat"
 val VId_String_concatWith = newVId "_Prim.String.concatWith"
@@ -226,7 +225,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Word.div", VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Word.mod", VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Word.~", VId_Word_TILDE, TypeScheme ([], primTy_word --> primTy_word))
-                                           ,("_Prim.Word.<", VId_Word_LT_bin, TypeScheme ([], function2 (primTy_bool, primTy_word, primTy_word)))
                                            ,("_Prim.Real.abs", VId_Real_abs, TypeScheme ([], primTy_real --> primTy_real))
                                            ,("_Prim.String.concat", VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
                                            ,("_Prim.String.concatWith", VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))

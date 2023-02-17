@@ -192,9 +192,6 @@ end
 local function _Word_negate(x)
   return (- x) % 0x100000000
 end
-local function __Word_LT(x, y)
-  return x < y
-end
 
 -- Real
 local NEGATIVE_ZERO = 0 / (-1)

@@ -201,7 +201,6 @@ local function __Word_mod(x, y)
     end
   end
 end
-local __Word_LT = math_ult
 
 -- List
 local function _list(t)
