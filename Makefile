@@ -82,6 +82,9 @@ test-luajit: bin/lunarml
 test-nodejs: bin/lunarml
 	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE)
 
+test-nodejs-via-cps: bin/lunarml
+	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) via-cps
+
 test-nodejs-cps: bin/lunarml
 	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) cps
 

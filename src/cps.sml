@@ -11,12 +11,14 @@ structure CVar :> sig
               val compare : ord_key * ord_key -> order
               val fromInt : int -> t
               val toInt : t -> int
+              val dummy : t
           end = struct
 type t = int
 type ord_key = t
 val compare = Int.compare
 fun fromInt x = x
 fun toInt x = x
+val dummy = ~1
 end
 type CVar = CVar.t
 structure CVarSet = RedBlackSetFn (CVar)

@@ -41,7 +41,7 @@ datatype lua_runtime = LUA_PLAIN | LUA_CONTINUATIONS
 datatype backend = BACKEND_LUA of lua_runtime
                  | BACKEND_LUAJIT
                  | BACKEND_JS
-                 | BACKEND_JS_CPS
+                 | BACKEND_JS_CPS of CodeGenJsCps.code_style
 datatype subcommand = SUBCOMMAND_COMPILE
 type options = { subcommand : subcommand option
                , output : string option
@@ -81,13 +81,13 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
                          , maxInt = SOME 0x7fffffff
                          , wordSize = 32
                          }
-         | BACKEND_JS_CPS => { defaultInt = TargetInfo.INT32
-                             , defaultWord = TargetInfo.WORD32
-                             , datatypeTag = TargetInfo.STRING16
-                             , minInt = SOME ~0x80000000
-                             , maxInt = SOME 0x7fffffff
-                             , wordSize = 32
-                             }
+         | BACKEND_JS_CPS _ => { defaultInt = TargetInfo.INT32
+                               , defaultWord = TargetInfo.WORD32
+                               , datatypeTag = TargetInfo.STRING16
+                               , minInt = SOME ~0x80000000
+                               , maxInt = SOME 0x7fffffff
+                               , wordSize = 32
+                               }
       )
 type context = { driverContext : Driver.Context
                , baseDir : string
@@ -227,7 +227,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val () = TextIO.closeOut outs
       in ()
       end
-  | emit (opts as { backend = BACKEND_JS_CPS, ... }) targetInfo fileName nextId decs
+  | emit (opts as { backend = BACKEND_JS_CPS style, ... }) targetInfo fileName nextId decs
     = let val cont = let val n = !nextId
                          val _ = nextId := n + 1
                      in CSyntax.CVar.fromInt n
@@ -243,12 +243,16 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
           val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val contEscapeMap = CpsAnalyze.contEscape cexp
+          val contEscapeMap = CpsAnalyze.contEscape cexp (* not used if direct style *)
           val base = OS.Path.base fileName
-          val mlinit_js = OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
+          val mlinit_js = case style of
+                              CodeGenJsCps.DIRECT_STYLE => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
+                            | CodeGenJsCps.CPS => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
-          val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap }
-          val js = CodeGenJsCps.doProgram jsctx cont cexp
+          val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap, style = style }
+          val js = case style of
+                       CodeGenJsCps.DIRECT_STYLE => CodeGenJsCps.doProgramDirect jsctx cont cexp
+                     | CodeGenJsCps.CPS => CodeGenJsCps.doProgramCPS jsctx cont cexp
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram { nextVId = nextId } js
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
@@ -270,8 +274,18 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
 fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Code)
     = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
-                                   ,("TARGET_LANG", case #backend opts of BACKEND_LUA _ => "lua" | BACKEND_LUAJIT => "luajit" | BACKEND_JS => "js" | BACKEND_JS_CPS => "js-cps")
-                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of BACKEND_LUA LUA_CONTINUATIONS => "oneshot" | BACKEND_JS_CPS => "multishot" | _ => "none")
+                                   ,("TARGET_LANG", case #backend opts of
+                                                        BACKEND_LUA _ => "lua"
+                                                      | BACKEND_LUAJIT => "luajit"
+                                                      | BACKEND_JS => "js"
+                                                      | BACKEND_JS_CPS CodeGenJsCps.DIRECT_STYLE => "js"
+                                                      | BACKEND_JS_CPS CodeGenJsCps.CPS => "js-cps"
+                                    )
+                                   ,("DELIMITED_CONTINUATIONS", case #backend opts of
+                                                                    BACKEND_LUA LUA_CONTINUATIONS => "oneshot"
+                                                                  | BACKEND_JS_CPS CodeGenJsCps.CPS => "multishot"
+                                                                  | _ => "none"
+                                    )
                                    ]
           val targetInfo = getTargetInfo opts
           val ctx = { driverContext = Driver.newContext targetInfo
@@ -381,6 +395,7 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_TARGET_LUA_CONTINUATIONS (* --lua-continuations *)
                 | OPT_TARGET_LUAJIT (* --luajit *)
                 | OPT_TARGET_JS (* --js *)
+                | OPT_TARGET_JS_VIA_CPS (* --js-via-cps *)
                 | OPT_TARGET_JS_CPS (* --js-cps *)
                 | OPT_HELP (* -h,--help *)
                 | OPT_VERSION (* -v,--version *)
@@ -398,6 +413,7 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--lua-continuations", SIMPLE OPT_TARGET_LUA_CONTINUATIONS)
                   ,(LONG "--luajit", SIMPLE OPT_TARGET_LUAJIT)
                   ,(LONG "--js", SIMPLE OPT_TARGET_JS)
+                  ,(LONG "--js-via-cps", SIMPLE OPT_TARGET_JS_VIA_CPS)
                   ,(LONG "--js-cps", SIMPLE OPT_TARGET_JS_CPS)
                   ,(SHORT "-h", SIMPLE OPT_HELP)
                   ,(LONG "--help", SIMPLE OPT_HELP)
@@ -431,7 +447,8 @@ fun parseArgs (opts : options) args
         | SOME (OPT_TARGET_LUA_CONTINUATIONS, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
         | SOME (OPT_TARGET_LUAJIT, args) => parseArgs (S.set.backend BACKEND_LUAJIT opts) args
         | SOME (OPT_TARGET_JS, args) => parseArgs (S.set.backend BACKEND_JS opts) args
-        | SOME (OPT_TARGET_JS_CPS, args) => parseArgs (S.set.backend BACKEND_JS_CPS opts) args
+        | SOME (OPT_TARGET_JS_VIA_CPS, args) => parseArgs (S.set.backend (BACKEND_JS_CPS CodeGenJsCps.DIRECT_STYLE) opts) args
+        | SOME (OPT_TARGET_JS_CPS, args) => parseArgs (S.set.backend (BACKEND_JS_CPS CodeGenJsCps.CPS) opts) args
         | SOME (OPT_HELP, args) => ( showHelp (); OS.Process.exit OS.Process.success )
         | SOME (OPT_VERSION, args) => ( showVersion (); OS.Process.exit OS.Process.success )
         | SOME (OPT_STOP, args) => handleInputFile opts args
