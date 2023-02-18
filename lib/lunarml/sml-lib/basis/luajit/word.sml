@@ -341,7 +341,7 @@ local
                          WordToUint64 x
     fun fromLarge x = Uint64ToWord (Word64.andb (x, WordToUint64 FULL))
     val toInt = Word.toInt
-    fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
+    fun toIntX x = if Word.andb (x, _primCall "Word.<<.unchecked" (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
                        Word.toInt x
                    else
                        ~ (Word.toInt (FULL - x) + 1)
@@ -386,7 +386,7 @@ local
                          WordToUint64 x
     fun fromLarge x = Uint64ToWord (Word64.andb (x, WordToUint64 FULL))
     val toInt = Word.toInt
-    fun toIntX x = if Word.andb (x, Word.<< (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
+    fun toIntX x = if Word.andb (x, _primCall "Word.<<.unchecked" (0w1, Word.fromInt (wordSize - 1))) = 0w0 then
                        Word.toInt x
                    else
                        ~ (Word.toInt (FULL - x) + 1)

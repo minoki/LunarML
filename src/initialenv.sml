@@ -109,6 +109,9 @@ val VId_Lua_Lib_string_format = newVId "_Prim.Lua.Lib.string.format"
 val VId_Lua_Lib_table = newVId "_Prim.Lua.Lib.table"
 val VId_Lua_Lib_table_pack = newVId "_Prim.Lua.Lib.table.pack"
 val VId_Lua_Lib_table_unpack = newVId "_Prim.Lua.Lib.table.unpack"
+val VId_Lua_Lib_bit = newVId "_Prim.Lua.Lib.bit" (* LuaJIT *)
+val VId_Lua_Lib_bit_lshift = newVId "_Prim.Lua.Lib.bit.lshift" (* LuaJIT *)
+val VId_Lua_Lib_bit_rshift = newVId "_Prim.Lua.Lib.bit.rshift" (* LuaJIT *)
 val VId_Lua_LuaError = newVId "_Prim.Lua.LuaError"
 val VId_Lua_LuaError_tag = newVId "_Prim.Lua.LuaError.tag"
 
@@ -254,6 +257,9 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Lua.Lib.string.format", VId_Lua_Lib_string_format, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.pack", VId_Lua_Lib_table_pack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.unpack", VId_Lua_Lib_table_unpack, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit", VId_Lua_Lib_bit, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.lshift", VId_Lua_Lib_bit_lshift, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.rshift", VId_Lua_Lib_bit_rshift, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.JavaScript.undefined", VId_JavaScript_undefined, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.null", VId_JavaScript_null, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.function", VId_JavaScript_function, TypeScheme ([], (vectorOf primTy_JavaScript_value --> primTy_JavaScript_value) --> primTy_JavaScript_value))

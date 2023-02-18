@@ -28,6 +28,8 @@ datatype PrimOp = EQUAL (* = *)
                 | Word_LE (* Word.<= *)
                 | Word_GT (* Word.> *)
                 | Word_GE (* Word.>= *)
+                | Word_LSHIFT_unchecked (* Word.<<.unchecked *)
+                | Word_RSHIFT_unchecked (* Word.>>.unchecked *)
                 | Real_PLUS (* Real.+ *)
                 | Real_MINUS (* Real.- *)
                 | Real_TIMES (* Real.* *)
@@ -182,6 +184,8 @@ fun toString EQUAL = "="
   | toString Word_LE = "Word.<="
   | toString Word_GT = "Word.>"
   | toString Word_GE = "Word.>="
+  | toString Word_LSHIFT_unchecked = "Word.<<.unchecked"
+  | toString Word_RSHIFT_unchecked = "Word.>>.unchecked"
   | toString Real_PLUS = "Real.+"
   | toString Real_MINUS = "Real.-"
   | toString Real_TIMES = "Real.*"
@@ -336,6 +340,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "Word.<=" = SOME Word_LE
   | fromString "Word.>" = SOME Word_GT
   | fromString "Word.>=" = SOME Word_GE
+  | fromString "Word.<<.unchecked" = SOME Word_LSHIFT_unchecked
+  | fromString "Word.>>.unchecked" = SOME Word_RSHIFT_unchecked
   | fromString "Real.+" = SOME Real_PLUS
   | fromString "Real.-" = SOME Real_MINUS
   | fromString "Real.*" = SOME Real_TIMES
@@ -491,6 +497,8 @@ fun mayRaise EQUAL = false
   | mayRaise Word_LE = false
   | mayRaise Word_GT = false
   | mayRaise Word_GE = false
+  | mayRaise Word_LSHIFT_unchecked = false
+  | mayRaise Word_RSHIFT_unchecked = false
   | mayRaise Real_PLUS = false
   | mayRaise Real_MINUS = false
   | mayRaise Real_TIMES = false
@@ -645,6 +653,8 @@ fun isDiscardable EQUAL = true
   | isDiscardable Word_LE = true
   | isDiscardable Word_GT = true
   | isDiscardable Word_GE = true
+  | isDiscardable Word_LSHIFT_unchecked = true
+  | isDiscardable Word_RSHIFT_unchecked = true
   | isDiscardable Real_PLUS = true
   | isDiscardable Real_MINUS = true
   | isDiscardable Real_TIMES = true
@@ -843,6 +853,8 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Word_LE = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.Word_GT = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.Word_GE = { vars = [], args = vector [word, word], result = bool }
+  | typeOf Primitives.Word_LSHIFT_unchecked = { vars = [], args = vector [word, word], result = word }
+  | typeOf Primitives.Word_RSHIFT_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], result = real }
   | typeOf Primitives.Real_MINUS = { vars = [], args = vector [real, real], result = real }
   | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], result = real }

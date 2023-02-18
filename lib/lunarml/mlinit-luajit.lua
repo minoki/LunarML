@@ -16,6 +16,9 @@ local table = table
 local select = select
 local table_pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local table_unpack = table.unpack or unpack
+local bit = require "bit"
+local bit_lshift = bit.lshift
+local bit_rshift = bit.rshift
 
 local function _id(x)
   return x

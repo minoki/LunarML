@@ -504,6 +504,8 @@ and doExpTo ctx env (F.PrimExp (F.IntConstOp x, tys, [])) dest : J.Stat list
            | Primitives.Word_GT => doBinaryOp (J.GT, true)
            | Primitives.Word_LE => doBinaryOp (J.LE, true)
            | Primitives.Word_GE => doBinaryOp (J.GE, true)
+           | Primitives.Word_LSHIFT_unchecked => doBinaryOp (J.LSHIFT, true)
+           | Primitives.Word_RSHIFT_unchecked => doBinaryOp (J.URSHIFT, true)
            | Primitives.Real_PLUS => doBinaryOp (J.PLUS, true)
            | Primitives.Real_MINUS => doBinaryOp (J.MINUS, true)
            | Primitives.Real_TIMES => doBinaryOp (J.TIMES, true)

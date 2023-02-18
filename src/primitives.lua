@@ -244,6 +244,20 @@ do
       mayraise = false,
       discardable = true,
     },
+    { -- the amount must be less than wordSize
+      name = "Word.<<.unchecked",
+      srcname = "Word_LSHIFT_unchecked",
+      type = HomoBinary(word),
+      mayraise = false,
+      discardable = true,
+    },
+    { -- the amount must be less than wordSize
+      name = "Word.>>.unchecked",
+      srcname = "Word_RSHIFT_unchecked",
+      type = HomoBinary(word),
+      mayraise = false,
+      discardable = true,
+    },
     {
       name = "Real.+",
       srcname = "Real_PLUS",

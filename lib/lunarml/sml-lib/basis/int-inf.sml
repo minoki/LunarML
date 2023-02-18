@@ -75,6 +75,10 @@ open Array
 val sub = Unsafe.Array.sub
 val update = Unsafe.Array.update
 end
+structure UncheckedWord = struct
+val << : word * word -> word = fn (x, y) => _primCall "Word.<<.unchecked" (x, y) (* assumption: y < wordSize *)
+val >> : word * word -> word = fn (x, y) => _primCall "Word.>>.unchecked" (x, y) (* assumption: y < wordSize *)
+end
 
 datatype int = ZERO
              | POSITIVE of Word.word vector (* invariant: nonempty and the last element is not zero *)
@@ -101,7 +105,7 @@ fun toInt ZERO = 0
                                  raise Overflow
                              else
                                  let val w = Vector.sub (words, 0)
-                                 in 2 * (~ (Word.toInt (Word.>> (w, 0w1)))) - Word.toInt (Word.andb (w, 0w1)) (* may raise Overflow *)
+                                 in 2 * (~ (Word.toInt (UncheckedWord.>> (w, 0w1)))) - Word.toInt (Word.andb (w, 0w1)) (* may raise Overflow *)
                                  end
 
 fun fromInt 0 = ZERO
@@ -167,22 +171,22 @@ fun add3 (x : Word.word, y : Word.word, z : Word.word) : { lo : Word.word, hi : 
       end
 
 val wordSize_2 = Word.fromInt Word.wordSize div 0w2
-val word_lo_mask = Word.<< (0w1, wordSize_2) - 0w1
+val word_lo_mask = UncheckedWord.<< (0w1, wordSize_2) - 0w1
 fun mul2 (0w0, _) = { lo = 0w0, hi = 0w0 }
   | mul2 (_, 0w0) = { lo = 0w0, hi = 0w0 }
   | mul2 (x : Word.word, y : Word.word) : { lo : Word.word, hi : Word.word }
-    = let val x_hi = Word.>> (x, wordSize_2)
+    = let val x_hi = UncheckedWord.>> (x, wordSize_2)
           val x_lo = Word.andb (x, word_lo_mask)
-          val y_hi = Word.>> (y, wordSize_2)
+          val y_hi = UncheckedWord.>> (y, wordSize_2)
           val y_lo = Word.andb (y, word_lo_mask)
           (* x_lo * y_lo, x_hi * y_lo + x_lo * y_hi, x_hi * y_hi *)
           val lo1 = x_lo * y_lo
           val mid1 = x_hi * y_lo
-          val lo2 = Word.<< (mid1, wordSize_2)
-          val hi1 = Word.>> (mid1, wordSize_2)
+          val lo2 = UncheckedWord.<< (mid1, wordSize_2)
+          val hi1 = UncheckedWord.>> (mid1, wordSize_2)
           val mid2 = x_lo * y_hi
-          val lo3 = Word.<< (mid2, wordSize_2)
-          val hi2 = Word.>> (mid2, wordSize_2)
+          val lo3 = UncheckedWord.<< (mid2, wordSize_2)
+          val hi2 = UncheckedWord.>> (mid2, wordSize_2)
           val hi3 = x_hi * y_hi
           val { lo, hi = hi4 } = add3 (lo1, lo2, lo3)
           val hi = hi1 + hi2 + hi3 + hi4
@@ -191,19 +195,19 @@ fun mul2 (0w0, _) = { lo = 0w0, hi = 0w0 }
 
 (* x * y + z *)
 fun mulAdd (x : Word.word, y : Word.word, z : Word.word) : { lo : Word.word, hi : Word.word }
-    = let val x_hi = Word.>> (x, wordSize_2)
+    = let val x_hi = UncheckedWord.>> (x, wordSize_2)
           val x_lo = Word.andb (x, word_lo_mask)
-          val y_hi = Word.>> (y, wordSize_2)
+          val y_hi = UncheckedWord.>> (y, wordSize_2)
           val y_lo = Word.andb (y, word_lo_mask)
-          val z_hi = Word.>> (z, wordSize_2)
+          val z_hi = UncheckedWord.>> (z, wordSize_2)
           val z_lo = Word.andb (z, word_lo_mask)
           val lo = x_lo * y_lo + z_lo
           val mid1 = x_hi * y_lo + z_hi
           val lo' = Word.andb (lo, word_lo_mask)
-          val mid2 = x_lo * y_hi + Word.>> (lo, wordSize_2)
+          val mid2 = x_lo * y_hi + UncheckedWord.>> (lo, wordSize_2)
           val hi1 = x_hi * y_hi
           val { lo = mid', hi = hi2 } = add2 (mid1, mid2)
-      in { lo = lo' + Word.<< (mid', wordSize_2), hi = hi1 + Word.>> (mid', wordSize_2) + Word.<< (hi2, wordSize_2) }
+      in { lo = lo' + UncheckedWord.<< (mid', wordSize_2), hi = hi1 + UncheckedWord.>> (mid', wordSize_2) + Word.<< (hi2, wordSize_2) }
       end
 
 fun compareAbs (words, words') = let val m = Vector.length words
@@ -558,8 +562,8 @@ fun LShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wor
                                                                                    raise Fail "LShiftAbs: carry not zero"
                                                                            else (* i < m *)
                                                                                let val w = if i < nn then Vector.sub (words, i) else 0w0
-                                                                                   val v = Word.orb (Word.<< (w, minor), lo)
-                                                                                   val hi = Word.>> (w, Word.fromInt Word.wordSize - minor)
+                                                                                   val v = Word.orb (UncheckedWord.<< (w, minor), lo)
+                                                                                   val hi = UncheckedWord.>> (w, Word.fromInt Word.wordSize - minor)
                                                                                in Array.update (arr, i + Word.toInt major, v)
                                                                                 ; loop (hi, i + 1)
                                                                                end
@@ -584,8 +588,8 @@ fun RShiftAbs (words, amount) = let val major = amount div Word.fromInt Word.wor
                                                                                          hi <> 0w0
                                                                                      else
                                                                                          let val w = Vector.sub (words, i + Word.toInt major)
-                                                                                             val v = Word.orb (Word.>> (w, minor), hi)
-                                                                                             val lo = Word.<< (w, Word.fromInt Word.wordSize - minor)
+                                                                                             val v = Word.orb (UncheckedWord.>> (w, minor), hi)
+                                                                                             val lo = UncheckedWord.<< (w, Word.fromInt Word.wordSize - minor)
                                                                                          in Array.update (arr, i, v)
                                                                                           ; loop (lo, i - 1)
                                                                                          end
@@ -618,7 +622,7 @@ fun ~>> (z as ZERO, _) = z
 fun clzWord (x : Word.word) = let fun loop (x, n) = if x = 0w0 then
                                                         n
                                                     else
-                                                        loop (Word.>> (x, 0w1), n - 1)
+                                                        loop (UncheckedWord.>> (x, 0w1), n - 1)
                               in loop (x, Word.wordSize)
                               end
 
@@ -653,10 +657,10 @@ fun quotRem2' (u1, u0, v) = let val q = quot2' (u1, u0, v)
 
 (* Compute (u1 * base + u0) div v *)
 (* precondition: u1 < base div 2 *)
-fun quot2 (u1, u0, v) = let val v_hi = Word.>> (v, wordSize_2)
+fun quot2 (u1, u0, v) = let val v_hi = UncheckedWord.>> (v, wordSize_2)
                             val q1 = u1 div v_hi
                             val r1 = u1 mod v_hi
-                            val q = Word.<< (q1, wordSize_2) + Word.<< (r1, wordSize_2) div v_hi + u0 div v
+                            val q = UncheckedWord.<< (q1, wordSize_2) + UncheckedWord.<< (r1, wordSize_2) div v_hi + u0 div v
                             fun loop q = if q = Word.notb 0w0 then
                                              q
                                          else
@@ -1048,7 +1052,7 @@ val realBase : real = (* case Word.wordSize of
                                in pow (2.0, Word.wordSize, 1.0)
                                end
 fun wordToReal 0w0 = 0.0
-  | wordToReal w = wordToReal (Word.>> (w, 0w31)) * 0x1p31 + Real.fromInt (Word.toInt (Word.andb (w, 0wx7fffffff)))
+  | wordToReal w = wordToReal (UncheckedWord.>> (w, 0w31)) * 0x1p31 + Real.fromInt (Word.toInt (Word.andb (w, 0wx7fffffff)))
 fun simpleNatToReal words = Vector.foldr (fn (w, acc) => acc * realBase + wordToReal w) 0.0 words
 fun toRealAbs words = let val k = log2Abs words (* 2^k <= words < 2^(k+1) *)
                       in if k < Real.precision then

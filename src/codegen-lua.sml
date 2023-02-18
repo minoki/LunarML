@@ -147,6 +147,9 @@ val builtinsLuaJIT
                     ,(VId_Lua_Lib_table, "table")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
+                    ,(VId_Lua_Lib_bit, "bit")
+                    ,(VId_Lua_Lib_bit_lshift, "bit_lshift")
+                    ,(VId_Lua_Lib_bit_rshift, "bit_rshift")
                     ]
       end
 fun VIdToLua (ctx : Context, vid as TypedSyntax.MkVId (name, n))
@@ -422,6 +425,14 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                         LUA5_3 => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b])), PURE)
                                       | LUAJIT => doBinaryOp (L.GE, PURE)
                                    )
+           | Primitives.Word_LSHIFT_unchecked => (case #targetLuaVersion ctx of
+                                                      LUA5_3 => doBinaryOp (L.LSHIFT, PURE)
+                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_lshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                                                 )
+           | Primitives.Word_RSHIFT_unchecked => (case #targetLuaVersion ctx of
+                                                      LUA5_3 => doBinaryOp (L.RSHIFT, PURE)
+                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_rshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                                                 )
            | Primitives.Real_PLUS => doBinaryOp (L.PLUS, PURE)
            | Primitives.Real_MINUS => doBinaryOp (L.MINUS, PURE)
            | Primitives.Real_TIMES => (case #targetLuaVersion ctx of

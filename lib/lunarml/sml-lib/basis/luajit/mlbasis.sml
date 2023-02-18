@@ -240,13 +240,13 @@ fun % (x, y) = _primCall "Lua.%" (x, y)
 fun pow (x, y) = _primCall "Lua.pow" (x, y)
 fun unm x = _primCall "Lua.unm" (x)
 val require = LunarML.assumeDiscardable global "require"
-val bit = LunarML.assumeDiscardable (fn () => call1 require #[fromString "bit"]) ()
+val bit = _Prim.Lua.Lib.bit
 val band = LunarML.assumeDiscardable field (bit, "band")
 val bor = LunarML.assumeDiscardable field (bit, "bor")
 val bxor = LunarML.assumeDiscardable field (bit, "bxor")
 val bnot = LunarML.assumeDiscardable field (bit, "bnot")
-val lshift = LunarML.assumeDiscardable field (bit, "lshift")
-val rshift = LunarML.assumeDiscardable field (bit, "rshift")
+val lshift = _Prim.Lua.Lib.bit.lshift
+val rshift = _Prim.Lua.Lib.bit.rshift
 fun andb (x, y) = call1 band #[x, y]
 fun orb (x, y) = call1 bor #[x, y]
 fun xorb (x, y) = call1 bxor #[x, y]
@@ -299,7 +299,7 @@ val pack = _Prim.Lua.Lib.table.pack
 val unpack = _Prim.Lua.Lib.table.unpack
 val concat = LunarML.assumeDiscardable field (table, "concat")
 end
-val bit = bit
+val bit = _Prim.Lua.Lib.bit
 structure bit = struct
 val tobit = LunarML.assumeDiscardable field (bit, "tobit")
 val tohex = LunarML.assumeDiscardable field (bit, "tohex")
@@ -307,8 +307,8 @@ val bnot = bnot
 val band = band
 val bor = bor
 val bxor = bxor
-val lshift = lshift
-val rshift = rshift
+val lshift = _Prim.Lua.Lib.bit.lshift
+val rshift = _Prim.Lua.Lib.bit.rshift
 val arshift = LunarML.assumeDiscardable field (bit, "arshift")
 val rol = LunarML.assumeDiscardable field (bit, "rol")
 val ror = LunarML.assumeDiscardable field (bit, "ror")
@@ -555,11 +555,11 @@ val notb : word -> word = fn x => coerceWord (Lua.notb (Lua.fromWord x))
 val << : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
                                                 0w0
                                             else
-                                                coerceWord (Lua.<< (Lua.fromWord x, Lua.fromWord y))
+                                                _primCall "Word.<<.unchecked" (x, y)
 val >> : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
                                                 0w0
                                             else
-                                                coerceWord (Lua.>> (Lua.fromWord x, Lua.fromWord y))
+                                                _primCall "Word.>>.unchecked" (x, y)
 val compare : word * word -> order = fn (x, y) => if x = y then
                                                       EQUAL
                                                   else if x < y then
