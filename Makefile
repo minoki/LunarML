@@ -38,7 +38,6 @@ sources = \
   src/js-syntax.sml \
   src/js-transform.sml \
   src/codegen-js.sml \
-  src/codegen-js-cps.sml \
   src/mlb-syntax.sml \
   src/mlb-parser.sml \
   src/driver.sml \
@@ -81,9 +80,6 @@ test-luajit: bin/lunarml
 
 test-nodejs: bin/lunarml
 	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE)
-
-test-nodejs-via-cps: bin/lunarml
-	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) via-cps
 
 test-nodejs-cps: bin/lunarml
 	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) cps

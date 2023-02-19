@@ -22,8 +22,6 @@ jobs:
           LUA_INIT: "local c=math.ceil;math.ceil=function(x)if-1<x and x<0 then return 0/(-1)else return c(x)end end"
       - name: Test (JS)
         run: make test-nodejs
-      - name: Test (JS-via-CPS)
-        run: make test-nodejs-via-cps
       - name: Test (JS-CPS)
         run: make test-nodejs-cps
       - name: Test (Lua-continuations)

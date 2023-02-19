@@ -8,14 +8,11 @@ else
 end
 local compiler = arg[1] or "../bin/lunarml"
 local js_interpreter = arg[2] or "node"
-local via_cps_mode = arg[3] == "via-cps"
 local cps_mode = arg[3] == "cps"
-local outext = via_cps_mode and ".via-cps.js" or (cps_mode and ".cps.js" or ".js")
+local outext = cps_mode and ".cps.js" or ".js"
 function compile(file, outfile)
   local h
-  if via_cps_mode then
-    h = io.popen(string.format("\"%s\" compile --js-via-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
-  elseif cps_mode then
+  if cps_mode then
     h = io.popen(string.format("\"%s\" compile --js-cps --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
   else
     h = io.popen(string.format("\"%s\" compile --js --output \"%s\" \"%s\" 2>&1", compiler, outfile, file), "r")
