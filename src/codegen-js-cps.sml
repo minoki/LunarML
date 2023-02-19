@@ -730,16 +730,22 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
              in dec :: doCExp ctx env' cont
              end
          else
-             let val dec = if List.null params then
-                               []
-                           else
-                               [J.LetStat (vector (List.map (fn p => (p, NONE)) params))]
-                 val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (VIdToJs ctx) params })
-                              , exnCont = #exnCont env
-                              }
-             in dec @ J.BlockStat (SOME (CVarToJs name), vector (doCExp ctx newEnv cont))
-                :: doCExp ctx env body
-             end
+             case (cont, params) of
+                 (app as C.App { applied, cont, args }, [result]) =>
+                 if cont = name then
+                     ConstStat (result, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env body
+                 else
+                     doCExp ctx env body (* dead continuation elimination *)
+               | _ => let val dec = if List.null params then
+                                        []
+                                    else
+                                        [J.LetStat (vector (List.map (fn p => (p, NONE)) params))]
+                          val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (VIdToJs ctx) params })
+                                       , exnCont = #exnCont env
+                                       }
+                      in dec @ J.BlockStat (SOME (CVarToJs name), vector (doCExp ctx newEnv cont))
+                         :: doCExp ctx env body
+                      end
       end
   | doCExp ctx env (C.LetRecCont { defs, cont })
     = let val escape = case #style ctx of
