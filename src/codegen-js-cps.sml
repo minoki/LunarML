@@ -216,7 +216,6 @@ datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) opti
                    | TAILCALL of C.CVar (* continuation passing style *)
                    | RETURN (* direct style *)
 type Env = { continuations : cont_type C.CVarMap.map
-           , exnCont : C.CVar (* used by CPS *)
            }
 fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
                                  val _ = #nextJsId ctx := n + 1
@@ -307,10 +306,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            | NONE => doCExp ctx env cont
       end
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result = _, cont = _ })
-    = (case #style ctx of
-           DIRECT_STYLE => [J.ThrowStat (doValue ctx exp)]
-         | CPS => applyCont (ctx, env, #exnCont env, [doValue ctx exp]) (* TODO: location information *)
-      )
+    = [J.ThrowStat (doValue ctx exp)] (* TODO: location information *)
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args }, result, cont })
     = let fun ConstStatOrExpStat e = case result of
                                        SOME result => ConstStat (result, e)
@@ -334,26 +330,9 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
           fun doTernaryExp (f, pure : bool) = doTernary (fn (a, b, c) => ConstStatOrExpStat (f (a, b, c)) :: doCExp ctx env cont)
       in case prim of
              Primitives.call2 => doTernary (fn (f, a0, a1) =>
-                                               case #style ctx of
-                                                   DIRECT_STYLE => (case result of
-                                                                        SOME result => ConstStat (result, J.CallExp (f, vector [a0, a1])) :: doCExp ctx env cont
-                                                                      | NONE => J.ExpStat (J.CallExp (f, vector [a0, a1])) :: doCExp ctx env cont
-                                                                   )
-                                                 | CPS =>
-                                                   let val exnName = genSym ctx
-                                                   in case result of
-                                                          SOME result => J.LetStat (vector [(result, NONE)])
-                                                                         :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.CallExp (f, vector [a0, a1])) ]
-                                                                                           , exnName
-                                                                                           , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                           )
-                                                                         :: doCExp ctx env cont
-                                                        | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (f, vector [a0, a1])) ]
-                                                                                 , exnName
-                                                                                 , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                 )
-                                                                  :: doCExp ctx env cont
-                                                   end
+                                               case result of
+                                                   SOME result => ConstStat (result, J.CallExp (f, vector [a0, a1])) :: doCExp ctx env cont
+                                                 | NONE => J.ExpStat (J.CallExp (f, vector [a0, a1])) :: doCExp ctx env cont
                                            )
            | Primitives.List_cons => doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), true)
            | Primitives.List_null => doUnaryExp (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), true)
@@ -491,139 +470,37 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                                                 )
                                                          )
            | Primitives.JavaScript_call => doBinary (fn (f, args) =>
-                                                        case #style ctx of
-                                                            DIRECT_STYLE => (case result of
-                                                                                 SOME result => ConstStat (result, J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) :: doCExp ctx env cont
-                                                                               | NONE => J.ExpStat (J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) :: doCExp ctx env cont
-                                                                            )
-                                                          | CPS =>
-                                                            let val exnName = genSym ctx
-                                                            in case result of
-                                                                   SOME result => J.LetStat (vector [(result, NONE)])
-                                                                                  :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) ]
-                                                                                                    , exnName
-                                                                                                    , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                                    )
-                                                                                  :: doCExp ctx env cont
-                                                                 | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) ]
-                                                                                          , exnName
-                                                                                          , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                          )
-                                                                           :: doCExp ctx env cont
-                                                            end
+                                                        case result of
+                                                            SOME result => ConstStat (result, J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) :: doCExp ctx env cont
+                                                          | NONE => J.ExpStat (J.MethodExp (f, "apply", vector [J.UndefinedExp, args])) :: doCExp ctx env cont
                                                     )
            | Primitives.JavaScript_method => doTernary (fn (obj, method, args) =>
-                                                           case #style ctx of
-                                                               DIRECT_STYLE => (case result of
-                                                                                    SOME result => ConstStat (result, J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) :: doCExp ctx env cont
-                                                                                  | NONE => J.ExpStat (J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) :: doCExp ctx env cont
-                                                                               )
-                                                             | CPS =>
-                                                               let val exnName = genSym ctx
-                                                               in case result of
-                                                                      SOME result => J.LetStat (vector [(result, NONE)])
-                                                                                     :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) ]
-                                                                                                       , exnName
-                                                                                                       , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                                       )
-                                                                                     :: doCExp ctx env cont
-                                                                    | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) ]
-                                                                                             , exnName
-                                                                                             , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                             )
-                                                                              :: doCExp ctx env cont
-                                                               end
+                                                           case result of
+                                                               SOME result => ConstStat (result, J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) :: doCExp ctx env cont
+                                                             | NONE => J.ExpStat (J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args])) :: doCExp ctx env cont
                                                        )
            | Primitives.JavaScript_new => doBinary (fn (ctor, args) =>
-                                                       case #style ctx of
-                                                           DIRECT_STYLE => (case result of
-                                                                                SOME result => ConstStat (result, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) :: doCExp ctx env cont
-                                                                              | NONE => J.ExpStat (J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) :: doCExp ctx env cont
-                                                                           )
-                                                         | CPS =>
-                                                           let val exnName = genSym ctx
-                                                           in case result of
-                                                                  SOME result => J.LetStat (vector [(result, NONE)])
-                                                                                 :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) ]
-                                                                                                   , exnName
-                                                                                                   , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                                   )
-                                                                                 :: doCExp ctx env cont
-                                                                | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) ]
-                                                                                         , exnName
-                                                                                         , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                                                         )
-                                                                          :: doCExp ctx env cont
-                                                           end
+                                                       case result of
+                                                           SOME result => ConstStat (result, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) :: doCExp ctx env cont
+                                                         | NONE => J.ExpStat (J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args])) :: doCExp ctx env cont
                                                    )
            | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.CallExp (J.VarExp (J.PredefinedId "_newPromptTag"), vector []), false)
            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript-CPS backend")
       end
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, result, cont })
-    = (case #style ctx of
-           DIRECT_STYLE => (case result of
-                                SOME result => ConstStat (result, J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                              | NONE => J.ExpStat (J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                           )
-         | CPS =>
-           let val exnName = genSym ctx
-           in case result of
-                  SOME result => J.LetStat (vector [(result, NONE)])
-                                 :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) ]
-                                                   , exnName
-                                                   , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                   )
-                                 :: doCExp ctx env cont
-                | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) ]
-                                         , exnName
-                                         , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                         )
-                          :: doCExp ctx env cont
-           end
+    = (case result of
+           SOME result => ConstStat (result, J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
+         | NONE => J.ExpStat (J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
       )
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = obj :: name :: args }, result, cont })
-    = (case #style ctx of
-           DIRECT_STYLE => (case result of
-                                SOME result => ConstStat (result, J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                              | NONE => J.ExpStat (J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                           )
-         | CPS =>
-           let val exnName = genSym ctx
-           in case result of
-                  SOME result => J.LetStat (vector [(result, NONE)])
-                                 :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) ]
-                                                   , exnName
-                                                   , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                   )
-                                 :: doCExp ctx env cont
-                | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) ]
-                                         , exnName
-                                         , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                         )
-                          :: doCExp ctx env cont
-           end
+    = (case result of
+           SOME result => ConstStat (result, J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
+         | NONE => J.ExpStat (J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
       )
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, result, cont })
-    = (case #style ctx of
-           DIRECT_STYLE => (case result of
-                                SOME result => ConstStat (result, J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                              | NONE => J.ExpStat (J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
-                           )
-         | CPS =>
-           let val exnName = genSym ctx
-           in case result of
-                  SOME result => J.LetStat (vector [(result, NONE)])
-                                 :: J.TryCatchStat ( vector [ J.AssignStat (J.VarExp (J.UserDefinedId result), J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) ]
-                                                   , exnName
-                                                   , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                                   )
-                                 :: doCExp ctx env cont
-                | NONE => J.TryCatchStat ( vector [ J.ExpStat (J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) ]
-                                         , exnName
-                                         , vector (applyCont (ctx, env, #exnCont env, [J.VarExp (J.UserDefinedId exnName)]))
-                                         )
-                          :: doCExp ctx env cont
-           end
+    = (case result of
+           SOME result => ConstStat (result, J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
+         | NONE => J.ExpStat (J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env cont
       )
   | doCExp ctx env (C.Let { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result, cont })
     = raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")
@@ -661,7 +538,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
       end
   | doCExp ctx env (C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
-           SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (vector (doCVar k :: doCVar (#exnCont env) :: List.map (doValue ctx) args))]))) ] (* continuation passing style *)
+           SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (vector (doCVar k :: List.map (doValue ctx) args))]))) ] (* continuation passing style *)
          | SOME (BREAK_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.BreakStat (SOME label) ] (* direct style *)
          | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ] (* direct style *)
          | SOME (CONTINUE_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.ContinueStat (SOME label) ] (* direct style *)
@@ -680,15 +557,13 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
     = (case result of
            SOME result =>
            (case #style ctx of
-                DIRECT_STYLE => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN), exnCont = C.CVar.dummy }
+                DIRECT_STYLE => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
                                 in ConstStat (result, J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))]))
                                    :: doCExp ctx env cont
                                 end
-              | CPS => let val exnContParam = genExnContSym ctx
-                           val env' = { continuations = C.CVarMap.insert (C.CVarMap.singleton (contParam, TAILCALL contParam), exnContParam, TAILCALL exnContParam)
-                                      , exnCont = exnContParam
+              | CPS => let val env' = { continuations = C.CVarMap.singleton (contParam, TAILCALL contParam)
                                       }
-                       in ConstStat (result, J.FunctionExp (vector (CVarToJs contParam :: CVarToJs exnContParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body)))
+                       in ConstStat (result, J.FunctionExp (vector (CVarToJs contParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body)))
                           :: doCExp ctx env cont
                        end
            )
@@ -698,7 +573,7 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
     = (case #style ctx of
            DIRECT_STYLE =>
            let val (decs, assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
-                                                        let val env' = { continuations = C.CVarMap.singleton (k, RETURN), exnCont = C.CVar.dummy }
+                                                        let val env' = { continuations = C.CVarMap.singleton (k, RETURN) }
                                                         in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
                                                         end
                                                     ) ([], []) defs
@@ -706,11 +581,9 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
            end
          | CPS =>
            let val (decs, assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
-                                                        let val exnContParam = genExnContSym ctx
-                                                            val env' = { continuations = C.CVarMap.insert (C.CVarMap.singleton (k, TAILCALL k), exnContParam, TAILCALL exnContParam)
-                                                                       , exnCont = exnContParam
+                                                        let val env' = { continuations = C.CVarMap.singleton (k, TAILCALL k)
                                                                        }
-                                                        in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: CVarToJs exnContParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
+                                                        in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
                                                         end
                                                     ) ([], []) defs
            in decs @ assignments @ doCExp ctx env cont
@@ -725,7 +598,6 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
       in if escape then
              let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map (VIdToJs ctx) params), vector (doCExp ctx env body)))
                  val env' = { continuations = C.CVarMap.insert (#continuations env, name, TAILCALL name)
-                            , exnCont = #exnCont env
                             }
              in dec :: doCExp ctx env' cont
              end
@@ -741,7 +613,6 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                                     else
                                         [J.LetStat (vector (List.map (fn p => (p, NONE)) params))]
                           val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (VIdToJs ctx) params })
-                                       , exnCont = #exnCont env
                                        }
                       in dec @ J.BlockStat (SOME (CVarToJs name), vector (doCExp ctx newEnv cont))
                          :: doCExp ctx env body
@@ -753,7 +624,6 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                          | CPS => List.exists (fn (name, _, _) => case C.CVarMap.find (#contEscapeMap ctx, name) of SOME false => false | _ => true) defs
       in if escape then
              let val env' = { continuations = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
-                            , exnCont = #exnCont env
                             }
                  val (decs, assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
                                                           (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
@@ -769,9 +639,9 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
                  val commonParams = List.tabulate (maxargs, fn _ => genSym ctx)
                  val vars = which :: commonParams
                  val (_, contEnvC) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, BREAK_TO { label = blockLabel, which = SOME (which', J.Numeral (Int.toString i)), params = List.map (VIdToJs ctx) (List.take (commonParams, List.length params)) }))) (0, #continuations env) defs
-                 val contEnv = { continuations = contEnvC, exnCont = #exnCont env }
+                 val contEnv = { continuations = contEnvC }
                  val (n, recEnvC) = List.foldl (fn ((name, params, _), (i, e)) => (i + 1, C.CVarMap.insert (e, name, CONTINUE_TO { label = loopLabel, which = SOME (which', J.Numeral (Int.toString i)), params = List.map (VIdToJs ctx) (List.take (commonParams, List.length params)) }))) (0, #continuations env) defs
-                 val recEnv = { continuations = recEnvC, exnCont = #exnCont env }
+                 val recEnv = { continuations = recEnvC }
              in J.LetStat (vector (List.map (fn p => (p, NONE)) vars))
                 :: J.BlockStat (SOME blockLabel, vector (doCExp ctx contEnv cont))
                 :: [ J.LoopStat ( SOME loopLabel
@@ -795,32 +665,45 @@ fun doCExp (ctx : Context) (env : Env) (C.Let { exp = C.PrimOp { primOp = F.Real
     = (case #style ctx of
            DIRECT_STYLE =>
            let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, C.CVarMap.lookup (#continuations env, successfulExitOut))
-                          , exnCont = C.CVar.dummy
                           }
            in [J.TryCatchStat (vector (doCExp ctx env' body), e, vector (doCExp ctx env h))]
            end
          | CPS =>
-           let val handlerName = genExnContSym ctx
-               val dec = ConstStat (CVarToId handlerName, J.FunctionExp (vector [VIdToJs ctx e], vector (doCExp ctx env h)))
-               val env' = { continuations = C.CVarMap.insert (C.CVarMap.insert (#continuations env, handlerName, TAILCALL handlerName), successfulExitIn, C.CVarMap.lookup (#continuations env, successfulExitOut))
-                          , exnCont = handlerName
-                          }
-           in dec :: doCExp ctx env' body
+           let val escape = case C.CVarMap.find (#contEscapeMap ctx, successfulExitIn) of
+                                SOME false => false
+                              | _ => true
+               val oldExh = genSym ctx
+               val save = ConstStat (oldExh, J.VarExp (J.PredefinedId "_exh"))
+               val restore = J.AssignStat (J.VarExp (J.PredefinedId "_exh"), J.VarExp (J.UserDefinedId oldExh))
+               val handler = J.FunctionExp (vector [VIdToJs ctx e], vector (restore :: doCExp ctx env h))
+               val install = J.AssignStat (J.VarExp (J.PredefinedId "_exh"), handler)
+           in if escape then
+                  let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, TAILCALL successfulExitIn) }
+                      val result = genSym ctx
+                      val dec = ConstStat (CVarToId successfulExitIn, J.FunctionExp (vector [VIdToJs ctx result], vector (restore :: applyCont (ctx, env, successfulExitOut, [J.VarExp (VIdToJs ctx result)]))))
+                  in save :: install :: dec :: doCExp ctx env' body
+                  end
+              else
+                  let val result = genSym ctx
+                      val dec = J.LetStat (vector [(result, NONE)])
+                      val env' = { continuations = C.CVarMap.singleton (successfulExitIn, BREAK_TO { label = CVarToJs successfulExitIn, which = NONE, params = [VIdToJs ctx result] }) }
+                  in save :: install :: dec
+                     :: J.BlockStat (SOME (CVarToJs successfulExitIn), vector (doCExp ctx env' body))
+                     :: restore
+                     :: applyCont (ctx, env, successfulExitOut, [J.VarExp (VIdToJs ctx result)])
+                  end
            end
       )
 
 fun doProgramDirect ctx cont cexp
     = let val label = CVarToJs cont
           val env = { continuations = C.CVarMap.singleton (cont, BREAK_TO { label = label, which = NONE, params = [] })
-                    , exnCont = C.CVar.dummy
                     }
       in vector [J.BlockStat (SOME label, vector (doCExp ctx env cexp))]
       end
 fun doProgramCPS ctx cont cexp
-    = let val exnCont = genExnContSym ctx
-          val env = { continuations = C.CVarMap.insert (C.CVarMap.singleton (cont, TAILCALL cont), exnCont, TAILCALL exnCont)
-                    , exnCont = exnCont
+    = let val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
                     }
-      in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont, CVarToJs exnCont], vector (doCExp ctx env cexp))]))]
+      in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp))]))]
       end
 end;
