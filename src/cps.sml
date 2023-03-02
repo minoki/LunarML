@@ -179,7 +179,7 @@ fun mapCont f [] cont = cont []
 fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
   | stripTyAbs e = e
 
-(* 'a -> 'b ~~> (cont : 'b -> 'ans, exh : exn -> 'ans, param : 'a) -> 'ans *)
+(* 'a -> 'b ~~> (cont : 'b -> 'ans, param : 'a) -> 'ans *)
 (* continuation of 'a : (value : 'a) -> 'ans *)
 
 datatype cont = REIFIED of C.CVar
@@ -197,11 +197,15 @@ fun reify (ctx, REIFIED k) f = f k
                                     end
 fun apply (REIFIED k) arg = C.AppCont { applied = k, args = [arg] }
   | apply (META (_, m)) arg = m arg
+fun getResultHint (META (hint, _)) = hint
+  | getResultHint (REIFIED _) = NONE
 val initialEnv = List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
                             [(InitialEnv.VId_false, C.BoolConst false)
                             ,(InitialEnv.VId_true, C.BoolConst true)
                             ]
-(* transformX : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> cont -> C.Exp *)
+(* transform : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> { resultHint : C.Var option } -> (C.Value -> C.CExp) -> C.CExp *)
+(* transformT : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> C.CVar -> C.CExp *)
+(* transformX : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> cont -> C.CExp *)
 fun transform (ctx, env) exp { resultHint } k = transformX (ctx, env) exp (META (resultHint, k))
 and transformT (ctx, env) exp k = transformX (ctx, env) exp (REIFIED k)
 and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
@@ -226,8 +230,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                              (fn kk =>
                                                  C.App { applied = C.Var InitialEnv.VId_DelimCont_withSubCont, cont = kk, args = [p, f] }
                                              )
-                               )
-                 )
+                                   )
+                     )
          | F.PrimExp (F.PrimFnOp Primitives.DelimCont_pushSubCont, tyargs, [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]) =>
            transform (ctx, env) subcont { resultHint = NONE }
                      (fn subcont =>
@@ -237,8 +241,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                              (fn kk =>
                                                  C.App { applied = C.Var InitialEnv.VId_DelimCont_pushSubCont, cont = kk, args = [subcont, f] }
                                              )
-                               )
-                 )
+                                   )
+                     )
          | F.PrimExp (F.PrimFnOp Primitives.Unsafe_cast, tyargs, [arg]) =>
            transformX (ctx, env) arg k
          | F.PrimExp (primOp, tyargs, args) =>
@@ -305,9 +309,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                              , cont = apply k C.Unit
                                              }
                                    else
-                                       let val result = case k of
-                                                            META (SOME r, _) => r
-                                                          | _ => genSym ctx
+                                       let val result = case getResultHint k of
+                                                            SOME r => r
+                                                          | NONE => genSym ctx
                                        in C.Let { exp = exp
                                                 , result = SOME result
                                                 , cont = apply k (C.Var result)
@@ -322,9 +326,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
          | F.RecordExp [] => apply k C.Unit
          | F.RecordExp fields => mapCont (fn ((label, exp), cont) => transform (ctx, env) exp { resultHint = NONE } (fn v => cont (label, v)))
                                          fields
-                                         (fn fields => let val result = case k of
-                                                                            META (SOME r, _) => r
-                                                                          | _ => genSym ctx
+                                         (fn fields => let val result = case getResultHint k of
+                                                                            SOME r => r
+                                                                          | NONE => genSym ctx
                                                        in C.Let { exp = C.Record (List.foldl Syntax.LabelMap.insert' Syntax.LabelMap.empty fields)
                                                                 , result = SOME result
                                                                 , cont = apply k (C.Var result)
@@ -396,12 +400,12 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
                                              , thenCont = transformT (ctx, env) e2 j
                                              , elseCont = transformT (ctx, env) e3 j
                                              }
-                                  )
+                               )
                      )
          | F.CaseExp _ => raise Fail "CaseExp: not supported here"
-         | F.FnExp (vid, _, body) => let val f = case k of
-                                                     META (SOME f, _) => f
-                                                   | _ => genSym ctx
+         | F.FnExp (vid, _, body) => let val f = case getResultHint k of
+                                                     SOME f => f
+                                                   | NONE => genSym ctx
                                          val kk = genContSym ctx
                                      in C.Let { exp = C.Abs { contParam = kk
                                                             , params = [vid]
@@ -414,9 +418,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (k : cont) : C.CExp
          | F.ProjectionExp { label, record, fieldTypes } =>
            transform (ctx, env) record { resultHint = NONE }
                      (fn record =>
-                         let val x = case k of
-                                         META (SOME x, _) => x
-                                       | _ => genSym ctx
+                         let val x = case getResultHint k of
+                                         SOME x => x
+                                       | NONE => genSym ctx
                          in C.Let { exp = C.Projection { label = label
                                                        , record = record
                                                        , fieldTypes = fieldTypes
