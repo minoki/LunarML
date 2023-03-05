@@ -24,7 +24,8 @@ type CVar = CVar.t
 structure CVarSet = RedBlackSetFn (CVar)
 structure CVarMap = RedBlackMapFn (CVar)
 datatype Value = Var of Var
-               | Unit
+               | Unit (* : unit *)
+               | Nil (* : 'a list *)
                | BoolConst of bool
                | NativeIntConst of IntInf.int
                | Int32Const of Int32.int
@@ -186,6 +187,7 @@ fun getResultHint (META (hint, _)) = hint
 val initialEnv = List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
                             [(InitialEnv.VId_false, C.BoolConst false)
                             ,(InitialEnv.VId_true, C.BoolConst true)
+                            ,(InitialEnv.VId_nil, C.Nil)
                             ]
 (* transform : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option } -> (C.Dec list * C.Value -> C.CExp) -> C.CExp *)
 (* transformT : Context * Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * C.CVar -> C.CExp *)
@@ -528,6 +530,7 @@ fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
                                     | NONE => ()
                                  )
   | usageInValue env C.Unit = ()
+  | usageInValue env C.Nil = ()
   | usageInValue env (C.BoolConst _) = ()
   | usageInValue env (C.NativeIntConst _) = ()
   | usageInValue env (C.Int32Const _) = ()
@@ -551,6 +554,7 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
                                             | NONE => ()
                                          )
   | usageInValueAsCallee env C.Unit = ()
+  | usageInValueAsCallee env C.Nil = ()
   | usageInValueAsCallee env (C.BoolConst _) = ()
   | usageInValueAsCallee env (C.NativeIntConst _) = ()
   | usageInValueAsCallee env (C.Int32Const _) = ()
@@ -849,6 +853,7 @@ and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, con
   | isDiscardableExp (env, C.If { cond, thenCont, elseCont }) = isDiscardableExp (env, thenCont) andalso isDiscardableExp (env, elseCont)
   | isDiscardableExp (env, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
 fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields) = NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.ListOp, tyargs, args = [] }) = VALUE C.Nil (* empty list *)
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.JavaScript_call, tyargs, args = [f, C.Var args] })
     = (case TypedSyntax.VIdMap.find (env, args) of
            SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.JsCallOp, tyargs = [], args = f :: args })

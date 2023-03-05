@@ -32,13 +32,8 @@ fun ConstStat (vid, exp) = J.ConstStat (vector [(vid, exp)])
 val builtinsDirect
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* boolean *)
-                     (VId_true, "true") (* boolean literal *)
-                    ,(VId_false, "false") (* boolean literal *)
-                    (* list *)
-                    ,(VId_nil, "null")
-                    (* exn *)
-                    ,(VId_Match, "_Match")
+                    [(* exn *)
+                     (VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
                     ,(VId_Div, "_Div")
                     ,(VId_Overflow, "_Overflow")
@@ -92,13 +87,8 @@ val builtinsDirect
 val builtinsCPS
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* boolean *)
-                     (VId_true, "true") (* boolean literal *)
-                    ,(VId_false, "false") (* boolean literal *)
-                    (* list *)
-                    ,(VId_nil, "null")
-                    (* exn *)
-                    ,(VId_Match, "_Match")
+                    [(* exn *)
+                     (VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
                     ,(VId_Div, "_Div")
                     ,(VId_Overflow, "_Overflow")
@@ -177,6 +167,7 @@ fun doValue ctx (C.Var vid) = (case VIdToJs ctx vid of
                                  | id => J.VarExp id
                               )
   | doValue _ C.Unit = J.UndefinedExp
+  | doValue _ C.Nil = J.ConstExp J.Null (* empty list *)
   | doValue _ (C.BoolConst false) = J.ConstExp J.False
   | doValue _ (C.BoolConst true) = J.ConstExp J.True
   | doValue _ (C.NativeIntConst x) = raise Fail "NativeIntConst is not supported by JavaScript backend"

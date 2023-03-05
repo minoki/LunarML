@@ -14,10 +14,8 @@ type Context = { nextLuaId : int ref
 val builtins
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* list *)
-                     (VId_nil, "nil")
-                    (* exn *)
-                    ,(VId_Match, "_Match")
+                    [(* exn *)
+                     (VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
                     ,(VId_Div, "_Div")
                     ,(VId_Overflow, "_Overflow")
@@ -84,10 +82,8 @@ val builtins
 val builtinsLuaJIT
     = let open InitialEnv
       in List.foldl (fn ((vid, name), map) => TypedSyntax.VIdMap.insert (map, vid, name)) TypedSyntax.VIdMap.empty
-                    [(* list *)
-                     (VId_nil, "nil")
-                    (* exn *)
-                    ,(VId_Match, "_Match")
+                    [(* exn *)
+                     (VId_Match, "_Match")
                     ,(VId_Bind, "_Bind")
                     ,(VId_Div, "_Div")
                     ,(VId_Overflow, "_Overflow")
@@ -214,6 +210,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                  | id => L.VarExp id
                               )
   | doValue ctx C.Unit = L.ConstExp L.Nil
+  | doValue ctx C.Nil = L.ConstExp L.Nil (* empty list *)
   | doValue ctx (C.BoolConst false) = L.ConstExp L.False
   | doValue ctx (C.BoolConst true) = L.ConstExp L.True
   | doValue ctx (C.NativeIntConst x) = if x < 0 then
