@@ -74,9 +74,6 @@ val VId_GE = newVId ">="
 val VId_Int_TILDE = newVId "_Prim.Int.~"
 val VId_Int_abs = newVId "_Prim.Int.abs"
 
-(* Word *)
-val VId_Word_TILDE = newVId "_Prim.Word.~"
-
 (* Real *)
 val VId_Real_abs = newVId "_Prim.Real.abs"
 
@@ -110,6 +107,10 @@ val VId_Lua_Lib_table = newVId "_Prim.Lua.Lib.table"
 val VId_Lua_Lib_table_pack = newVId "_Prim.Lua.Lib.table.pack"
 val VId_Lua_Lib_table_unpack = newVId "_Prim.Lua.Lib.table.unpack"
 val VId_Lua_Lib_bit = newVId "_Prim.Lua.Lib.bit" (* LuaJIT *)
+val VId_Lua_Lib_bit_bnot = newVId "_Prim.Lua.Lib.bit.bnot" (* LuaJIT *)
+val VId_Lua_Lib_bit_band = newVId "_Prim.Lua.Lib.bit.band" (* LuaJIT *)
+val VId_Lua_Lib_bit_bor = newVId "_Prim.Lua.Lib.bit.bor" (* LuaJIT *)
+val VId_Lua_Lib_bit_bxor = newVId "_Prim.Lua.Lib.bit.bxor" (* LuaJIT *)
 val VId_Lua_Lib_bit_lshift = newVId "_Prim.Lua.Lib.bit.lshift" (* LuaJIT *)
 val VId_Lua_Lib_bit_rshift = newVId "_Prim.Lua.Lib.bit.rshift" (* LuaJIT *)
 val VId_Lua_LuaError = newVId "_Prim.Lua.LuaError"
@@ -132,8 +133,6 @@ val VId_Int_div_bin = newVId "_Prim.Int.div"
 val VId_Int_mod_bin = newVId "_Prim.Int.mod"
 val VId_Int_quot_bin = newVId "_Prim.Int.quot"
 val VId_Int_rem_bin = newVId "_Prim.Int.rem"
-val VId_Word_add_bin = newVId "_Prim.Word.+"
-val VId_Word_sub_bin = newVId "_Prim.Word.-"
 val VId_Word_mul_bin = newVId "_Prim.Word.*"
 val VId_Word_div_bin = newVId "_Prim.Word.div"
 val VId_Word_mod_bin = newVId "_Prim.Word.mod"
@@ -222,12 +221,9 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Int.mod", VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("_Prim.Int.quot", VId_Int_quot_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
                                            ,("_Prim.Int.rem", VId_Int_rem_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Word.+", VId_Word_add_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.-", VId_Word_sub_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Word.*", VId_Word_mul_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Word.div", VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Word.mod", VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.~", VId_Word_TILDE, TypeScheme ([], primTy_word --> primTy_word))
                                            ,("_Prim.Real.abs", VId_Real_abs, TypeScheme ([], primTy_real --> primTy_real))
                                            ,("_Prim.String.concat", VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
                                            ,("_Prim.String.concatWith", VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))
@@ -258,6 +254,10 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Lua.Lib.table.pack", VId_Lua_Lib_table_pack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.unpack", VId_Lua_Lib_table_unpack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.bit", VId_Lua_Lib_bit, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.bnot", VId_Lua_Lib_bit_bnot, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.band", VId_Lua_Lib_bit_band, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.bor", VId_Lua_Lib_bit_bor, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.bit.bxor", VId_Lua_Lib_bit_bxor, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.bit.lshift", VId_Lua_Lib_bit_lshift, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.bit.rshift", VId_Lua_Lib_bit_rshift, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.JavaScript.undefined", VId_JavaScript_undefined, TypeScheme ([], primTy_JavaScript_value))

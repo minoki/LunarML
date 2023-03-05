@@ -228,18 +228,18 @@ val toInt : word -> int = fn x => if x >= 0wx80000000 then
                                       Unsafe.cast x
 val toIntX : word -> int = fn x => JavaScript.toInt32 (JavaScript.fromWord x)
 val fromInt : int -> word = fn x => JavaScript.toUint32 (JavaScript.fromInt x)
-val andb : word * word -> word = fn (x, y) => JavaScript.toUint32 (JavaScript.andb (JavaScript.fromWord x, JavaScript.fromWord y))
-val orb : word * word -> word = fn (x, y) => JavaScript.toUint32 (JavaScript.orb (JavaScript.fromWord x, JavaScript.fromWord y))
-val xorb : word * word -> word = fn (x, y) => JavaScript.toUint32 (JavaScript.xorb (JavaScript.fromWord x, JavaScript.fromWord y))
-val notb : word -> word = fn x => JavaScript.toUint32 (JavaScript.notb (JavaScript.fromWord x))
+val andb : word * word -> word = fn (x, y) => _primCall "Word.andb" (x, y)
+val orb : word * word -> word = fn (x, y) => _primCall "Word.orb" (x, y)
+val xorb : word * word -> word = fn (x, y) => _primCall "Word.xorb" (x, y)
+val notb : word -> word = fn x => _primCall "Word.notb" (x)
 val << : word * word -> word = fn (x, y) => if y >= 0w32 then
                                                 0w0
                                             else
-                                                JavaScript.toUint32 (JavaScript.<< (JavaScript.fromWord x, JavaScript.fromWord y))
+                                                _primCall "Word.<<.unchecked" (x, y)
 val >> : word * word -> word = fn (x, y) => if y >= 0w32 then
                                                 0w0
                                             else
-                                                JavaScript.unsafeFromValue (JavaScript.>>> (JavaScript.fromWord x, JavaScript.fromWord y))
+                                                _primCall "Word.>>.unchecked" (x, y)
 val ~>> : word * word -> word = fn (x, y) => if y >= 0w31 then
                                                  if x >= 0wx80000000 then
                                                      0wxFFFFFFFF

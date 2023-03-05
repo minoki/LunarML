@@ -1,11 +1,18 @@
+_equality word = fn (x, y) => _primCall "Word.=" (x, y);
 structure Word = struct
 type word = word
-fun ~ x = _Prim.Word.~ x
-fun x + y = _primCall "call2" (_Prim.Word.+, x, y)
-fun x - y = _primCall "call2" (_Prim.Word.-, x, y)
+fun ~ x = _primCall "Word.~" (x)
+fun x + y = _primCall "Word.+" (x, y)
+fun x - y = _primCall "Word.-" (x, y)
 fun x * y = _primCall "call2" (_Prim.Word.*, x, y)
-fun x div y = _primCall "call2" (_Prim.Word.div, x, y)
-fun x mod y = _primCall "call2" (_Prim.Word.mod, x, y)
+fun x div y = if y = 0w0 then
+                  raise Div
+              else
+                  _primCall "Word.div.unchecked" (x, y)
+fun x mod y = if y = 0w0 then
+                  raise Div
+              else
+                  _primCall "Word.mod.unchecked" (x, y)
 fun x < y = _primCall "Word.<" (x, y)
 fun x > y = _primCall "Word.>" (x, y)
 fun x <= y = _primCall "Word.<=" (x, y)
@@ -14,7 +21,6 @@ end
 local
 fun fromWord (x : word) = x
 in
-_equality word = fn (x, y) => _primCall "Word.=" (x, y);
 _overload "Word" [word] { + = Word.+
                         , - = Word.-
                         , * = Word.*
@@ -548,10 +554,10 @@ val toInt : word -> int = fn x => if x >= 0wx80000000 then
 val toIntX : word -> int = fn x => Lua.unsafeFromValue (Lua.fromWord x)
 fun coerceWord (x : Lua.value) : word = Lua.unsafeFromValue (Lua.% (x, Lua.fromReal 0x1p32))
 val fromInt : int -> word = fn x => coerceWord (Lua.fromInt x)
-val andb : word * word -> word = fn (x, y) => coerceWord (Lua.andb (Lua.fromWord x, Lua.fromWord y))
-val orb : word * word -> word = fn (x, y) => coerceWord (Lua.orb (Lua.fromWord x, Lua.fromWord y))
-val xorb : word * word -> word = fn (x, y) => coerceWord (Lua.xorb (Lua.fromWord x, Lua.fromWord y))
-val notb : word -> word = fn x => coerceWord (Lua.notb (Lua.fromWord x))
+val andb : word * word -> word = fn (x, y) => _primCall "Word.andb" (x, y)
+val orb : word * word -> word = fn (x, y) => _primCall "Word.orb" (x, y)
+val xorb : word * word -> word = fn (x, y) => _primCall "Word.xorb" (x, y)
+val notb : word -> word = fn x => _primCall "Word.notb" (x)
 val << : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
                                                 0w0
                                             else

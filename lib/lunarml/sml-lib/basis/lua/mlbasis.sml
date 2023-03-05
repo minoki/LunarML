@@ -529,10 +529,10 @@ val toInt : word -> int = fn x => if Lua.< (Lua.fromWord x, Lua.fromWord 0w0) th
                                       Lua.unsafeFromValue (Lua.fromWord x)
 val toIntX : word -> int = fn x => Lua.unsafeFromValue (Lua.fromWord x)
 val fromInt : int -> word = fn x => Lua.unsafeFromValue (Lua.fromInt x)
-val andb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.andb (Lua.fromWord x, Lua.fromWord y))
-val orb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.orb (Lua.fromWord x, Lua.fromWord y))
-val xorb : word * word -> word = fn (x, y) => Lua.unsafeFromValue (Lua.xorb (Lua.fromWord x, Lua.fromWord y))
-val notb : word -> word = fn x => Lua.unsafeFromValue (Lua.notb (Lua.fromWord x))
+val andb : word * word -> word = fn (x, y) => _primCall "Word.andb" (x, y)
+val orb : word * word -> word = fn (x, y) => _primCall "Word.orb" (x, y)
+val xorb : word * word -> word = fn (x, y) => _primCall "Word.xorb" (x, y)
+val notb : word -> word = fn x => _primCall "Word.notb" (x)
 val << : word * word -> word = fn (x, y) => if y >= fromInt wordSize then
                                                 0w0
                                             else

@@ -24,10 +24,16 @@ datatype PrimOp = EQUAL (* = *)
                 | Word_MINUS (* Word.- *)
                 | Word_TIMES (* Word.* *)
                 | Word_TILDE (* Word.~ *)
+                | Word_div_unchecked (* Word.div.unchecked *)
+                | Word_mod_unchecked (* Word.mod.unchecked *)
                 | Word_LT (* Word.< *)
                 | Word_LE (* Word.<= *)
                 | Word_GT (* Word.> *)
                 | Word_GE (* Word.>= *)
+                | Word_notb (* Word.notb *)
+                | Word_andb (* Word.andb *)
+                | Word_orb (* Word.orb *)
+                | Word_xorb (* Word.xorb *)
                 | Word_LSHIFT_unchecked (* Word.<<.unchecked *)
                 | Word_RSHIFT_unchecked (* Word.>>.unchecked *)
                 | Real_PLUS (* Real.+ *)
@@ -180,10 +186,16 @@ fun toString EQUAL = "="
   | toString Word_MINUS = "Word.-"
   | toString Word_TIMES = "Word.*"
   | toString Word_TILDE = "Word.~"
+  | toString Word_div_unchecked = "Word.div.unchecked"
+  | toString Word_mod_unchecked = "Word.mod.unchecked"
   | toString Word_LT = "Word.<"
   | toString Word_LE = "Word.<="
   | toString Word_GT = "Word.>"
   | toString Word_GE = "Word.>="
+  | toString Word_notb = "Word.notb"
+  | toString Word_andb = "Word.andb"
+  | toString Word_orb = "Word.orb"
+  | toString Word_xorb = "Word.xorb"
   | toString Word_LSHIFT_unchecked = "Word.<<.unchecked"
   | toString Word_RSHIFT_unchecked = "Word.>>.unchecked"
   | toString Real_PLUS = "Real.+"
@@ -336,10 +348,16 @@ fun fromString "=" = SOME EQUAL
   | fromString "Word.-" = SOME Word_MINUS
   | fromString "Word.*" = SOME Word_TIMES
   | fromString "Word.~" = SOME Word_TILDE
+  | fromString "Word.div.unchecked" = SOME Word_div_unchecked
+  | fromString "Word.mod.unchecked" = SOME Word_mod_unchecked
   | fromString "Word.<" = SOME Word_LT
   | fromString "Word.<=" = SOME Word_LE
   | fromString "Word.>" = SOME Word_GT
   | fromString "Word.>=" = SOME Word_GE
+  | fromString "Word.notb" = SOME Word_notb
+  | fromString "Word.andb" = SOME Word_andb
+  | fromString "Word.orb" = SOME Word_orb
+  | fromString "Word.xorb" = SOME Word_xorb
   | fromString "Word.<<.unchecked" = SOME Word_LSHIFT_unchecked
   | fromString "Word.>>.unchecked" = SOME Word_RSHIFT_unchecked
   | fromString "Real.+" = SOME Real_PLUS
@@ -493,10 +511,16 @@ fun mayRaise EQUAL = false
   | mayRaise Word_MINUS = false
   | mayRaise Word_TIMES = false
   | mayRaise Word_TILDE = false
+  | mayRaise Word_div_unchecked = false
+  | mayRaise Word_mod_unchecked = false
   | mayRaise Word_LT = false
   | mayRaise Word_LE = false
   | mayRaise Word_GT = false
   | mayRaise Word_GE = false
+  | mayRaise Word_notb = false
+  | mayRaise Word_andb = false
+  | mayRaise Word_orb = false
+  | mayRaise Word_xorb = false
   | mayRaise Word_LSHIFT_unchecked = false
   | mayRaise Word_RSHIFT_unchecked = false
   | mayRaise Real_PLUS = false
@@ -649,10 +673,16 @@ fun isDiscardable EQUAL = true
   | isDiscardable Word_MINUS = true
   | isDiscardable Word_TIMES = true
   | isDiscardable Word_TILDE = true
+  | isDiscardable Word_div_unchecked = true
+  | isDiscardable Word_mod_unchecked = true
   | isDiscardable Word_LT = true
   | isDiscardable Word_LE = true
   | isDiscardable Word_GT = true
   | isDiscardable Word_GE = true
+  | isDiscardable Word_notb = true
+  | isDiscardable Word_andb = true
+  | isDiscardable Word_orb = true
+  | isDiscardable Word_xorb = true
   | isDiscardable Word_LSHIFT_unchecked = true
   | isDiscardable Word_RSHIFT_unchecked = true
   | isDiscardable Real_PLUS = true
@@ -849,10 +879,16 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Word_MINUS = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_TIMES = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_TILDE = { vars = [], args = vector [word], result = word }
+  | typeOf Primitives.Word_div_unchecked = { vars = [], args = vector [word, word], result = word }
+  | typeOf Primitives.Word_mod_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_LT = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.Word_LE = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.Word_GT = { vars = [], args = vector [word, word], result = bool }
   | typeOf Primitives.Word_GE = { vars = [], args = vector [word, word], result = bool }
+  | typeOf Primitives.Word_notb = { vars = [], args = vector [word], result = word }
+  | typeOf Primitives.Word_andb = { vars = [], args = vector [word, word], result = word }
+  | typeOf Primitives.Word_orb = { vars = [], args = vector [word, word], result = word }
+  | typeOf Primitives.Word_xorb = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_LSHIFT_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_RSHIFT_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], result = real }

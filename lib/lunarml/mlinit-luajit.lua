@@ -17,6 +17,10 @@ local select = select
 local table_pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local table_unpack = table.unpack or unpack
 local bit = require "bit"
+local bit_bnot = bit.bnot
+local bit_band = bit.band
+local bit_bor = bit.bor
+local bit_bxor = bit.bxor
 local bit_lshift = bit.lshift
 local bit_rshift = bit.rshift
 
@@ -148,52 +152,23 @@ local function _Int_abs(x)
 end
 
 -- Word
-local function __Word_add(x, y)
-  return (x + y) % 0x100000000
-end
-local function __Word_sub(x, y)
-  return (x - y) % 0x100000000
-end
 local __Word_mul
 do
-  local bit = require "bit"
   local tobit = bit.tobit
-  --[[
-  local band = bit.band
-  local lshift = bit.lshift
-  local rshift = bit.rshift
-  ]]
   local ffi = require "ffi"
   local uint32_t = ffi.typeof("uint32_t")
   function __Word_mul(x, y)
     return tobit(uint32_t(x) * uint32_t(y)) % 0x100000000
     --[[
-    local x_lo = band(x, 0xffff)
-    local x_hi = rshift(x, 16)
-    local y_lo = band(y, 0xffff)
-    local y_hi = rshift(y, 16)
+    local x_lo = bit_band(x, 0xffff)
+    local x_hi = bit_rshift(x, 16)
+    local y_lo = bit_band(y, 0xffff)
+    local y_hi = bit_rshift(y, 16)
     local lolo = x_lo * y_lo
     local lohi = x_lo * y_hi + x_hi * y_lo
-    return (lolo + lshift(band(lohi, 0xffff), 16)) % 0x100000000
+    return (lolo + bit_lshift(bit_band(lohi, 0xffff), 16)) % 0x100000000
     ]]
   end
-end
-local function __Word_div(x, y)
-  if y == 0 then
-    _raise(_Div, "Word.div")
-  else
-    return math_floor(x / y)
-  end
-end
-local function __Word_mod(x, y)
-  if y == 0 then
-    _raise(_Div, "Word.mod")
-  else
-    return x % y
-  end
-end
-local function _Word_negate(x)
-  return (- x) % 0x100000000
 end
 
 -- Real
