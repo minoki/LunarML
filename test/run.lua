@@ -36,7 +36,7 @@ function compile_and_run(file)
   if not compile_succ then
     return false, output
   end
-  local h = assert(io.popen(string.format("\"%s\" \"%s\"", lua_interpreter, luafile), "r"))
+  local h = assert(io.popen(string.format("\"%s\" -e 'setmetatable(_G,{__index=function(t,k)error(\"undefined variable \"..k,2)end})' \"%s\"", lua_interpreter, luafile), "r"))
   local actual_output = normalize_line_ending(h:read("a"))
   local succ = h:close()
   assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
