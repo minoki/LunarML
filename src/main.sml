@@ -121,7 +121,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      in CSyntax.CVar.fromInt n
                      end
           val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
+          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
           val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
                        print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
@@ -168,7 +168,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      in CSyntax.CVar.fromInt n
                      end
           val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
+          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
           val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
                        print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
@@ -212,7 +212,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      in CSyntax.CVar.fromInt n
                      end
           val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs cont
+          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
           val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
                        print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
