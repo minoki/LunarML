@@ -45,6 +45,11 @@ fun disjoint (x, y) = isEmpty (intersection (x, y))
 open VIdSet
 end
 structure VIdMap = RedBlackMapFn(VIdKey)
+structure VIdTable = HashTableFn (struct
+                                   type hash_key = VId
+                                   fun hashVal (MkVId (_, i)) = Word.fromInt i
+                                   val sameKey = eqVId
+                                   end)
 
 structure TyNameKey = struct
 type ord_key = TyName

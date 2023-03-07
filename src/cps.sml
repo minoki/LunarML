@@ -23,6 +23,11 @@ end
 type CVar = CVar.t
 structure CVarSet = RedBlackSetFn (CVar)
 structure CVarMap = RedBlackMapFn (CVar)
+structure CVarTable = HashTableFn (struct
+                                   type hash_key = CVar.t
+                                   fun hashVal x = Word.fromInt (CVar.toInt x)
+                                   fun sameKey (x : CVar.t, y : CVar.t) = x = y
+                                   end)
 datatype Value = Var of Var
                | Unit (* : unit *)
                | Nil (* : 'a list *)
@@ -520,7 +525,7 @@ and sizeOfCExp (e, threshold)
             | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
 datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
 datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
-fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
+fun usageInValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
                                       SOME r => (case !r of
                                                      NEVER => r := ONCE
                                                    | ONCE => r := MANY
@@ -544,7 +549,7 @@ fun usageInValue env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
   | usageInValue env (C.Char16Const _) = ()
   | usageInValue env (C.StringConst _) = ()
   | usageInValue env (C.String16Const _) = ()
-fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) of
+fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
                                               SOME r => (case !r of
                                                              NEVER => r := ONCE_AS_CALLEE
                                                            | ONCE => r := MANY
@@ -568,7 +573,7 @@ fun usageInValueAsCallee env (C.Var v) = (case TypedSyntax.VIdMap.find (env, v) 
   | usageInValueAsCallee env (C.Char16Const _) = ()
   | usageInValueAsCallee env (C.StringConst _) = ()
   | usageInValueAsCallee env (C.String16Const _) = ()
-fun usageContVar cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
+fun usageContVar cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                           SOME r => (case !r of
                                                          C_NEVER => r := C_ONCE
                                                        | C_ONCE => r := C_MANY
@@ -578,7 +583,7 @@ fun usageContVar cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
                                                     )
                                         | NONE => ()
                                      )
-fun usageContVarDirect cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
+fun usageContVarDirect cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                                 SOME r => (case !r of
                                                                C_NEVER => r := C_ONCE_DIRECT
                                                              | C_ONCE => r := C_MANY
@@ -589,85 +594,82 @@ fun usageContVarDirect cenv (v : C.CVar) = (case C.CVarMap.find (cenv, v) of
                                               | NONE => ()
                                            )
 local
-    fun add (env, v) = if TypedSyntax.VIdMap.inDomain (env, v) then
+    fun add (env, v) = if TypedSyntax.VIdTable.inDomain env v then
                            raise Fail ("usageInCExp: duplicate name in AST: " ^ TypedSyntax.print_VId v)
                        else
-                           TypedSyntax.VIdMap.insert (env, v, ref NEVER)
-    fun addC (cenv, v) = if C.CVarMap.inDomain (cenv, v) then
+                           TypedSyntax.VIdTable.insert env (v, ref NEVER)
+    fun addC (cenv, v) = if C.CVarTable.inDomain cenv v then
                              raise Fail ("usageInCExp: duplicate continuation name in AST: " ^ Int.toString (C.CVar.toInt v))
                          else
-                             C.CVarMap.insert (cenv, v, ref C_NEVER)
+                             C.CVarTable.insert cenv (v, ref C_NEVER)
 in
-fun usageInSimpleExp (env, renv, cenv, crenv, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (usageInValue (!env)) args
-  | usageInSimpleExp (env, renv, cenv, crenv, C.Record fields) = Syntax.LabelMap.app (usageInValue (!env)) fields
+fun usageInSimpleExp (env, renv, cenv, crenv, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (usageInValue env) args
+  | usageInSimpleExp (env, renv, cenv, crenv, C.Record fields) = Syntax.LabelMap.app (usageInValue env) fields
   | usageInSimpleExp (env, renv, cenv, crenv, C.ExnTag { name = _, payloadTy = _ }) = ()
-  | usageInSimpleExp (env, renv, cenv, crenv, C.Projection { label = _, record, fieldTypes = _ }) = usageInValue (!env) record
+  | usageInSimpleExp (env, renv, cenv, crenv, C.Projection { label = _, record, fieldTypes = _ }) = usageInValue env record
   | usageInSimpleExp (env, renv, cenv, crenv, C.Abs { contParam, params, body })
-    = ( env := List.foldl (fn (p, e) => add (e, p)) (!env) params
-      ; cenv := addC (!cenv, contParam)
+    = ( List.app (fn p => add (env, p)) params
+      ; addC (cenv, contParam)
       ; usageInCExp (env, renv, cenv, crenv, body)
       )
 and usageInDec (env, renv, cenv, crenv)
     = fn C.ValDec { exp, result } =>
          ( usageInSimpleExp (env, renv, cenv, crenv, exp)
          ; case result of
-               SOME result => env := add (!env, result)
+               SOME result => add (env, result)
              | NONE => ()
          )
        | C.RecDec defs =>
          let val recursiveEnv = List.foldl (fn ((f, _, _, _), m) => TypedSyntax.VIdMap.insert (m, f, ref NEVER)) TypedSyntax.VIdMap.empty defs
-             val innerEnv = List.foldl (fn ((_, _, params, _), e) =>
-                                           List.foldl (fn (p, e) => add (e, p)) e params
-                                       ) (TypedSyntax.VIdMap.unionWith #2 (!env, recursiveEnv)) defs
-             val cenv' = List.foldl (fn ((_, k, _, _), ce) => addC (ce, k)) (!cenv) defs
-         in env := innerEnv
-          ; cenv := cenv'
-          ; List.app (fn (_, _, _, body) => usageInCExp (env, renv, cenv, crenv, body)) defs
-          ; renv := TypedSyntax.VIdMap.foldli (fn (f, r, m) => TypedSyntax.VIdMap.insert (m, f, r)) (!renv) recursiveEnv
-          ; env := List.foldl (fn ((f, _, _, _), m) => TypedSyntax.VIdMap.insert (m, f, ref NEVER)) (!env) defs
+         in TypedSyntax.VIdMap.appi (fn (f, v) => TypedSyntax.VIdTable.insert env (f, v)) recursiveEnv
+          ; List.app (fn (_, k, params, body) => ( addC (cenv, k)
+                                                 ; List.app (fn p => add (env, p)) params
+                                                 ; usageInCExp (env, renv, cenv, crenv, body)
+                                                 )
+                     ) defs
+          ; TypedSyntax.VIdMap.appi (fn (f, v) => TypedSyntax.VIdTable.insert renv (f, v)) recursiveEnv
+          ; List.app (fn (f, _, _, _) => TypedSyntax.VIdTable.insert env (f, ref NEVER)) defs
          end
        | C.ContDec { name, params, body } =>
-         ( env := List.foldl (fn (p, e) => add (e, p)) (!env) params
+         ( List.app (fn p => add (env, p)) params
          ; usageInCExp (env, renv, cenv, crenv, body)
-         ; cenv := addC (!cenv, name)
+         ; addC (cenv, name)
          )
        | C.RecContDec defs =>
          let val recursiveCEnv = List.foldl (fn ((f, _, _), m) => C.CVarMap.insert (m, f, ref C_NEVER)) C.CVarMap.empty defs
-             val env' = List.foldl (fn ((f, params, _), e) =>
-                                       List.foldl (fn (p, e) => add (e, p)) e params
-                                   ) (!env) defs
-             val innerCEnv = C.CVarMap.unionWith #2 (!cenv, recursiveCEnv)
-         in env := env'
-          ; cenv := innerCEnv
-          ; List.app (fn (_, _, body) => usageInCExp (env, renv, cenv, crenv, body)) defs
-          ; crenv := C.CVarMap.foldli (fn (f, r, m) => C.CVarMap.insert (m, f, r)) (!crenv) recursiveCEnv
-          ; cenv := List.foldl (fn ((f, _, _), m) => C.CVarMap.insert (m, f, ref C_NEVER)) (!cenv) defs
+         in C.CVarMap.appi (fn (f, v) => C.CVarTable.insert cenv (f, v)) recursiveCEnv
+          ; List.app (fn (f, params, body) => ( List.app (fn p => add (env, p)) params
+                                              ; usageInCExp (env, renv, cenv, crenv, body)
+                                              )
+                     ) defs
+          ; C.CVarMap.appi (fn (f, v) => C.CVarTable.insert crenv (f, v)) recursiveCEnv
+          ; List.app (fn (f, _, _) => C.CVarTable.insert cenv (f, ref C_NEVER)) defs
          end
-and usageInCExp (env : ((usage ref) TypedSyntax.VIdMap.map) ref, renv, cenv : ((cont_usage ref) C.CVarMap.map) ref, crenv, cexp)
+and usageInCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (cont_usage ref) C.CVarTable.hash_table, crenv, cexp)
     = case cexp of
           C.Let { decs, cont } =>
           ( Vector.app (usageInDec (env, renv, cenv, crenv)) decs
           ; usageInCExp (env, renv, cenv, crenv, cont)
           )
         | C.App { applied, cont, args } =>
-          ( usageInValueAsCallee (!env) applied
-          ; usageContVar (!cenv) cont
-          ; List.app (usageInValue (!env)) args
+          ( usageInValueAsCallee env applied
+          ; usageContVar cenv cont
+          ; List.app (usageInValue env) args
           )
         | C.AppCont { applied, args } =>
-          ( usageContVarDirect (!cenv) applied
-          ; List.app (usageInValue (!env)) args
+          ( usageContVarDirect cenv applied
+          ; List.app (usageInValue env) args
           )
         | C.If { cond, thenCont, elseCont } =>
-          ( usageInValue (!env) cond
+          ( usageInValue env cond
           ; usageInCExp (env, renv, cenv, crenv, thenCont)
           ; usageInCExp (env, renv, cenv, crenv, elseCont)
           )
         | C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut } =>
-          ( usageContVar (!cenv) successfulExitOut
-          ; cenv := addC (!cenv, successfulExitIn)
+          ( usageContVar cenv successfulExitOut
+          ; addC (cenv, successfulExitIn)
           ; usageInCExp (env, renv, cenv, crenv, body)
-          ; env := add (!env, e)
+          ; add (env, e)
           ; usageInCExp (env, renv, cenv, crenv, h)
           )
 end
@@ -947,7 +949,7 @@ and simplifyDec (ctx, usage, rusage, cusage, crusage) (dec, (env, cenv, subst, c
                                  | _ => exp
                  in case (exp, result) of
                         (C.Abs { contParam, params, body }, SOME result) =>
-                        (case TypedSyntax.VIdMap.find (usage, result) of
+                        (case TypedSyntax.VIdTable.find usage result of
                              SOME (ref NEVER) => (env, cenv, subst, csubst, acc)
                            | SOME (ref ONCE_AS_CALLEE) => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body)
                                                               val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME (C.Abs { contParam = contParam, params = params, body = body }), isDiscardableFunction = isDiscardableExp (env, body) })
@@ -966,7 +968,7 @@ and simplifyDec (ctx, usage, rusage, cusage, crusage) (dec, (env, cenv, subst, c
                                   end
                         )
                       | _ => let val result = case result of
-                                                  s as SOME result => (case TypedSyntax.VIdMap.find (usage, result) of
+                                                  s as SOME result => (case TypedSyntax.VIdTable.find usage result of
                                                                            SOME (ref NEVER) => NONE
                                                                          | _ => s
                                                                       )
@@ -988,7 +990,7 @@ and simplifyDec (ctx, usage, rusage, cusage, crusage) (dec, (env, cenv, subst, c
                  end
           end
         | C.RecDec defs =>
-          if List.exists (fn (f, _, _, _) => case TypedSyntax.VIdMap.find (usage, f) of SOME (ref NEVER) => false | _ => true) defs then
+          if List.exists (fn (f, _, _, _) => case TypedSyntax.VIdTable.find usage f of SOME (ref NEVER) => false | _ => true) defs then
               let val dec = C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body))) defs)
               in (env, cenv, subst, csubst, dec :: acc)
               end
@@ -997,7 +999,7 @@ and simplifyDec (ctx, usage, rusage, cusage, crusage) (dec, (env, cenv, subst, c
               ; (env, cenv, subst, csubst, acc)
               )
         | C.ContDec { name, params, body } =>
-          (case C.CVarMap.find (cusage, name) of
+          (case C.CVarTable.find cusage name of
                SOME (ref C_NEVER) => ( #simplificationOccurred ctx := true
                                      ; (env, cenv, subst, csubst, acc)
                                      )
@@ -1019,7 +1021,7 @@ and simplifyDec (ctx, usage, rusage, cusage, crusage) (dec, (env, cenv, subst, c
                     end
           )
         | C.RecContDec defs =>
-          if List.exists (fn (f, _, _) => case C.CVarMap.find (cusage, f) of SOME (ref C_NEVER) => false | _ => true) defs then
+          if List.exists (fn (f, _, _) => case C.CVarTable.find cusage f of SOME (ref C_NEVER) => false | _ => true) defs then
               let val cenv = List.foldl (fn ((f, params, body), cenv) => C.CVarMap.insert (cenv, f, (params, NONE))) cenv defs
                   val dec = C.RecContDec (List.map (fn (f, params, body) => (f, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage, body))) defs)
               in (env, cenv, subst, csubst, dec :: acc)
@@ -1045,13 +1047,13 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                       let val () = #simplificationOccurred ctx := true
                           val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
                           val csubst = C.CVarMap.insert (csubst, contParam, cont)
-                      in case TypedSyntax.VIdMap.find (usage, applied) of
+                      in case TypedSyntax.VIdTable.find usage applied of
                              SOME (ref ONCE_AS_CALLEE) => substCExp (subst, csubst, body) (* no alpha conversion *)
                            | _ => alphaConvert (ctx, subst, csubst, body)
                       end
                     | SOME { exp, isDiscardableFunction = true } =>
                       (case C.CVarMap.find (cenv, cont) of
-                           SOME (params, _) => if List.all (fn p => case TypedSyntax.VIdMap.find (usage, p) of SOME (ref NEVER) => true | _ => false) params then
+                           SOME (params, _) => if List.all (fn p => case TypedSyntax.VIdTable.find usage p of SOME (ref NEVER) => true | _ => false) params then
                                                    ( #simplificationOccurred ctx := true
                                                    ; C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
                                                    )
@@ -1070,7 +1072,7 @@ and simplifyCExp (ctx, env, cenv, subst, csubst, usage, rusage, cusage, crusage,
                  SOME (params, SOME body) =>
                  let val () = #simplificationOccurred ctx := true
                      val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
-                 in case C.CVarMap.find (cusage, applied) of
+                 in case C.CVarTable.find cusage applied of
                         SOME (ref C_ONCE_DIRECT) => substCExp (subst, csubst, body) (* no alpha conversion *)
                       | _ => alphaConvert (ctx, subst, csubst, body)
                  end
