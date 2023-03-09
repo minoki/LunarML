@@ -252,7 +252,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
       end
 fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Code)
     = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
-                                   [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "sml-lib" }, relativeTo = OS.FileSys.getDir () })
+                                   [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "ml" }, relativeTo = OS.FileSys.getDir () })
                                    ,("TARGET_LANG", case #backend opts of
                                                         BACKEND_LUA _ => "lua"
                                                       | BACKEND_LUAJIT => "luajit"

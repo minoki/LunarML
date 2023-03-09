@@ -12,5 +12,5 @@ thirdparty/smlnj-lib/
 thirdparty/smlnj-lib-original/
 thirdparty/smlnj-lib-lunarml/
 thirdparty/ml-yacc/
-lib/lunarml/sml-lib/mlyacc-lib/
-lib/lunarml/sml-lib/smlnj-lib/
+lib/lunarml/ml/mlyacc-lib/
+lib/lunarml/ml/smlnj-lib/
