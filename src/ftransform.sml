@@ -148,14 +148,14 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
               = F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, [], [exp, tag])
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
-              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp Primitives.Vector_length, [elemTy], [exp])
+              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp (Primitives.Vector_length Primitives.INT), [elemTy], [exp])
                     val intTy = F.TyCon ([], Typing.primTyName_int)
                     val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
-                                 F.PrimExp (F.PrimFnOp Primitives.Int_GE, [], [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimFnOp (Primitives.Int_GE Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
                              else
-                                 F.PrimExp (F.PrimFnOp Primitives.Int_EQUAL, [], [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
+                                 F.PrimExp (F.PrimFnOp (Primitives.Int_EQUAL Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
+                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                     in F.SimplifyingAndalsoExp (e, exp)
                                                     end
                                  ) e0 pats
@@ -188,7 +188,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
             | genBinders exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
-                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp Primitives.Unsafe_Vector_sub, [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
                                                                                end
           and isExhaustive (F.WildcardPat _) = true
             | isExhaustive (F.SConPat _) = false

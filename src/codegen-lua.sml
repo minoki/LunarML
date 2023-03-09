@@ -353,93 +353,168 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                            )
                        | Primitives.Bool_EQUAL => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Bool_not => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
-                       | Primitives.Int_EQUAL => doBinaryOp (L.EQUAL, PURE)
-                       | Primitives.Int_PLUS => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_add"), vector [a, b]), IMPURE)
-                       | Primitives.Int_MINUS => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_sub"), vector [a, b]), IMPURE)
-                       | Primitives.Int_TIMES => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mul"), vector [a, b]), IMPURE)
-                       | Primitives.Int_div => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_div"), vector [a, b]), IMPURE)
-                       | Primitives.Int_mod => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
-                       | Primitives.Int_quot => (case #targetLuaVersion ctx of
-                                                     LUA5_3 => raise CodeGenError "primop Int.quot is not supported on this target"
-                                                   | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_quot"), vector [a, b]), IMPURE)
-                                                )
-                       | Primitives.Int_LT => doBinaryOp (L.LT, PURE)
-                       | Primitives.Int_GT => doBinaryOp (L.GT, PURE)
-                       | Primitives.Int_LE => doBinaryOp (L.LE, PURE)
-                       | Primitives.Int_GE => doBinaryOp (L.GE, PURE)
-                       | Primitives.Word_EQUAL => doBinaryOp (L.EQUAL, PURE)
-                       | Primitives.Word_PLUS => (case #targetLuaVersion ctx of
-                                                      LUA5_3 => doBinaryOp (L.PLUS, PURE)
-                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.BinExp (L.PLUS, a, b), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                 )
-                       | Primitives.Word_MINUS => (case #targetLuaVersion ctx of
-                                                      LUA5_3 => doBinaryOp (L.MINUS, PURE)
-                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.BinExp (L.MINUS, a, b), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                 )
-                       | Primitives.Word_TIMES => (case #targetLuaVersion ctx of
-                                                       LUA5_3 => doBinaryOp (L.TIMES, PURE)
-                                                     | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mul"), vector [a, b]), PURE)
-                                                  )
-                       | Primitives.Word_TILDE => (case #targetLuaVersion ctx of
-                                                       LUA5_3 => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
-                                                     | LUAJIT => doUnaryExp (fn a => L.BinExp (L.MOD, L.UnaryExp (L.NEGATE, a), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                  )
-                       | Primitives.Word_div => (case #targetLuaVersion ctx of
-                                                     LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [a, b]), IMPURE)
-                                                   | LUAJIT => raise CodeGenError "primop Word.div is not supported on this target"
-                                                )
-                       | Primitives.Word_mod => (case #targetLuaVersion ctx of
-                                                     LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mod"), vector [a, b]), IMPURE)
-                                                   | LUAJIT => raise CodeGenError "primop Word.mod is not supported on this target"
-                                                )
-                       | Primitives.Word_div_unchecked => (case #targetLuaVersion ctx of
-                                                               LUA5_3 => raise CodeGenError "primop Word.div.unchecked is not supported on this target"
-                                                             | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
-                                                          )
-                       | Primitives.Word_mod_unchecked => (case #targetLuaVersion ctx of
-                                                               LUA5_3 => raise CodeGenError "primop Word.mod.unchecked is not supported on this target"
-                                                             | LUAJIT => doBinaryOp (L.MOD, PURE)
-                                                          )
-                       | Primitives.Word_LT => (case #targetLuaVersion ctx of
-                                                    LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b]), PURE)
-                                                  | LUAJIT => doBinaryOp (L.LT, PURE)
-                                               )
-                       | Primitives.Word_LE => (case #targetLuaVersion ctx of
-                                                    LUA5_3 => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a])), PURE)
-                                                  | LUAJIT => doBinaryOp (L.LE, PURE)
-                                               )
-                       | Primitives.Word_GT => (case #targetLuaVersion ctx of
-                                                    LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a]), PURE)
-                                                  | LUAJIT => doBinaryOp (L.GT, PURE)
-                                               )
-                       | Primitives.Word_GE => (case #targetLuaVersion ctx of
-                                                    LUA5_3 => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b])), PURE)
-                                                  | LUAJIT => doBinaryOp (L.GE, PURE)
-                                               )
-                       | Primitives.Word_notb => (case #targetLuaVersion ctx of
-                                                       LUA5_3 => doUnaryExp (fn a => L.UnaryExp (L.BITNOT, a), PURE)
-                                                     | LUAJIT => doUnaryExp (fn a => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bnot"), vector [a]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                  )
-                       | Primitives.Word_andb => (case #targetLuaVersion ctx of
-                                                      LUA5_3 => doBinaryOp (L.BITAND, PURE)
-                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_band"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                 )
-                       | Primitives.Word_orb => (case #targetLuaVersion ctx of
-                                                     LUA5_3 => doBinaryOp (L.BITOR, PURE)
-                                                   | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bor"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                )
-                       | Primitives.Word_xorb => (case #targetLuaVersion ctx of
-                                                      LUA5_3 => doBinaryOp (L.BITXOR, PURE)
-                                                    | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bxor"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                 )
-                       | Primitives.Word_LSHIFT_unchecked => (case #targetLuaVersion ctx of
-                                                                  LUA5_3 => doBinaryOp (L.LSHIFT, PURE)
-                                                                | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_lshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                             )
-                       | Primitives.Word_RSHIFT_unchecked => (case #targetLuaVersion ctx of
-                                                                  LUA5_3 => doBinaryOp (L.RSHIFT, PURE)
-                                                                | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_rshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
-                                                             )
+                       | Primitives.Int_EQUAL _ => doBinaryOp (L.EQUAL, PURE)
+                       | Primitives.Int_PLUS i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_add"), vector [a, b]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_add"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_MINUS i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_sub"), vector [a, b]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_sub"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_TIMES i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mul"), vector [a, b]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mul"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_div i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_div"), vector [a, b]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_div"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_mod i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_quot i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => raise CodeGenError "primop Int.quot is not supported on this target"
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_quot"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_LT _ => doBinaryOp (L.LT, PURE)
+                       | Primitives.Int_GT _ => doBinaryOp (L.GT, PURE)
+                       | Primitives.Int_LE _ => doBinaryOp (L.LE, PURE)
+                       | Primitives.Int_GE _ => doBinaryOp (L.GE, PURE)
+                       | Primitives.Word_EQUAL w => doBinaryOp (L.EQUAL, PURE)
+                       | Primitives.Word_PLUS w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.PLUS, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.BinExp (L.PLUS, a, b), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.PLUS, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_MINUS w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.MINUS, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.BinExp (L.MINUS, a, b), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.MINUS, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_TIMES w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.TIMES, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mul"), vector [a, b]), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.TIMES, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_TILDE w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
+                            | (LUAJIT, Primitives.W32) => doUnaryExp (fn a => L.BinExp (L.MOD, L.UnaryExp (L.NEGATE, a), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_div w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_mod w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mod"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_div_unchecked w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.DIV, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_mod_unchecked w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUAJIT, Primitives.W32) => doBinaryOp (L.MOD, PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.MOD, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_LT w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b]), PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryOp (L.LT, PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.LT, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_LE w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a])), PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryOp (L.LE, PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.LE, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_GT w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [b, a]), PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryOp (L.GT, PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.GT, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_GE w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.UnaryExp (L.NOT, L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b])), PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryOp (L.GE, PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryOp (L.GE, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_notb w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doUnaryExp (fn a => L.UnaryExp (L.BITNOT, a), PURE)
+                            | (LUAJIT, Primitives.W32) => doUnaryExp (fn a => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bnot"), vector [a]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "bit_bnot"), vector [a]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_andb w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.BITAND, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_band"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "bit_band"), vector [a, b]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_orb w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.BITOR, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bor"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "bit_bor"), vector [a, b]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_xorb w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.WORD) => doBinaryOp (L.BITXOR, PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_bxor"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "bit_bxor"), vector [a, b]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_LSHIFT_unchecked (w1, w2) =>
+                         (case (#targetLuaVersion ctx, w1, w2) of
+                              (LUA5_3, Primitives.WORD, Primitives.WORD) => doBinaryOp (L.LSHIFT, PURE)
+                            | (LUAJIT, Primitives.W32, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_lshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "bit_lshift"), vector [a, b]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Word_RSHIFT_unchecked (w1, w2) =>
+                         (case (#targetLuaVersion ctx, w1, w2) of
+                              (LUA5_3, Primitives.WORD, Primitives.WORD) => doBinaryOp (L.RSHIFT, PURE)
+                            | (LUAJIT, Primitives.W32, Primitives.W32) => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.CallExp (L.VarExp (L.PredefinedId "bit_rshift"), vector [a, b]), L.ConstExp (L.Numeral "0x100000000")), PURE)
+                            | (LUAJIT, Primitives.W64, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "bit_rshift"), vector [a, b]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Real_PLUS => doBinaryOp (L.PLUS, PURE)
                        | Primitives.Real_MINUS => doBinaryOp (L.MINUS, PURE)
                        | Primitives.Real_TIMES => (case #targetLuaVersion ctx of
@@ -467,17 +542,17 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                        | Primitives.String_LE => doBinaryOp (L.LE, PURE)
                        | Primitives.String_GE => doBinaryOp (L.GE, PURE)
                        | Primitives.String_HAT => doBinaryOp (L.CONCAT, PURE)
-                       | Primitives.String_size => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), PURE)
+                       | Primitives.String_size _ => doUnaryExp (fn a => L.UnaryExp (L.LENGTH, a), PURE)
                        | Primitives.String_str => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "string_char"), vector [a]), PURE)
-                       | Primitives.Vector_length => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
-                       | Primitives.Vector_unsafeFromListRevN => doBinaryExp (fn (n, xs) => L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), PURE)
+                       | Primitives.Vector_length _ => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
+                       | Primitives.Vector_unsafeFromListRevN _ => doBinaryExp (fn (n, xs) => L.CallExp (L.VarExp (L.PredefinedId "_Vector_unsafeFromListRevN"), vector [n, xs]), PURE)
                        | Primitives.Array_EQUAL => doBinaryOp (L.EQUAL, PURE)
-                       | Primitives.Array_length => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
-                       | Primitives.Unsafe_Vector_sub => doBinaryExp (fn (vec, i) => L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), PURE)
-                       | Primitives.Unsafe_Array_sub => doBinaryExp (fn (arr, i) => L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), IMPURE)
-                       | Primitives.Unsafe_Array_update => doTernary (fn (arr, i, v) =>
-                                                                         action (result, L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]))
-                                                                     )
+                       | Primitives.Array_length _ => doUnaryExp (fn a => L.IndexExp (a, L.ConstExp (L.LiteralString "n")), PURE)
+                       | Primitives.Unsafe_Vector_sub _ => doBinaryExp (fn (vec, i) => L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), PURE)
+                       | Primitives.Unsafe_Array_sub _ => doBinaryExp (fn (arr, i) => L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), IMPURE)
+                       | Primitives.Unsafe_Array_update _ => doTernary (fn (arr, i, v) =>
+                                                                           action (result, L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]))
+                                                                       )
                        | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [e, tag]), PURE)
                        | Primitives.Lua_sub => doBinaryExp (fn (a, b) => L.IndexExp (a, b), IMPURE)
                        | Primitives.Lua_set => doTernary (fn (a, b, c) =>

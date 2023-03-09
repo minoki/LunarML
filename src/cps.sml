@@ -245,8 +245,10 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                              F.IntConstOp x => (case tyargs of
                                                     [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
                                                                         case #defaultInt (#targetInfo ctx) of
-                                                                            TargetInfo.NATIVE_INT => apply revDecs k (C.NativeIntConst x)
-                                                                          | TargetInfo.INT32 => apply revDecs k (C.Int32Const (Int32.fromLarge x))
+                                                                            Primitives.INT => apply revDecs k (C.NativeIntConst x)
+                                                                          | Primitives.I32 => apply revDecs k (C.Int32Const (Int32.fromLarge x))
+                                                                          | Primitives.I54 => apply revDecs k (C.Int54Const (Int64.fromLarge x))
+                                                                          | Primitives.I64 => apply revDecs k (C.Int64Const (Int64.fromLarge x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int32) then
                                                                         apply revDecs k (C.Int32Const (Int32.fromLarge x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int54) then
@@ -262,8 +264,9 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                            | F.WordConstOp x => (case tyargs of
                                                      [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
                                                                          case #defaultWord (#targetInfo ctx) of
-                                                                             TargetInfo.NATIVE_WORD => apply revDecs k (C.NativeWordConst x)
-                                                                           | TargetInfo.WORD32 => apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
+                                                                             Primitives.WORD => apply revDecs k (C.NativeWordConst x)
+                                                                           | Primitives.W32 => apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
+                                                                           | Primitives.W64 => apply revDecs k (C.Word64Const (Word64.fromLargeInt x))
                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word32) then
                                                                          apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
@@ -292,13 +295,16 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                   )
                            | _ => let val returnsUnit = case primOp of
                                                             F.PrimFnOp Primitives.Ref_set => true
-                                                          | F.PrimFnOp Primitives.Unsafe_Array_update => true
+                                                          | F.PrimFnOp (Primitives.Unsafe_Array_update _) => true
                                                           | F.PrimFnOp Primitives.Lua_set => true
                                                           | F.PrimFnOp Primitives.Lua_setGlobal => true
                                                           | F.PrimFnOp Primitives.JavaScript_set => true
                                                           | F.PrimFnOp Primitives.JavaScript_setGlobal => true
                                                           | _ => false
                                       val args = List.rev revArgs
+                                      val primOp = case primOp of
+                                                       F.PrimFnOp p => F.PrimFnOp (Primitives.fixIntWord { int = #defaultInt (#targetInfo ctx), word = #defaultWord (#targetInfo ctx) } p)
+                                                     | _ => primOp
                                       val exp = C.PrimOp { primOp = primOp, tyargs = tyargs, args = args }
                                   in if returnsUnit then
                                          apply (C.ValDec { exp = exp, result = NONE } :: revDecs) k C.Unit

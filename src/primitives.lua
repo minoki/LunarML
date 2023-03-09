@@ -10,8 +10,16 @@ do
   local string_format = string.format
   local unit = {"unit"}
   local bool = {"bool"}
-  local int = {"int"}
-  local word = {"word"}
+  -- local int = {"int"}
+  local intA = {"intA"}
+  local int32 = {"int32"}
+  local int54 = {"int54"}
+  local int64 = {"int64"}
+  -- local word = {"word"}
+  local wordA = {"wordA"}
+  local wordB = {"wordB"}
+  local word32 = {"word32"}
+  local word64 = {"word64"}
   local real = {"real"}
   local char = {"char"}
   local char16 = {"char16"}
@@ -147,219 +155,219 @@ do
       discardable = true,
     },
     {
-      name = "Int.=",
+      name = "Int{i}.=",
       srcname = "Int_EQUAL",
-      type = Compare(int),
+      type = Compare(intA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Int.+",
+      name = "Int{i}.+",
       srcname = "Int_PLUS",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.-",
+      name = "Int{i}.-",
       srcname = "Int_MINUS",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.*",
+      name = "Int{i}.*",
       srcname = "Int_TIMES",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.div",
+      name = "Int{i}.div",
       srcname = "Int_div",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.mod",
+      name = "Int{i}.mod",
       srcname = "Int_mod",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.quot",
+      name = "Int{i}.quot",
       srcname = "Int_quot",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.rem",
+      name = "Int{i}.rem",
       srcname = "Int_rem",
-      type = HomoBinary(int),
+      type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Int.<",
+      name = "Int{i}.<",
       srcname = "Int_LT",
-      type = Compare(int),
+      type = Compare(intA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Int.<=",
+      name = "Int{i}.<=",
       srcname = "Int_LE",
-      type = Compare(int),
+      type = Compare(intA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Int.>",
+      name = "Int{i}.>",
       srcname = "Int_GT",
-      type = Compare(int),
+      type = Compare(intA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Int.>=",
+      name = "Int{i}.>=",
       srcname = "Int_GE",
-      type = Compare(int),
+      type = Compare(intA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.=",
+      name = "Word{w}.=",
       srcname = "Word_EQUAL",
-      type = Compare(word),
+      type = Compare(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.+",
+      name = "Word{w}.+",
       srcname = "Word_PLUS",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.-",
+      name = "Word{w}.-",
       srcname = "Word_MINUS",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.*",
+      name = "Word{w}.*",
       srcname = "Word_TIMES",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.~",
+      name = "Word{w}.~",
       srcname = "Word_TILDE",
-      type = HomoUnary(word),
+      type = HomoUnary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.div",
+      name = "Word{w}.div",
       srcname = "Word_div",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Word.mod",
+      name = "Word{w}.mod",
       srcname = "Word_mod",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = true,
       discardable = false,
     },
     {
-      name = "Word.div.unchecked",
+      name = "Word{w}.div.unchecked",
       srcname = "Word_div_unchecked",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.mod.unchecked",
+      name = "Word{w}.mod.unchecked",
       srcname = "Word_mod_unchecked",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.<",
+      name = "Word{w}.<",
       srcname = "Word_LT",
-      type = Compare(word),
+      type = Compare(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.<=",
+      name = "Word{w}.<=",
       srcname = "Word_LE",
-      type = Compare(word),
+      type = Compare(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.>",
+      name = "Word{w}.>",
       srcname = "Word_GT",
-      type = Compare(word),
+      type = Compare(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.>=",
+      name = "Word{w}.>=",
       srcname = "Word_GE",
-      type = Compare(word),
+      type = Compare(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.notb",
+      name = "Word{w}.notb",
       srcname = "Word_notb",
-      type = HomoUnary(word),
+      type = HomoUnary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.andb",
+      name = "Word{w}.andb",
       srcname = "Word_andb",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.orb",
+      name = "Word{w}.orb",
       srcname = "Word_orb",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Word.xorb",
+      name = "Word{w}.xorb",
       srcname = "Word_xorb",
-      type = HomoBinary(word),
+      type = HomoBinary(wordA),
       mayraise = false,
       discardable = true,
     },
     { -- the amount must be less than wordSize
-      name = "Word.<<.unchecked",
+      name = "Word{w}.<<.unchecked{.w}",
       srcname = "Word_LSHIFT_unchecked",
-      type = HomoBinary(word),
+      type = { vars = {}, args = {wordA, wordB}, result = wordA },
       mayraise = false,
       discardable = true,
     },
     { -- the amount must be less than wordSize
-      name = "Word.>>.unchecked",
+      name = "Word{w}.>>.unchecked{.w}",
       srcname = "Word_RSHIFT_unchecked",
-      type = HomoBinary(word),
+      type = { vars = {}, args = {wordA, wordB}, result = wordA },
       mayraise = false,
       discardable = true,
     },
@@ -539,9 +547,9 @@ do
       discardable = false, -- Size
     },
     {
-      name = "String.size",
+      name = "String.size{.i}",
       srcname = "String_size",
-      type = { vars = {}, args = {string}, result = int },
+      type = { vars = {}, args = {string}, result = intA },
       mayraise = false,
       discardable = true,
     },
@@ -595,9 +603,9 @@ do
       discardable = false, -- Size
     },
     {
-      name = "String16.size",
+      name = "String16.size{.i}",
       srcname = "String16_size",
-      type = { vars = {}, args = {string16}, result = int },
+      type = { vars = {}, args = {string16}, result = intA },
       mayraise = false,
       discardable = true,
     },
@@ -714,16 +722,16 @@ do
       discardable = true,
     },
     {
-      name = "Vector.length",
+      name = "Vector.length{.i}",
       srcname = "Vector_length",
-      type = { vars = {TV.a}, args = {vector(TV.a)}, result = int },
+      type = { vars = {TV.a}, args = {vector(TV.a)}, result = intA },
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Vector.unsafeFromListRevN",
+      name = "Vector.unsafeFromListRevN{.i}",
       srcname = "Vector_unsafeFromListRevN",
-      type = { vars = {TV.a}, args = {int, list(TV.a)}, result = vector(TV.a) },
+      type = { vars = {TV.a}, args = {intA, list(TV.a)}, result = vector(TV.a) },
       mayraise = false,
       discardable = true,
     },
@@ -735,9 +743,9 @@ do
       discardable = true,
     },
     {
-      name = "Array.length",
+      name = "Array.length{.i}",
       srcname = "Array_length",
-      type = { vars = {TV.a}, args = {array(TV.a)}, result = int },
+      type = { vars = {TV.a}, args = {array(TV.a)}, result = intA },
       mayraise = false,
       discardable = true,
     },
@@ -749,23 +757,23 @@ do
       discardable = true,
     },
     {
-      name = "Unsafe.Vector.sub",
+      name = "Unsafe.Vector.sub{.i}",
       srcname = "Unsafe_Vector_sub",
-      type = { vars = {TV.a}, args = {vector(TV.a), int}, result = TV.a },
+      type = { vars = {TV.a}, args = {vector(TV.a), intA}, result = TV.a },
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Unsafe.Array.sub",
+      name = "Unsafe.Array.sub{.i}",
       srcname = "Unsafe_Array_sub",
-      type = { vars = {TV.a}, args = {array(TV.a), int}, result = TV.a },
+      type = { vars = {TV.a}, args = {array(TV.a), intA}, result = TV.a },
       mayraise = false,
       discardable = true,
     },
     {
-      name = "Unsafe.Array.update",
+      name = "Unsafe.Array.update{.i}",
       srcname = "Unsafe_Array_update",
-      type = { vars = {TV.a}, args = {array(TV.a), int, TV.a}, result = unit },
+      type = { vars = {TV.a}, args = {array(TV.a), intA, TV.a}, result = unit },
       mayraise = false,
       discardable = false,
     },
@@ -1269,6 +1277,8 @@ f:write[[
 (* -*- mode: sml; mode: read-only -*- *)
 (* This file was generated by primitives.lua *)
 structure Primitives = struct
+datatype int_width = INT | I32 | I54 | I64
+datatype word_width = WORD | W32 | W64
 ]]
 
 for i, p in ipairs(PRIMITIVES) do
@@ -1278,27 +1288,135 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "                | "
   end
-  f:write(string.format("%s%s (* %s *)\n", head, p.srcname, p.name))
+  if p.name:find("{%.?%a}") then
+    local params = {}
+    for m in p.name:gmatch("{%.?%a}") do
+      if m == "{i}" or m == "{.i}" then
+        table.insert(params, "int_width")
+      elseif m == "{w}" or m == "{.w}" then
+        table.insert(params, "word_width")
+      else
+        error("invalid parameter specification in " .. p.name)
+      end
+    end
+    f:write(string.format("%s%s of %s (* %s *)\n", head, p.srcname, table.concat(params, " * "), p.name))
+  else
+    f:write(string.format("%s%s (* %s *)\n", head, p.srcname, p.name))
+  end
+end
+
+function cartesian_product(xs, i)
+  i = i or 1
+  if #xs < i then
+    return {{}}
+  else
+    local ys = cartesian_product(xs, i + 1)
+    local results = {}
+    for _, v in ipairs(xs[i]) do
+      for j, w in ipairs(ys) do
+        local t = {v}
+        table.move(w, 1, #w, 2, t)
+        table.insert(results, t)
+      end
+    end
+    return results
+  end
 end
 
 for i, p in ipairs(PRIMITIVES) do
-  local head
-  if i == 1 then
-    head = "fun toString "
-  else
-    head = "  | toString "
+  local params = {}
+  for m in p.name:gmatch("{%.?%a}") do
+    if m == "{i}" or m == "{.i}" then
+      table.insert(params, {{"INT", "", ""}, {"I32", "32", ".i32"}, {"I54", "54", ".i54"}, {"I64", "64", ".i64"}})
+    elseif m == "{w}" or m == "{.w}" then
+      table.insert(params, {{"WORD", "", ""}, {"W32", "32", ".w32"}, {"W64", "64", ".w64"}})
+    else
+      error("invalid parameter specification in " .. p.name)
+    end
   end
-  f:write(string.format("%s%s = %q\n", head, p.srcname, p.name))
+  for j, pr in ipairs(cartesian_product(params)) do
+    local head
+    if i == 1 and j == 1 then
+      head = "fun toString "
+    else
+      head = "  | toString "
+    end
+    if #pr == 0 then
+      f:write(string.format("%s%s = %q\n", head, p.srcname, p.name))
+    else
+      local a = {}
+      for k, t in ipairs(pr) do
+        a[k] = t[1]
+      end
+      local aa = table.concat(a, ", ")
+      if #a > 1 then
+        aa = "(" .. aa .. ")"
+      end
+      local name = {}
+      local k = 1
+      for pre, m, post in p.name:gmatch("([^{}]*)({%.?%a})([^{}]*)") do
+        table.insert(name, pre)
+        if m == "{i}" or m == "{w}" then
+          table.insert(name, pr[k][2])
+        elseif m == "{.i}" or m == "{.w}" then
+          table.insert(name, pr[k][3])
+        else
+          error("invalid parameter specification in " .. p.name)
+        end
+        k = k + 1
+        table.insert(name, post)
+      end
+      f:write(string.format("%s(%s %s) = %q\n", head, p.srcname, aa, table.concat(name)))
+    end
+  end
 end
 
 for i, p in ipairs(PRIMITIVES) do
-  local head
-  if i == 1 then
-    head = "fun fromString "
-  else
-    head = "  | fromString "
+  local params = {}
+  for m in p.name:gmatch("{%.?%a}") do
+    if m == "{i}" or m == "{.i}" then
+      table.insert(params, {{"INT", "", ""}, {"I32", "32", ".i32"}, {"I54", "54", ".i54"}, {"I64", "64", ".i64"}})
+    elseif m == "{w}" or m == "{.w}" then
+      table.insert(params, {{"WORD", "", ""}, {"W32", "32", ".w32"}, {"W64", "64", ".w64"}})
+    else
+      error("invalid parameter specification in " .. p.name)
+    end
   end
-  f:write(string.format("%s%q = SOME %s\n", head, p.name, p.srcname))
+  for j, pr in ipairs(cartesian_product(params)) do
+    local head
+    if i == 1 and j == 1 then
+      head = "fun fromString "
+    else
+      head = "  | fromString "
+    end
+    if #pr == 0 then
+      f:write(string.format("%s%q = SOME %s\n", head, p.name, p.srcname))
+    else
+      local a = {}
+      for k, t in ipairs(pr) do
+        a[k] = t[1]
+      end
+      local aa = table.concat(a, ", ")
+      if #a > 1 then
+        aa = "(" .. aa .. ")"
+      end
+      local name = {}
+      local k = 1
+      for pre, m, post in p.name:gmatch("([^{}]*)({%.?%a})([^{}]*)") do
+        table.insert(name, pre)
+        if m == "{i}" or m == "{w}" then
+          table.insert(name, pr[k][2])
+        elseif m == "{.i}" or m == "{.w}" then
+          table.insert(name, pr[k][3])
+        else
+          error("invalid parameter specification in " .. p.name)
+        end
+        k = k + 1
+        table.insert(name, post)
+      end
+      f:write(string.format("%s%q = SOME (%s %s)\n", head, table.concat(name), p.srcname, aa))
+    end
+  end
 end
 f:write("  | fromString _ = NONE\n")
 
@@ -1309,7 +1427,11 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "  | mayRaise "
   end
-  f:write(string.format("%s%s = %s\n", head, p.srcname, tostring(p.mayraise)))
+  if p.name:find("{%.?%a}") then
+    f:write(string.format("%s(%s _) = %s\n", head, p.srcname, tostring(p.mayraise)))
+  else
+    f:write(string.format("%s%s = %s\n", head, p.srcname, tostring(p.mayraise)))
+  end
 end
 
 for i, p in ipairs(PRIMITIVES) do
@@ -1319,8 +1441,56 @@ for i, p in ipairs(PRIMITIVES) do
   else
     head = "  | isDiscardable "
   end
-  f:write(string.format("%s%s = %s\n", head, p.srcname, tostring(p.discardable)))
+  if p.name:find("{%.?%a}") then
+    f:write(string.format("%s(%s _) = %s\n", head, p.srcname, tostring(p.discardable)))
+  else
+    f:write(string.format("%s%s = %s\n", head, p.srcname, tostring(p.discardable)))
+  end
 end
+
+f:write [[
+fun fixIntWord { int, word }
+  = let fun fixInt INT = int
+          | fixInt i = i
+        fun fixWord WORD = word
+          | fixWord w = w
+]]
+local initial = true
+for i, p in ipairs(PRIMITIVES) do
+  if p.name:find("{%.?%a}") then
+    local head
+    if initial then
+      head = "    in fn "
+      initial = false
+    else
+      head = "        | "
+    end
+    local params = {}
+    local args = {}
+    local j = 1
+    for m in p.name:gmatch("{%.?%a}") do
+      if m == "{i}" or m == "{.i}" then
+        table.insert(params, "a" .. j)
+        table.insert(args, "fixInt a" .. j)
+      elseif m == "{w}" or m == "{.w}" then
+        table.insert(params, "a" .. j)
+        table.insert(args, "fixWord a" .. j)
+      else
+        error("invalid parameter specification in " .. p.name)
+      end
+      j = j + 1
+    end
+    local pp = table.concat(params, ", ")
+    if #params > 1 then
+      pp = "(" .. pp .. ")"
+    end
+    f:write(string.format("%s%s %s => %s (%s)\n", head, p.srcname, pp, p.srcname, table.concat(args, ", ")))
+  end
+end
+f:write [[
+        | p => p
+    end
+]]
 
 f:write[[
 end;
@@ -1341,7 +1511,12 @@ functor TypeOfPrimitives (type ty
                           val unit : ty
                           val bool : ty
                           val int : ty
+                          val int32 : ty
+                          val int54 : ty
+                          val int64 : ty
                           val word : ty
+                          val word32 : ty
+                          val word64 : ty
                           val real : ty
                           val char : ty
                           val char16 : ty
@@ -1384,12 +1559,72 @@ for i, p in ipairs(PRIMITIVES) do
     end
     table.insert(typeVariables, "(" .. t[2] .. ", [" .. ct .. "])")
   end
-  local argTypes = {}
-  for _, t in ipairs(p.type.args) do
-    table.insert(argTypes, t[1])
+  local params = {}
+  for m in p.name:gmatch("{%.?%a}") do
+    if m == "{i}" or m == "{.i}" then
+      table.insert(params, {{"int", "INT", "int"}, {"int", "I32", "int32"}, {"int", "I54", "int54"}, {"int", "I64", "int64"}})
+    elseif m == "{w}" or m == "{.w}" then
+      table.insert(params, {{"word", "WORD", "word"}, {"word", "W32", "word32"}, {"word", "W64", "word64"}})
+    else
+      error("invalid parameter specification in " .. p.name)
+    end
   end
-  local resultType = p.type.result[1]
-  f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+  for j, pr in ipairs(cartesian_product(params)) do
+    if #pr == 0 then
+      local argTypes = {}
+      for _, t in ipairs(p.type.args) do
+        table.insert(argTypes, t[1])
+      end
+      local resultType = p.type.result[1]
+      f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+    else
+      local actualInt, actualWord, actualWordB
+      for _, u in ipairs(pr) do
+        if u[1] == "int" then
+          actualInt = u[3]
+        elseif u[1] == "word" then
+          if actualWord == nil then
+            actualWord = u[3]
+          else
+            actualWordB = u[3]
+          end
+        else
+          error("invalid")
+        end
+      end
+      local argTypes = {}
+      for _, t in ipairs(p.type.args) do
+        if t[1] == "intA" then
+          table.insert(argTypes, actualInt)
+        elseif t[1] == "wordA" then
+          table.insert(argTypes, actualWord)
+        elseif t[1] == "wordB" then
+          table.insert(argTypes, actualWordB)
+        else
+          table.insert(argTypes, t[1])
+        end
+      end
+      local resultType
+      if p.type.result[1] == "intA" then
+        resultType = actualInt
+      elseif p.type.result[1] == "wordA" then
+        resultType = actualWord
+      elseif p.type.result[1] == "wordB" then
+        resultType = actualWordB
+      else
+        resultType = p.type.result[1]
+      end
+      local a = {}
+      for k, t in ipairs(pr) do
+        a[k] = "Primitives." .. t[2]
+      end
+      local aa = table.concat(a, ", ")
+      if #a > 1 then
+        aa = "(" .. aa .. ")"
+      end
+      f:write(string.format("%s(Primitives.%s %s) = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, aa, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+    end
+  end
 end
 
 f:write[[
