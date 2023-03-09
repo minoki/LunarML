@@ -247,6 +247,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                         case #defaultInt (#targetInfo ctx) of
                                                                             TargetInfo.NATIVE_INT => apply revDecs k (C.NativeIntConst x)
                                                                           | TargetInfo.INT32 => apply revDecs k (C.Int32Const (Int32.fromLarge x))
+                                                                    else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int32) then
+                                                                        apply revDecs k (C.Int32Const (Int32.fromLarge x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int54) then
                                                                         apply revDecs k (C.Int54Const (Int64.fromLarge x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
@@ -262,6 +264,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                          case #defaultWord (#targetInfo ctx) of
                                                                              TargetInfo.NATIVE_WORD => apply revDecs k (C.NativeWordConst x)
                                                                            | TargetInfo.WORD32 => apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
+                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word32) then
+                                                                         apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
                                                                          apply revDecs k (C.Word64Const (Word64.fromLargeInt x))
                                                                      else

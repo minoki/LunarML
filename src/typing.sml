@@ -240,9 +240,11 @@ val primTyName_Lua_value = TypedSyntax.MkTyName ("Lua.value", 17)
 val primTyName_JavaScript_value = TypedSyntax.MkTyName ("JavaScript.value", 18)
 val primTyName_prompt_tag = TypedSyntax.MkTyName ("DelimCont.prompt_tag", 19)
 val primTyName_subcont = TypedSyntax.MkTyName ("DelimCont.subcont", 20)
-val primTyName_int54 = TypedSyntax.MkTyName ("Int54.int", 21)
-val primTyName_int64 = TypedSyntax.MkTyName ("Int64.int", 22)
-val primTyName_word64 = TypedSyntax.MkTyName ("Word64.word", 22)
+val primTyName_int32 = TypedSyntax.MkTyName ("Int32.int", 21)
+val primTyName_int54 = TypedSyntax.MkTyName ("Int54.int", 22)
+val primTyName_int64 = TypedSyntax.MkTyName ("Int64.int", 23)
+val primTyName_word32 = TypedSyntax.MkTyName ("Word32.word", 24)
+val primTyName_word64 = TypedSyntax.MkTyName ("Word64.word", 25)
 val primTy_unit = TypedSyntax.RecordType (SourcePos.nullSpan, Syntax.LabelMap.empty)
 val primTy_int = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int)
 val primTy_word = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word)
@@ -257,8 +259,10 @@ val primTy_string16 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_stri
 val primTy_intInf = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_intInf)
 val primTy_Lua_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_Lua_value)
 val primTy_JavaScript_value = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_JavaScript_value)
+val primTy_int32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int32)
 val primTy_int54 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int54)
 val primTy_int64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_int64)
+val primTy_word32 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word32)
 val primTy_word64 = TypedSyntax.TyCon (SourcePos.nullSpan, [], primTyName_word64)
 val VId_Bind = TypedSyntax.MkVId ("Bind", ~1)
 val LongVId_Bind = TypedSyntax.MkShortVId VId_Bind
@@ -293,8 +297,10 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                val string = primTy_string
                                                val string16 = primTy_string16
                                                val intInf = primTy_intInf
+                                               val int32 = primTy_int32
                                                val int54 = primTy_int54
                                                val int64 = primTy_int64
+                                               val word32 = primTy_word32
                                                val word64 = primTy_word64
                                                val exn = primTy_exn
                                                val exntag = primTy_exntag
@@ -631,6 +637,8 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_intInf) then
                unify(ctx, env, ctrs) (* do nothing *)
+           else if TypedSyntax.eqTyName (tyname, primTyName_int32) then
+               unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_int54) then
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_int64) then
@@ -644,6 +652,8 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsWord) =>
            if TypedSyntax.eqTyName (tyname, primTyName_word) then
+               unify(ctx, env, ctrs) (* do nothing *)
+           else if TypedSyntax.eqTyName (tyname, primTyName_word32) then
                unify(ctx, env, ctrs) (* do nothing *)
            else if TypedSyntax.eqTyName (tyname, primTyName_word64) then
                unify(ctx, env, ctrs) (* do nothing *)

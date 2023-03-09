@@ -632,6 +632,14 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                             else
                                                 emitError (ctx, [span], "integer constant out of range")
                                          end
+                                     else if T.eqTyName (tycon, Typing.primTyName_int32) then
+                                         let val lower = ~0x80000000 <= value
+                                             val upper = value <= 0x7fffffff
+                                         in if lower andalso upper then
+                                                F.IntConstExp (value, toFTy (ctx, env, ty))
+                                            else
+                                                emitError (ctx, [span], "integer constant out of range")
+                                         end
                                      else if T.eqTyName (tycon, Typing.primTyName_int54) then
                                          let val lower = ~0x20000000000000 <= value
                                              val upper = value <= 0x1fffffffffffff
@@ -710,6 +718,11 @@ fun cookWordConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                             else
                                                 emitError (ctx, [span], "word constant out of range")
                                          end
+                                     else if T.eqTyName (tycon, Typing.primTyName_word32) then
+                                         if IntInf.~>> (value, 0w32) = 0 then
+                                             F.WordConstExp (value, toFTy (ctx, env, ty))
+                                         else
+                                             emitError (ctx, [span], "word constant out of range")
                                      else if T.eqTyName (tycon, Typing.primTyName_word64) then
                                          if IntInf.~>> (value, 0w64) = 0 then
                                              F.WordConstExp (value, toFTy (ctx, env, ty))

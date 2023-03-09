@@ -278,9 +278,11 @@ val initialEnv : Typing.Env
                                  ,("vector", { typeFunction = TypeFunction ([tyVarA], vectorOf tyA), valEnv = emptyValEnv })
                                  ,("_Prim.Char16.char", { typeFunction = TypeFunction ([], primTy_char16), valEnv = emptyValEnv })
                                  ,("_Prim.String16.string", { typeFunction = TypeFunction ([], primTy_string16), valEnv = emptyValEnv })
+                                 ,("_Prim.Int32.int", { typeFunction = TypeFunction ([], primTy_int32), valEnv = emptyValEnv })
                                  ,("_Prim.Int54.int", { typeFunction = TypeFunction ([], primTy_int54), valEnv = emptyValEnv })
                                  ,("_Prim.Int64.int", { typeFunction = TypeFunction ([], primTy_int64), valEnv = emptyValEnv })
                                  ,("_Prim.IntInf.int", { typeFunction = TypeFunction ([], primTy_intInf), valEnv = emptyValEnv })
+                                 ,("_Prim.Word32.word", { typeFunction = TypeFunction ([], primTy_word32), valEnv = emptyValEnv })
                                  ,("_Prim.Word64.word", { typeFunction = TypeFunction ([], primTy_word64), valEnv = emptyValEnv })
                                  ,("_Prim.Function2.function2", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC], function2 (tyA, tyB, tyC)), valEnv = emptyValEnv })
                                  ,("_Prim.Function3.function3", { typeFunction = TypeFunction ([tyVarA, tyVarB, tyVarC, tyVarD], function3 (tyA, tyB, tyC, tyD)), valEnv = emptyValEnv })
@@ -293,10 +295,12 @@ val initialEnv : Typing.Env
                                   TypedSyntax.TyNameMap.empty
                                   [(primTyName_bool, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE })
                                   ,(primTyName_int, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
+                                  ,(primTyName_int32, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_int54, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_int64, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_intInf, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_INT *) })
                                   ,(primTyName_word, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
+                                  ,(primTyName_word32, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
                                   ,(primTyName_word64, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_WORD *) })
                                   ,(primTyName_real, { arity = 0, admitsEquality = false, overloadClass = NONE (* SOME Syntax.CLASS_REAL *) })
                                   ,(primTyName_char, { arity = 0, admitsEquality = false (* true *), overloadClass = NONE (* SOME Syntax.CLASS_CHAR *) })
@@ -360,10 +364,12 @@ val primOverloadEnv : Typing.Env
 val initialTyNameSet = let open Typing
                        in TypedSyntax.TyNameSet.fromList
                               [primTyName_int
+                              ,primTyName_int32
                               ,primTyName_int54
                               ,primTyName_int64
                               ,primTyName_intInf
                               ,primTyName_word
+                              ,primTyName_word32
                               ,primTyName_word64
                               ,primTyName_real
                               ,primTyName_char
