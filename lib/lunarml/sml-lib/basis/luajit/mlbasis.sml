@@ -4,7 +4,7 @@ type word = word
 fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
-fun x * y = _primCall "call2" (_Prim.Word.*, x, y)
+fun x * y = _primCall "Word.*" (x, y)
 fun x div y = if y = 0w0 then
                   raise Div
               else
@@ -430,7 +430,7 @@ val toInt : int -> int = fn x => x
 val precision : int option = SOME 32
 val minInt : int option = SOME ~0x80000000
 val maxInt : int option = SOME 0x7fffffff
-fun quot (x, y) = _primCall "call2" (_Prim.Int.quot, x, y)
+fun quot (x, y) = _primCall "Int.quot" (x, y)
 fun rem (x, y) = if y = ~1 then
                      0
                  else

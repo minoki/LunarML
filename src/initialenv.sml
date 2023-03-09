@@ -126,16 +126,6 @@ val VId_JavaScript_require = newVId "_Prim.JavaScript.require" (* Node.js *)
 
 (* Other primitives *)
 val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
-val VId_Int_add_bin = newVId "_Prim.Int.+"
-val VId_Int_sub_bin = newVId "_Prim.Int.-"
-val VId_Int_mul_bin = newVId "_Prim.Int.*"
-val VId_Int_div_bin = newVId "_Prim.Int.div"
-val VId_Int_mod_bin = newVId "_Prim.Int.mod"
-val VId_Int_quot_bin = newVId "_Prim.Int.quot"
-val VId_Int_rem_bin = newVId "_Prim.Int.rem"
-val VId_Word_mul_bin = newVId "_Prim.Word.*"
-val VId_Word_div_bin = newVId "_Prim.Word.div"
-val VId_Word_mod_bin = newVId "_Prim.Word.mod"
 
 val VId_String_concat = newVId "_Prim.String.concat"
 val VId_String_concatWith = newVId "_Prim.String.concatWith"
@@ -214,16 +204,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Vector.fromList", VId_Vector_fromList, TypeScheme ([(tyVarA, [])], listOf tyA --> vectorOf tyA))
                                            ,("_Prim.Int.~", VId_Int_TILDE, TypeScheme ([], primTy_int --> primTy_int))
                                            ,("_Prim.Int.abs", VId_Int_abs, TypeScheme ([], primTy_int --> primTy_int))
-                                           ,("_Prim.Int.+", VId_Int_add_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.-", VId_Int_sub_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.*", VId_Int_mul_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.div", VId_Int_div_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.mod", VId_Int_mod_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.quot", VId_Int_quot_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Int.rem", VId_Int_rem_bin, TypeScheme ([], function2 (primTy_int, primTy_int, primTy_int)))
-                                           ,("_Prim.Word.*", VId_Word_mul_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.div", VId_Word_div_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
-                                           ,("_Prim.Word.mod", VId_Word_mod_bin, TypeScheme ([], function2 (primTy_word, primTy_word, primTy_word)))
                                            ,("_Prim.Real.abs", VId_Real_abs, TypeScheme ([], primTy_real --> primTy_real))
                                            ,("_Prim.String.concat", VId_String_concat, TypeScheme ([], listOf primTy_string --> primTy_string))
                                            ,("_Prim.String.concatWith", VId_String_concatWith, TypeScheme ([], function2 (primTy_string, primTy_string, listOf primTy_string)))

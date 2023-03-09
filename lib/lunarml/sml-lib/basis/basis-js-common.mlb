@@ -9,7 +9,7 @@ local
 ann "allowPrim true" "allowOverload true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
-$(TARGET_LANG)/int-prim.sml
+js-common/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml
 $(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)

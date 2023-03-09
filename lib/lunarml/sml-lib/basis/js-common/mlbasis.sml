@@ -1,11 +1,18 @@
+_equality word = fn (x, y) => _primCall "Word.=" (x, y);
 structure Word = struct
 type word = word
 fun ~ x = _primCall "Word.~" (x)
 fun x + y = _primCall "Word.+" (x, y)
 fun x - y = _primCall "Word.-" (x, y)
 fun x * y = _primCall "Word.*" (x, y)
-fun x div y = _primCall "call2" (_Prim.Word.div, x, y)
-fun x mod y = _primCall "call2" (_Prim.Word.mod, x, y)
+fun x div y = if y = 0w0 then
+                  raise Div
+              else
+                  _primCall "Word.div.unchecked" (x, y)
+fun x mod y = if y = 0w0 then
+                  raise Div
+              else
+                  _primCall "Word.mod.unchecked" (x, y)
 fun x < y = _primCall "Word.<" (x, y)
 fun x <= y = _primCall "Word.<=" (x, y)
 fun x > y = _primCall "Word.>" (x, y)
@@ -14,7 +21,6 @@ end
 local
 fun fromWord (x : word) = x
 in
-_equality word = fn (x, y) => _primCall "Word.=" (x, y);
 _overload "Word" [word] { + = Word.+
                         , - = Word.-
                         , * = Word.*
@@ -125,8 +131,8 @@ val toInt : int -> int = fn x => x
 val precision : int option = SOME 32
 val minInt : int option = SOME ~0x80000000
 val maxInt : int option = SOME 0x7fffffff
-fun quot (x, y) = _primCall "call2" (_Prim.Int.quot, x, y)
-fun rem (x, y) = _primCall "call2" (_Prim.Int.rem, x, y)
+fun quot (x, y) = _primCall "Int.quot" (x, y)
+fun rem (x, y) = _primCall "Int.rem" (x, y)
 val compare : int * int -> order = fn (x, y) => if x = y then
                                                     EQUAL
                                                 else if x < y then

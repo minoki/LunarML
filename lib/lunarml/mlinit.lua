@@ -82,7 +82,7 @@ local function _raise(x, location)
 end
 
 -- Int
-local function __Int_add(x, y)
+local function _Int_add(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   local z = x + y
@@ -94,7 +94,7 @@ local function __Int_add(x, y)
     return z
   end
 end
-local function __Int_sub(x, y)
+local function _Int_sub(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   local z = x - y
@@ -106,7 +106,7 @@ local function __Int_sub(x, y)
     return z
   end
 end
-local function __Int_mul(x, y)
+local function _Int_mul(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   local z = x * y
@@ -116,7 +116,7 @@ local function __Int_mul(x, y)
     return z
   end
 end
-local function __Int_div(x, y)
+local function _Int_div(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   if y == 0 then
@@ -126,7 +126,7 @@ local function __Int_div(x, y)
   end
   return x // y
 end
-local function __Int_mod(x, y)
+local function _Int_mod(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   if y == 0 then
@@ -150,7 +150,7 @@ local function _Int_abs(x)
 end
 
 -- Word
-local function __Word_div(x, y)
+local function _Word_div(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   if y == 0 then
@@ -176,7 +176,7 @@ local function __Word_div(x, y)
     end
   end
 end
-local function __Word_mod(x, y)
+local function _Word_mod(x, y)
   -- assert(math_type(x) == "integer")
   -- assert(math_type(y) == "integer")
   if y == 0 then

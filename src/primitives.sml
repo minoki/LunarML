@@ -15,6 +15,13 @@ datatype PrimOp = EQUAL (* = *)
                 | Bool_EQUAL (* Bool.= *)
                 | Bool_not (* Bool.not *)
                 | Int_EQUAL (* Int.= *)
+                | Int_PLUS (* Int.+ *)
+                | Int_MINUS (* Int.- *)
+                | Int_TIMES (* Int.* *)
+                | Int_div (* Int.div *)
+                | Int_mod (* Int.mod *)
+                | Int_quot (* Int.quot *)
+                | Int_rem (* Int.rem *)
                 | Int_LT (* Int.< *)
                 | Int_LE (* Int.<= *)
                 | Int_GT (* Int.> *)
@@ -24,6 +31,8 @@ datatype PrimOp = EQUAL (* = *)
                 | Word_MINUS (* Word.- *)
                 | Word_TIMES (* Word.* *)
                 | Word_TILDE (* Word.~ *)
+                | Word_div (* Word.div *)
+                | Word_mod (* Word.mod *)
                 | Word_div_unchecked (* Word.div.unchecked *)
                 | Word_mod_unchecked (* Word.mod.unchecked *)
                 | Word_LT (* Word.< *)
@@ -177,6 +186,13 @@ fun toString EQUAL = "="
   | toString Bool_EQUAL = "Bool.="
   | toString Bool_not = "Bool.not"
   | toString Int_EQUAL = "Int.="
+  | toString Int_PLUS = "Int.+"
+  | toString Int_MINUS = "Int.-"
+  | toString Int_TIMES = "Int.*"
+  | toString Int_div = "Int.div"
+  | toString Int_mod = "Int.mod"
+  | toString Int_quot = "Int.quot"
+  | toString Int_rem = "Int.rem"
   | toString Int_LT = "Int.<"
   | toString Int_LE = "Int.<="
   | toString Int_GT = "Int.>"
@@ -186,6 +202,8 @@ fun toString EQUAL = "="
   | toString Word_MINUS = "Word.-"
   | toString Word_TIMES = "Word.*"
   | toString Word_TILDE = "Word.~"
+  | toString Word_div = "Word.div"
+  | toString Word_mod = "Word.mod"
   | toString Word_div_unchecked = "Word.div.unchecked"
   | toString Word_mod_unchecked = "Word.mod.unchecked"
   | toString Word_LT = "Word.<"
@@ -339,6 +357,13 @@ fun fromString "=" = SOME EQUAL
   | fromString "Bool.=" = SOME Bool_EQUAL
   | fromString "Bool.not" = SOME Bool_not
   | fromString "Int.=" = SOME Int_EQUAL
+  | fromString "Int.+" = SOME Int_PLUS
+  | fromString "Int.-" = SOME Int_MINUS
+  | fromString "Int.*" = SOME Int_TIMES
+  | fromString "Int.div" = SOME Int_div
+  | fromString "Int.mod" = SOME Int_mod
+  | fromString "Int.quot" = SOME Int_quot
+  | fromString "Int.rem" = SOME Int_rem
   | fromString "Int.<" = SOME Int_LT
   | fromString "Int.<=" = SOME Int_LE
   | fromString "Int.>" = SOME Int_GT
@@ -348,6 +373,8 @@ fun fromString "=" = SOME EQUAL
   | fromString "Word.-" = SOME Word_MINUS
   | fromString "Word.*" = SOME Word_TIMES
   | fromString "Word.~" = SOME Word_TILDE
+  | fromString "Word.div" = SOME Word_div
+  | fromString "Word.mod" = SOME Word_mod
   | fromString "Word.div.unchecked" = SOME Word_div_unchecked
   | fromString "Word.mod.unchecked" = SOME Word_mod_unchecked
   | fromString "Word.<" = SOME Word_LT
@@ -502,6 +529,13 @@ fun mayRaise EQUAL = false
   | mayRaise Bool_EQUAL = false
   | mayRaise Bool_not = false
   | mayRaise Int_EQUAL = false
+  | mayRaise Int_PLUS = true
+  | mayRaise Int_MINUS = true
+  | mayRaise Int_TIMES = true
+  | mayRaise Int_div = true
+  | mayRaise Int_mod = true
+  | mayRaise Int_quot = true
+  | mayRaise Int_rem = true
   | mayRaise Int_LT = false
   | mayRaise Int_LE = false
   | mayRaise Int_GT = false
@@ -511,6 +545,8 @@ fun mayRaise EQUAL = false
   | mayRaise Word_MINUS = false
   | mayRaise Word_TIMES = false
   | mayRaise Word_TILDE = false
+  | mayRaise Word_div = true
+  | mayRaise Word_mod = true
   | mayRaise Word_div_unchecked = false
   | mayRaise Word_mod_unchecked = false
   | mayRaise Word_LT = false
@@ -664,6 +700,13 @@ fun isDiscardable EQUAL = true
   | isDiscardable Bool_EQUAL = true
   | isDiscardable Bool_not = true
   | isDiscardable Int_EQUAL = true
+  | isDiscardable Int_PLUS = false
+  | isDiscardable Int_MINUS = false
+  | isDiscardable Int_TIMES = false
+  | isDiscardable Int_div = false
+  | isDiscardable Int_mod = false
+  | isDiscardable Int_quot = false
+  | isDiscardable Int_rem = false
   | isDiscardable Int_LT = true
   | isDiscardable Int_LE = true
   | isDiscardable Int_GT = true
@@ -673,6 +716,8 @@ fun isDiscardable EQUAL = true
   | isDiscardable Word_MINUS = true
   | isDiscardable Word_TIMES = true
   | isDiscardable Word_TILDE = true
+  | isDiscardable Word_div = false
+  | isDiscardable Word_mod = false
   | isDiscardable Word_div_unchecked = true
   | isDiscardable Word_mod_unchecked = true
   | isDiscardable Word_LT = true
@@ -870,6 +915,13 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Bool_EQUAL = { vars = [], args = vector [bool, bool], result = bool }
   | typeOf Primitives.Bool_not = { vars = [], args = vector [bool], result = bool }
   | typeOf Primitives.Int_EQUAL = { vars = [], args = vector [int, int], result = bool }
+  | typeOf Primitives.Int_PLUS = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_MINUS = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_TIMES = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_div = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_mod = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_quot = { vars = [], args = vector [int, int], result = int }
+  | typeOf Primitives.Int_rem = { vars = [], args = vector [int, int], result = int }
   | typeOf Primitives.Int_LT = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.Int_LE = { vars = [], args = vector [int, int], result = bool }
   | typeOf Primitives.Int_GT = { vars = [], args = vector [int, int], result = bool }
@@ -879,6 +931,8 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Word_MINUS = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_TIMES = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_TILDE = { vars = [], args = vector [word], result = word }
+  | typeOf Primitives.Word_div = { vars = [], args = vector [word, word], result = word }
+  | typeOf Primitives.Word_mod = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_div_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_mod_unchecked = { vars = [], args = vector [word, word], result = word }
   | typeOf Primitives.Word_LT = { vars = [], args = vector [word, word], result = bool }

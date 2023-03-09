@@ -34,14 +34,6 @@ val builtins
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(VId_Int_add_bin, "__Int_add")
-                    ,(VId_Int_sub_bin, "__Int_sub")
-                    ,(VId_Int_mul_bin, "__Int_mul")
-                    ,(VId_Int_div_bin, "__Int_div")
-                    ,(VId_Int_mod_bin, "__Int_mod")
-                    (* word *)
-                    ,(VId_Word_div_bin, "__Word_div")
-                    ,(VId_Word_mod_bin, "__Word_mod")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     (* Vector and Array *)
@@ -102,14 +94,6 @@ val builtinsLuaJIT
                     (* int *)
                     ,(VId_Int_abs, "_Int_abs") (* may raise Overflow *)
                     ,(VId_Int_TILDE, "_Int_negate") (* may raise Overflow *)
-                    ,(VId_Int_add_bin, "__Int_add")
-                    ,(VId_Int_sub_bin, "__Int_sub")
-                    ,(VId_Int_mul_bin, "__Int_mul")
-                    ,(VId_Int_div_bin, "__Int_div")
-                    ,(VId_Int_mod_bin, "__Int_mod")
-                    ,(VId_Int_quot_bin, "__Int_quot")
-                    (* word *)
-                    ,(VId_Word_mul_bin, "__Word_mul")
                     (* real *)
                     ,(VId_Real_abs, "math_abs") (* Lua math.abs *)
                     (* Vector and Array *)
@@ -370,6 +354,15 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Bool_EQUAL => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Bool_not => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
                        | Primitives.Int_EQUAL => doBinaryOp (L.EQUAL, PURE)
+                       | Primitives.Int_PLUS => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_add"), vector [a, b]), IMPURE)
+                       | Primitives.Int_MINUS => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_sub"), vector [a, b]), IMPURE)
+                       | Primitives.Int_TIMES => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mul"), vector [a, b]), IMPURE)
+                       | Primitives.Int_div => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_div"), vector [a, b]), IMPURE)
+                       | Primitives.Int_mod => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
+                       | Primitives.Int_quot => (case #targetLuaVersion ctx of
+                                                     LUA5_3 => raise CodeGenError "primop Int.quot is not supported on this target"
+                                                   | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_quot"), vector [a, b]), IMPURE)
+                                                )
                        | Primitives.Int_LT => doBinaryOp (L.LT, PURE)
                        | Primitives.Int_GT => doBinaryOp (L.GT, PURE)
                        | Primitives.Int_LE => doBinaryOp (L.LE, PURE)
@@ -383,16 +376,30 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                       LUA5_3 => doBinaryOp (L.MINUS, PURE)
                                                     | LUAJIT => doBinaryExp (fn (a, b) => L.BinExp (L.MOD, L.BinExp (L.MINUS, a, b), L.ConstExp (L.Numeral "0x100000000")), PURE)
                                                  )
-                       | Primitives.Word_TIMES => doBinaryOp (L.TIMES, PURE) (* not used on LuaJIT *)
+                       | Primitives.Word_TIMES => (case #targetLuaVersion ctx of
+                                                       LUA5_3 => doBinaryOp (L.TIMES, PURE)
+                                                     | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mul"), vector [a, b]), PURE)
+                                                  )
                        | Primitives.Word_TILDE => (case #targetLuaVersion ctx of
                                                        LUA5_3 => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
                                                      | LUAJIT => doUnaryExp (fn a => L.BinExp (L.MOD, L.UnaryExp (L.NEGATE, a), L.ConstExp (L.Numeral "0x100000000")), PURE)
                                                   )
+                       | Primitives.Word_div => (case #targetLuaVersion ctx of
+                                                     LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [a, b]), IMPURE)
+                                                   | LUAJIT => raise CodeGenError "primop Word.div is not supported on this target"
+                                                )
+                       | Primitives.Word_mod => (case #targetLuaVersion ctx of
+                                                     LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mod"), vector [a, b]), IMPURE)
+                                                   | LUAJIT => raise CodeGenError "primop Word.mod is not supported on this target"
+                                                )
                        | Primitives.Word_div_unchecked => (case #targetLuaVersion ctx of
-                                                               LUA5_3 => doBinaryExp (fn (a, b) => L.BinExp (L.INTDIV, a, b), PURE)
+                                                               LUA5_3 => raise CodeGenError "primop Word.div.unchecked is not supported on this target"
                                                              | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
                                                           )
-                       | Primitives.Word_mod_unchecked => doBinaryOp (L.MOD, PURE)
+                       | Primitives.Word_mod_unchecked => (case #targetLuaVersion ctx of
+                                                               LUA5_3 => raise CodeGenError "primop Word.mod.unchecked is not supported on this target"
+                                                             | LUAJIT => doBinaryOp (L.MOD, PURE)
+                                                          )
                        | Primitives.Word_LT => (case #targetLuaVersion ctx of
                                                     LUA5_3 => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_ult"), vector [a, b]), PURE)
                                                   | LUAJIT => doBinaryOp (L.LT, PURE)
@@ -437,7 +444,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Real_MINUS => doBinaryOp (L.MINUS, PURE)
                        | Primitives.Real_TIMES => (case #targetLuaVersion ctx of
                                                        LUA5_3 => doBinaryOp (L.TIMES, PURE)
-                                                     | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "__Real_mul"), vector [a, b]), PURE)
+                                                     | LUAJIT => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Real_mul"), vector [a, b]), PURE)
                                                   )
                        | Primitives.Real_DIVIDE => doBinaryOp (L.DIV, PURE)
                        | Primitives.Real_TILDE => doUnaryExp ( fn a => case #targetLuaVersion ctx of

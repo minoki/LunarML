@@ -92,7 +92,7 @@ local MIN_INT32 = -0x80000000
 local MAX_INT32 = 0x7fffffff
 
 -- Int
-local function __Int_add(x, y)
+local function _Int_add(x, y)
   local z = x + y
   if z < MIN_INT32 or MAX_INT32 < z then
     _raise(_Overflow, "Int.+")
@@ -100,7 +100,7 @@ local function __Int_add(x, y)
     return z
   end
 end
-local function __Int_sub(x, y)
+local function _Int_sub(x, y)
   local z = x - y
   if z < MIN_INT32 or MAX_INT32 < z then
     _raise(_Overflow, "Int.-")
@@ -108,7 +108,7 @@ local function __Int_sub(x, y)
     return z
   end
 end
-local function __Int_mul(x, y)
+local function _Int_mul(x, y)
   local z = x * y
   if z < MIN_INT32 or MAX_INT32 < z then
     _raise(_Overflow, "Int.*")
@@ -116,7 +116,7 @@ local function __Int_mul(x, y)
     return z
   end
 end
-local function __Int_div(x, y)
+local function _Int_div(x, y)
   if y == 0 then
     _raise(_Div, "Int.div")
   elseif x == MIN_INT32 and y == -1 then
@@ -124,7 +124,7 @@ local function __Int_div(x, y)
   end
   return math_floor(x / y)
 end
-local function __Int_quot(x, y)
+local function _Int_quot(x, y)
   if y == 0 then
     _raise(_Div, "Int.quot")
   elseif x == MIN_INT32 and y == -1 then
@@ -132,7 +132,7 @@ local function __Int_quot(x, y)
   end
   return (math_modf(x / y))
 end
-local function __Int_mod(x, y)
+local function _Int_mod(x, y)
   if y == 0 then
     _raise(_Div, "Int.mod")
   end
@@ -152,12 +152,12 @@ local function _Int_abs(x)
 end
 
 -- Word
-local __Word_mul
+local _Word_mul
 do
   local tobit = bit.tobit
   local ffi = require "ffi"
   local uint32_t = ffi.typeof("uint32_t")
-  function __Word_mul(x, y)
+  function _Word_mul(x, y)
     return tobit(uint32_t(x) * uint32_t(y)) % 0x100000000
     --[[
     local x_lo = bit_band(x, 0xffff)
@@ -178,7 +178,7 @@ local function _Real_TILDE(x)
   return NEGATIVE_ZERO - x
 end
 ]]
-local function __Real_mul(x, y)
+local function _Real_mul(x, y)
   local z = x * y
   if z == 0 then
     if x < 0 then

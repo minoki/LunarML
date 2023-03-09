@@ -2,11 +2,11 @@ structure Int = struct
 type int = int
 val ~ = _Prim.Int.~
 val abs = _Prim.Int.abs
-fun x + y = _primCall "call2" (_Prim.Int.+, x, y)
-fun x - y = _primCall "call2" (_Prim.Int.-, x, y)
-fun x * y = _primCall "call2" (_Prim.Int.*, x, y)
-fun x div y = _primCall "call2" (_Prim.Int.div, x, y)
-fun x mod y = _primCall "call2" (_Prim.Int.mod, x, y)
+fun x + y = _primCall "Int.+" (x, y)
+fun x - y = _primCall "Int.-" (x, y)
+fun x * y = _primCall "Int.*" (x, y)
+fun x div y = _primCall "Int.div" (x, y)
+fun x mod y = _primCall "Int.mod" (x, y)
 fun x < y = _primCall "Int.<" (x, y)
 fun x <= y = _primCall "Int.<=" (x, y)
 fun x > y = _primCall "Int.>" (x, y)
