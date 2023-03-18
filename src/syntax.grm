@@ -36,9 +36,12 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
 
 %term AlnumIdent of string (* alphanumeric identifier not starting with a prime *)
     | QualifiedAlnumIdent of string list * string
+    | DotAlnumIdent of string (* alphanumeric identifier with leading dot (may be used by future extension) *)
     | PrimeIdent of string (* alphanumeric identifier starting with a prime *)
     | SymbolicIdent of string
     | QualifiedSymbolicIdent of string list * string
+    | DotSymbolicIdent of string (* identifier with leading dot (may be used by future extension) *)
+    | InfixIdent of string list * string (* identifier with prefix and postfix dots (extension) *)
     | PrimIdent of string (* identifiers prefixed by "_Prim." (extension) *)
     | PosInt of IntInf.int (* positive integer literal, not starting with 0, and not containing any underscore *)
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
@@ -285,6 +288,7 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat(span(UNDERSCOREleft,UNDERSCORErigh
 (* one or more atomic patterns *)
 AtPats : AtPat ([AtPat])
        | AtPat AtPats (AtPat :: AtPats)
+       | AtPat InfixIdent AtPats (AtPat :: UnfixedSyntax.InfixPat (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 InfixIdent), Syntax.MkVId (#2 InfixIdent))) :: AtPats)
 
 TypedPat : AtPats (UnfixedSyntax.JuxtapositionPat(span(AtPatsleft, AtPatsright), AtPats))
          | TypedPat COLON Ty (UnfixedSyntax.TypedPat (span(TypedPatleft, Tyright), TypedPat, Ty)) (* typed *)
@@ -412,6 +416,7 @@ InfExp : AppExp
 
 AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
             | AtExp ([AtExp])
+            | AtExp InfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 InfixIdent), Syntax.MkVId (#2 InfixIdent))) :: AppOrInfExp)
 
 TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExpleft,AppOrInfExpright), AppOrInfExp))
          | TypedExp COLON Ty (UnfixedSyntax.TypedExp (span(TypedExpleft,Tyright), TypedExp, Ty)) (* typed (L) *)

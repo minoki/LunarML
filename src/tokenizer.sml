@@ -37,7 +37,13 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"," :: xs) = SOME (Tokens.COMMA (pos(l,c),pos(l,c)), l, c+1, xs)
               | tokenizeOne (l, c, #";" :: xs) = SOME (Tokens.SEMICOLON (pos(l,c),pos(l,c)), l, c+1, xs)
               | tokenizeOne (l, c, #"." :: #"." :: #"." :: xs) = SOME (Tokens.ELLIPSIS (pos(l,c),pos(l,c+2)), l, c+3, xs)
-              | tokenizeOne (l, c, #"." :: xs) = SOME (Tokens.DOT (pos(l,c),pos(l,c)), l, c+1, xs)
+              | tokenizeOne (l, c, #"." :: x :: xs) = if Char.isAlpha x then
+                                                          readIdentifierOrKeyword (l, c, c + 1, true, [], [x], xs)
+                                                      else if isSymbolChar x then
+                                                          readSymbolicIdentifier (l, c, c + 1, true, [], [x], xs)
+                                                      else
+                                                          SOME (Tokens.DOT (pos (l, c), pos (l, c)), l, c + 1, xs)
+              | tokenizeOne (l, c, #"." :: (xs as nil)) = SOME (Tokens.DOT (pos (l, c), pos (l, c)), l, c + 1, xs)
               | tokenizeOne (l, c, #"#" :: #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+2, nil, xs)
                                                               val value = case str of
                                                                               [value] => value
@@ -68,7 +74,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | tokenizeOne (l, c, #"~" :: (rest0 as x :: xs)) = if Char.isDigit x then
                                                                      readDecimalConstant (l, c, c+2, NLTNegative, digitToLargeInt x, xs)
                                                                  else
-                                                                     readSymbolicIdentifier (l, c, c, [], [#"~"], rest0)
+                                                                     readSymbolicIdentifier (l, c, c, false, [], [#"~"], rest0)
               | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: #"x" :: x :: xs)) = if Char.isHexDigit x then
                                                                                      readHexadecimalConstant (l, c, c+3, NLTWord, hexDigitToLargeInt x, xs)
                                                                                  else
@@ -101,12 +107,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                                              )
               | tokenizeOne (l, c, #"\n" :: xs) = tokenizeOne (l+1, 1, xs)
               | tokenizeOne (l, c, x :: xs) = if Char.isAlpha x orelse x = #"_" orelse x = #"'" then
-                                                  readIdentifierOrKeyword (l, c, c, [], [x], xs)
+                                                  readIdentifierOrKeyword (l, c, c, false, [], [x], xs)
                                               else if Char.isDigit x then
                                                   (* integer in decimal notation, or real constant *)
                                                   readDecimalConstant (l, c, c+1, NLTUnsigned, digitToLargeInt x, xs)
                                               else if isSymbolChar x then
-                                                  readSymbolicIdentifier (l, c, c, [], [x], xs)
+                                                  readSymbolicIdentifier (l, c, c, false, [], [x], xs)
                                               else if Char.isSpace x then
                                                   tokenizeOne (l, c+1, xs)
                                               else
@@ -124,75 +130,122 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
               | skipComment (l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
                                                      ; NONE
                                                      )
-            and readIdentifierOrKeyword (l, c0, c1, rstrids, accum, nil) = let val name = String.implode (List.rev accum)
-                                                                               val (tok, ident) = recognizeKeyword (l, c1, name)
-                                                                           in if name = "_Prim" then
-                                                                                  emitError (l, c1, "_Prim not allowed here")
-                                                                              else
-                                                                                  ()
-                                                                            ; if List.null rstrids then
-                                                                                  SOME (tok, l, c1 + String.size name, nil)
-                                                                              else
-                                                                                  case ident of
-                                                                                      SOME (name, p2) => (case List.rev rstrids of
-                                                                                                              strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, nil)
-                                                                                                            | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, nil)
-                                                                                                         )
-                                                                                    | NONE => ( emitError (l, c1, "invalid qualified name")
-                                                                                              ; SOME (tok, l, c1 + String.size name, nil)
-                                                                                              )
-                                                                           end
-              | readIdentifierOrKeyword (l, c0, c1, rstrids, accum, input as x :: xs) = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
-                                                                                            readIdentifierOrKeyword (l, c0, c1, rstrids, x :: accum, xs)
-                                                                                        else
-                                                                                            let val name = String.implode (List.rev accum)
-                                                                                                val (tok, ident) = recognizeKeyword (l, c1, name)
-                                                                                            in if List.null rstrids then
-                                                                                                   case ident of
-                                                                                                       SOME (name, p2) =>
-                                                                                                       if x = #"." then
-                                                                                                           case xs of
-                                                                                                               x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
-                                                                                                                            else if isSymbolChar x' then
-                                                                                                                                readSymbolicIdentifier (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
-                                                                                                                            else
-                                                                                                                                SOME (tok, l, c1 + String.size name, input)
-                                                                                                             | [] => SOME (tok, l, c1 + String.size name, input)
-                                                                                                       else
-                                                                                                           ( if name = "_Prim" then
-                                                                                                                 emitError (l, c1, "_Prim not allowed here")
-                                                                                                             else
-                                                                                                                 ()
-                                                                                                           ; SOME (tok, l, c1 + String.size name, input)
-                                                                                                           )
-                                                                                                     | NONE => SOME (tok, l, c1 + String.size name, input)
-                                                                                               else
-                                                                                                   ( if name = "_Prim" then
-                                                                                                         emitError (l, c1, "_Prim not allowed here")
-                                                                                                     else
-                                                                                                         ()
-                                                                                                   ; case ident of
-                                                                                                         SOME (name, p2) =>
-                                                                                                         if x = #"." then
-                                                                                                             case xs of
-                                                                                                                 x' :: xs' => if Char.isAlpha x' then
-                                                                                                                                  readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
-                                                                                                                              else if isSymbolChar x' then
-                                                                                                                                  readSymbolicIdentifier (l, c0, c1 + String.size name + 1, name :: rstrids, [x'], xs')
-                                                                                                                              else
-                                                                                                                                  SOME (tok, l, c1 + String.size name, input)
-                                                                                                               | [] => SOME (tok, l, c1 + String.size name, input)
-                                                                                                         else
-                                                                                                             (case List.rev rstrids of
-                                                                                                                  strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, input)
-                                                                                                                | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, input)
-                                                                                                             )
-                                                                                                       | NONE => ( emitError (l, c1, "invalid qualified name")
-                                                                                                                 ; SOME (tok, l, c1 + String.size name, input)
-                                                                                                                 )
-                                                                                                   )
-                                                                                                end
+            and readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, accum, nil)
+                = let val name = String.implode (List.rev accum)
+                      val (tok, ident) = recognizeKeyword (l, c1, name)
+                  in if name = "_Prim" then
+                         emitError (l, c1, "_Prim not allowed here")
+                     else
+                         ()
+                   ; case (rstrids, startingDot, ident) of
+                         ([], false, _) => SOME (tok, l, c1 + String.size name, nil)
+                       | ([], true, SOME (name, p2)) => let val p1 = pos (l, c0)
+                                                        in SOME (Tokens.DotAlnumIdent (name, p1, p2), l, c1 + String.size name, nil)
+                                                        end
+                       | ([], true, NONE) => ( emitError (l, c0, "stray dot")
+                                             ; SOME (tok, l, c1 + String.size name, nil)
+                                             )
+                       | (_, _, SOME (name, p2)) =>
+                         ( if startingDot then
+                               emitError (l, c0, "stray dot")
+                           else
+                               ()
+                         ; case List.rev rstrids of
+                               strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, nil)
+                             | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, nil)
+                         )
+                       | (_, _, NONE) => ( if startingDot then
+                                               emitError (l, c0, "stray dot")
+                                           else
+                                               ()
+                                         ; emitError (l, c1, "invalid qualified name")
+                                         ; SOME (tok, l, c1 + String.size name, nil)
+                                         )
+                  end
+              | readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
+                = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
+                      readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, x :: accum, xs)
+                  else
+                      let val name = String.implode (List.rev accum)
+                          val (tok, ident) = recognizeKeyword (l, c1, name)
+                      in if List.null rstrids then
+                             case ident of
+                                 SOME (name, p2) =>
+                                 if x = #"." then
+                                     let fun finalize () = if startingDot then
+                                                               let val p1 = pos (l, c0)
+                                                                   val p2 = pos (l, c1 + String.size name)
+                                                               in SOME (Tokens.InfixIdent (([], name), p1, p2), l, c1 + String.size name + 1, xs)
+                                                               end
+                                                           else
+                                                               SOME (tok, l, c1 + String.size name, input)
+                                     in case xs of
+                                            x' :: xs' => if Char.isAlpha x' then
+                                                             readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                         else if isSymbolChar x' then
+                                                             readSymbolicIdentifier (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                         else
+                                                             finalize ()
+                                          | [] => finalize ()
+                                     end
+                                 else
+                                     ( if startingDot then
+                                           emitError (l, c0, "stray dot")
+                                       else
+                                           ()
+                                     ; if name = "_Prim" then
+                                           emitError (l, c1, "_Prim not allowed here")
+                                       else
+                                           ()
+                                     ; SOME (tok, l, c1 + String.size name, input)
+                                     )
+                               | NONE => ( if startingDot then
+                                               emitError (l, c0, "stray dot")
+                                           else
+                                               ()
+                                         ; SOME (tok, l, c1 + String.size name, input)
+                                         )
+                         else
+                             ( if name = "_Prim" then
+                                   emitError (l, c1, "_Prim not allowed here")
+                               else
+                                   ()
+                             ; case ident of
+                                   SOME (name, p2) =>
+                                   if x = #"." then
+                                       let fun finalize () = if startingDot then
+                                                                 case List.rev rstrids of
+                                                                     strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                                   | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                             else
+                                                                 SOME (tok, l, c1 + String.size name, input)
+                                       in case xs of
+                                              x' :: xs' => if Char.isAlpha x' then
+                                                               readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                           else if isSymbolChar x' then
+                                                               readSymbolicIdentifier (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                           else
+                                                               finalize ()
+                                            | [] => finalize ()
+                                       end
+                                   else
+                                       ( if startingDot then
+                                             emitError (l, c0, "stray dot")
+                                         else
+                                             ()
+                                       ; case List.rev rstrids of
+                                             strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, input)
+                                           | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, input)
+                                       )
+                                 | NONE => ( if startingDot then
+                                                 emitError (l, c0, "stray dot")
+                                             else
+                                                 ()
+                                           ; emitError (l, c1, "invalid qualified name")
+                                           ; SOME (tok, l, c1 + String.size name, input)
+                                           )
+                             )
+                      end
             and recognizeKeyword (l, c, name) = let val (tok, ident) = case name of
                                                                            "_" => (Tokens.UNDERSCORE, NONE)
                                                                          | "_Prim" => ( if not (#allowPrim opts) then
@@ -269,23 +322,58 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                                     val p2 = pos(l,c + String.size name - 1)
                                                 in (tok (pos(l, c), p2), Option.map (fn name => (name, p2)) ident)
                                                 end
-            and readSymbolicIdentifier (l, c0, c1, rstrids, accum, nil) = SOME (#1 (recognizeSymbolic (l, c1, String.implode (rev accum))), l, c1 + length accum, nil)
-              | readSymbolicIdentifier (l, c0, c1, rstrids, accum, input as x :: xs) = if isSymbolChar x then
-                                                                                           readSymbolicIdentifier (l, c0, c1, rstrids, x :: accum, xs)
-                                                                                       else
-                                                                                           let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
-                                                                                           in if List.null rstrids then
-                                                                                                  SOME (tok, l, c1 + length accum, input)
-                                                                                              else
-                                                                                                  case ident of
-                                                                                                      SOME (name, p2) => (case List.rev rstrids of
-                                                                                                                              strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + length accum, input)
-                                                                                                                            | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), l, c1 + length accum, input)
-                                                                                                                         )
-                                                                                                    | NONE => ( emitError (l, c1, "invalid qualified name")
-                                                                                                              ; SOME (tok, l, c1 + length accum, input)
-                                                                                                              )
-                                                                                           end
+            and readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, accum, nil) = let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                                                                                       in if startingDot then
+                                                                                              case ident of
+                                                                                                  SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), l, c1 + length accum, nil)
+                                                                                                | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, nil) )
+                                                                                          else
+                                                                                              SOME (tok, l, c1 + length accum, nil)
+                                                                                       end
+              | readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
+                = if isSymbolChar x then
+                      readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, x :: accum, xs)
+                  else if startingDot andalso x = #"." then
+                      let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                      in if List.null rstrids then
+                             case ident of
+                                 SOME (name, p2) => SOME (Tokens.InfixIdent (([], name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                               | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, input) )
+                         else
+                             case ident of
+                                 SOME (name, p2) => (case List.rev rstrids of
+                                                         strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                       | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                    )
+                               | NONE => ( emitError (l, c0, "stray dot")
+                                         ; emitError (l, c1, "invalid qualified name")
+                                         ; SOME (tok, l, c1 + length accum, input)
+                                         )
+                      end
+                  else
+                      let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                      in if List.null rstrids then
+                             if startingDot then
+                                 case ident of
+                                     SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), l, c1 + length accum, input)
+                                   | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, input) )
+                             else
+                                 SOME (tok, l, c1 + length accum, input)
+                         else
+                             ( if startingDot then
+                                   emitError (l, c0, "stray dot")
+                               else
+                                   ()
+                             ; case ident of
+                                   SOME (name, p2) => (case List.rev rstrids of
+                                                           strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + length accum, input)
+                                                         | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                      )
+                                 | NONE => ( emitError (l, c1, "invalid qualified name")
+                                           ; SOME (tok, l, c1 + length accum, input)
+                                           )
+                             )
+                      end
             and recognizeSymbolic (l, c, name) = let val (tok, ident) = case name of
                                                                             ":" => (Tokens.COLON, NONE)
                                                                           | "|" => (Tokens.BAR, NONE)
@@ -662,12 +750,12 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                    x ^ readAll input
                             end
         fun makeLexer input (name, opts, ewRef) = let val (tokens, ew) = tokenizeAllString (opts, name, readAll input)
-                                                val tokensRef = ref tokens
-                                            in ewRef := ew
-                                              ; fn _ => case !tokensRef of
-                                                            nil => Tokens.EOF ({file=name,line=0,column=0},{file=name,line=0,column=0})
-                                                          | x :: xs => (tokensRef := xs; x)
-                                            end
+                                                      val tokensRef = ref tokens
+                                                  in ewRef := ew
+                                                   ; fn _ => case !tokensRef of
+                                                                 nil => Tokens.EOF ({file=name,line=0,column=0},{file=name,line=0,column=0})
+                                                               | x :: xs => (tokensRef := xs; x)
+                                                  end
         fun makeInputFromString str = let val i = ref false
                                       in fn _ => if !i then
                                                      ""

@@ -59,6 +59,21 @@ Examples of invalid constants:
 #"\u{10000}" : WideChar.char (* equivalent to #"\uD800\uDC00" if WideChar.maxOrd = 65535 *)
 ```
 
+## Infixing dot
+
+`infexp_1 .longvid. infexp_2` is equivalent to `op longvid (infexp_1, infexp_2)`.
+
+`pat_1 .longvid. pat_2` is equivalent to `op longvid (pat_1, pat_2)`.
+
+Associativity of `.longvid.` is currently `infix 0`, but I plan to allow overriding.
+
+Examples:
+
+```sml
+0wxdead .Word.andb. 0wxbeef; (* equivalent to Word.andb (0wxdead, 0wxbeef) *)
+fun a .foo. b = print (a ^ ", " ^ b ^ "\n"); (* equivalent to fun foo (a, b) = ... *)
+```
+
 ## Other extensions planned
 
 * [ ] Packaged modules (like in Alice ML or HaMLet S)

@@ -339,12 +339,12 @@ fun getSourceSpanOfExp(SConExp(span, _)) = span
   | getSourceSpanOfExp(VectorExp(span, _)) = span
   | getSourceSpanOfExp(PrimExp(span, _, _, _)) = span
 
-fun MkInfixConPat(pat1, _, vid, pat2) = let val span = SourcePos.mergeSpan(getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
-                                        in ConPat(span, MkLongVId([], vid), SOME(RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], ellipsis = NONE }))
-                                        end
-fun MkInfixExp(exp1, vspan, vid, exp2) = let val span = SourcePos.mergeSpan(getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
-                                        in AppExp(span, VarExp(vspan, MkLongVId([], vid)), RecordExp(span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)], NONE))
-                                        end
+fun MkInfixConPat (pat1, _, longvid, pat2) = let val span = SourcePos.mergeSpan (getSourceSpanOfPat pat1, getSourceSpanOfPat pat2)
+                                             in ConPat (span, longvid, SOME (RecordPat { sourceSpan = span, fields = [(NumericLabel 1, pat1), (NumericLabel 2, pat2)], ellipsis = NONE }))
+                                             end
+fun MkInfixExp (exp1, vspan, longvid, exp2) = let val span = SourcePos.mergeSpan (getSourceSpanOfExp exp1, getSourceSpanOfExp exp2)
+                                              in AppExp (span, VarExp (vspan, longvid), RecordExp (span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)], NONE))
+                                              end
 
 (* extractTuple : int * (Label * 'a) list -> ('a list) option *)
 fun extractTuple (i, nil) = SOME nil
@@ -449,6 +449,7 @@ datatype Pat
   | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
   | NonInfixVIdPat of SourcePos.span * Syntax.LongVId (* value identifier, with 'op' or structure identifiers *)
   | InfixOrVIdPat of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifers *)
+  | InfixPat of SourcePos.span * Syntax.LongVId (* [extension] infix identifier *)
   | JuxtapositionPat of SourcePos.span * Pat list (* constructed pattern, maybe with binary operator  *)
   | ConPat of SourcePos.span * Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
   | RecordPat of SourcePos.span * (Pat RecordItem) list
@@ -459,6 +460,7 @@ datatype Pat
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
              | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
+             | InfixExp of SourcePos.span * Syntax.LongVId (* [extension] infix identifier *)
              | RecordExp of SourcePos.span * (Exp RecordItem) list (* record *)
              | RecordUpdateExp of SourcePos.span * Exp * (Exp RecordItem) list (* [Successor ML] record update *)
              | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
@@ -506,6 +508,7 @@ fun getSourceSpanOfPat(WildcardPat span) = span
   | getSourceSpanOfPat(SConPat(span, _)) = span
   | getSourceSpanOfPat(NonInfixVIdPat(span, _)) = span
   | getSourceSpanOfPat(InfixOrVIdPat(span, _)) = span
+  | getSourceSpanOfPat (InfixPat (span, _)) = span
   | getSourceSpanOfPat(JuxtapositionPat(span, _)) = span
   | getSourceSpanOfPat(ConPat(span, _, _)) = span
   | getSourceSpanOfPat(RecordPat(span, _)) = span
