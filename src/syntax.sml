@@ -187,6 +187,7 @@ datatype OverloadKey = OVERLOAD_abs
                      | OVERLOAD_minInt
                      | OVERLOAD_maxInt
                      | OVERLOAD_wordSize
+                     | OVERLOAD_maxOrd
 
 structure OverloadKey = struct
 type t = OverloadKey
@@ -240,6 +241,9 @@ fun compare (OVERLOAD_abs, OVERLOAD_abs) = EQUAL
   | compare (OVERLOAD_maxInt, _) = LESS
   | compare (_, OVERLOAD_maxInt) = GREATER
   | compare (OVERLOAD_wordSize, OVERLOAD_wordSize) = EQUAL
+  | compare (OVERLOAD_wordSize, _) = LESS
+  | compare (_, OVERLOAD_wordSize) = GREATER
+  | compare (OVERLOAD_maxOrd, OVERLOAD_maxOrd) = EQUAL
 end
 structure OverloadKeyMap = RedBlackMapFn (OverloadKey)
 

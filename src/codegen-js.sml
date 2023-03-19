@@ -172,7 +172,7 @@ fun doValue ctx (C.Var vid) = (case VIdToJs ctx vid of
   | doValue _ (C.Word64Const x) = J.ConstExp (J.Numeral ("0x" ^ Word64.fmt StringCvt.HEX x ^ "n"))
   | doValue _ (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
   | doValue _ (C.Char16Const x) = J.ConstExp (J.Numeral (Int.toString x))
-  | doValue _ (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString) x)
+  | doValue _ (C.StringConst x) = J.MethodExp (J.VarExp (J.PredefinedId "Uint8Array"), "of", Vector.map (J.ConstExp o J.Numeral o Int.toString o Char.ord) (Vector.fromList (String.explode x)))
   | doValue _ (C.String16Const x) = J.ConstExp (J.WideString x)
 
 fun CVarToId v = TypedSyntax.MkVId ("cont", C.CVar.toInt v)

@@ -42,7 +42,7 @@ datatype Value = Var of Var
                | Word64Const of Word64.word
                | CharConst of char
                | Char16Const of int
-               | StringConst of int vector
+               | StringConst of string
                | String16Const of int vector
 (*
                | RealConst of Numeric.float_notation
@@ -68,8 +68,10 @@ local structure F = FSyntax in
 fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.WordConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.RealConstOp _, ... }) = true
-  | isDiscardable (PrimOp { primOp = F.StringConstOp _, ... }) = true
-  | isDiscardable (PrimOp { primOp = F.CharConstOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.Char8ConstOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.Char16ConstOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.String8ConstOp _, ... }) = true
+  | isDiscardable (PrimOp { primOp = F.String16ConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.RaiseOp _, ... }) = false
   | isDiscardable (PrimOp { primOp = F.ListOp, ... }) = true
   | isDiscardable (PrimOp { primOp = F.VectorOp, ... }) = true
@@ -96,8 +98,10 @@ fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
                                              F.IntConstOp _ => false
                                            | F.WordConstOp _ => false
                                            | F.RealConstOp _ => false
-                                           | F.StringConstOp _ => false
-                                           | F.CharConstOp _ => false
+                                           | F.Char8ConstOp _ => false
+                                           | F.Char16ConstOp _ => false
+                                           | F.String8ConstOp _ => false
+                                           | F.String16ConstOp _ => false
                                            | F.RaiseOp _ => true
                                            | F.ListOp => false
                                            | F.VectorOp => false
@@ -275,24 +279,10 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                          raise Fail "WordConstOp: invalid type"
                                                    | _ => raise Fail "WordConstOp: invalid type"
                                                 )
-                           | F.CharConstOp x => (case tyargs of
-                                                     [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char) then
-                                                                         apply revDecs k (C.CharConst (Char.chr x))
-                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_char16) then
-                                                                         apply revDecs k (C.Char16Const x)
-                                                                     else
-                                                                         raise Fail "CharConstOp: invalid type"
-                                                   | _ => raise Fail "CharConstOp: invalid type"
-                                                )
-                           | F.StringConstOp x => (case tyargs of
-                                                       [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string) then
-                                                                           apply revDecs k (C.StringConst x)
-                                                                       else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_string16) then
-                                                                           apply revDecs k (C.String16Const x)
-                                                                       else
-                                                                           raise Fail "StringConstOp: invalid type"
-                                                     | _ => raise Fail "StringConstOp: invalid type"
-                                                  )
+                           | F.Char8ConstOp x => apply revDecs k (C.CharConst x) (* assume the type is correct *)
+                           | F.Char16ConstOp x => apply revDecs k (C.Char16Const x) (* assume the type is correct *)
+                           | F.String8ConstOp x => apply revDecs k (C.StringConst x) (* assume the type is correct *)
+                           | F.String16ConstOp x => apply revDecs k (C.String16Const x) (* assume the type is correct *)
                            | _ => let val returnsUnit = case primOp of
                                                             F.PrimFnOp Primitives.Ref_set => true
                                                           | F.PrimFnOp (Primitives.Unsafe_Array_update _) => true
@@ -892,18 +882,16 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
          | _ => NOT_SIMPLIFIED
       )
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp Primitives.Lua_method, tyargs, args = [ctor, C.StringConst name, C.Var args] })
-    = let val name = CharVector.tabulate (Vector.length name, fn i => Char.chr (Vector.sub (name, i)))
-      in if LuaWriter.isLuaIdentifier name then
-             case TypedSyntax.VIdMap.find (env, args) of
-                 SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethodOp name, tyargs = [], args = ctor :: args })
-               | _ => NOT_SIMPLIFIED
-         else
-             NOT_SIMPLIFIED
-      end
+    = if LuaWriter.isLuaIdentifier name then
+          case TypedSyntax.VIdMap.find (env, args) of
+              SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethodOp name, tyargs = [], args = ctor :: args })
+            | _ => NOT_SIMPLIFIED
+      else
+          NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.DataTagAsStringOp _, tyargs, args = [C.Var x] })
     = (case TypedSyntax.VIdMap.find (env, x) of
-           SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValOp { tag, ... }, ... }), ... } => VALUE (C.StringConst (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i)))))
-         | SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag, ... }, ... }), ... } => VALUE (C.StringConst (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i)))))
+           SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValOp { tag, ... }, ... }), ... } => VALUE (C.StringConst tag)
+         | SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag, ... }, ... }), ... } => VALUE (C.StringConst tag)
          | _ => NOT_SIMPLIFIED
       )
   | simplifySimpleExp (env, C.PrimOp { primOp = F.DataTagAsString16Op _, tyargs, args = [C.Var x] })

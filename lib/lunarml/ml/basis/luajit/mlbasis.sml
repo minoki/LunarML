@@ -73,6 +73,7 @@ _overload "Char" [char] { < = Char.<
                         , <= = Char.<=
                         , > = Char.>
                         , >= = Char.>=
+                        , maxOrd = 255
                         };
 
 structure String = struct
@@ -90,6 +91,7 @@ _overload "String" [string] { < = String.<
                             , <= = String.<=
                             , > = String.>
                             , >= = String.>=
+                            , maxOrd = 255
                             };
 
 structure LunarML : sig

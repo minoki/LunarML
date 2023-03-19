@@ -56,36 +56,36 @@ fun toAsciiString (s : char vector) : string option
       end handle Chr => NONE
 fun fromAsciiString (s : string) : char vector = Vector.tabulate (String.size s, fn i => CODEUNIT (Char.ord (String.sub (s, i))))
 fun encodeAscii (s : string) : int vector = Vector.tabulate (String.size s, fn i => Char.ord (String.sub (s, i)))
-fun encode8bit (s : char vector) : int vector (* may raise Chr *)
-    = Vector.fromList (Vector.foldr (fn (CODEUNIT x, xs) => if 0 <= x andalso x <= 255 then
-                                                                x :: xs
-                                                            else
-                                                                raise Chr
-                                    | (UNICODE_SCALAR x, xs) => if x < 128 then
-                                                                    x :: xs
-                                                                else if x < 0x800 then
-                                                                    let val x = Word.fromInt x
-                                                                        val u0 = Word.orb (0wxc0, Word.>> (x, 0w6))
-                                                                        val u1 = Word.orb (0wx80, Word.andb (x, 0wx3f))
-                                                                    in Word.toInt u0 :: Word.toInt u1 :: xs
-                                                                    end
-                                                                else if x < 0x10000 then
-                                                                    let val x = Word.fromInt x
-                                                                        val u0 = Word.orb (0wxe0, Word.>> (x, 0w12))
-                                                                        val u1 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w6), 0wx3f))
-                                                                        val u2 = Word.orb (0wx80, Word.andb (x, 0wx3f))
-                                                                    in Word.toInt u0 :: Word.toInt u1 :: Word.toInt u2 :: xs
-                                                                    end
-                                                                else
-                                                                    let val x = Word.fromInt x
-                                                                        val u0 = Word.orb (0wxf0, Word.>> (x, 0w18))
-                                                                        val u1 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w12), 0wx3f))
-                                                                        val u2 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w6), 0wx3f))
-                                                                        val u3 = Word.orb (0wx80, Word.andb (x, 0wx3f))
-                                                                    in Word.toInt u0 :: Word.toInt u1 :: Word.toInt u2 :: Word.toInt u3 :: xs
-                                                                    end
-                                    ) [] s
-                      )
+fun encode8bit (s : char vector) : string (* may raise Chr *)
+    = String.implode (Vector.foldr (fn (CODEUNIT x, xs) => if 0 <= x andalso x <= 255 then
+                                                               Char.chr x :: xs
+                                                           else
+                                                               raise Chr
+                                   | (UNICODE_SCALAR x, xs) => if x < 128 then
+                                                                   Char.chr x :: xs
+                                                               else if x < 0x800 then
+                                                                   let val x = Word.fromInt x
+                                                                       val u0 = Word.orb (0wxc0, Word.>> (x, 0w6))
+                                                                       val u1 = Word.orb (0wx80, Word.andb (x, 0wx3f))
+                                                                   in Char.chr (Word.toInt u0) :: Char.chr (Word.toInt u1) :: xs
+                                                                   end
+                                                               else if x < 0x10000 then
+                                                                   let val x = Word.fromInt x
+                                                                       val u0 = Word.orb (0wxe0, Word.>> (x, 0w12))
+                                                                       val u1 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w6), 0wx3f))
+                                                                       val u2 = Word.orb (0wx80, Word.andb (x, 0wx3f))
+                                                                   in Char.chr (Word.toInt u0) :: Char.chr (Word.toInt u1) :: Char.chr (Word.toInt u2) :: xs
+                                                                   end
+                                                               else
+                                                                   let val x = Word.fromInt x
+                                                                       val u0 = Word.orb (0wxf0, Word.>> (x, 0w18))
+                                                                       val u1 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w12), 0wx3f))
+                                                                       val u2 = Word.orb (0wx80, Word.andb (Word.>> (x, 0w6), 0wx3f))
+                                                                       val u3 = Word.orb (0wx80, Word.andb (x, 0wx3f))
+                                                                   in Char.chr (Word.toInt u0) :: Char.chr (Word.toInt u1) :: Char.chr (Word.toInt u2) :: Char.chr (Word.toInt u3) :: xs
+                                                                   end
+                                   ) [] s
+                     )
 fun encode16bit (s : char vector) : int vector (* may raise Chr *)
     = Vector.fromList (Vector.foldr (fn (CODEUNIT x, xs) => if 0 <= x andalso x <= 0xffff then
                                                                 x :: xs

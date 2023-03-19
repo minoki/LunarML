@@ -10,4 +10,5 @@ _overload "Char" [WideChar.char] { < = WideChar.<
                                  , <= = WideChar.<=
                                  , > = WideChar.>
                                  , >= = WideChar.>=
+                                 , maxOrd = 0xffff
                                  };

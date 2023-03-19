@@ -23,4 +23,5 @@ _overload "String" [string] { < = String.<
                             , <= = String.<=
                             , > = String.>
                             , >= = String.>=
+                            , maxOrd = 255
                             };

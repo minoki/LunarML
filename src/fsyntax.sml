@@ -18,8 +18,10 @@ datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
 datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | WordConstOp of IntInf.int (* 1 type argument *)
                 | RealConstOp of Numeric.float_notation (* 1 type argument *)
-                | StringConstOp of int vector (* narrow / wide, 1 type argument *)
-                | CharConstOp of int (* narrow / wide, 1 type argument *)
+                | Char8ConstOp of char (* 1 type argument *)
+                | Char16ConstOp of int (* 1 type argument *)
+                | String8ConstOp of string (* 1 type argument *)
+                | String16ConstOp of int vector (* 1 type argument *)
                 | RaiseOp of SourcePos.span (* type argument: result type, value argument: the exception *)
                 | ListOp (* type argument: element type, value arguments: the elements *)
                 | VectorOp (* type argument: element type, value arguments: the elements *)
@@ -102,11 +104,10 @@ fun TupleExp xs = let fun doFields i nil = nil
 fun tyNameToTyVar (TypedSyntax.MkTyName (name, n)) = TypedSyntax.MkTyVar (name, n)
 fun TyCon(tyargs, tyname) = List.foldl (fn (arg, applied) => AppType { applied = applied, arg = arg }) (TyVar (tyNameToTyVar tyname)) tyargs
 fun AsciiStringAsDatatypeTag (targetInfo : TargetInfo.target_info, s : string)
-    = let val ty = case #datatypeTag targetInfo of
-                       TargetInfo.STRING8 => TyCon ([], Typing.primTyName_string)
-                     | TargetInfo.STRING16 => TyCon ([], Typing.primTyName_string16)
-      in PrimExp (StringConstOp (StringElement.encodeAscii s), [ty], [])
-      end
+    = (case #datatypeTag targetInfo of
+           TargetInfo.STRING8 => PrimExp (String8ConstOp s, [TyCon ([], Typing.primTyName_string)], [])
+         | TargetInfo.STRING16 => PrimExp (String16ConstOp (StringElement.encodeAscii s), [TyCon ([], Typing.primTyName_string16)], [])
+      )
 fun strIdToVId (TypedSyntax.MkStrId (name, n)) = TypedSyntax.MkVId (name, n)
 fun AndalsoExp(a, b) = IfThenElseExp(a, b, VarExp(InitialEnv.VId_false))
 fun SimplifyingAndalsoExp (a as VarExp vid, b) = if TypedSyntax.eqVId (vid, InitialEnv.VId_true) then
@@ -395,8 +396,10 @@ fun print_Ty (TyVar x) = "TyVar(" ^ print_TyVar x ^ ")"
 fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp (WordConstOp x) = "WordConstOp " ^ IntInf.toString x
   | print_PrimOp (RealConstOp x) = "RealConstOp " ^ Numeric.Notation.toString "~" x
-  | print_PrimOp (StringConstOp x) = "StringConstOp \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\"" x
-  | print_PrimOp (CharConstOp x) = "CharConstOp \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
+  | print_PrimOp (Char8ConstOp x) = "Char8ConstOp \"" ^ Char.toString x ^ "\""
+  | print_PrimOp (Char16ConstOp x) = "Char16ConstOp \"" ^ StringElement.charToString (StringElement.CODEUNIT x) ^ "\""
+  | print_PrimOp (String8ConstOp x) = "String8ConstOp \"" ^ String.toString x ^ "\""
+  | print_PrimOp (String16ConstOp x) = "String16ConstOp \"" ^ Vector.foldr (fn (c, acc) => StringElement.charToString (StringElement.CODEUNIT c) ^ acc) "\"" x
   | print_PrimOp (RaiseOp span) = "RaiseOp"
   | print_PrimOp ListOp = "ListOp"
   | print_PrimOp VectorOp = "VectorOp"
@@ -775,46 +778,81 @@ fun cookRealConstant (ctx : Context, env : Env, span, value : Numeric.float_nota
                                          emitError (ctx, [span], "invalid real constant: type")
          | _ => emitError (ctx, [span], "invalid real constant: type")
       )
+datatype char_width = C8 | C16
 fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement.char, ty)
     = (case ty of
-           T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_char) then
-                                         case value of
-                                             StringElement.CODEUNIT x => if 0 <= x andalso x <= 255 then
-                                                                             F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
-                                                                         else
-                                                                             emitError (ctx, [span], "invalid character constant: out of range")
-                                           | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 127 then
-                                                                                   F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
-                                                                               else
-                                                                                   emitError (ctx, [span], "invalid character constant: out of range")
-                                     else if T.eqTyName (tycon, Typing.primTyName_char16) then
-                                         case value of
-                                             StringElement.CODEUNIT x => if 0 <= x andalso x <= 0xffff then
-                                                                             F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
-                                                                         else
-                                                                             emitError (ctx, [span], "invalid character constant: out of range")
-                                           | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 0xffff then
-                                                                                   F.PrimExp (F.CharConstOp x, [toFTy (ctx, env, ty)], [])
-                                                                               else
-                                                                                   emitError (ctx, [span], "invalid character constant: out of range")
-                                     else
-                                         emitError (ctx, [span], "invalid character constant: type")
+           T.TyCon (_, [], tycon) =>
+           let val w = if T.eqTyName (tycon, Typing.primTyName_char) then
+                           C8
+                       else if T.eqTyName (tycon, Typing.primTyName_char16) then
+                           C16
+                       else
+                           let val overloadMap = case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                     SOME m => m
+                                                   | NONE => emitError (ctx, [span], "invalid character constant: type")
+                               val maxOrd = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_maxOrd) of
+                                                SOME (F.PrimExp (F.IntConstOp x, _, _)) => x
+                                              | _ => emitError (ctx, [span], "invalid character constant: type")
+                           in case maxOrd of
+                                  255 => C8
+                                | 65535 => C16
+                                | _ => emitError (ctx, [span], "invalid character constant: type")
+                           end
+           in case w of
+                  C8 => let val x = case value of
+                                        StringElement.CODEUNIT x => if 0 <= x andalso x <= 255 then
+                                                                        x
+                                                                    else
+                                                                        emitError (ctx, [span], "invalid character constant: out of range")
+                                      | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 127 then
+                                                                              x
+                                                                          else
+                                                                              emitError (ctx, [span], "invalid character constant: out of range")
+                        in F.PrimExp (F.Char8ConstOp (Char.chr x), [toFTy (ctx, env, ty)], [])
+                        end
+                | C16 => let val x = case value of
+                                         StringElement.CODEUNIT x => if 0 <= x andalso x <= 0xffff then
+                                                                         x
+                                                                     else
+                                                                         emitError (ctx, [span], "invalid character constant: out of range")
+                                       | StringElement.UNICODE_SCALAR x => if 0 <= x andalso x <= 0xffff then
+                                                                               x
+                                                                           else
+                                                                               emitError (ctx, [span], "invalid character constant: out of range")
+                         in F.PrimExp (F.Char16ConstOp x, [toFTy (ctx, env, ty)], [])
+                         end
+           end
          | _ => emitError (ctx, [span], "invalid character constant: type")
       )
 fun cookStringConstant (ctx : Context, env : Env, span, value, ty)
     = (case ty of
-           T.TyCon (_, [], tycon) => if T.eqTyName (tycon, Typing.primTyName_string) then
-                                         let val cooked = StringElement.encode8bit value
-                                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
-                                         in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
-                                         end
-                                     else if T.eqTyName (tycon, Typing.primTyName_string16) then
-                                         let val cooked = StringElement.encode16bit value
-                                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
-                                         in F.PrimExp (F.StringConstOp cooked, [toFTy (ctx, env, ty)], [])
-                                         end
-                                     else
-                                         emitError (ctx, [span], "invalid string constant: type")
+           T.TyCon (_, [], tycon) =>
+           let val w = if T.eqTyName (tycon, Typing.primTyName_string) then
+                           C8
+                       else if T.eqTyName (tycon, Typing.primTyName_string16) then
+                           C16
+                       else
+                           let val overloadMap = case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
+                                                     SOME m => m
+                                                   | NONE => emitError (ctx, [span], "invalid string constant: type")
+                               val maxOrd = case Syntax.OverloadKeyMap.find (overloadMap, Syntax.OVERLOAD_maxOrd) of
+                                                SOME (F.PrimExp (F.IntConstOp x, _, _)) => x
+                                              | _ => emitError (ctx, [span], "invalid string constant: type")
+                           in case maxOrd of
+                                  255 => C8
+                                | 65535 => C16
+                                | _ => emitError (ctx, [span], "invalid string constant: type")
+                           end
+           in case w of
+                  C8 => let val cooked = StringElement.encode8bit value
+                                         handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
+                        in F.PrimExp (F.String8ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                        end
+                | C16 => let val cooked = StringElement.encode16bit value
+                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
+                         in F.PrimExp (F.String16ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                         end
+           end
          | _ => emitError (ctx, [span], "invalid string constant: type")
       )
 fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.empty, F.WildcardPat span)

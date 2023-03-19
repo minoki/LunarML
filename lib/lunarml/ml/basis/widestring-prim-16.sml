@@ -14,4 +14,5 @@ _overload "String" [WideString.string] { < = WideString.<
                                        , <= = WideString.<=
                                        , > = WideString.>
                                        , >= = WideString.>=
+                                       , maxOrd = 0xffff
                                        };

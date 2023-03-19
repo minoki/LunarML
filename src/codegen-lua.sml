@@ -232,7 +232,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                     end
   | doValue ctx (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
   | doValue ctx (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
-  | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString (CharVector.tabulate (Vector.length s, fn i => Char.chr (Vector.sub (s, i)))))
+  | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
   | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
 (* doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list *)
