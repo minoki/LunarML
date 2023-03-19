@@ -68,6 +68,7 @@ signature STRING
 signature STRING_CVT
 signature SUBSTRING
 signature TEXT
+signature TIME
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
