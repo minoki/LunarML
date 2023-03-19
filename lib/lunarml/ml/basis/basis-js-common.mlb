@@ -38,6 +38,7 @@ js-common/int.sml
 real.sml
 js-common/unsafe-extra.sml
 byte.sml
+text.sml
 scan-bool.sml
 scan-text.sml
 js-common/time.sml
@@ -66,6 +67,7 @@ signature REAL
 signature STRING
 signature STRING_CVT
 signature SUBSTRING
+signature TEXT
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
@@ -102,6 +104,7 @@ structure Real
 structure String
 structure StringCvt
 structure Substring
+structure Text
 structure Time
 structure Vector
 structure VectorSlice

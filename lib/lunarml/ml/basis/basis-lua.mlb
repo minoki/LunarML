@@ -39,6 +39,7 @@ real.sml
 lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml
+text.sml
 lua/time.sml
 lua/timer.sml
 lua/text-io.sml
@@ -66,6 +67,7 @@ signature REAL
 signature STRING
 signature STRING_CVT
 signature SUBSTRING
+signature TEXT
 signature TIME
 signature TIMER
 signature VECTOR
@@ -107,6 +109,7 @@ structure Real
 structure String
 structure StringCvt
 structure Substring
+structure Text
 structure TextIO
 structure Time
 structure Timer

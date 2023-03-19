@@ -28,6 +28,7 @@ signature REAL
 signature STRING
 signature STRING_CVT
 signature SUBSTRING
+signature TEXT
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
@@ -65,6 +66,7 @@ structure Real
 structure String
 structure StringCvt
 structure Substring
+structure Text
 structure TextIO
 structure Time
 structure Timer
