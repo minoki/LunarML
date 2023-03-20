@@ -248,6 +248,7 @@ should_run "mlbasis/should_run/" {
   "real-intinf.sml",
   "substring.sml",
   -- "os-path.sml",
+  "char.sml",
 }
 should_run "successor_ml/should_run/" {
   "record_extension_pattern.sml",

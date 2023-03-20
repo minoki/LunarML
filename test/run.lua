@@ -252,6 +252,7 @@ should_run "mlbasis/should_run/" {
   "real-intinf.sml",
   "substring.sml",
   "os-path.sml",
+  "char.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
