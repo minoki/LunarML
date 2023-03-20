@@ -426,6 +426,10 @@ structure Char :> CHAR where type char = char where type string = String.string
 structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
 ```
 
+On Lua backend, `WideChar.maxOrd` is 255 and `WideChar` is an opaque alias of `Char`.
+
+On JavaScript backend, `WideChar.maxOrd` is 65535.
+
 ## signature STRING (structure String, WideString) - partial
 
 ```sml
@@ -466,10 +470,10 @@ signature STRING = sig
   val implodeRev : char list -> string
 end
 structure String :> STRING where type string = string
-structure WideString (* :> STRING; currently JavaScript backend only *)
+structure WideString :> STRING
 ```
 
-## structure Substring - partial
+## signature SUBSTRING (structure Substring, WideSubstring) - partial
 
 ```sml
 signature SUBSTRING = sig
@@ -516,9 +520,12 @@ end
 structure Substring :> SUBSTRING where type substring = CharVectorSlice.slice
                                  where type string = String.string
                                  where type char = Char.char
+structure WideSubstring :> SUBSTRING where type substring = WideCharVectorSlice.slice
+                                     where type string = WideString.string
+                                     where type char = WideChar.char
 ```
 
-## signature TEXT (structure Text) - complete
+## signature TEXT (structure Text, WideText) - complete
 
 ```sml
 signature TEXT = sig
@@ -545,6 +552,12 @@ structure Text :> TEXT where type Char.char = Char.char
                        where type CharArray.array = CharArray.array
                        where type CharVectorSlice.slice = CharVectorSlice.slice
                        where type CharArraySlice.slice = CharArraySlice.slice
+structure WideText :> TEXT where type Char.char = WideChar.char
+                           where type String.string = WideString.string
+                           where type Substring.substring = WideSubstring.substring
+                           where type CharArray.array = WideCharArray.array
+                           where type CharVectorSlice.slice = WideCharVectorSlice.slice
+                           where type CharArraySlice.slice = WideCharArraySlice.slice
 ```
 
 ## structure List - complete
@@ -758,7 +771,7 @@ end
 structure ArraySlice :> ARRAY_SLICE
 ```
 
-## signature MONO_VECTOR (structure CharVector, Word8Vector) - complete
+## signature MONO_VECTOR (structure CharVector, WideCharVector, Word8Vector) - complete
 
 ```sml
 signature MONO_VECTOR = sig
@@ -792,10 +805,12 @@ signature MONO_VECTOR = sig
 end
 structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
+structure WideCharVector :> MONO_VECTOR where type vector = WideString.string
+                                        where type elem = WideChar.char
 structure Word8Vector :> MONO_VECTOR where type elem = Word8.word
 ```
 
-## signature MONO_VECTOR_SLICE (structure CharVectorSlice, Word8VectorSlice) - complete
+## signature MONO_VECTOR_SLICE (structure CharVectorSlice, WideCharVectorSlice, Word8VectorSlice) - complete
 
 ```sml
 signature MONO_VECTOR_SLICE = sig
@@ -829,11 +844,14 @@ end
 structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = CharVector.vector
                                                where type elem = char
                                                where type slice = Substring.substring
+structure WideCharVectorSlice :> MONO_VECTOR_SLICE where type vector = WideCharVector.vector
+                                                   where type elem = WideChar.char
+                                                   where type slice = WideSubstring.substring
 structure Word8VectorSlice :> MONO_VECTOR_SLICE where type vector = Word8Vector.vector
                                                 where type elem = Word8.word
 ```
 
-## signature MONO_ARRAY (structure CharArray, Word8Array) - complete
+## signature MONO_ARRAY (structure CharArray, WideCharArray, Word8Array) - complete
 
 ```sml
 signature MONO_ARRAY = sig
@@ -871,11 +889,13 @@ signature MONO_ARRAY = sig
 end
 structure CharArray : MONO_ARRAY where type vector = CharVector.vector
                                  where type elem = char
+structure WideCharArray : MONO_ARRAY where type vector = WideCharVector.vector
+                                     where type elem = WideChar.char
 structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
                                   where type elem = Word8.word
 ```
 
-## signature MONO_ARRAY_SLICE (structure CharArraySlice, Word8ArraySlice) - complete
+## signature MONO_ARRAY_SLICE (structure CharArraySlice, WideCharArraySlice, Word8ArraySlice) - complete
 
 ```sml
 signature MONO_ARRAY_SLICE = sig
@@ -914,6 +934,10 @@ structure CharArraySlice : MONO_ARRAY_SLICE where type vector = CharVector.vecto
                                             where type vector_slice = CharVectorSlice.slice
                                             where type array = CharArray.array
                                             where type elem = char
+structure WideCharArraySlice : MONO_ARRAY_SLICE where type vector = WideCharVector.vector
+                                                where type vector_slice = WideCharVectorSlice.slice
+                                                where type array = WideCharArray.array
+                                                where type elem = WideChar.char
 structure Word8ArraySlice : MONO_ARRAY_SLICE where type vector = Word8Vector.vector
                                              where type vector_slice = Word8VectorSlice.slice
                                              where type array = Word8Array.array
@@ -1173,15 +1197,10 @@ signature DATE
 structure Date :> DATE
 signature IMPERATIVE_IO
 structure Position :> INTEGER
-structure WideCharArray :> MONO_ARRAY where ...
-structure WideCharArraySlice :> MONO_ARRAY_SLICE where ...
-structure WideCharVector :> MONO_VECTOR where ...
-structure WideCharVectorSlice :> MONO_VECTOR_SLICE where ...
 signature PRIM_IO
 structure BinPrimIO :> PRIM_IO where ...
 structure TextPrimIO :> PRIM_IO where ...
 signature STREAM_IO
-structure WideText :> TEXT where ...
 signature TEXT_IO
 structure WideTextIO :> TEXT_IO
 signature TEXT_STREAM_IO

@@ -40,6 +40,7 @@ lua/word-sequence.sml
 lua/unsafe-extra.sml
 byte.sml
 text.sml
+widetext-8.sml
 luajit/time.sml
 lua/timer.sml
 lua/text-io.sml
@@ -113,6 +114,14 @@ structure Time
 structure Timer
 structure Vector
 structure VectorSlice
+structure WideChar
+structure WideCharArray
+structure WideCharArraySlice
+structure WideCharVector
+structure WideCharVectorSlice
+structure WideString
+structure WideSubstring
+structure WideText
 structure Word
 structure Word16
 structure Word32

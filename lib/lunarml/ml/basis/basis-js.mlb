@@ -74,7 +74,13 @@ structure Timer
 structure Vector
 structure VectorSlice
 structure WideChar
+structure WideCharArray
+structure WideCharArraySlice
+structure WideCharVector
+structure WideCharVectorSlice
 structure WideString
+structure WideSubstring
+structure WideText
 structure Word
 structure Word16
 structure Word32

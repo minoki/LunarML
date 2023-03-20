@@ -12,64 +12,68 @@ signature STRING = sig
     val fromCString : String.string -> string option
 end;
 
-local
-    fun isOctDigit c = #"0" <= c andalso c <= #"7"
-    fun digitToInt c = if #"0" <= c andalso c <= #"9" then
-                           Char.ord c - Char.ord #"0"
-                       else if #"a" <= c andalso c <= #"f" then
-                           Char.ord c - Char.ord #"a" + 10
-                       else
-                           Char.ord c - Char.ord #"A" + 10
-    fun scanDecimalDigits (getc, strm, n, acc) = if n = 0 then
+structure ScanTextUtils = struct
+fun isOctDigit c = #"0" <= c andalso c <= #"7"
+fun digitToInt c = if #"0" <= c andalso c <= #"9" then
+                       Char.ord c - Char.ord #"0"
+                   else if #"a" <= c andalso c <= #"f" then
+                       Char.ord c - Char.ord #"a" + 10
+                   else
+                       Char.ord c - Char.ord #"A" + 10
+fun scanDecimalDigits (getc, strm, n, acc) = if n = 0 then
+                                                 SOME (acc, strm)
+                                             else
+                                                 case getc strm of
+                                                     SOME (c, strm') => if Char.isDigit c then
+                                                                            scanDecimalDigits (getc, strm', n - 1, acc * 10 + digitToInt c)
+                                                                        else
+                                                                            NONE
+                                                   | NONE => NONE
+fun scanHexadecimalDigits (getc, strm, n, acc) = if n = 0 then
                                                      SOME (acc, strm)
                                                  else
                                                      case getc strm of
-                                                         SOME (c, strm') => if Char.isDigit c then
-                                                                                scanDecimalDigits (getc, strm', n - 1, acc * 10 + digitToInt c)
+                                                         SOME (c, strm') => if Char.isHexDigit c then
+                                                                                scanHexadecimalDigits (getc, strm', n - 1, acc * 16 + digitToInt c)
                                                                             else
                                                                                 NONE
                                                        | NONE => NONE
-    fun scanHexadecimalDigits (getc, strm, n, acc) = if n = 0 then
-                                                         SOME (acc, strm)
+(* For C-style escape sequence *)
+fun scanOctalDigits (getc, strm, n, acc) = if n = 0 then
+                                               (acc, strm)
+                                           else
+                                               case getc strm of
+                                                   SOME (c, strm') => if isOctDigit c then
+                                                                          scanOctalDigits (getc, strm', n - 1, acc * 8 + digitToInt c)
+                                                                      else
+                                                                          (acc, strm)
+                                                 | NONE => (acc, strm)
+(* For C-style escape sequence *)
+fun scanHexadecimalDigits' (getc, strm, acc) = case getc strm of
+                                                   SOME (c, strm') => if Char.isHexDigit c then
+                                                                          let val acc' = SOME (acc * 16 + digitToInt c) handle Overflow => NONE
+                                                                          in case acc' of
+                                                                                 SOME a => scanHexadecimalDigits' (getc, strm', a)
+                                                                               | NONE => NONE
+                                                                          end
+                                                                      else
+                                                                          SOME (acc, strm)
+                                                 | NONE => SOME (acc, strm)
+fun skipSpaces (getc, strm) = case getc strm of
+                                  SOME (#"\\", strm') => SOME strm'
+                                | SOME (c, strm') => if Char.isSpace c then
+                                                         skipSpaces (getc, strm')
                                                      else
-                                                         case getc strm of
-                                                             SOME (c, strm') => if Char.isHexDigit c then
-                                                                                    scanHexadecimalDigits (getc, strm', n - 1, acc * 16 + digitToInt c)
-                                                                                else
-                                                                                    NONE
-                                                           | NONE => NONE
-    (* For C-style escape sequence *)
-    fun scanOctalDigits (getc, strm, n, acc) = if n = 0 then
-                                                   (acc, strm)
-                                               else
-                                                   case getc strm of
-                                                       SOME (c, strm') => if isOctDigit c then
-                                                                              scanOctalDigits (getc, strm', n - 1, acc * 8 + digitToInt c)
-                                                                          else
-                                                                              (acc, strm)
-                                                     | NONE => (acc, strm)
-    (* For C-style escape sequence *)
-    fun scanHexadecimalDigits' (getc, strm, acc) = case getc strm of
-                                                       SOME (c, strm') => if Char.isHexDigit c then
-                                                                              let val acc' = SOME (acc * 16 + digitToInt c) handle Overflow => NONE
-                                                                              in case acc' of
-                                                                                     SOME a => scanHexadecimalDigits' (getc, strm', a)
-                                                                                   | NONE => NONE
-                                                                              end
-                                                                          else
-                                                                              SOME (acc, strm)
-                                                     | NONE => SOME (acc, strm)
-    fun skipSpaces (getc, strm) = case getc strm of
-                                      SOME (#"\\", strm') => SOME strm'
-                                    | SOME (c, strm') => if Char.isSpace c then
-                                                             skipSpaces (getc, strm')
-                                                         else
-                                                             NONE
-                                    | NONE => NONE
-    datatype 'strm ScanCharResult = Parsed of char * 'strm
-                                  | Skipped of 'strm
-                                  | Error
-                                  | Empty
+                                                         NONE
+                                | NONE => NONE
+datatype ('strm, 'char) ScanCharResult = Parsed of 'char * 'strm
+                                       | Skipped of 'strm
+                                       | Error
+                                       | Empty
+end;
+
+local
+    open ScanTextUtils
     fun scanChar (getc, strm) = case getc strm of
                                     SOME (#"\\", strm') => (case getc strm' of
                                                                 SOME (#"a", strm'') => Parsed (#"\a", strm'')
