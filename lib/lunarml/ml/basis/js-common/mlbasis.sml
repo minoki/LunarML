@@ -742,7 +742,7 @@ fun isLower (c : char) = #"a" <= c andalso c <= #"z"
 fun isDigit (c : char) = #"0" <= c andalso c <= #"9"
 fun isAlpha (c : char) = isUpper c orelse isLower c
 fun isAlphaNum (c : char) = isAlpha c orelse isDigit c
-fun isHexDigit (c : char) = isDigit c orelse (#"a" <= c andalso c <= #"f") orelse (#"A" <= c andalso c <= #"Z")
+fun isHexDigit (c : char) = isDigit c orelse (#"a" <= c andalso c <= #"f") orelse (#"A" <= c andalso c <= #"F")
 fun isGraph (c : char) = #"!" <= c andalso c <= #"~"
 fun isPrint (c : char) = isGraph c orelse c = #" "
 fun isPunct (c : char) = isGraph c andalso not (isAlphaNum c)
