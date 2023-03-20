@@ -456,7 +456,7 @@ signature STRING = sig
   val <= : string * string -> bool
   val > : string * string -> bool
   val >= : string * string -> bool
-  val toString : string -> string
+  val toString : string -> String.string
   val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
   val fromString : String.string -> string option
   val toCString : string -> String.string
