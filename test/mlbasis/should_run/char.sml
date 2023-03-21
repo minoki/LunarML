@@ -23,3 +23,20 @@ fun go i = if i > 127 then
                 ; go (i + 1)
                end;
 val _ = go 0;
+List.app (fn s => case Char.fromString s of
+                      NONE => print ("Char.fromString \"" ^ String.toString s ^ "\" = NONE\n")
+                    | SOME c => print ("Char.fromString \"" ^ String.toString s ^ "\" = SOME #\"" ^ Char.toString c ^ "\"\n")
+         )
+         ["\\q"
+         ,"a"
+         ,""
+         ,"\\  \\z"
+         ,"\\  a"
+         ,"\\a"
+         ,"\\^H"
+         ,"\\0"
+         ,"\\123"
+         ,"\\1234"
+         ,"\\u00Ac"
+         ,"\\uFEFF"
+         ];
