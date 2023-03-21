@@ -102,7 +102,7 @@ local
                                                                                           | NONE => Error
                                                                                        )
                                                               | SOME (c, strm'') => if Char.isDigit c then
-                                                                                        (case scanDecimalDigits (getc, strm'', 2, 0) of
+                                                                                        (case scanDecimalDigits (getc, strm'', 2, digitToInt c) of
                                                                                              SOME (value, strm''') => if value <= Char.maxOrd then
                                                                                                                           Parsed (Char.chr value, strm''')
                                                                                                                       else
