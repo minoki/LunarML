@@ -197,6 +197,20 @@ do
       discardable = false,
     },
     {
+      name = "Int{i}.div.unchecked",
+      srcname = "Int_div_unchecked",
+      type = HomoBinary(intA),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Int{i}.mod.unchecked",
+      srcname = "Int_mod_unchecked",
+      type = HomoBinary(intA),
+      mayraise = false,
+      discardable = true,
+    },
+    {
       name = "Int{i}.quot",
       srcname = "Int_quot",
       type = HomoBinary(intA),
@@ -209,6 +223,20 @@ do
       type = HomoBinary(intA),
       mayraise = true,
       discardable = false,
+    },
+    {
+      name = "Int{i}.quot.unchecked",
+      srcname = "Int_quot_unchecked",
+      type = HomoBinary(intA),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Int{i}.rem.unchecked",
+      srcname = "Int_rem_unchecked",
+      type = HomoBinary(intA),
+      mayraise = false,
+      discardable = true,
     },
     {
       name = "Int{i}.<",

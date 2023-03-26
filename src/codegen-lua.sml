@@ -378,16 +378,34 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                             | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_div"), vector [a, b]), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
+                       | Primitives.Int_div_unchecked i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryOp (L.INTDIV, PURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Int_mod i =>
                          (case (#targetLuaVersion ctx, i) of
                               (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
                             | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mod"), vector [a, b]), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
+                       | Primitives.Int_mod_unchecked i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doBinaryOp (L.MOD, PURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryOp (L.MOD, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Int_quot i =>
                          (case (#targetLuaVersion ctx, i) of
                               (LUA5_3, Primitives.INT) => raise CodeGenError "primop Int.quot is not supported on this target"
                             | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_quot"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_quot_unchecked i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => raise CodeGenError "primop Int.quot.unchecked is not supported on this target"
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
                        | Primitives.Int_LT _ => doBinaryOp (L.LT, PURE)
