@@ -1177,6 +1177,60 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_rem_unchecked Primitives.I64), tyargs = [], args = [x, y] })
       else
           NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div Primitives.WORD), tyargs, args = [x, y as C.NativeWordConst y'] })
+    = if y' = 1 then
+          VALUE x
+      else if y' <> 0 then
+          case x of
+              C.NativeWordConst x' => VALUE (C.NativeWordConst (x' div y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div_unchecked Primitives.WORD), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div Primitives.W32), tyargs, args = [x, y as C.Word32Const y'] })
+    = if y' = 0w1 then
+          VALUE x
+      else if y' <> 0w0 then
+          case x of
+              C.Word32Const x' => VALUE (C.Word32Const (x' div y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div_unchecked Primitives.W32), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div Primitives.W64), tyargs, args = [x, y as C.Word64Const y'] })
+    = if y' = 0w1 then
+          VALUE x
+      else if y' <> 0w0 then
+          case x of
+              C.Word64Const x' => VALUE (C.Word64Const (x' div y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_div_unchecked Primitives.W64), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod Primitives.WORD), tyargs, args = [x, y as C.NativeWordConst y'] })
+    = if y' = 1 then
+          VALUE (C.NativeWordConst 0)
+      else if y' <> 0 then
+          case x of
+              C.NativeWordConst x' => VALUE (C.NativeWordConst (x' mod y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod_unchecked Primitives.WORD), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod Primitives.W32), tyargs, args = [x, y as C.Word32Const y'] })
+    = if y' = 0w1 then
+          VALUE (C.Word32Const 0w0)
+      else if y' <> 0w0 then
+          case x of
+              C.Word32Const x' => VALUE (C.Word32Const (x' mod y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod_unchecked Primitives.W32), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod Primitives.W64), tyargs, args = [x, y as C.Word64Const y'] })
+    = if y' = 0w1 then
+          VALUE (C.Word64Const 0w0)
+      else if y' <> 0w0 then
+          case x of
+              C.Word64Const x' => VALUE (C.Word64Const (x' mod y'))
+            | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Word_mod_unchecked Primitives.W64), tyargs = [], args = [x, y] })
+      else
+          NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp, tyargs, args }) = NOT_SIMPLIFIED (* TODO: constant folding *)
   | simplifySimpleExp (env, C.ExnTag _) = NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.Projection { label, record, fieldTypes })

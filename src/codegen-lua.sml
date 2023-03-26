@@ -312,9 +312,16 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                  | DISCARDABLE => discardable (result, f a)
                                                                  | IMPURE => impure (result, f a)
                                                            )
-                      fun doBinary f = case args of
-                                           [a, b] => f (doValue ctx a, doValue ctx b)
-                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+                      fun doBinaryRaw f = case args of
+                                              [a, b] => f (a, b)
+                                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
+                      fun doBinary f = doBinaryRaw (fn (a, b) => f (doValue ctx a, doValue ctx b))
+                      fun doBinaryExpRaw (f, purity) = doBinaryRaw (fn (a, b) =>
+                                                                       case purity of
+                                                                           PURE => pure (result, f (a, b))
+                                                                         | DISCARDABLE => discardable (result, f (a, b))
+                                                                         | IMPURE => impure (result, f (a, b))
+                                                                   )
                       fun doBinaryExp (f, purity) = doBinary (fn (a, b) =>
                                                                  case purity of
                                                                      PURE => pure (result, f (a, b))
@@ -453,13 +460,32 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                          )
                        | Primitives.Word_div_unchecked w =>
                          (case (#targetLuaVersion ctx, w) of
-                              (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
+                              (LUA5_3, Primitives.WORD) => doBinaryExpRaw ( fn (a, b as C.NativeWordConst b') => if b' mod 2 = 0 then
+                                                                                                                     let fun shiftAmount (0, amount) = (0, amount) (* should not occur *)
+                                                                                                                           | shiftAmount (n, amount) = if n mod 2 = 0 then
+                                                                                                                                                           shiftAmount (n div 2, amount + 1)
+                                                                                                                                                       else
+                                                                                                                                                           (n, amount)
+                                                                                                                         val (d, shift) = shiftAmount (b', 0)
+                                                                                                                         val a' = L.BinExp (L.RSHIFT, doValue ctx a, L.ConstExp (L.Numeral (Int.toString shift)))
+                                                                                                                     in if d = 1 then
+                                                                                                                            a'
+                                                                                                                        else
+                                                                                                                            L.BinExp (L.INTDIV, a', L.ConstExp (L.Numeral (IntInf.toString d)))
+                                                                                                                     end
+                                                                                                                 else
+                                                                                                                     L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [doValue ctx a, doValue ctx b])
+                                                                          | (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [doValue ctx a, doValue ctx b])
+                                                                          , PURE
+                                                                          )
+                            | (LUAJIT, Primitives.W32) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "math_floor"), vector [L.BinExp (L.DIV, a, b)]), PURE)
                             | (LUAJIT, Primitives.W64) => doBinaryOp (L.DIV, PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
                        | Primitives.Word_mod_unchecked w =>
                          (case (#targetLuaVersion ctx, w) of
-                              (LUAJIT, Primitives.W32) => doBinaryOp (L.MOD, PURE)
+                              (LUA5_3, Primitives.WORD) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_mod"), vector [a, b]), PURE)
+                            | (LUAJIT, Primitives.W32) => doBinaryOp (L.MOD, PURE)
                             | (LUAJIT, Primitives.W64) => doBinaryOp (L.MOD, PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
