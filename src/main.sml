@@ -99,13 +99,9 @@ fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                           else
                                               ()
                                  val timer = Timer.startCPUTimer ()
-                                 val usage = TypedSyntax.VIdTable.mkTable (1, Fail "usage table lookup failed")
-                                 val rusage = TypedSyntax.VIdTable.mkTable (1, Fail "rusage table lookup failed")
-                                 val cusage = CSyntax.CVarTable.mkTable (1, Fail "cusage table lookup failed")
-                                 val crusage = CSyntax.CVarTable.mkTable (1, Fail "crusage table lookup failed")
-                                 val () = CpsUsageAnalysis.usageInCExp (usage, rusage, cusage, crusage, cexp)
+                                 val usage = CpsUsageAnalysis.analyze cexp
                                  val ctx' = { nextVId = #nextVId ctx, simplificationOccurred = ref false }
-                                 val cexp = CpsSimplify.simplifyCExp (ctx', TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, usage, rusage, cusage, crusage, cexp)
+                                 val cexp = CpsSimplify.simplifyCExp (ctx', TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, usage, cexp)
                              in if #printTimings ctx then
                                     print (" " ^ LargeInt.toString (Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))) ^ " us\n")
                                 else
