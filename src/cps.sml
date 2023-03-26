@@ -476,53 +476,14 @@ fun transformDecs (ctx : Context, env) ([] : F.Dec list) (revDecs : C.Dec list, 
 end
 end;
 
-structure CpsSimplify = struct
+structure CpsUsageAnalysis : sig
+              datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
+              datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
+              val usageInCExp : (usage ref) TypedSyntax.VIdTable.hash_table * (usage ref) TypedSyntax.VIdTable.hash_table * (cont_usage ref) CSyntax.CVarTable.hash_table * (cont_usage ref) CSyntax.CVarTable.hash_table * CSyntax.CExp -> unit
+          end = struct
 local structure F = FSyntax
       structure C = CSyntax
 in
-type Context = { nextVId : int ref, simplificationOccurred : bool ref }
-fun genContSym (ctx : Context) : CSyntax.CVar
-    = let val n = !(#nextVId ctx)
-          val _ = #nextVId ctx := n + 1
-      in CSyntax.CVar.fromInt n
-      end
-fun renewVId ({ nextVId, ... } : Context, TypedSyntax.MkVId (name, _))
-    = let val n = !nextVId
-      in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
-      end
-fun renewCVar ({ nextVId, ... } : Context, _ : C.CVar)
-    = let val n = !nextVId
-      in C.CVar.fromInt n before (nextVId := n + 1)
-      end
-fun sizeOfSimpleExp (e, threshold)
-    = if threshold < 0 then
-          threshold
-      else
-          case e of
-              C.PrimOp { primOp = _, tyargs = _, args } => threshold - List.length args
-            | C.Record fields => threshold - Syntax.LabelMap.numItems fields
-            | C.ExnTag _ => threshold - 1
-            | C.Projection _ => threshold - 1
-            | C.Abs { contParam, params, body } => sizeOfCExp (body, threshold)
-and sizeOfDec (dec, threshold)
-    = if threshold < 0 then
-          threshold
-      else
-          case dec of
-              C.ValDec { exp, result = _ } => sizeOfSimpleExp (exp, threshold)
-            | C.RecDec defs => List.foldl (fn ((_, _, _, body), t) => sizeOfCExp (body, t)) threshold defs
-            | C.ContDec { name, params, body } => sizeOfCExp (body, threshold)
-            | C.RecContDec defs => List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold defs
-and sizeOfCExp (e, threshold)
-    = if threshold < 0 then
-          threshold
-      else
-          case e of
-              C.Let { decs, cont } => Vector.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
-            | C.App { applied, cont, args } => threshold - List.length args
-            | C.AppCont { applied, args } => threshold - List.length args
-            | C.If { cond, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
-            | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
 datatype usage = NEVER | ONCE_AS_CALLEE | ONCE | MANY
 datatype cont_usage = C_NEVER | C_ONCE | C_ONCE_DIRECT | C_MANY_DIRECT | C_MANY
 fun usageInValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
@@ -673,6 +634,58 @@ and usageInCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv :
           ; usageInCExp (env, renv, cenv, crenv, h)
           )
 end
+end (* local *)
+end (* strucuture CpsUsageAnalysis *)
+
+structure CpsSimplify = struct
+local structure F = FSyntax
+      structure C = CSyntax
+      datatype usage = datatype CpsUsageAnalysis.usage
+      datatype cont_usage = datatype CpsUsageAnalysis.cont_usage
+in
+type Context = { nextVId : int ref, simplificationOccurred : bool ref }
+fun genContSym (ctx : Context) : CSyntax.CVar
+    = let val n = !(#nextVId ctx)
+          val _ = #nextVId ctx := n + 1
+      in CSyntax.CVar.fromInt n
+      end
+fun renewVId ({ nextVId, ... } : Context, TypedSyntax.MkVId (name, _))
+    = let val n = !nextVId
+      in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
+      end
+fun renewCVar ({ nextVId, ... } : Context, _ : C.CVar)
+    = let val n = !nextVId
+      in C.CVar.fromInt n before (nextVId := n + 1)
+      end
+fun sizeOfSimpleExp (e, threshold)
+    = if threshold < 0 then
+          threshold
+      else
+          case e of
+              C.PrimOp { primOp = _, tyargs = _, args } => threshold - List.length args
+            | C.Record fields => threshold - Syntax.LabelMap.numItems fields
+            | C.ExnTag _ => threshold - 1
+            | C.Projection _ => threshold - 1
+            | C.Abs { contParam, params, body } => sizeOfCExp (body, threshold)
+and sizeOfDec (dec, threshold)
+    = if threshold < 0 then
+          threshold
+      else
+          case dec of
+              C.ValDec { exp, result = _ } => sizeOfSimpleExp (exp, threshold)
+            | C.RecDec defs => List.foldl (fn ((_, _, _, body), t) => sizeOfCExp (body, t)) threshold defs
+            | C.ContDec { name, params, body } => sizeOfCExp (body, threshold)
+            | C.RecContDec defs => List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold defs
+and sizeOfCExp (e, threshold)
+    = if threshold < 0 then
+          threshold
+      else
+          case e of
+              C.Let { decs, cont } => Vector.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
+            | C.App { applied, cont, args } => threshold - List.length args
+            | C.AppCont { applied, args } => threshold - List.length args
+            | C.If { cond, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
+            | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
 fun substValue (subst : C.Value TypedSyntax.VIdMap.map) (x as C.Var v) = (case TypedSyntax.VIdMap.find (subst, v) of
                                                                               SOME w => w
                                                                             | NONE => x
