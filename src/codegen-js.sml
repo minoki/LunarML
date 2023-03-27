@@ -455,7 +455,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Primitives.JavaScript_new => doBinary (fn (ctor, args) =>
                                                                    impure (result, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args]))
                                                                )
-                       | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.CallExp (J.VarExp (J.PredefinedId "_newPromptTag"), vector []), DISCARDABLE)
+                       | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.NewExp (J.VarExp (J.PredefinedId "_PromptTag"), vector []), DISCARDABLE)
                        | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript backend")
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, result } =>
