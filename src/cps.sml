@@ -253,6 +253,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                           | Primitives.I32 => apply revDecs k (C.Int32Const (Int32.fromLarge x))
                                                                           | Primitives.I54 => apply revDecs k (C.Int54Const (Int64.fromLarge x))
                                                                           | Primitives.I64 => apply revDecs k (C.Int64Const (Int64.fromLarge x))
+                                                                          | Primitives.INT_INF => apply revDecs k (C.IntInfConst x)
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int32) then
                                                                         apply revDecs k (C.Int32Const (Int32.fromLarge x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int54) then
