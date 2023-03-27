@@ -1028,42 +1028,46 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div Primitives.INT), tyargs, args = [x, y as C.NativeIntConst y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.INT), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.NativeIntConst x' => VALUE (C.NativeIntConst (x' div y'))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div_unchecked Primitives.INT), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div Primitives.I32), tyargs, args = [x, y as C.Int32Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I32), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int32Const x' => VALUE (C.Int32Const (x' div y'))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div_unchecked Primitives.I32), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div Primitives.I54), tyargs, args = [x, y as C.Int54Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I54), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int54Const x' => VALUE (C.Int54Const (x' div y'))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div_unchecked Primitives.I54), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div Primitives.I64), tyargs, args = [x, y as C.Int64Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I64), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int64Const x' => VALUE (C.Int64Const (x' div y'))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_div_unchecked Primitives.I64), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_mod Primitives.INT), tyargs, args = [x, y as C.NativeIntConst y'] })
     = if y' = 1 orelse y' = ~1 then
@@ -1104,42 +1108,46 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot Primitives.INT), tyargs, args = [x, y as C.NativeIntConst y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.INT), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.NativeIntConst x' => VALUE (C.NativeIntConst (IntInf.quot (x', y')))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot_unchecked Primitives.INT), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot Primitives.I32), tyargs, args = [x, y as C.Int32Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I32), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int32Const x' => VALUE (C.Int32Const (Int32.quot (x', y')))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot_unchecked Primitives.I32), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot Primitives.I54), tyargs, args = [x, y as C.Int54Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I54), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int54Const x' => VALUE (C.Int54Const (Int64.quot (x', y')))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot_unchecked Primitives.I54), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot Primitives.I64), tyargs, args = [x, y as C.Int64Const y'] })
     = if y' = 1 then
           VALUE x
-      else if y' <> 0 andalso y' <> ~1 then
+      else if y' = ~1 then
+          SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_TILDE Primitives.I64), tyargs = [], args = [x] })
+      else if y' <> 0 then
           case x of
               C.Int64Const x' => VALUE (C.Int64Const (Int64.quot (x', y')))
             | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_quot_unchecked Primitives.I64), tyargs = [], args = [x, y] })
       else
-          (* TODO: y' = ~1 => Int.~ x *)
           NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp = F.PrimFnOp (Primitives.Int_rem Primitives.INT), tyargs, args = [x, y as C.NativeIntConst y'] })
     = if y' = 1 orelse y' = ~1 then

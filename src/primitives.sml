@@ -28,6 +28,9 @@ datatype PrimOp = EQUAL (* = *)
                 | Int_rem of int_width (* Int{i}.rem *)
                 | Int_quot_unchecked of int_width (* Int{i}.quot.unchecked *)
                 | Int_rem_unchecked of int_width (* Int{i}.rem.unchecked *)
+                | Int_TILDE of int_width (* Int{i}.~ *)
+                | Int_TILDE_unchecked of int_width (* Int{i}.~.unchecked *)
+                | Int_abs of int_width (* Int{i}.abs *)
                 | Int_LT of int_width (* Int{i}.< *)
                 | Int_LE of int_width (* Int{i}.<= *)
                 | Int_GT of int_width (* Int{i}.> *)
@@ -239,6 +242,18 @@ fun toString EQUAL = "="
   | toString (Int_rem_unchecked I32) = "Int32.rem.unchecked"
   | toString (Int_rem_unchecked I54) = "Int54.rem.unchecked"
   | toString (Int_rem_unchecked I64) = "Int64.rem.unchecked"
+  | toString (Int_TILDE INT) = "Int.~"
+  | toString (Int_TILDE I32) = "Int32.~"
+  | toString (Int_TILDE I54) = "Int54.~"
+  | toString (Int_TILDE I64) = "Int64.~"
+  | toString (Int_TILDE_unchecked INT) = "Int.~.unchecked"
+  | toString (Int_TILDE_unchecked I32) = "Int32.~.unchecked"
+  | toString (Int_TILDE_unchecked I54) = "Int54.~.unchecked"
+  | toString (Int_TILDE_unchecked I64) = "Int64.~.unchecked"
+  | toString (Int_abs INT) = "Int.abs"
+  | toString (Int_abs I32) = "Int32.abs"
+  | toString (Int_abs I54) = "Int54.abs"
+  | toString (Int_abs I64) = "Int64.abs"
   | toString (Int_LT INT) = "Int.<"
   | toString (Int_LT I32) = "Int32.<"
   | toString (Int_LT I54) = "Int54.<"
@@ -536,6 +551,18 @@ fun fromString "=" = SOME EQUAL
   | fromString "Int32.rem.unchecked" = SOME (Int_rem_unchecked I32)
   | fromString "Int54.rem.unchecked" = SOME (Int_rem_unchecked I54)
   | fromString "Int64.rem.unchecked" = SOME (Int_rem_unchecked I64)
+  | fromString "Int.~" = SOME (Int_TILDE INT)
+  | fromString "Int32.~" = SOME (Int_TILDE I32)
+  | fromString "Int54.~" = SOME (Int_TILDE I54)
+  | fromString "Int64.~" = SOME (Int_TILDE I64)
+  | fromString "Int.~.unchecked" = SOME (Int_TILDE_unchecked INT)
+  | fromString "Int32.~.unchecked" = SOME (Int_TILDE_unchecked I32)
+  | fromString "Int54.~.unchecked" = SOME (Int_TILDE_unchecked I54)
+  | fromString "Int64.~.unchecked" = SOME (Int_TILDE_unchecked I64)
+  | fromString "Int.abs" = SOME (Int_abs INT)
+  | fromString "Int32.abs" = SOME (Int_abs I32)
+  | fromString "Int54.abs" = SOME (Int_abs I54)
+  | fromString "Int64.abs" = SOME (Int_abs I64)
   | fromString "Int.<" = SOME (Int_LT INT)
   | fromString "Int32.<" = SOME (Int_LT I32)
   | fromString "Int54.<" = SOME (Int_LT I54)
@@ -798,6 +825,9 @@ fun mayRaise EQUAL = false
   | mayRaise (Int_rem _) = true
   | mayRaise (Int_quot_unchecked _) = false
   | mayRaise (Int_rem_unchecked _) = false
+  | mayRaise (Int_TILDE _) = true
+  | mayRaise (Int_TILDE_unchecked _) = false
+  | mayRaise (Int_abs _) = true
   | mayRaise (Int_LT _) = false
   | mayRaise (Int_LE _) = false
   | mayRaise (Int_GT _) = false
@@ -973,6 +1003,9 @@ fun isDiscardable EQUAL = true
   | isDiscardable (Int_rem _) = false
   | isDiscardable (Int_quot_unchecked _) = true
   | isDiscardable (Int_rem_unchecked _) = true
+  | isDiscardable (Int_TILDE _) = false
+  | isDiscardable (Int_TILDE_unchecked _) = true
+  | isDiscardable (Int_abs _) = false
   | isDiscardable (Int_LT _) = true
   | isDiscardable (Int_LE _) = true
   | isDiscardable (Int_GT _) = true
@@ -1140,6 +1173,9 @@ fun fixIntWord { int, word }
         | Int_rem a1 => Int_rem (fixInt a1)
         | Int_quot_unchecked a1 => Int_quot_unchecked (fixInt a1)
         | Int_rem_unchecked a1 => Int_rem_unchecked (fixInt a1)
+        | Int_TILDE a1 => Int_TILDE (fixInt a1)
+        | Int_TILDE_unchecked a1 => Int_TILDE_unchecked (fixInt a1)
+        | Int_abs a1 => Int_abs (fixInt a1)
         | Int_LT a1 => Int_LT (fixInt a1)
         | Int_LE a1 => Int_LE (fixInt a1)
         | Int_GT a1 => Int_GT (fixInt a1)
@@ -1283,6 +1319,18 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf (Primitives.Int_rem_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_rem_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_rem_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_TILDE Primitives.INT) = { vars = [], args = vector [int], result = int }
+  | typeOf (Primitives.Int_TILDE Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
+  | typeOf (Primitives.Int_TILDE Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
+  | typeOf (Primitives.Int_TILDE Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT) = { vars = [], args = vector [int], result = int }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
+  | typeOf (Primitives.Int_abs Primitives.INT) = { vars = [], args = vector [int], result = int }
+  | typeOf (Primitives.Int_abs Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
+  | typeOf (Primitives.Int_abs Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
+  | typeOf (Primitives.Int_abs Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
   | typeOf (Primitives.Int_LT Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
   | typeOf (Primitives.Int_LT Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
   | typeOf (Primitives.Int_LT Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }

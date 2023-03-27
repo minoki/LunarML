@@ -239,6 +239,27 @@ do
       discardable = true,
     },
     {
+      name = "Int{i}.~",
+      srcname = "Int_TILDE",
+      type = HomoUnary(intA),
+      mayraise = true,
+      discardable = false,
+    },
+    {
+      name = "Int{i}.~.unchecked",
+      srcname = "Int_TILDE_unchecked",
+      type = HomoUnary(intA),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Int{i}.abs",
+      srcname = "Int_abs",
+      type = HomoUnary(intA),
+      mayraise = true,
+      discardable = false,
+    },
+    {
       name = "Int{i}.<",
       srcname = "Int_LT",
       type = Compare(intA),

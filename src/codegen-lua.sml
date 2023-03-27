@@ -415,6 +415,24 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                             | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
+                       | Primitives.Int_TILDE i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "_Int_negate"), vector [a]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "_Int_negate"), vector [a]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_TILDE_unchecked i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doUnaryExp (fn a => L.BinExp (L.MINUS, L.ConstExp (L.Numeral "0"), a), IMPURE) (* Should we avoid negative zero? *)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_abs i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "_Int_abs"), vector [a]), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "_Int_abs"), vector [a]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Int_LT _ => doBinaryOp (L.LT, PURE)
                        | Primitives.Int_GT _ => doBinaryOp (L.GT, PURE)
                        | Primitives.Int_LE _ => doBinaryOp (L.LE, PURE)

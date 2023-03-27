@@ -1,7 +1,7 @@
 structure Int = struct
 type int = int
-val ~ = _Prim.Int.~
-val abs = _Prim.Int.abs
+fun ~ x = _primCall "Int.~" (x)
+fun abs x = _primCall "Int.abs" (x)
 fun x + y = _primCall "Int.+" (x, y)
 fun x - y = _primCall "Int.-" (x, y)
 fun x * y = _primCall "Int.*" (x, y)
