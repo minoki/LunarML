@@ -133,7 +133,10 @@ val precision : int option = SOME 32
 val minInt : int option = SOME ~0x80000000
 val maxInt : int option = SOME 0x7fffffff
 fun quot (x, y) = _primCall "Int.quot" (x, y)
-fun rem (x, y) = _primCall "Int.rem" (x, y)
+fun rem (x, y) = if y = 0 then
+                     raise Div
+                 else
+                     _primCall "Int.rem.unchecked" (x, y)
 val compare : int * int -> order = fn (x, y) => if x = y then
                                                     EQUAL
                                                 else if x < y then
