@@ -86,13 +86,6 @@ type context = { driverContext : Driver.Context
                , pathMap : string MLBSyntax.StringMap.map
                , targetInfo : TargetInfo.target_info
                }
-fun optimize (ctx : context) fdecs 0 = fdecs
-  | optimize ctx fdecs n = let val ctx' = { nextVId = #nextVId (#toFContext (#driverContext ctx))
-                                          , nextTyVar = #nextTyVar (#toFContext (#driverContext ctx))
-                                          , targetInfo = #targetInfo ctx
-                                          }
-                           in optimize ctx (#2 (FTransform.doDecs ctx' FTransform.initialEnv fdecs)) (n - 1)
-                           end
 fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
   | optimizeCps ctx cexp n = let val () = if #printTimings ctx then
                                               print ("[TIME] optimizeCps " ^ Int.toString n ^ "...")
@@ -111,22 +104,8 @@ fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                 else
                                     cexp
                              end
-fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName nextId decs
-    = let val cont = let val n = !nextId
-                         val _ = nextId := n + 1
-                     in CSyntax.CVar.fromInt n
-                     end
-          val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
-          val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val () = if #printTimings opts then
-                       print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
-                   else
-                       ()
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName cont nextId cexp
+    = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
                                                , file = case runtime of
@@ -150,30 +129,15 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val () = TextIO.output (outs, lua)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then
-                       print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n\
-                              \[TIME] Lua codegen: " ^ LargeInt.toString (codegenTime - optTime) ^ " us\n\
+                       print ("[TIME] Lua codegen: " ^ LargeInt.toString codegenTime ^ " us\n\
                               \[TIME] Lua transformation: " ^ LargeInt.toString (codetransTime - codegenTime) ^ " us\n\
                               \[TIME] Lua writer: " ^ LargeInt.toString (writeTime - codetransTime) ^ " us\n")
                    else
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName nextId decs
-    = let val cont = let val n = !nextId
-                         val _ = nextId := n + 1
-                     in CSyntax.CVar.fromInt n
-                     end
-          val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
-          val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val () = if #printTimings opts then
-                       print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
-                   else
-                       ()
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+  | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName cont nextId cexp
+    = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
                                                , file = "mlinit-luajit.lua"
@@ -194,30 +158,15 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val () = TextIO.output (outs, lua)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then
-                       print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n\
-                              \[TIME] Lua codegen: " ^ LargeInt.toString (codegenTime - optTime) ^ " us\n\
+                       print ("[TIME] Lua codegen: " ^ LargeInt.toString codegenTime ^ " us\n\
                               \[TIME] Lua transformation: " ^ LargeInt.toString (codetransTime - codegenTime) ^ " us\n\
                               \[TIME] Lua writer: " ^ LargeInt.toString (writeTime - codetransTime) ^ " us\n")
                    else
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName nextId decs
-    = let val cont = let val n = !nextId
-                         val _ = nextId := n + 1
-                     in CSyntax.CVar.fromInt n
-                     end
-          val timer = Timer.startCPUTimer ()
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) decs ([], cont)
-          val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val () = if #printTimings opts then
-                       print ("[TIME] CPS: " ^ LargeInt.toString cpsTime ^ " us\n")
-                   else
-                       ()
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
-          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+  | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp
+    = let val timer = Timer.startCPUTimer ()
           val contEscapeMap = CpsAnalyze.contEscape cexp (* not used if direct style *)
           val base = OS.Path.base fileName
           val mlinit_js = case style of
@@ -238,8 +187,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val () = TextIO.output (outs, js)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then
-                       print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n\
-                              \[TIME] JavaScript codegen: " ^ LargeInt.toString (codegenTime - optTime) ^ " us\n\
+                       print ("[TIME] JavaScript codegen: " ^ LargeInt.toString codegenTime ^ " us\n\
                               \[TIME] JavaScript transformation: " ^ LargeInt.toString (codetransTime - codegenTime) ^ " us\n\
                               \[TIME] JavaScript writer: " ^ LargeInt.toString (writeTime - codetransTime) ^ " us\n")
                    else
@@ -277,8 +225,9 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-          val fdecs = optimize ctx fdecs (2 * (#optimizationLevel opts + 1))
-          val fdecs = Driver.wholeProgramOptimization fdecs
+          val fdecs = #doDecs (DesugarPatternMatches.desugarPatternMatches (#toFContext (#driverContext ctx))) fdecs
+          val fdecs = DecomposeValRec.doDecs fdecs
+          val (_, fdecs) = DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, fdecs)
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_FINAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
@@ -289,7 +238,26 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                               \[TIME] optimization (F): " ^ LargeInt.toString (optTime - frontTime) ^ " us\n")
                    else
                        ()
-      in emit opts targetInfo fileName (#nextVId (#toFContext (#driverContext ctx))) fdecs
+          val nextId = #nextVId (#toFContext (#driverContext ctx))
+          val cont = let val n = !nextId
+                         val _ = nextId := n + 1
+                     in CSyntax.CVar.fromInt n
+                     end
+          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) fdecs ([], cont)
+          val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val () = if #printTimings opts then
+                       print ("[TIME] CPS: " ^ LargeInt.toString (cpsTime - optTime) ^ " us\n")
+                   else
+                       ()
+          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
+          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
+          val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
+          val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val () = if #printTimings opts then
+                       print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n")
+                   else
+                       ()
+      in emit opts targetInfo fileName cont nextId cexp
       end handle Driver.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
                  ( print ("internal error: " ^ message ^ "\n")

@@ -184,6 +184,4 @@ fun compile({ typingContext, toFContext } : Context, langopt : LanguageOptions.o
                   ; raise Abort
                   )
     end
-fun wholeProgramOptimization decs = case DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, decs) of
-                                        (_, decs) => decs
-end (* structure Driver *)
+end; (* structure Driver *)
