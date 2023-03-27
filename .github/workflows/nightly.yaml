@@ -106,8 +106,8 @@ jobs:
         run: make -C thirdparty install LUA=/usr/local/opt/lua@5.3/bin/lua
       - name: Compile myself and validate (JavaScript)
         run: make validate-js LUA=/usr/local/opt/lua@5.3/bin/lua
-      # - name: Compile myself and validate (LuaJIT)
-      #   run: make validate-luajit LUA=/usr/local/opt/lua@5.3/bin/lua
-      #   # ^ Homebrew's LuaJIT is recent enough so https://github.com/LuaJIT/LuaJIT/issues/859 is fixed
+      - name: Compile myself and validate (LuaJIT)
+        run: make validate-luajit LUA=/usr/local/opt/lua@5.3/bin/lua
+        # ^ Homebrew's LuaJIT is recent enough so https://github.com/LuaJIT/LuaJIT/issues/859 is fixed
       - name: Compile myself and validate (Lua)
         run: make validate-lua LUA=/usr/local/opt/lua@5.3/bin/lua
