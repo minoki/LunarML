@@ -115,6 +115,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                          val payload = genMatcher (F.TupleExp [hdExp, tlExp]) payloadTy payloadPat
                      in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])]), payload)
                      end
+                   | { representation = Syntax.REP_REF, tag = "ref", ... } =>
+                     genMatcher (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
                    | { tag, ... } =>
                      let val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                          val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of

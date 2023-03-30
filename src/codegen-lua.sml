@@ -342,20 +342,17 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                        | Primitives.List_unsafeTail => doUnaryExp (fn xs => L.IndexExp (xs, L.ConstExp (L.Numeral "2")), PURE)
                        | Primitives.Ref_ref => doUnaryExp ( fn x =>
                                                                (* REPRESENTATION_OF_REF *)
-                                                               L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString "ref"))
-                                                                                  ,(L.StringKey "payload", x)
-                                                                                  ]
-                                                                          )
+                                                               L.TableExp (vector [(L.IntKey 1, x)])
                                                           , DISCARDABLE
                                                           )
                        | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Ref_set => doBinary (fn (a, b) =>
                                                             (* REPRESENTATION_OF_REF *)
-                                                            action (result, L.AssignStat ([L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))], [b]))
+                                                            action (result, L.AssignStat ([L.IndexExp (a, L.ConstExp (L.Numeral "1"))], [b]))
                                                         )
                        | Primitives.Ref_read => doUnaryExp ( fn a =>
                                                                 (* REPRESENTATION_OF_REF *)
-                                                                L.IndexExp (a, L.ConstExp (L.LiteralString "payload"))
+                                                                L.IndexExp (a, L.ConstExp (L.Numeral "1"))
                                                            , DISCARDABLE
                                                            )
                        | Primitives.Bool_EQUAL => doBinaryOp (L.EQUAL, PURE)

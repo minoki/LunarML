@@ -14,7 +14,7 @@ exception CodeGenError of string
  * Char16.char (WideChar.char) -> 16-bit unsigned integer, as a subset of 64-bit floating-point number (excluding negative zero)
  * exn -> object
  * bool -> boolean
- * ref -> { tag: "ref", payload: <mutable> }
+ * ref -> [ <mutable> ]
  * list -> null | [<head>, <tail>]
  * tuple -> immutable Array
  * non-tuple record -> immutable object, with integer index starting with 0
@@ -306,17 +306,14 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Primitives.List_unsafeTail => doUnaryExp (fn xs => J.IndexExp (xs, J.ConstExp (J.Numeral "1")), PURE)
                        | Primitives.Ref_ref => doUnaryExp ( fn x =>
                                                                (* REPRESENTATION_OF_REF *)
-                                                               J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide "ref"))
-                                                                                   ,(J.StringKey "payload", x)
-                                                                                   ]
-                                                                           )
+                                                               J.ArrayExp (vector [x])
                                                           , DISCARDABLE
                                                           )
                        | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, PURE)
                        | Primitives.Ref_set => doBinary (fn (a, b) =>
-                                                            action (result, J.AssignStat (J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), b))
+                                                            action (result, J.AssignStat (J.IndexExp (a, J.ConstExp (J.Numeral "0")), b))
                                                         ) (* REPRESENTATION_OF_REF *)
-                       | Primitives.Ref_read => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.asciiStringAsWide "payload")), DISCARDABLE) (* REPRESENTATION_OF_REF *)
+                       | Primitives.Ref_read => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.Numeral "0")), DISCARDABLE) (* REPRESENTATION_OF_REF *)
                        | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, PURE)
                        | Primitives.Bool_not => doUnaryExp (fn a => J.UnaryExp (J.NOT, a), PURE)
                        | Primitives.Int_EQUAL _ => doBinaryOp (J.EQUAL, PURE) (* Int32, Int54, IntInf *)

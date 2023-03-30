@@ -129,7 +129,7 @@ Primitives
 * `'a list`: `nil` for `nil` and `{[1] = <head>, [2] = <tail>}` for `::`.
 * `'a vector`: `{ n = <length>, [1] = <0th element>, [2] = <1st element>, ... }`; compatible with `table.pack`.
 * `'a array`: Same as `'a vector`, but mutable.
-* `'a ref`: `{ tag = "ref", payload = <the payload> }`.
+* `'a ref`: `{ [1] = <the payload> }`.
 * `Lua.value`: any Lua value, including `nil`.
 
 Non-empty records: `{ [1] = <#1 of the record>, foo = <#foo of the record> }`
