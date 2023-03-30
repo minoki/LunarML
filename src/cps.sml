@@ -135,6 +135,26 @@ and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists con
   | containsApp (AppCont _) = false
   | containsApp (If { cond, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
   | containsApp (Handle { body, handler = (_, h), ... }) = containsApp body orelse containsApp h
+
+fun recurseCExp f
+    = let fun goSimpleExp (e as PrimOp _) = e
+            | goSimpleExp (e as Record _) = e
+            | goSimpleExp (e as ExnTag _) = e
+            | goSimpleExp (e as Projection _) = e
+            | goSimpleExp (Abs { contParam, params, body }) = Abs { contParam = contParam, params = params, body = goExp body }
+          and goDec (ValDec { exp, result }) = ValDec { exp = goSimpleExp exp, result = result }
+            | goDec (RecDec defs) = RecDec (List.map (fn (g, k, params, body) => (g, k, params, goExp body)) defs)
+            | goDec (ContDec { name, params, body }) = ContDec { name = name, params = params, body = goExp body }
+            | goDec (RecContDec defs) = RecContDec (List.map (fn (name, params, body) => (name, params, goExp body)) defs)
+          and goExp e = f (case e of
+                               Let { decs, cont } => Let { decs = Vector.map goDec decs, cont = goExp cont }
+                             | App _ => e
+                             | AppCont _ => e
+                             | If { cond, thenCont, elseCont } => If { cond = cond, thenCont = goExp thenCont, elseCont = goExp elseCont }
+                             | Handle { body, handler = (k, h), successfulExitIn, successfulExitOut } => Handle { body = goExp body, handler = (k, goExp h), successfulExitIn = successfulExitIn, successfulExitOut = successfulExitOut }
+                          )
+      in goExp
+      end
 end
 end
 
@@ -552,7 +572,7 @@ end (* structure CpsDeadCodeAnalysis *)
 
 structure CpsUsageAnalysis :> sig
               datatype frequency = NEVER | ONCE | MANY
-              type usage = { call : frequency, other : frequency }
+              type usage = { call : frequency, other : frequency, returnConts : CSyntax.CVarSet.set }
               type cont_usage = { direct : frequency, indirect : frequency }
               val neverUsed : usage
               val neverUsedCont : cont_usage
@@ -574,23 +594,23 @@ datatype frequency = NEVER | ONCE | MANY
 fun oneMore NEVER = ONCE
   | oneMore ONCE = MANY
   | oneMore (many as MANY) = many
-type usage = { call : frequency, other : frequency }
+type usage = { call : frequency, other : frequency, returnConts : CSyntax.CVarSet.set }
 type cont_usage = { direct : frequency, indirect : frequency }
-val neverUsed : usage = { call = NEVER, other = NEVER }
+val neverUsed : usage = { call = NEVER, other = NEVER, returnConts = CSyntax.CVarSet.empty }
 val neverUsedCont : cont_usage = { direct = NEVER, indirect = NEVER }
 type usage_table = (usage ref) TypedSyntax.VIdTable.hash_table
 type cont_usage_table = (cont_usage ref) CSyntax.CVarTable.hash_table
 fun getValueUsage (table : usage_table, v)
     = case TypedSyntax.VIdTable.find table v of
           SOME r => !r
-        | NONE => { call = MANY, other = MANY } (* unknown *)
+        | NONE => { call = MANY, other = MANY, returnConts = CSyntax.CVarSet.empty } (* unknown *)
 fun getContUsage (table : cont_usage_table, c)
     = case CSyntax.CVarTable.find table c of
           SOME r => !r
         | NONE => { direct = MANY, indirect = MANY } (* unknown *)
 fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
-                                      SOME r => let val { call, other } = !r
-                                                in r := { call = call, other = oneMore other }
+                                      SOME r => let val { call, other, returnConts } = !r
+                                                in r := { call = call, other = oneMore other, returnConts = returnConts }
                                                 end
                                     | NONE => ()
                                  )
@@ -609,27 +629,28 @@ fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
   | useValue env (C.Char16Const _) = ()
   | useValue env (C.StringConst _) = ()
   | useValue env (C.String16Const _) = ()
-fun useValueAsCallee env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
-                                          SOME r => let val { call, other } = !r
-                                                    in r := { call = oneMore call, other = other }
-                                                    end
-                                        | NONE => ()
-                                     )
-  | useValueAsCallee env C.Unit = ()
-  | useValueAsCallee env C.Nil = ()
-  | useValueAsCallee env (C.BoolConst _) = ()
-  | useValueAsCallee env (C.NativeIntConst _) = ()
-  | useValueAsCallee env (C.Int32Const _) = ()
-  | useValueAsCallee env (C.Int54Const _) = ()
-  | useValueAsCallee env (C.Int64Const _) = ()
-  | useValueAsCallee env (C.IntInfConst _) = ()
-  | useValueAsCallee env (C.NativeWordConst _) = ()
-  | useValueAsCallee env (C.Word32Const _) = ()
-  | useValueAsCallee env (C.Word64Const _) = ()
-  | useValueAsCallee env (C.CharConst _) = ()
-  | useValueAsCallee env (C.Char16Const _) = ()
-  | useValueAsCallee env (C.StringConst _) = ()
-  | useValueAsCallee env (C.String16Const _) = ()
+fun useValueAsCallee (env, cont, C.Var v)
+    = (case TypedSyntax.VIdTable.find env v of
+           SOME r => let val { call, other, returnConts } = !r
+                     in r := { call = oneMore call, other = other, returnConts = C.CVarSet.add (returnConts, cont) }
+                     end
+         | NONE => ()
+      )
+  | useValueAsCallee (env, cont, C.Unit) = ()
+  | useValueAsCallee (env, cont, C.Nil) = ()
+  | useValueAsCallee (env, cont, C.BoolConst _) = ()
+  | useValueAsCallee (env, cont, C.NativeIntConst _) = ()
+  | useValueAsCallee (env, cont, C.Int32Const _) = ()
+  | useValueAsCallee (env, cont, C.Int54Const _) = ()
+  | useValueAsCallee (env, cont, C.Int64Const _) = ()
+  | useValueAsCallee (env, cont, C.IntInfConst _) = ()
+  | useValueAsCallee (env, cont, C.NativeWordConst _) = ()
+  | useValueAsCallee (env, cont, C.Word32Const _) = ()
+  | useValueAsCallee (env, cont, C.Word64Const _) = ()
+  | useValueAsCallee (env, cont, C.CharConst _) = ()
+  | useValueAsCallee (env, cont, C.Char16Const _) = ()
+  | useValueAsCallee (env, cont, C.StringConst _) = ()
+  | useValueAsCallee (env, cont, C.String16Const _) = ()
 fun useContVarIndirect cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                                 SOME r => let val { direct, indirect } = !r
                                                           in r := { direct = direct, indirect = oneMore indirect }
@@ -701,7 +722,7 @@ and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (con
           ; goCExp (env, renv, cenv, crenv, cont)
           )
         | C.App { applied, cont, args } =>
-          ( useValueAsCallee env applied
+          ( useValueAsCallee (env, cont, applied)
           ; useContVarIndirect cenv cont
           ; List.app (useValue env) args
           )
@@ -1276,8 +1297,8 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                  in case (exp, result) of
                         (C.Abs { contParam, params, body }, SOME result) =>
                         (case CpsUsageAnalysis.getValueUsage (#usage usage, result) of
-                             { call = NEVER, other = NEVER } => (env, cenv, subst, csubst, acc)
-                           | { call = ONCE, other = NEVER } =>
+                             { call = NEVER, other = NEVER, returnConts = _ } => (env, cenv, subst, csubst, acc)
+                           | { call = ONCE, other = NEVER, returnConts = _ } =>
                              let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
                                  val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME (C.Abs { contParam = contParam, params = params, body = body }), isDiscardableFunction = isDiscardableExp (env, body) })
                              in (env, cenv, subst, csubst, acc)
@@ -1311,8 +1332,27 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                  end
           end
         | C.RecDec defs =>
-          if List.exists (fn (f, _, _, _) => CpsUsageAnalysis.getValueUsage (#usage usage, f) <> CpsUsageAnalysis.neverUsed) defs then
-              let val dec = C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs)
+          if List.exists (fn (f, _, _, _) => CpsDeadCodeAnalysis.isUsed (#dead_code_analysis usage, f)) defs then
+              let fun tryConvertToLoop (def as (f, k, params, body))
+                      = if C.CVarSet.member (#returnConts (CpsUsageAnalysis.getValueUsage (#rec_usage usage, f)), k) then
+                            let val loop = genContSym ctx
+                                val params' = List.map (fn v => renewVId (ctx, v)) params
+                                val body' = C.recurseCExp (fn call as C.App { applied = C.Var applied, cont, args } =>
+                                                              if applied = f andalso cont = k then
+                                                                  C.AppCont { applied = loop, args = args }
+                                                              else
+                                                                  call
+                                                          | c => c
+                                                          ) body
+                                val body'' = C.Let { decs = vector [C.RecContDec [(loop, params, body')]]
+                                                   , cont = C.AppCont { applied = loop, args = List.map C.Var params' }
+                                                   }
+                            in (f, k, params', body'')
+                            end
+                        else
+                            def
+                  val defs = List.map tryConvertToLoop defs
+                  val dec = C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs)
               in (env, cenv, subst, csubst, dec :: acc)
               end
           else
@@ -1371,12 +1411,12 @@ and simplifyCExp (ctx : Context, env, cenv, subst, csubst, usage, e)
                           val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
                           val csubst = C.CVarMap.insert (csubst, contParam, cont)
                       in case CpsUsageAnalysis.getValueUsage (#usage usage, applied) of
-                             { call = ONCE, other = NEVER } => substCExp (subst, csubst, body) (* no alpha conversion *)
+                             { call = ONCE, other = NEVER, returnConts = _ } => substCExp (subst, csubst, body) (* no alpha conversion *)
                            | _ => alphaConvert (ctx, subst, csubst, body)
                       end
                     | SOME { exp, isDiscardableFunction = true } =>
                       (case C.CVarMap.find (cenv, cont) of
-                           SOME (params, _) => if List.all (fn p => CpsUsageAnalysis.getValueUsage (#usage usage, p) = CpsUsageAnalysis.neverUsed) params then
+                           SOME (params, _) => if List.all (fn p => not (CpsDeadCodeAnalysis.isUsed (#dead_code_analysis usage, p))) params then
                                                    ( #simplificationOccurred ctx := true
                                                    ; C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
                                                    )
