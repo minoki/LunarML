@@ -179,7 +179,8 @@ fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
 datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
                    | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
                    | TAILCALL of C.CVar (* continuation passing style *)
-                   | RETURN (* direct style *)
+                   | RETURN_TRAMPOLINE (* direct style *)
+                   | RETURN_SIMPLE (* direct style *)
 type Env = { continuations : cont_type C.CVarMap.map
            }
 
@@ -201,7 +202,11 @@ fun applyCont (ctx : Context, env : Env, cont, args)
         | SOME (CONTINUE_TO { label, which = NONE, params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.ContinueStat (SOME label) ]
         | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ]
         | SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar k, J.ArrayExp (vector args)]))) ] (* continuation passing style *)
-        | SOME RETURN => [ J.ReturnStat (SOME (J.ArrayExp (vector (J.ConstExp J.True :: args)))) ] (* direct style *)
+        | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector (J.ConstExp J.True :: args)))) ] (* direct style *)
+        | SOME RETURN_SIMPLE => (case args of
+                                     [v] => [ J.ReturnStat (SOME v) ] (* direct style *)
+                                   | _ => raise CodeGenError "invalid return arity"
+                                )
         | NONE => raise CodeGenError "undefined continuation"
 (* doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
 fun doDecs (ctx, env, decs, finalExp, revStats)
@@ -487,9 +492,14 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   end
                 | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
                   (case #style ctx of
-                       DIRECT_STYLE => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
-                                       in pure (result, J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))]))
-                                       end
+                       DIRECT_STYLE => (case C.CVarMap.find (#contEscapeMap ctx, contParam) of
+                                            SOME true => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE) }
+                                                         in pure (result, J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))]))
+                                                         end
+                                          | _ => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE) }
+                                                 in pure (result, J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body)))
+                                                 end
+                                       )
                      | CPS => let val env' = { continuations = C.CVarMap.singleton (contParam, TAILCALL contParam)
                                              }
                               in pure (result, J.FunctionExp (vector (CVarToJs contParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body)))
@@ -499,9 +509,13 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   (case #style ctx of
                        DIRECT_STYLE =>
                        let val (decs', assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
-                                                                     let val env' = { continuations = C.CVarMap.singleton (k, RETURN) }
-                                                                     in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
-                                                                     end
+                                                                     case C.CVarMap.find (#contEscapeMap ctx, k) of
+                                                                         SOME true => let val env' = { continuations = C.CVarMap.singleton (k, RETURN_TRAMPOLINE) }
+                                                                                      in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
+                                                                                      end
+                                                                       | _ => let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE) }
+                                                                              in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
+                                                                              end
                                                                  ) ([], []) defs
                        in doDecs (ctx, env, decs, finalExp, List.revAppend (decs' @ assignments, revStats))
                        end
@@ -631,10 +645,11 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
          | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ] (* direct style *)
          | SOME (CONTINUE_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.ContinueStat (SOME label) ] (* direct style *)
          | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ] (* direct style *)
-         | SOME RETURN => (case args of
-                               [arg] => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, doValue ctx arg]))) ] (* direct style, tail call *)
-                             | _ => raise CodeGenError "unsupported number of arguments"
-                          )
+         | SOME RETURN_TRAMPOLINE => (case args of
+                                          [arg] => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, doValue ctx arg]))) ] (* direct style, tail call *)
+                                        | _ => raise CodeGenError "unsupported number of arguments"
+                                     )
+         | SOME RETURN_SIMPLE => raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation"
       )
   | doCExp ctx env (C.AppCont { applied, args })

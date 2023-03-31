@@ -1517,7 +1517,7 @@ fun recEscape (env : env) k = case C.CVarMap.find (env, k) of
                                                                                     ( escapes := true
                                                                                     ; C.CVarSet.app (recEscape env) outerDestinations
                                                                                     )
-                                | NONE => ()
+                                | NONE => () (* TODO: unbound continuation *)
 fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
                                                 SOME { escapes, level = level', outerDestinations } => ( recEscape (!env) k
                                                                                                        ; if level' < level then
@@ -1525,13 +1525,18 @@ fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
                                                                                                          else
                                                                                                              acc
                                                                                                        )
-                                              | NONE => acc
+                                              | NONE => acc (* TODO: unbound continuation *)
 fun goDec (env, level) (dec, acc)
     = case dec of
-          C.ValDec { exp = C.Abs { contParam, params, body }, result = SOME result } => go (env, 0, body, acc)
+          C.ValDec { exp = C.Abs { contParam, params, body }, result = SOME result } =>
+          ( env := C.CVarMap.insert (!env, contParam, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
+          ; go (env, 0, body, acc)
+          )
         | C.ValDec { exp, result } => acc
         | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) =>
-                                          go (env, 0, body, acc)
+                                          ( env := C.CVarMap.insert (!env, k, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
+                                          ; go (env, 0, body, acc)
+                                          )
                                       ) acc defs
         | C.ContDec { name, params, body } =>
           let val outerDestinations = go (env, level + 1, body, C.CVarSet.empty)

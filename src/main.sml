@@ -167,7 +167,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
       end
   | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp
     = let val timer = Timer.startCPUTimer ()
-          val contEscapeMap = CpsAnalyze.contEscape cexp (* not used if direct style *)
+          val contEscapeMap = CpsAnalyze.contEscape cexp
           val base = OS.Path.base fileName
           val mlinit_js = case style of
                               CodeGenJs.DIRECT_STYLE => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
