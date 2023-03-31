@@ -496,9 +496,10 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                             SOME true => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE) }
                                                          in pure (result, J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))]))
                                                          end
-                                          | _ => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE) }
-                                                 in pure (result, J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body)))
-                                                 end
+                                          | SOME false => let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE) }
+                                                          in pure (result, J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body)))
+                                                          end
+                                          | NONE => raise CodeGenError "unbound continuation"
                                        )
                      | CPS => let val env' = { continuations = C.CVarMap.singleton (contParam, TAILCALL contParam)
                                              }
@@ -513,9 +514,10 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                          SOME true => let val env' = { continuations = C.CVarMap.singleton (k, RETURN_TRAMPOLINE) }
                                                                                       in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
                                                                                       end
-                                                                       | _ => let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE) }
-                                                                              in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
-                                                                              end
+                                                                       | SOME false => let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE) }
+                                                                                       in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
+                                                                                       end
+                                                                       | NONE => raise CodeGenError "unbound continuation"
                                                                  ) ([], []) defs
                        in doDecs (ctx, env, decs, finalExp, List.revAppend (decs' @ assignments, revStats))
                        end
@@ -533,8 +535,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   let val escape = case #style ctx of
                                        DIRECT_STYLE => false
                                      | CPS => case C.CVarMap.find (#contEscapeMap ctx, name) of
-                                                  SOME false => false
-                                                | _ => true
+                                                  SOME b => b
+                                                | NONE => raise CodeGenError "unbound continuation"
                   in if escape then
                          let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map (VIdToJs ctx) params), vector (doCExp ctx env body)))
                              val env' = { continuations = C.CVarMap.insert (#continuations env, name, TAILCALL name)
@@ -561,7 +563,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                 | C.RecContDec defs =>
                   let val escape = case #style ctx of
                                        DIRECT_STYLE => false
-                                     | CPS => List.exists (fn (name, _, _) => case C.CVarMap.find (#contEscapeMap ctx, name) of SOME false => false | _ => true) defs
+                                     | CPS => List.exists (fn (name, _, _) => case C.CVarMap.find (#contEscapeMap ctx, name) of SOME b => b | NONE => raise CodeGenError "unbound continuation") defs
                   in if escape then
                          let val env' = { continuations = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
                                         }
@@ -665,8 +667,8 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
            end
          | CPS =>
            let val escape = case C.CVarMap.find (#contEscapeMap ctx, successfulExitIn) of
-                                SOME false => false
-                              | _ => true
+                                SOME b => b
+                              | NONE => raise CodeGenError "unbound continuation"
                val oldExh = genSym ctx
                val save = ConstStat (oldExh, J.VarExp (J.PredefinedId "_exh"))
                val restore = J.AssignStat (J.VarExp (J.PredefinedId "_exh"), J.VarExp (J.UserDefinedId oldExh))

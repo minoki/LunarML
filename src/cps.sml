@@ -3,6 +3,7 @@
  * This file is part of LunarML.
  *)
 structure CSyntax = struct
+exception InvalidCode of string
 type Var = TypedSyntax.VId
 type Tag = string
 structure CVar :> sig
@@ -1509,7 +1510,7 @@ fun direct (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
                                                                                                            C.CVarSet.add (acc, k)
                                                                                                        else
                                                                                                            acc
-                                              | NONE => acc
+                                              | NONE => raise CSyntax.InvalidCode "unbound continuation"
 fun recEscape (env : env) k = case C.CVarMap.find (env, k) of
                                   SOME { escapes, level, outerDestinations } => if !escapes then
                                                                                     ()
@@ -1517,7 +1518,7 @@ fun recEscape (env : env) k = case C.CVarMap.find (env, k) of
                                                                                     ( escapes := true
                                                                                     ; C.CVarSet.app (recEscape env) outerDestinations
                                                                                     )
-                                | NONE => () (* TODO: unbound continuation *)
+                                | NONE => raise CSyntax.InvalidCode "unbound continuation"
 fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
                                                 SOME { escapes, level = level', outerDestinations } => ( recEscape (!env) k
                                                                                                        ; if level' < level then
@@ -1525,7 +1526,7 @@ fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
                                                                                                          else
                                                                                                              acc
                                                                                                        )
-                                              | NONE => acc (* TODO: unbound continuation *)
+                                              | NONE => raise CSyntax.InvalidCode "unbound continuation"
 fun goDec (env, level) (dec, acc)
     = case dec of
           C.ValDec { exp = C.Abs { contParam, params, body }, result = SOME result } =>
@@ -1533,10 +1534,9 @@ fun goDec (env, level) (dec, acc)
           ; go (env, 0, body, acc)
           )
         | C.ValDec { exp, result } => acc
-        | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) =>
-                                          ( env := C.CVarMap.insert (!env, k, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
-                                          ; go (env, 0, body, acc)
-                                          )
+        | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) => ( env := C.CVarMap.insert (!env, k, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
+                                                                         ; go (env, 0, body, acc)
+                                                                         )
                                       ) acc defs
         | C.ContDec { name, params, body } =>
           let val outerDestinations = go (env, level + 1, body, C.CVarSet.empty)
@@ -1564,9 +1564,9 @@ and go (env, level, C.Let { decs, cont }, acc)
        ; C.CVarSet.app (fn k => ignore (escape (env, level + 1, k, C.CVarSet.empty))) outerDestinations
        ; go (env, level, body, C.CVarSet.union (acc, outerDestinations))
       end
-fun contEscape cexp = let val env = ref C.CVarMap.empty
-                          val _ = go (env, 0, cexp, C.CVarSet.empty)
-                      in C.CVarMap.map (fn { escapes, ... } => !escapes) (!env)
-                      end
+fun contEscape (cont, cexp) = let val env = ref (C.CVarMap.singleton (cont, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty }))
+                                  val _ = go (env, 0, cexp, C.CVarSet.empty)
+                              in C.CVarMap.map (fn { escapes, ... } => !escapes) (!env)
+                              end
 end (* local *)
 end; (* structure CpsAnalyze *)

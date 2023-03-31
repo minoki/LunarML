@@ -167,7 +167,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
       end
   | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp
     = let val timer = Timer.startCPUTimer ()
-          val contEscapeMap = CpsAnalyze.contEscape cexp
+          val contEscapeMap = CpsAnalyze.contEscape (cont, cexp)
           val base = OS.Path.base fileName
           val mlinit_js = case style of
                               CodeGenJs.DIRECT_STYLE => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
@@ -273,6 +273,7 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
                  ; OS.Process.exit OS.Process.failure
                  )
+               | CSyntax.InvalidCode message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenLua.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
                | CodeGenJs.CodeGenError message => ( print (message ^ "\n") ; OS.Process.exit OS.Process.failure )
 fun handleInputFile opts [file] = if String.isSuffix ".sml" file then
