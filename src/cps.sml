@@ -137,6 +137,69 @@ and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists con
   | containsApp (If { cond, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
   | containsApp (Handle { body, handler = (_, h), ... }) = containsApp body orelse containsApp h
 
+fun freeVarsInValue bound (v, acc)
+    = case v of
+          Var var => if TypedSyntax.VIdSet.member (bound, var) then
+                         acc
+                     else
+                         TypedSyntax.VIdSet.add (acc, var)
+        | Unit => acc
+        | Nil => acc
+        | BoolConst _ => acc
+        | NativeIntConst _ => acc
+        | Int32Const _ => acc
+        | Int54Const _ => acc
+        | Int64Const _ => acc
+        | IntInfConst _ => acc
+        | NativeWordConst _ => acc
+        | Word32Const _ => acc
+        | Word64Const _ => acc
+        | CharConst _ => acc
+        | Char16Const _ => acc
+        | StringConst _ => acc
+        | String16Const _ => acc
+fun freeVarsInSimpleExp (bound, PrimOp { primOp, tyargs = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
+  | freeVarsInSimpleExp (bound, Record fields, acc) = Syntax.LabelMap.foldl (freeVarsInValue bound) acc fields
+  | freeVarsInSimpleExp (bound, ExnTag { name, payloadTy }, acc) = acc
+  | freeVarsInSimpleExp (bound, Projection { label, record, fieldTypes }, acc) = freeVarsInValue bound (record, acc)
+  | freeVarsInSimpleExp (bound, Abs { contParam, params, body }, acc) = let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+                                                                        in freeVarsInExp (bound, body, acc)
+                                                                        end
+and freeVarsInDec (ValDec { exp, result }, (bound, acc))
+    = let val acc = freeVarsInSimpleExp (bound, exp, acc)
+      in case result of
+             SOME r => (TypedSyntax.VIdSet.add (bound, r), acc)
+           | NONE => (bound, acc)
+      end
+  | freeVarsInDec (RecDec defs, (bound, acc))
+    = let val bound = List.foldl (fn ((name, _, _, _), bound) => TypedSyntax.VIdSet.add (bound, name)) bound defs
+          val acc = List.foldl (fn ((_, _, params, body), acc) =>
+                                   let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+                                   in freeVarsInExp (bound, body, acc)
+                                   end
+                               ) acc defs
+      in (bound, acc)
+      end
+  | freeVarsInDec (ContDec { name, params, body }, (bound, acc))
+    = let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+      in (bound, freeVarsInExp (bound, body, acc))
+      end
+  | freeVarsInDec (RecContDec defs, (bound, acc))
+    = let val acc = List.foldl (fn ((_, params, body), acc) =>
+                                   let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+                                   in freeVarsInExp (bound, body, acc)
+                                   end
+                               ) acc defs
+      in (bound, acc)
+      end
+and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = Vector.foldl freeVarsInDec (bound, acc) decs
+                                                     in freeVarsInExp (bound, cont, acc)
+                                                     end
+  | freeVarsInExp (bound, App { applied, cont, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
+  | freeVarsInExp (bound, AppCont { applied, args }, acc) = List.foldl (freeVarsInValue bound) acc args
+  | freeVarsInExp (bound, If { cond, thenCont, elseCont }, acc) = freeVarsInExp (bound, elseCont, freeVarsInExp (bound, thenCont, freeVarsInValue bound (cond, acc)))
+  | freeVarsInExp (bound, Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = freeVarsInExp (bound, body, freeVarsInExp (TypedSyntax.VIdSet.add (bound, e), h, acc))
+
 fun recurseCExp f
     = let fun goSimpleExp (e as PrimOp _) = e
             | goSimpleExp (e as Record _) = e
@@ -1352,9 +1415,54 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                             end
                         else
                             def
+                  val defs = List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs
                   val defs = List.map tryConvertToLoop defs
-                  val dec = C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs)
-              in (env, cenv, subst, csubst, dec :: acc)
+                  (* SCC *)
+                  val defined = List.foldl (fn ((f, _, _, _), set) => TypedSyntax.VIdSet.add (set, f)) TypedSyntax.VIdSet.empty defs
+                  val map : { def : C.Var * C.CVar * C.Var list * C.CExp, refs : TypedSyntax.VIdSet.set, invrefs : TypedSyntax.VId list ref, seen1 : bool ref, seen2 : bool ref } TypedSyntax.VIdMap.map
+                      = List.foldl (fn (def as (f, k, params, body), map) => TypedSyntax.VIdMap.insert (map, f, { def = def, refs = TypedSyntax.VIdSet.intersection (C.freeVarsInExp (TypedSyntax.VIdSet.empty, body, TypedSyntax.VIdSet.empty), defined), invrefs = ref [], seen1 = ref false, seen2 = ref false })) TypedSyntax.VIdMap.empty defs
+                  fun dfs1 (from : TypedSyntax.VId option, vid) : TypedSyntax.VId list
+                      = let val { refs, invrefs, seen1, ... } = TypedSyntax.VIdMap.lookup (map, vid)
+                        in case from of
+                               SOME vid' => invrefs := vid' :: !invrefs
+                             | NONE => ()
+                         ; if !seen1 then
+                               []
+                           else
+                               ( seen1 := true
+                               ; TypedSyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
+                               )
+                        end
+                  val list : TypedSyntax.VId list = TypedSyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
+                  fun dfs2 vid : TypedSyntax.VIdSet.set
+                      = let val { refs, invrefs = ref invrefs, seen2, ... } = TypedSyntax.VIdMap.lookup (map, vid)
+                        in if !seen2 then
+                               TypedSyntax.VIdSet.empty
+                           else
+                               ( seen2 := true
+                               ; List.foldl (fn (vid', acc) => TypedSyntax.VIdSet.union (acc, dfs2 vid')) (TypedSyntax.VIdSet.singleton vid) invrefs
+                               )
+                        end
+                  val sccs : TypedSyntax.VIdSet.set list = List.foldl (fn (vid, acc) =>
+                                                                          let val set = dfs2 vid
+                                                                          in if TypedSyntax.VIdSet.isEmpty set then
+                                                                                 acc
+                                                                             else
+                                                                                 set :: acc
+                                                                          end) [] list
+                  val decs = List.foldl (fn (scc, decs) =>
+                                            let val dec = case TypedSyntax.VIdSet.listItems scc of
+                                                              [vid] => let val { def as (f, k, params, body), refs, ... } = TypedSyntax.VIdMap.lookup (map, vid)
+                                                                       in if TypedSyntax.VIdSet.member (refs, vid) then
+                                                                              C.RecDec [def]
+                                                                          else
+                                                                              C.ValDec { exp = C.Abs { contParam = k, params = params, body = body }, result = SOME f }
+                                                                       end
+                                                            | scc => C.RecDec (List.map (fn vid => #def (TypedSyntax.VIdMap.lookup (map, vid))) scc)
+                                            in dec :: decs
+                                            end
+                                        ) acc sccs
+              in (env, cenv, subst, csubst, decs)
               end
           else
               ( #simplificationOccurred ctx := true
