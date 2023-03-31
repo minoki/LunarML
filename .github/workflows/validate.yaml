@@ -1,29 +1,12 @@
 on:
-  schedule:
-    - cron: '10 17 * * *'
+  push:
+    branches:
+      - master
 name: nightly-ci
 jobs:
-  # See https://stackoverflow.com/questions/63014786/how-to-schedule-a-github-actions-nightly-build-but-run-it-only-when-there-where
-  check_date:
-    runs-on: ubuntu-20.04
-    name: Check latest commit
-    outputs:
-      should_run: ${{ steps.should_run.outputs.should_run }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: print latest_commit
-        run: echo ${{ github.sha }}
-      - id: should_run
-        continue-on-error: true
-        name: check latest commit is less than a day
-        if: ${{ github.event_name == 'schedule' }}
-        run: test -z $(git rev-list --after="24 hours" ${{ github.sha }}) && echo "::set-output name=should_run::false"
-
   # Disabled for now, because validate-lua consumes memory too much
-  validate:
-    name: validate
-    needs: check_date
-    if: ${{ false && needs.check_date.outputs.should_run != 'false' }}
+  validate-linux:
+    name: validate (Linux)
     runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
     steps:
       - uses: actions/checkout@v3
@@ -70,8 +53,6 @@ jobs:
 
   validate-macos:
     name: validate (macOS)
-    needs: check_date
-    if: ${{ needs.check_date.outputs.should_run != 'false' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
