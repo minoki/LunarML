@@ -1500,73 +1500,84 @@ and finalizeCExp (ctx, C.Let { decs, cont })
 end
 end;
 
-structure CpsAnalyze = struct
+structure CpsAnalyze :> sig
+              type cont_map
+              val escapes : cont_map * CSyntax.CVar -> bool
+              val escapesTransitively : cont_map * CSyntax.CVar -> bool
+              val contEscape : CSyntax.CVar * CSyntax.CExp -> cont_map
+              end = struct
 local structure F = FSyntax
       structure C = CSyntax
 in
-type env = { escapes : bool ref, level : int, outerDestinations : C.CVarSet.set } C.CVarMap.map
-fun direct (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
-                                                SOME { escapes, level = level', outerDestinations } => if level' < level then
-                                                                                                           C.CVarSet.add (acc, k)
-                                                                                                       else
-                                                                                                           acc
-                                              | NONE => raise CSyntax.InvalidCode "unbound continuation"
-fun recEscape (env : env) k = case C.CVarMap.find (env, k) of
-                                  SOME { escapes, level, outerDestinations } => if !escapes then
-                                                                                    ()
-                                                                                else
-                                                                                    ( escapes := true
-                                                                                    ; C.CVarSet.app (recEscape env) outerDestinations
-                                                                                    )
-                                | NONE => raise CSyntax.InvalidCode "unbound continuation"
-fun escape (env : env ref, level, k, acc) = case C.CVarMap.find (!env, k) of
-                                                SOME { escapes, level = level', outerDestinations } => ( recEscape (!env) k
-                                                                                                       ; if level' < level then
-                                                                                                             C.CVarSet.add (acc, k)
-                                                                                                         else
-                                                                                                             acc
-                                                                                                       )
-                                              | NONE => raise CSyntax.InvalidCode "unbound continuation"
-fun goDec (env, level) (dec, acc)
+type cont_map = { escapes : bool, escapesTransitively : bool } CSyntax.CVarTable.hash_table
+fun escapes (t : cont_map, v) = #escapes (C.CVarTable.lookup t v)
+fun escapesTransitively (t : cont_map, v) = #escapesTransitively (C.CVarTable.lookup t v)
+type table = { escapes : bool ref, escapesTransitively : bool ref, level : int, free : CSyntax.CVarSet.set } CSyntax.CVarTable.hash_table
+fun direct (table : table, level, k, acc) = let val { escapes, escapesTransitively, level = level', free } = C.CVarTable.lookup table k
+                                            in if level' < level then
+                                                   C.CVarSet.add (acc, k)
+                                               else
+                                                   acc
+                                            end
+fun recEscape (table : table) k = let val { escapes, escapesTransitively, level, free } = C.CVarTable.lookup table k
+                                  in if !escapesTransitively then
+                                         ()
+                                     else
+                                         ( escapesTransitively := true
+                                         ; C.CVarSet.app (recEscape table) free
+                                         )
+                                  end
+fun escape (table : table, level, k, acc) = let val { escapes, escapesTransitively, level = level', free } = C.CVarTable.lookup table k
+                                            in escapes := true
+                                             ; if level' < level then
+                                                   C.CVarSet.add (acc, k)
+                                               else
+                                                   acc
+                                            end
+fun goDec (table, level) (dec, acc)
     = case dec of
-          C.ValDec { exp = C.Abs { contParam, params, body }, result = SOME result } =>
-          ( env := C.CVarMap.insert (!env, contParam, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
-          ; go (env, 0, body, acc)
+          C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
+          ( C.CVarTable.insert table (contParam, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
+          ; go (table, 0, body, acc)
           )
         | C.ValDec { exp, result } => acc
-        | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) => ( env := C.CVarMap.insert (!env, k, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty })
-                                                                         ; go (env, 0, body, acc)
-                                                                         )
+        | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) =>
+                                          ( C.CVarTable.insert table (k, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
+                                          ; go (table, 0, body, acc)
+                                          )
                                       ) acc defs
         | C.ContDec { name, params, body } =>
-          let val outerDestinations = go (env, level + 1, body, C.CVarSet.empty)
-          in env := C.CVarMap.insert (!env, name, { escapes = ref false, level = level, outerDestinations = outerDestinations })
-           ; C.CVarSet.union (acc, outerDestinations)
+          let val free = go (table, level + 1, body, C.CVarSet.empty)
+          in C.CVarTable.insert table (name, { escapes = ref false, escapesTransitively = ref false, level = level, free = free })
+           ; C.CVarSet.union (acc, free)
           end
         | C.RecContDec defs =>
-          let val () = env := List.foldl (fn ((name, params, body), env) => C.CVarMap.insert (env, name, { escapes = ref false, level = level, outerDestinations = C.CVarSet.empty })) (!env) defs
-              val outerDestinations = List.foldl (fn ((name, params, body), acc) => go (env, level + 1, body, acc)) C.CVarSet.empty defs
-          in env := List.foldl (fn ((name, params, body), env) => C.CVarMap.insert (env, name, { escapes = #escapes (C.CVarMap.lookup (env, name)), level = level, outerDestinations = outerDestinations })) (!env) defs
-           ; if List.exists (fn (name, _, _) => !(#escapes (C.CVarMap.lookup (!env, name)))) defs then
-                 List.app (fn (name, _, _) => ignore (escape (env, level + 1, name, C.CVarSet.empty))) defs
-             else
-                 ()
-           ; C.CVarSet.union (acc, outerDestinations)
-          end
-and go (env, level, C.Let { decs, cont }, acc)
-    = go (env, level, cont, Vector.foldl (goDec (env, level)) acc decs)
-  | go (env, level, C.App { applied, cont, args }, acc) = escape (env, level, cont, acc)
-  | go (env, level, C.AppCont { applied, args }, acc) = direct (env, level, applied, acc)
-  | go (env, level, C.If { cond, thenCont, elseCont }, acc) = go (env, level, elseCont, go (env, level, thenCont, acc))
-  | go (env, level, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc)
-    = let val outerDestinations = (go (env, level + 1, h, C.CVarSet.empty))
-      in env := C.CVarMap.insert (!env, successfulExitIn, { escapes = ref false, level = level, outerDestinations = C.CVarSet.singleton successfulExitOut })
-       ; C.CVarSet.app (fn k => ignore (escape (env, level + 1, k, C.CVarSet.empty))) outerDestinations
-       ; go (env, level, body, C.CVarSet.union (acc, outerDestinations))
+          ( List.app (fn (name, params, body) => C.CVarTable.insert table (name, { escapes = ref false, escapesTransitively = ref false, level = level, free = C.CVarSet.empty })) defs
+          ; List.foldl (fn ((name, params, body), acc) =>
+                         let val { escapes, escapesTransitively, level, free = _ } = C.CVarTable.lookup table name
+                             val free = go (table, level + 1, body, C.CVarSet.empty)
+                         in C.CVarTable.insert table (name, { escapes = escapes, escapesTransitively = escapesTransitively, level = level, free = free })
+                          ; C.CVarSet.union (acc, free)
+                         end
+                     ) acc defs
+          )
+and go (table, level, C.Let { decs, cont }, acc)
+    = go (table, level, cont, Vector.foldl (goDec (table, level)) acc decs)
+  | go (table, level, C.App { applied, cont, args }, acc) = escape (table, level, cont, acc)
+  | go (table, level, C.AppCont { applied, args }, acc) = direct (table, level, applied, acc)
+  | go (table, level, C.If { cond, thenCont, elseCont }, acc) = go (table, level, elseCont, go (table, level, thenCont, acc))
+  | go (table, level, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc)
+    = let val free = go (table, level + 1, h, C.CVarSet.empty)
+      in C.CVarTable.insert table (successfulExitIn, { escapes = ref false, escapesTransitively = ref false, level = level, free = C.CVarSet.singleton successfulExitOut })
+       ; C.CVarSet.app (fn k => ignore (escape (table, level + 1, k, C.CVarSet.empty))) free
+       ; go (table, level, body, C.CVarSet.union (acc, free))
       end
-fun contEscape (cont, cexp) = let val env = ref (C.CVarMap.singleton (cont, { escapes = ref false, level = 0, outerDestinations = C.CVarSet.empty }))
-                                  val _ = go (env, 0, cexp, C.CVarSet.empty)
-                              in C.CVarMap.map (fn { escapes, ... } => !escapes) (!env)
+fun contEscape (cont, cexp) = let val table = C.CVarTable.mkTable (1, C.InvalidCode "unbound continuation")
+                              in C.CVarTable.insert table (cont, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
+                               ; ignore (go (table, 0, cexp, C.CVarSet.empty))
+                               ; C.CVarTable.appi (fn (k, { escapes = ref true, escapesTransitively = ref false, ... }) => recEscape table k
+                                                  | _ => ()) table
+                               ; C.CVarTable.map (fn { escapes, escapesTransitively, ... } => { escapes = !escapes, escapesTransitively = !escapesTransitively }) table
                               end
 end (* local *)
 end; (* structure CpsAnalyze *)
