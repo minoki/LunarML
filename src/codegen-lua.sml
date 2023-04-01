@@ -786,14 +786,38 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                             end
                   )
                 | C.RecContDec defs =>
-                  let val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
+                  let datatype init = INIT_WITH_VALUES of C.CVar * C.Value list
+                                    | NO_INIT
+                      val init = case (VectorSlice.isEmpty decs, finalExp) of
+                                     (true, C.AppCont { applied, args }) =>
+                                     if List.exists (fn (name, _, _) => name = applied) defs then
+                                         INIT_WITH_VALUES (applied, args)
+                                     else
+                                         NO_INIT
+                                   | _ => NO_INIT
+                      val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
                       val commonParams = List.tabulate (maxParams, fn _ => genSym ctx)
-                      val decs' = if maxParams > 0 then
-                                      [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, [])]
-                                  else
-                                      []
                       val env' = { continuations = List.foldl (fn ((name, params, body), m) => C.CVarMap.insert (m, name, GOTO { label = doLabel name, params = List.map L.UserDefinedId (List.take (commonParams, List.length params)) })) (#continuations env) defs
                                  }
+                      val initAndRest = case init of
+                                            INIT_WITH_VALUES (initCont, args) =>
+                                            let val args' = List.map (doValue ctx) args
+                                                val decs' = if maxParams > 0 then
+                                                                [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, args')]
+                                                            else
+                                                                []
+                                                val jump = case defs of
+                                                               [_] => []
+                                                             | _ => [L.GotoStat (doLabel initCont)]
+                                            in decs' @ jump
+                                            end
+                                          | NO_INIT =>
+                                            let val decs' = if maxParams > 0 then
+                                                                [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, [])]
+                                                            else
+                                                                []
+                                            in decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, []))
+                                            end
                       val conts = List.map (fn (name, params, body) =>
                                                let val dec = if List.null params then
                                                                  []
@@ -802,7 +826,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                in L.LabelStat (doLabel name) :: L.makeDoStat (dec @ doCExp ctx env' body)
                                                end
                                            ) defs
-                  in List.revAppend (revStats, decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, [])) @ List.concat conts)
+                  in List.revAppend (revStats, initAndRest @ List.concat conts)
                   end
            end
       )
