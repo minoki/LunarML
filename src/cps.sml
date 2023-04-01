@@ -1333,7 +1333,7 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
          | _ => NOT_SIMPLIFIED
       )
   | simplifySimpleExp (env, C.Abs { contParam, params, body }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
-and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage }) (dec, (env, cenv, subst, csubst, acc))
+and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage }, appliedCont : C.CVar option) (dec, (env, cenv, subst, csubst, acc))
     = case dec of
           C.ValDec { exp, result } =>
           let val exp = substSimpleExp (subst, csubst, exp)
@@ -1475,13 +1475,23 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                ; (env, cenv, subst, csubst, acc)
                )
              | { direct = ONCE, indirect = NEVER } =>
-               let val () = #simplificationOccurred ctx := true
-                   val body' = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
-                   val cenv' = C.CVarMap.insert (cenv, name, (params, SOME body'))
-               in (env, cenv', subst, csubst, acc)
+               let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
+               in if (case appliedCont of SOME c => c = name | NONE => false) orelse sizeOfCExp (body, 10) >= 0 then (* Inline small continuations *)
+                      let val () = #simplificationOccurred ctx := true
+                          val cenv = C.CVarMap.insert (cenv, name, (params, SOME body))
+                      in (env, cenv, subst, csubst, acc)
+                      end
+                  else
+                      let val cenv = C.CVarMap.insert (cenv, name, (params, NONE))
+                          val dec = C.ContDec { name = name
+                                              , params = params
+                                              , body = body
+                                              }
+                      in (env, cenv, subst, csubst, dec :: acc)
+                      end
                end
              | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
-                        val cenv = if sizeOfCExp (body, 3) >= 0 then (* Inline small continuations *)
+                        val cenv = if sizeOfCExp (body, 3) >= 0 then (* Inline very small continuations *)
                                        C.CVarMap.insert (cenv, name, (params, SOME body))
                                    else
                                        C.CVarMap.insert (cenv, name, (params, NONE))
@@ -1505,7 +1515,10 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
 and simplifyCExp (ctx : Context, env, cenv, subst, csubst, usage, e)
     = case e of
           C.Let { decs, cont } =>
-          let val (env, cenv, subst, csubst, revDecs) = Vector.foldl (simplifyDec (ctx, usage)) (env, cenv, subst, csubst, []) decs
+          let val appliedCont = case cont of
+                                    C.AppCont { applied, args } => SOME applied
+                                  | _ => NONE
+              val (env, cenv, subst, csubst, revDecs) = Vector.foldl (simplifyDec (ctx, usage, appliedCont)) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, usage, cont))
           end
         | C.App { applied, cont, args } =>
