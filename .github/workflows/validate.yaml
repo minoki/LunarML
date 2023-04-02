@@ -7,6 +7,7 @@ jobs:
   # Disabled for now, because validate-lua consumes memory too much
   validate-linux:
     name: validate (Linux)
+    if: ${{ false }}
     runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
     steps:
       - uses: actions/checkout@v3
