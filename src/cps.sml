@@ -636,7 +636,12 @@ end (* structure CpsDeadCodeAnalysis *)
 
 structure CpsUsageAnalysis :> sig
               datatype frequency = NEVER | ONCE | MANY
-              type usage = { call : frequency, other : frequency, returnConts : CSyntax.CVarSet.set }
+              type usage = { call : frequency
+                           , project : frequency
+                           , other : frequency
+                           , returnConts : CSyntax.CVarSet.set
+                           , labels : Syntax.LabelSet.set
+                           }
               type cont_usage = { direct : frequency, indirect : frequency }
               val neverUsed : usage
               val neverUsedCont : cont_usage
@@ -658,26 +663,31 @@ datatype frequency = NEVER | ONCE | MANY
 fun oneMore NEVER = ONCE
   | oneMore ONCE = MANY
   | oneMore (many as MANY) = many
-type usage = { call : frequency, other : frequency, returnConts : CSyntax.CVarSet.set }
+type usage = { call : frequency
+             , project : frequency
+             , other : frequency
+             , returnConts : CSyntax.CVarSet.set
+             , labels : Syntax.LabelSet.set
+             }
 type cont_usage = { direct : frequency, indirect : frequency }
-val neverUsed : usage = { call = NEVER, other = NEVER, returnConts = CSyntax.CVarSet.empty }
+val neverUsed : usage = { call = NEVER, project = NEVER, other = NEVER, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelSet.empty }
 val neverUsedCont : cont_usage = { direct = NEVER, indirect = NEVER }
 type usage_table = (usage ref) TypedSyntax.VIdTable.hash_table
 type cont_usage_table = (cont_usage ref) CSyntax.CVarTable.hash_table
 fun getValueUsage (table : usage_table, v)
     = case TypedSyntax.VIdTable.find table v of
           SOME r => !r
-        | NONE => { call = MANY, other = MANY, returnConts = CSyntax.CVarSet.empty } (* unknown *)
+        | NONE => { call = MANY, project = MANY, other = MANY, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelSet.empty } (* unknown *)
 fun getContUsage (table : cont_usage_table, c)
     = case CSyntax.CVarTable.find table c of
           SOME r => !r
         | NONE => { direct = MANY, indirect = MANY } (* unknown *)
 fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
-                                      SOME r => let val { call, other, returnConts } = !r
-                                                in r := { call = call, other = oneMore other, returnConts = returnConts }
-                                                end
-                                    | NONE => ()
-                                 )
+                                  SOME r => let val { call, project, other, returnConts, labels } = !r
+                                            in r := { call = call, project = project, other = oneMore other, returnConts = returnConts, labels = labels }
+                                            end
+                                | NONE => ()
+                             )
   | useValue env C.Unit = ()
   | useValue env C.Nil = ()
   | useValue env (C.BoolConst _) = ()
@@ -695,8 +705,8 @@ fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
   | useValue env (C.String16Const _) = ()
 fun useValueAsCallee (env, cont, C.Var v)
     = (case TypedSyntax.VIdTable.find env v of
-           SOME r => let val { call, other, returnConts } = !r
-                     in r := { call = oneMore call, other = other, returnConts = C.CVarSet.add (returnConts, cont) }
+           SOME r => let val { call, project, other, returnConts, labels } = !r
+                     in r := { call = oneMore call, project = project, other = other, returnConts = C.CVarSet.add (returnConts, cont), labels = labels }
                      end
          | NONE => ()
       )
@@ -715,6 +725,28 @@ fun useValueAsCallee (env, cont, C.Var v)
   | useValueAsCallee (env, cont, C.Char16Const _) = ()
   | useValueAsCallee (env, cont, C.StringConst _) = ()
   | useValueAsCallee (env, cont, C.String16Const _) = ()
+fun useValueAsRecord (env, label, C.Var v)
+    = (case TypedSyntax.VIdTable.find env v of
+           SOME r => let val { call, project, other, returnConts, labels } = !r
+                     in r := { call = call, project = oneMore project, other = other, returnConts = returnConts, labels = Syntax.LabelSet.add (labels, label) }
+                     end
+         | NONE => ()
+      )
+  | useValueAsRecord (env, label, C.Unit) = ()
+  | useValueAsRecord (env, label, C.Nil) = ()
+  | useValueAsRecord (env, label, C.BoolConst _) = ()
+  | useValueAsRecord (env, label, C.NativeIntConst _) = ()
+  | useValueAsRecord (env, label, C.Int32Const _) = ()
+  | useValueAsRecord (env, label, C.Int54Const _) = ()
+  | useValueAsRecord (env, label, C.Int64Const _) = ()
+  | useValueAsRecord (env, label, C.IntInfConst _) = ()
+  | useValueAsRecord (env, label, C.NativeWordConst _) = ()
+  | useValueAsRecord (env, label, C.Word32Const _) = ()
+  | useValueAsRecord (env, label, C.Word64Const _) = ()
+  | useValueAsRecord (env, label, C.CharConst _) = ()
+  | useValueAsRecord (env, label, C.Char16Const _) = ()
+  | useValueAsRecord (env, label, C.StringConst _) = ()
+  | useValueAsRecord (env, label, C.String16Const _) = ()
 fun useContVarIndirect cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                                 SOME r => let val { direct, indirect } = !r
                                                           in r := { direct = direct, indirect = oneMore indirect }
@@ -740,7 +772,7 @@ in
 fun goSimpleExp (env, renv, cenv, crenv, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (useValue env) args
   | goSimpleExp (env, renv, cenv, crenv, C.Record fields) = Syntax.LabelMap.app (useValue env) fields
   | goSimpleExp (env, renv, cenv, crenv, C.ExnTag { name = _, payloadTy = _ }) = ()
-  | goSimpleExp (env, renv, cenv, crenv, C.Projection { label = _, record, fieldTypes = _ }) = useValue env record
+  | goSimpleExp (env, renv, cenv, crenv, C.Projection { label, record, fieldTypes = _ }) = useValueAsRecord (env, label, record)
   | goSimpleExp (env, renv, cenv, crenv, C.Abs { contParam, params, body })
     = ( List.app (fn p => add (env, p)) params
       ; addC (cenv, contParam)
@@ -828,6 +860,10 @@ fun genContSym (ctx : Context) : CSyntax.CVar
     = let val n = !(#nextVId ctx)
           val _ = #nextVId ctx := n + 1
       in CSyntax.CVar.fromInt n
+      end
+fun newVId ({ nextVId, ... } : Context, name)
+    = let val n = !nextVId
+      in TypedSyntax.MkVId (name, n) before (nextVId := n + 1)
       end
 fun renewVId ({ nextVId, ... } : Context, TypedSyntax.MkVId (name, _))
     = let val n = !nextVId
@@ -1333,7 +1369,7 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
          | _ => NOT_SIMPLIFIED
       )
   | simplifySimpleExp (env, C.Abs { contParam, params, body }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
-and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage }, appliedCont : C.CVar option) (dec, (env, cenv, subst, csubst, acc))
+and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage }, appliedCont : C.CVar option) (dec, (env, cenv, subst, csubst, acc : C.Dec list))
     = case dec of
           C.ValDec { exp, result } =>
           let val exp = substSimpleExp (subst, csubst, exp)
@@ -1361,22 +1397,85 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                  in case (exp, result) of
                         (C.Abs { contParam, params, body }, SOME result) =>
                         (case CpsUsageAnalysis.getValueUsage (#usage usage, result) of
-                             { call = NEVER, other = NEVER, returnConts = _ } => (env, cenv, subst, csubst, acc)
-                           | { call = ONCE, other = NEVER, returnConts = _ } =>
+                             { call = NEVER, project = NEVER, other = NEVER, returnConts = _, labels = _ } => (env, cenv, subst, csubst, acc)
+                           | { call = ONCE, project = NEVER, other = NEVER, returnConts = _, labels = _ } =>
                              let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
                                  val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME (C.Abs { contParam = contParam, params = params, body = body }), isDiscardableFunction = isDiscardableExp (env, body) })
                              in (env, cenv, subst, csubst, acc)
                              end
-                           | _ => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
-                                      val exp = C.Abs { contParam = contParam, params = params, body = body }
-                                      val env = if sizeOfCExp (body, 10) >= 0 then (* Inline small functions *)
-                                                    TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp, isDiscardableFunction = isDiscardableExp (env, body) })
-                                                else
-                                                    TypedSyntax.VIdMap.insert (env, result, { exp = NONE, isDiscardableFunction = isDiscardableExp (env, body) })
-                                      val dec = C.ValDec { exp = exp
-                                                         , result = SOME result
-                                                         }
-                                  in (env, cenv, subst, csubst, dec :: acc)
+                           | u => let datatype param_transform = KEEP | ELIMINATE | UNPACK of (C.Var * Syntax.Label) list
+                                      fun tryUnpackParam param = case CpsUsageAnalysis.getValueUsage (#usage usage, param) of
+                                                                     { call = NEVER, project = NEVER, other = NEVER, ... } => ELIMINATE
+                                                                   | { call = NEVER, project = _, other = NEVER, labels, ... } => UNPACK (List.map (fn label as Syntax.IdentifierLabel name => (newVId (ctx, name), label)
+                                                                                                                                                   | label as Syntax.NumericLabel n => (newVId (ctx, "_" ^ Int.toString n), label)
+                                                                                                                                                   ) (Syntax.LabelSet.toList labels))
+                                                                   | _ => KEEP
+                                      val isSmall = sizeOfCExp (body, 10) >= 0
+                                      val shouldTransformParams = if isSmall then
+                                                                      NONE
+                                                                  else
+                                                                      case u of
+                                                                          { call = _, project = NEVER, other = NEVER, ... } =>
+                                                                          let val t = List.map tryUnpackParam params
+                                                                          in if List.exists (fn ELIMINATE => true | UNPACK _ => true | KEEP => false) t then
+                                                                                 SOME t
+                                                                             else
+                                                                                 NONE
+                                                                          end
+                                                                        | _ => NONE
+                                  in case shouldTransformParams of
+                                         SOME paramTransforms =>
+                                         let val params' = ListPair.foldrEq (fn (p, KEEP, acc) => p :: acc
+                                                                            | (p, ELIMINATE, acc) => acc
+                                                                            | (p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                                            ) [] (params, paramTransforms)
+                                             val env' = ListPair.foldlEq (fn (p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
+                                                                         | (p, KEEP, env) => env
+                                                                         | (p, ELIMINATE, env) => env
+                                                                         ) env (params, paramTransforms)
+                                             val body = simplifyCExp (ctx, env', cenv, subst, csubst, usage, body)
+                                             val exp = C.Abs { contParam = contParam, params = params', body = body }
+                                             val result' = renewVId (ctx, result)
+                                             val wrapperBody = let val k = genContSym ctx
+                                                                   val params' = List.map (fn p => renewVId (ctx, p)) params
+                                                                   val (decs, args) = ListPair.foldrEq (fn (p, KEEP, (decs, args)) => (decs, C.Var p :: args)
+                                                                                                       | (p, ELIMINATE, acc) => acc
+                                                                                                       | (p, UNPACK fields, (decs, args)) =>
+                                                                                                         List.foldr (fn ((v, label), (decs, args)) =>
+                                                                                                                        let val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
+                                                                                                                                               , result = SOME v
+                                                                                                                                               }
+                                                                                                                        in (dec :: decs, C.Var v :: args)
+                                                                                                                        end
+                                                                                                                    ) (decs, args) fields
+                                                                                                       ) ([], []) (params', paramTransforms)
+                                                               in C.Abs { contParam = k
+                                                                        , params = params'
+                                                                        , body = C.Let { decs = vector decs
+                                                                                       , cont = C.App { applied = C.Var result'
+                                                                                                      , cont = k
+                                                                                                      , args = args
+                                                                                                      }
+                                                                                       }
+                                                                        }
+                                                               end
+                                             val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME wrapperBody, isDiscardableFunction = isDiscardableExp (env, body) })
+                                             val dec = C.ValDec { exp = exp
+                                                                , result = SOME result'
+                                                                }
+                                         in (env, cenv, subst, csubst, dec :: acc)
+                                         end
+                                       | NONE => let val body = simplifyCExp (ctx, env, cenv, subst, csubst, usage, body)
+                                                     val exp = C.Abs { contParam = contParam, params = params, body = body }
+                                                     val env = if isSmall orelse sizeOfCExp (body, 10) >= 0 then (* Inline small functions *)
+                                                                   TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp, isDiscardableFunction = isDiscardableExp (env, body) })
+                                                               else
+                                                                   TypedSyntax.VIdMap.insert (env, result, { exp = NONE, isDiscardableFunction = isDiscardableExp (env, body) })
+                                                     val dec = C.ValDec { exp = exp
+                                                                        , result = SOME result
+                                                                        }
+                                                 in (env, cenv, subst, csubst, dec :: acc)
+                                                 end
                                   end
                         )
                       | _ => (case (C.isDiscardable exp, result) of
@@ -1512,7 +1611,7 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
               ( #simplificationOccurred ctx := true
               ; (env, cenv, subst, csubst, acc)
               )
-and simplifyCExp (ctx : Context, env, cenv, subst, csubst, usage, e)
+and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv : (C.Var list * C.CExp option) C.CVarMap.map, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, usage, e)
     = case e of
           C.Let { decs, cont } =>
           let val appliedCont = case cont of
@@ -1533,7 +1632,7 @@ and simplifyCExp (ctx : Context, env, cenv, subst, csubst, usage, e)
                           val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
                           val csubst = C.CVarMap.insert (csubst, contParam, cont)
                       in case CpsUsageAnalysis.getValueUsage (#usage usage, applied) of
-                             { call = ONCE, other = NEVER, returnConts = _ } => substCExp (subst, csubst, body) (* no alpha conversion *)
+                             { call = ONCE, project = NEVER, other = NEVER, returnConts = _, labels = _ } => substCExp (subst, csubst, body) (* no alpha conversion *)
                            | _ => alphaConvert (ctx, subst, csubst, body)
                       end
                     | SOME { exp, isDiscardableFunction = true } =>
