@@ -20,7 +20,7 @@ exception CodeGenError of string
  * non-tuple record -> immutable object, with integer index starting with 0
  * vector -> immutable Array
  * array -> mutable Array
- * function -> function with arity 1, with optional _MLTAIL_ field (direct style)
+ * function -> function with optional _MLTAIL_ field (direct style)
  *)
 structure F = FSyntax
 structure C = CSyntax
@@ -666,10 +666,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
          | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ] (* direct style *)
          | SOME (CONTINUE_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.ContinueStat (SOME label) ] (* direct style *)
          | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ] (* direct style *)
-         | SOME RETURN_TRAMPOLINE => (case args of
-                                          [arg] => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, doValue ctx arg]))) ] (* direct style, tail call *)
-                                        | _ => raise CodeGenError "unsupported number of arguments"
-                                     )
+         | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (Vector.map (doValue ctx) (vector args))]))) ] (* direct style, tail call *)
          | SOME RETURN_SIMPLE => raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation"
       )
