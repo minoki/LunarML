@@ -640,7 +640,7 @@ structure CpsUsageAnalysis :> sig
                            , project : frequency
                            , other : frequency
                            , returnConts : CSyntax.CVarSet.set
-                           , labels : Syntax.LabelSet.set
+                           , labels : (string option) Syntax.LabelMap.map
                            }
               type cont_usage = { direct : frequency, indirect : frequency }
               val neverUsed : usage
@@ -667,17 +667,17 @@ type usage = { call : frequency
              , project : frequency
              , other : frequency
              , returnConts : CSyntax.CVarSet.set
-             , labels : Syntax.LabelSet.set
+             , labels : (string option) Syntax.LabelMap.map
              }
 type cont_usage = { direct : frequency, indirect : frequency }
-val neverUsed : usage = { call = NEVER, project = NEVER, other = NEVER, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelSet.empty }
+val neverUsed : usage = { call = NEVER, project = NEVER, other = NEVER, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelMap.empty }
 val neverUsedCont : cont_usage = { direct = NEVER, indirect = NEVER }
 type usage_table = (usage ref) TypedSyntax.VIdTable.hash_table
 type cont_usage_table = (cont_usage ref) CSyntax.CVarTable.hash_table
 fun getValueUsage (table : usage_table, v)
     = case TypedSyntax.VIdTable.find table v of
           SOME r => !r
-        | NONE => { call = MANY, project = MANY, other = MANY, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelSet.empty } (* unknown *)
+        | NONE => { call = MANY, project = MANY, other = MANY, returnConts = CSyntax.CVarSet.empty, labels = Syntax.LabelMap.empty } (* unknown *)
 fun getContUsage (table : cont_usage_table, c)
     = case CSyntax.CVarTable.find table c of
           SOME r => !r
@@ -725,28 +725,33 @@ fun useValueAsCallee (env, cont, C.Var v)
   | useValueAsCallee (env, cont, C.Char16Const _) = ()
   | useValueAsCallee (env, cont, C.StringConst _) = ()
   | useValueAsCallee (env, cont, C.String16Const _) = ()
-fun useValueAsRecord (env, label, C.Var v)
+fun useValueAsRecord (env, label, result, C.Var v)
     = (case TypedSyntax.VIdTable.find env v of
            SOME r => let val { call, project, other, returnConts, labels } = !r
-                     in r := { call = call, project = oneMore project, other = other, returnConts = returnConts, labels = Syntax.LabelSet.add (labels, label) }
+                         val result' = case result of
+                                           SOME (TypedSyntax.MkVId (name, _)) => SOME name
+                                         | NONE => NONE
+                         fun mergeOption (x as SOME _, _) = x
+                           | mergeOption (NONE, y) = y
+                     in r := { call = call, project = oneMore project, other = other, returnConts = returnConts, labels = Syntax.LabelMap.insertWith mergeOption (labels, label, result') }
                      end
          | NONE => ()
       )
-  | useValueAsRecord (env, label, C.Unit) = ()
-  | useValueAsRecord (env, label, C.Nil) = ()
-  | useValueAsRecord (env, label, C.BoolConst _) = ()
-  | useValueAsRecord (env, label, C.NativeIntConst _) = ()
-  | useValueAsRecord (env, label, C.Int32Const _) = ()
-  | useValueAsRecord (env, label, C.Int54Const _) = ()
-  | useValueAsRecord (env, label, C.Int64Const _) = ()
-  | useValueAsRecord (env, label, C.IntInfConst _) = ()
-  | useValueAsRecord (env, label, C.NativeWordConst _) = ()
-  | useValueAsRecord (env, label, C.Word32Const _) = ()
-  | useValueAsRecord (env, label, C.Word64Const _) = ()
-  | useValueAsRecord (env, label, C.CharConst _) = ()
-  | useValueAsRecord (env, label, C.Char16Const _) = ()
-  | useValueAsRecord (env, label, C.StringConst _) = ()
-  | useValueAsRecord (env, label, C.String16Const _) = ()
+  | useValueAsRecord (env, label, result, C.Unit) = ()
+  | useValueAsRecord (env, label, result, C.Nil) = ()
+  | useValueAsRecord (env, label, result, C.BoolConst _) = ()
+  | useValueAsRecord (env, label, result, C.NativeIntConst _) = ()
+  | useValueAsRecord (env, label, result, C.Int32Const _) = ()
+  | useValueAsRecord (env, label, result, C.Int54Const _) = ()
+  | useValueAsRecord (env, label, result, C.Int64Const _) = ()
+  | useValueAsRecord (env, label, result, C.IntInfConst _) = ()
+  | useValueAsRecord (env, label, result, C.NativeWordConst _) = ()
+  | useValueAsRecord (env, label, result, C.Word32Const _) = ()
+  | useValueAsRecord (env, label, result, C.Word64Const _) = ()
+  | useValueAsRecord (env, label, result, C.CharConst _) = ()
+  | useValueAsRecord (env, label, result, C.Char16Const _) = ()
+  | useValueAsRecord (env, label, result, C.StringConst _) = ()
+  | useValueAsRecord (env, label, result, C.String16Const _) = ()
 fun useContVarIndirect cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                                 SOME r => let val { direct, indirect } = !r
                                                           in r := { direct = direct, indirect = oneMore indirect }
@@ -769,18 +774,18 @@ local
                          else
                              C.CVarTable.insert cenv (v, ref neverUsedCont)
 in
-fun goSimpleExp (env, renv, cenv, crenv, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (useValue env) args
-  | goSimpleExp (env, renv, cenv, crenv, C.Record fields) = Syntax.LabelMap.app (useValue env) fields
-  | goSimpleExp (env, renv, cenv, crenv, C.ExnTag { name = _, payloadTy = _ }) = ()
-  | goSimpleExp (env, renv, cenv, crenv, C.Projection { label, record, fieldTypes = _ }) = useValueAsRecord (env, label, record)
-  | goSimpleExp (env, renv, cenv, crenv, C.Abs { contParam, params, body })
+fun goSimpleExp (env, renv, cenv, crenv, _, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (useValue env) args
+  | goSimpleExp (env, renv, cenv, crenv, _, C.Record fields) = Syntax.LabelMap.app (useValue env) fields
+  | goSimpleExp (env, renv, cenv, crenv, _, C.ExnTag { name = _, payloadTy = _ }) = ()
+  | goSimpleExp (env, renv, cenv, crenv, result, C.Projection { label, record, fieldTypes = _ }) = useValueAsRecord (env, label, result, record)
+  | goSimpleExp (env, renv, cenv, crenv, _, C.Abs { contParam, params, body })
     = ( List.app (fn p => add (env, p)) params
       ; addC (cenv, contParam)
       ; goCExp (env, renv, cenv, crenv, body)
       )
 and goDec (env, renv, cenv, crenv)
     = fn C.ValDec { exp, result } =>
-         ( goSimpleExp (env, renv, cenv, crenv, exp)
+         ( goSimpleExp (env, renv, cenv, crenv, result, exp)
          ; case result of
                SOME result => add (env, result)
              | NONE => ()
@@ -1406,9 +1411,16 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                            | u => let datatype param_transform = KEEP | ELIMINATE | UNPACK of (C.Var * Syntax.Label) list
                                       fun tryUnpackParam param = case CpsUsageAnalysis.getValueUsage (#usage usage, param) of
                                                                      { call = NEVER, project = NEVER, other = NEVER, ... } => ELIMINATE
-                                                                   | { call = NEVER, project = _, other = NEVER, labels, ... } => UNPACK (List.map (fn label as Syntax.IdentifierLabel name => (newVId (ctx, name), label)
-                                                                                                                                                   | label as Syntax.NumericLabel n => (newVId (ctx, "_" ^ Int.toString n), label)
-                                                                                                                                                   ) (Syntax.LabelSet.toList labels))
+                                                                   | { call = NEVER, project = _, other = NEVER, labels, ... } =>
+                                                                     UNPACK (Syntax.LabelMap.foldri (fn (label, optName, acc) =>
+                                                                                                        let val name = case optName of
+                                                                                                                           SOME name => name
+                                                                                                                         | NONE => case label of
+                                                                                                                                       Syntax.IdentifierLabel name => name
+                                                                                                                                     | Syntax.NumericLabel n => "_" ^ Int.toString n
+                                                                                                        in (newVId (ctx, name), label) :: acc
+                                                                                                        end
+                                                                                                    ) [] labels)
                                                                    | _ => KEEP
                                       val isSmall = sizeOfCExp (body, 10) >= 0
                                       val shouldTransformParams = if isSmall then
