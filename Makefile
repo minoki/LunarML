@@ -14,6 +14,7 @@ sources = \
   pluto/char-parser.fun \
   src/numeric.sml \
   src/text.sml \
+  src/strongly-connected-components.sml \
   src/language-options.sml \
   src/target-info.sml \
   src/primitives.sml \

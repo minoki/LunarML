@@ -50,6 +50,10 @@ structure VIdTable = HashTableFn (struct
                                    fun hashVal (MkVId (_, i)) = Word.fromInt i
                                    val sameKey = eqVId
                                    end)
+structure VIdSCC = StronglyConnectedComponents (type t = VId
+                                                structure Map = VIdMap
+                                                structure Set = VIdSet
+                                               )
 
 structure TyNameKey = struct
 type ord_key = TyName

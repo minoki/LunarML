@@ -1516,43 +1516,18 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                             def
                   val defs = List.map (fn (f, k, params, body) => (f, k, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs
                   val defs = List.map tryConvertToLoop defs
-                  (* SCC *)
                   val defined = List.foldl (fn ((f, _, _, _), set) => TypedSyntax.VIdSet.add (set, f)) TypedSyntax.VIdSet.empty defs
-                  val map : { def : C.Var * C.CVar * C.Var list * C.CExp, refs : TypedSyntax.VIdSet.set, invrefs : TypedSyntax.VId list ref, seen1 : bool ref, seen2 : bool ref } TypedSyntax.VIdMap.map
-                      = List.foldl (fn (def as (f, k, params, body), map) => TypedSyntax.VIdMap.insert (map, f, { def = def, refs = TypedSyntax.VIdSet.intersection (C.freeVarsInExp (TypedSyntax.VIdSet.empty, body, TypedSyntax.VIdSet.empty), defined), invrefs = ref [], seen1 = ref false, seen2 = ref false })) TypedSyntax.VIdMap.empty defs
-                  fun dfs1 (from : TypedSyntax.VId option, vid) : TypedSyntax.VId list
-                      = let val { refs, invrefs, seen1, ... } = TypedSyntax.VIdMap.lookup (map, vid)
-                        in case from of
-                               SOME vid' => invrefs := vid' :: !invrefs
-                             | NONE => ()
-                         ; if !seen1 then
-                               []
-                           else
-                               ( seen1 := true
-                               ; TypedSyntax.VIdSet.foldl (fn (vid', acc) => acc @ dfs1 (SOME vid, vid')) [vid] refs
-                               )
-                        end
-                  val list : TypedSyntax.VId list = TypedSyntax.VIdMap.foldli (fn (vid, _, acc) => acc @ dfs1 (NONE, vid)) [] map
-                  fun dfs2 vid : TypedSyntax.VIdSet.set
-                      = let val { refs, invrefs = ref invrefs, seen2, ... } = TypedSyntax.VIdMap.lookup (map, vid)
-                        in if !seen2 then
-                               TypedSyntax.VIdSet.empty
-                           else
-                               ( seen2 := true
-                               ; List.foldl (fn (vid', acc) => TypedSyntax.VIdSet.union (acc, dfs2 vid')) (TypedSyntax.VIdSet.singleton vid) invrefs
-                               )
-                        end
-                  val sccs : TypedSyntax.VIdSet.set list = List.foldl (fn (vid, acc) =>
-                                                                          let val set = dfs2 vid
-                                                                          in if TypedSyntax.VIdSet.isEmpty set then
-                                                                                 acc
-                                                                             else
-                                                                                 set :: acc
-                                                                          end) [] list
+                  val map = List.foldl (fn (def as (f, _, _, body), map) =>
+                                           TypedSyntax.VIdMap.insert (map, f, { def = def
+                                                                              , dests = TypedSyntax.VIdSet.intersection (C.freeVarsInExp (TypedSyntax.VIdSet.empty, body, TypedSyntax.VIdSet.empty), defined)
+                                                                              }
+                                                                     )
+                                       ) TypedSyntax.VIdMap.empty defs
+                  val sccs = TypedSyntax.VIdSCC.components (#dests, map)
                   val decs = List.foldl (fn (scc, decs) =>
                                             let val dec = case TypedSyntax.VIdSet.listItems scc of
-                                                              [vid] => let val { def as (f, k, params, body), refs, ... } = TypedSyntax.VIdMap.lookup (map, vid)
-                                                                       in if TypedSyntax.VIdSet.member (refs, vid) then
+                                                              [vid] => let val { def as (f, k, params, body), dests } = TypedSyntax.VIdMap.lookup (map, vid)
+                                                                       in if TypedSyntax.VIdSet.member (dests, vid) then
                                                                               C.RecDec [def]
                                                                           else
                                                                               C.ValDec { exp = C.Abs { contParam = k, params = params, body = body }, result = SOME f }
