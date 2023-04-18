@@ -23,6 +23,10 @@ val toList = foldr (op ::) []
 open IdSet
 end
 structure IdMap = RedBlackMapFn (IdKey)
+structure IdSCC = StronglyConnectedComponents (type t = Id
+                                               structure Map = IdMap
+                                               structure Set = IdSet
+                                              )
 datatype VarAttr = CONST | LATE_INIT | MUTABLE
 datatype LuaConst = Nil
                   | False
@@ -79,6 +83,62 @@ fun makeDoStat (stats : Stat list) = if List.exists (fn LocalStat _ => true | Re
                                          [DoStat (vector stats)]
                                      else
                                          stats
+
+fun freeVarsInExp (bound : IdSet.set, ConstExp _, acc : IdSet.set) = acc
+  | freeVarsInExp (bound, VarExp v, acc) = if IdSet.member (bound, v) then
+                                               acc
+                                           else
+                                               IdSet.add (acc, v)
+  | freeVarsInExp (bound, TableExp fields, acc) = Vector.foldl (fn ((k, x), acc) => freeVarsInExp (bound, x, acc)) acc fields
+  | freeVarsInExp (bound, CallExp (f, args), acc) = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) (freeVarsInExp (bound, f, acc)) args
+  | freeVarsInExp (bound, MethodExp (obj, _, args), acc) = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) (freeVarsInExp (bound, obj, acc)) args
+  | freeVarsInExp (bound, FunctionExp (params, body), acc) = freeVarsInBlock (Vector.foldl IdSet.add' bound params, body, acc)
+  | freeVarsInExp (bound, BinExp (_, x, y), acc) = freeVarsInExp (bound, y, freeVarsInExp (bound, x, acc))
+  | freeVarsInExp (bound, UnaryExp (_, x), acc) = freeVarsInExp (bound, x, acc)
+  | freeVarsInExp (bound, IndexExp (x, y), acc) = freeVarsInExp (bound, y, freeVarsInExp (bound, x, acc))
+  | freeVarsInExp (bound, SingleValueExp x, acc) = freeVarsInExp (bound, x, acc)
+and freeVarsInStat (LocalStat (lhs, rhs), (bound, acc)) = let val acc = List.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc rhs
+                                                              val bound = List.foldl (fn ((v, _), b) => IdSet.add (b, UserDefinedId v)) bound lhs
+                                                          in (bound, acc)
+                                                          end
+  | freeVarsInStat (AssignStat (lhs, rhs), (bound, acc)) = let val acc = List.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc rhs
+                                                               val acc = List.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc lhs
+                                                           in (bound, acc)
+                                                           end
+  | freeVarsInStat (CallStat (f, args), (bound, acc)) = let val acc = freeVarsInExp (bound, f, acc)
+                                                            val acc = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc args
+                                                        in (bound, acc)
+                                                        end
+  | freeVarsInStat (MethodStat (obj, _, args), (bound, acc)) = let val acc = freeVarsInExp (bound, obj, acc)
+                                                                   val acc = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc args
+                                                               in (bound, acc)
+                                                               end
+  | freeVarsInStat (IfStat (cond, then_, else_), (bound, acc)) = let val acc = freeVarsInExp (bound, cond, acc)
+                                                                     val acc = freeVarsInBlock (bound, then_, acc)
+                                                                     val acc = freeVarsInBlock (bound, else_, acc)
+                                                                 in (bound, acc)
+                                                                 end
+  | freeVarsInStat (ReturnStat xs, (bound, acc)) = let val acc = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc xs
+                                                   in (bound, acc)
+                                                   end
+  | freeVarsInStat (DoStat block, (bound, acc)) = let val acc = freeVarsInBlock (bound, block, acc)
+                                                  in (bound, acc)
+                                                  end
+  | freeVarsInStat (GotoStat _, bound_acc) = bound_acc
+  | freeVarsInStat (LabelStat _, bound_acc) = bound_acc
+and freeVarsInBlock (bound, block, acc) = #2 (Vector.foldl freeVarsInStat (bound, acc) block)
+fun MultiAssignStat (vars : Id list, values : Exp list)
+    = let val idset = List.foldl IdSet.add' IdSet.empty vars
+          val graph = ListPair.foldlEq (fn (v, x, map) =>
+                                           let val free = IdSet.intersection (idset, freeVarsInExp (IdSet.empty, x, IdSet.empty))
+                                           in IdMap.insert (map, v, { rhsFree = free, rhs = x })
+                                           end
+                                       ) IdMap.empty (vars, values)
+          val sccs = List.rev (IdSCC.components (#rhsFree, graph))
+      in List.map (fn set => let val vars = IdSet.toList set
+                             in AssignStat (List.map VarExp vars, List.map (fn v => #rhs (IdMap.lookup (graph, v))) vars)
+                             end) sccs
+      end
 end;
 
 structure LuaWriter = struct

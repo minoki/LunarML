@@ -180,7 +180,7 @@ datatype purity = PURE | DISCARDABLE | IMPURE
 fun applyCont (ctx : Context, env : Env, cont : C.CVar, args : L.Exp list)
     = case C.CVarMap.find (#continuations env, cont) of
           SOME (GOTO { label, params = [] }) => [L.GotoStat label]
-        | SOME (GOTO { label, params }) => [L.AssignStat (List.map L.VarExp params, args), L.GotoStat label]
+        | SOME (GOTO { label, params }) => L.MultiAssignStat (params, args) @ [L.GotoStat label]
         | SOME RETURN => [L.ReturnStat (vector args)]
         | NONE => raise CodeGenError "undefined continuation"
 
