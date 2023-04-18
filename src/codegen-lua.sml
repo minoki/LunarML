@@ -170,7 +170,7 @@ fun ExpStat (L.CallExp (f, args)) = [L.CallStat (f, args)]
   | ExpStat (L.ConstExp _) = []
   | ExpStat e = [L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [e])]
 
-datatype cont_type = GOTO of { label : L.Id, params : L.Id list }
+datatype cont_type = GOTO of { label : L.Id, params : (L.Id option) list }
                    | RETURN
 type Env = { continuations : cont_type C.CVarMap.map
            }
@@ -180,7 +180,11 @@ datatype purity = PURE | DISCARDABLE | IMPURE
 fun applyCont (ctx : Context, env : Env, cont : C.CVar, args : L.Exp list)
     = case C.CVarMap.find (#continuations env, cont) of
           SOME (GOTO { label, params = [] }) => [L.GotoStat label]
-        | SOME (GOTO { label, params }) => L.MultiAssignStat (params, args) @ [L.GotoStat label]
+        | SOME (GOTO { label, params }) => let val (params', args') = ListPair.foldrEq (fn (SOME p, a, (pp, aa)) => (p :: pp, a :: aa)
+                                                                                       | (NONE, _, acc) => acc
+                                                                                       ) ([], []) (params, args)
+                                           in L.MultiAssignStat (params', args') @ [L.GotoStat label]
+                                           end
         | SOME RETURN => [L.ReturnStat (vector args)]
         | NONE => raise CodeGenError "undefined continuation"
 
@@ -771,17 +775,19 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                 | C.ContDec { name, params, body } =>
                   (case (VectorSlice.isEmpty decs, finalExp) of
                        (true, C.App { applied, cont, args }) => if cont = name then
-                                                                    List.revAppend (revStats, L.LocalStat (List.map (fn p => (p, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+                                                                    List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
                                                                                               :: doCExp ctx env body)
                                                                 else
                                                                     List.revAppend (revStats, doCExp ctx env finalExp) (* dead continuation elimination *)
                      | _ => let val label = doLabel name
-                                val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (fn p => VIdToLua (ctx, p)) params })
+                                val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (Option.map (fn p => VIdToLua (ctx, p))) params })
                                            }
-                                val decs' = if List.null params then
-                                                []
-                                            else
-                                                [L.LocalStat (List.map (fn p => (p, L.LATE_INIT)) params, [])]
+                                val decs' = let val params' = List.mapPartial (Option.map (fn p => (p, L.LATE_INIT))) params
+                                            in if List.null params' then
+                                                   []
+                                               else
+                                                   [L.LocalStat (params', [])]
+                                            end
                             in List.revAppend (revStats, decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, [])) @ L.LabelStat label :: doCExp ctx env body) (* enclose with do statement? *)
                             end
                   )
@@ -790,14 +796,22 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                     | NO_INIT
                       val init = case (VectorSlice.isEmpty decs, finalExp) of
                                      (true, C.AppCont { applied, args }) =>
-                                     if List.exists (fn (name, _, _) => name = applied) defs then
+                                     if List.exists (fn (name, params, _) => name = applied andalso List.all Option.isSome params) defs then
                                          INIT_WITH_VALUES (applied, args)
                                      else
                                          NO_INIT
                                    | _ => NO_INIT
-                      val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
+                      val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length (List.filter Option.isSome params))) 0 defs
                       val commonParams = List.tabulate (maxParams, fn _ => genSym ctx)
-                      val env' = { continuations = List.foldl (fn ((name, params, body), m) => C.CVarMap.insert (m, name, GOTO { label = doLabel name, params = List.map L.UserDefinedId (List.take (commonParams, List.length params)) })) (#continuations env) defs
+                      fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME p, (c :: rest, acc)) => (rest, SOME c :: acc)
+                                                                            | (_, (rest, acc)) => (rest, NONE :: acc)
+                                                                            ) (commonParams, []) params))
+                      val env' = { continuations = List.foldl (fn ((name, params, body), m) =>
+                                                                  C.CVarMap.insert (m, name, GOTO { label = doLabel name
+                                                                                                  , params = List.map (Option.map L.UserDefinedId) (mapCommonParams params)
+                                                                                                  }
+                                                                                   )
+                                                              ) (#continuations env) defs
                                  }
                       val initAndRest = case init of
                                             INIT_WITH_VALUES (initCont, args) =>
@@ -819,10 +833,12 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                             in decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, []))
                                             end
                       val conts = List.map (fn (name, params, body) =>
-                                               let val dec = if List.null params then
-                                                                 []
-                                                             else
-                                                                 [L.LocalStat (List.map (fn v => (v, L.CONST)) params, List.map (fn v => L.VarExp (L.UserDefinedId v)) (List.take (commonParams, List.length params)))]
+                                               let val dec = let val params' = List.mapPartial (Option.map (fn v => (v, L.CONST))) params
+                                                             in if List.null params' then
+                                                                    []
+                                                                else
+                                                                    [L.LocalStat (params', List.mapPartial (Option.map (L.VarExp o L.UserDefinedId)) (mapCommonParams params))]
+                                                             end
                                                in L.LabelStat (doLabel name) :: L.makeDoStat (dec @ doCExp ctx env' body)
                                                end
                                            ) defs
@@ -835,10 +851,16 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
   | doCExp ctx env (C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO { label, params }) =>
-           let val callAndAssign = case params of
-                                       [] => L.CallStat (doValue ctx applied, Vector.map (doValue ctx) (vector args))
-                                     | _ => L.AssignStat (List.map L.VarExp params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
-           in [callAndAssign, L.GotoStat label]
+           let val callAndAssign = if List.exists Option.isSome params then
+                                       if List.all Option.isSome params then
+                                           [L.AssignStat (List.map (L.VarExp o Option.valOf) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])]
+                                       else
+                                           let val dummy = genSym ctx
+                                           in [L.LocalStat ([(dummy, L.LATE_INIT)], []), L.AssignStat (List.map (fn SOME p => L.VarExp p | NONE => L.VarExp (L.UserDefinedId dummy)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])]
+                                           end
+                                   else
+                                       [L.CallStat (doValue ctx applied, Vector.map (doValue ctx) (vector args))]
+           in callAndAssign @ [L.GotoStat label]
            end
          | SOME RETURN => [L.ReturnStat (vector [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])] (* tail call *)
          | NONE => raise CodeGenError "undefined continuation"

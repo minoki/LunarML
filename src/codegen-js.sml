@@ -176,8 +176,8 @@ fun doCVar v = J.VarExp (CVarToJs v)
 fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
 
-datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
-                   | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : J.Id list }
+datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
+                   | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
                    | TAILCALL of C.CVar (* continuation passing style *)
                    | RETURN_TRAMPOLINE (* direct style *)
                    | RETURN_SIMPLE (* direct style *)
@@ -197,10 +197,22 @@ fun genExnContSym (ctx : Context) = let val n = !(#nextJsId ctx)
 
 fun applyCont (ctx : Context, env : Env, cont, args)
     = case C.CVarMap.find (#continuations env, cont) of
-          SOME (BREAK_TO { label, which = NONE, params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.BreakStat (SOME label) ]
-        | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ]
-        | SOME (CONTINUE_TO { label, which = NONE, params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.ContinueStat (SOME label) ]
-        | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params }) => J.MultiAssignStat (List.map J.VarExp params, args) @ [ J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ]
+          SOME (BREAK_TO { label, which, params }) => let val (params', args') = ListPair.foldrEq (fn (SOME p, a, (pp, aa)) => (p :: pp, a :: aa)
+                                                                                                  | (NONE, _, acc) => acc
+                                                                                                  ) ([], []) (params, args)
+                                                          val setWhich = case which of
+                                                                             NONE => []
+                                                                           | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
+                                                      in J.MultiAssignStat (List.map J.VarExp params', args') @ setWhich @ [ J.BreakStat (SOME label) ]
+                                                      end
+        | SOME (CONTINUE_TO { label, which, params }) => let val (params', args') = ListPair.foldrEq (fn (SOME p, a, (pp, aa)) => (p :: pp, a :: aa)
+                                                                                                     | (NONE, _, acc) => acc
+                                                                                                     ) ([], []) (params, args)
+                                                             val setWhich = case which of
+                                                                                NONE => []
+                                                                              | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
+                                                         in J.MultiAssignStat (List.map J.VarExp params', args') @ setWhich @ [ J.ContinueStat (SOME label) ]
+                                                         end
         | SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doCVar k, J.ArrayExp (vector args)]))) ] (* continuation passing style *)
         | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector (J.ConstExp J.True :: args)))) ] (* direct style *)
         | SOME RETURN_SIMPLE => (case args of
@@ -535,23 +547,25 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                        DIRECT_STYLE => false
                                      | CPS => CpsAnalyze.escapesTransitively (#contEscapeMap ctx, name)
                   in if escape then
-                         let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map (VIdToJs ctx) params), vector (doCExp ctx env body)))
+                         let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map (fn SOME p => VIdToJs ctx p | NONE => VIdToJs ctx (genSym ctx)) params), vector (doCExp ctx env body)))
                              val env' = { continuations = C.CVarMap.insert (#continuations env, name, TAILCALL name)
                                         }
                          in doDecs (ctx, env', decs, finalExp, dec :: revStats)
                          end
                      else
                          case (VectorSlice.isEmpty decs, finalExp, params) of
-                             (true, C.App { applied, cont, args }, [result]) =>
+                             (true, C.App { applied, cont, args }, [SOME result]) =>
                              if cont = name then
                                  List.revAppend (revStats, ConstStat (result, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env body)
                              else
                                  List.revAppend (revStats, doCExp ctx env finalExp) (* dead continuation elimination *)
-                           | _ => let val dec = if List.null params then
-                                                    []
-                                                else
-                                                    [J.LetStat (vector (List.map (fn p => (p, NONE)) params))]
-                                      val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (VIdToJs ctx) params })
+                           | _ => let val dec = let val params' = List.mapPartial (Option.map (fn p => (p, NONE))) params
+                                                in if List.null params' then
+                                                       []
+                                                   else
+                                                       [J.LetStat (vector params')]
+                                                end
+                                      val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (Option.map (VIdToJs ctx)) params })
                                                    }
                                   in List.revAppend (revStats, dec @ J.BlockStat (SOME (CVarToJs name), vector (doDecs (ctx, newEnv, decs, finalExp, [])))
                                                                :: doCExp ctx env body)
@@ -565,28 +579,31 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                          let val env' = { continuations = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
                                         }
                              val (decs', assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
-                                                                       (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
+                                                                       (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map (fn SOME p => VIdToJs ctx p | NONE => VIdToJs ctx (genSym ctx)) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
                                                                    ) ([], []) defs
                          in doDecs (ctx, env', decs, finalExp, List.revAppend (decs' @ assignments, revStats))
                          end
                      else
-                         let datatype init = INIT_WITH_VALUES of int * C.Value list
+                         let datatype init = INIT_WITH_VALUES of int * (C.Var option list) * C.Value list
                                            | NO_INIT
                              val init = case (VectorSlice.isEmpty decs, finalExp) of
                                             (true, C.AppCont { applied, args }) =>
                                             let fun find (i, []) = NO_INIT
-                                                  | find (i, (name, _, _) :: xs) = if name = applied then
-                                                                                       INIT_WITH_VALUES (i, args)
-                                                                                   else
-                                                                                       find (i + 1, xs)
+                                                  | find (i, (name, params, _) :: xs) = if name = applied then
+                                                                                            INIT_WITH_VALUES (i, params, args)
+                                                                                        else
+                                                                                            find (i + 1, xs)
                                             in find (0, defs)
                                             end
                                          | _ => NO_INIT
                              val loopLabel = J.UserDefinedId (genSym ctx)
                              datatype needs_which = NEED_WHICH of J.Id
-                                                  | NO_WHICH of C.CVar * C.Var list * C.CExp
-                             val maxargs = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length params)) 0 defs
+                                                  | NO_WHICH of C.CVar * (C.Var option) list * C.CExp
+                             val maxargs = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length (List.filter Option.isSome params))) 0 defs
                              val commonParams = List.tabulate (maxargs, fn _ => genSym ctx)
+                             fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME p, (c :: rest, acc)) => (rest, SOME c :: acc)
+                                                                                   | (_, (rest, acc)) => (rest, NONE :: acc)
+                                                                                   ) (commonParams, []) params))
                              val (optWhich, vars) = case defs of
                                                         [def] => (NO_WHICH def, commonParams)
                                                       | _ => let val which = genSym ctx
@@ -598,17 +615,23 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                                           , which = case optWhich of
                                                                                                         NO_WHICH _ => NONE
                                                                                                       | NEED_WHICH which' => SOME (which', J.Numeral (Int.toString i))
-                                                                                          , params = List.map (VIdToJs ctx) (List.take (commonParams, List.length params))
+                                                                                          , params = List.map (Option.map (VIdToJs ctx)) (mapCommonParams params)
                                                                                           }
                                                                in (i + 1, C.CVarMap.insert (e, name, cont))
                                                                end) (0, #continuations env) defs
                              val recEnv = { continuations = recEnvC }
                              val initAndRest = case init of
-                                                   INIT_WITH_VALUES (initialWhich, args) =>
-                                                   let val args' = case optWhich of
+                                                   INIT_WITH_VALUES (initialWhich, params, args) =>
+                                                   let val args = ListPair.foldrEq (fn (SOME _, a, acc) => a :: acc
+                                                                                   | (NONE, _, acc) => acc
+                                                                                   ) [] (params, args)
+                                                       val args' = case optWhich of
                                                                        NO_WHICH _ => List.map (doValue ctx) args
                                                                      | NEED_WHICH _ => J.ConstExp (J.Numeral (Int.toString initialWhich)) :: List.map (doValue ctx) args
-                                                   in [ J.LetStat (vector (ListPair.mapEq (fn (p, a) => (p, SOME a)) (vars, args'))) ]
+                                                   in if List.null args' then
+                                                          []
+                                                      else
+                                                          [ J.LetStat (vector (ListPair.map (fn (p, a) => (p, SOME a)) (vars, args'))) ]
                                                    end
                                                  | NO_INIT =>
                                                    let val blockLabel = J.UserDefinedId (genSym ctx)
@@ -617,7 +640,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                                                                   , which = case optWhich of
                                                                                                                                 NO_WHICH _ => NONE
                                                                                                                               | NEED_WHICH which' => SOME (which', J.Numeral (Int.toString i))
-                                                                                                                  , params = List.map (VIdToJs ctx) (List.take (commonParams, List.length params))
+                                                                                                                  , params = List.map (Option.map (VIdToJs ctx)) (mapCommonParams params)
                                                                                                                   }
                                                                                           in (i + 1, C.CVarMap.insert (e, name, cont))
                                                                                           end) (0, #continuations env) defs
@@ -631,20 +654,24 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                              @ [ J.LoopStat ( SOME loopLabel
                                                             , case optWhich of
                                                                   NO_WHICH (name, params, body) =>
-                                                                  let val dec = if List.null params then
-                                                                                    []
-                                                                                else
-                                                                                    [J.ConstStat (vector (ListPair.map (fn (p, v) => (p, J.VarExp (J.UserDefinedId v))) (params, commonParams)))]
+                                                                  let val dec = let val defs = ListPair.map (fn (p, c) => (p, J.VarExp (J.UserDefinedId c))) (List.mapPartial (fn x => x) params, commonParams)
+                                                                                in if List.null defs then
+                                                                                       []
+                                                                                   else
+                                                                                       [J.ConstStat (vector defs)]
+                                                                                end
                                                                   in vector (dec @ doCExp ctx recEnv body)
                                                                   end
                                                                 | NEED_WHICH which' =>
                                                                   vector [ J.SwitchStat ( J.VarExp which'
                                                                                         , #2 (List.foldr (fn ((name, params, body), (i, cases)) =>
                                                                                                              let val i = i - 1
-                                                                                                                 val dec = if List.null params then
-                                                                                                                               []
-                                                                                                                           else
-                                                                                                                               [J.ConstStat (vector (ListPair.map (fn (p, v) => (p, J.VarExp (J.UserDefinedId v))) (params, commonParams)))]
+                                                                                                                 val dec = let val defs = ListPair.map (fn (p, c) => (p, J.VarExp (J.UserDefinedId c))) (List.mapPartial (fn x => x) params, commonParams)
+                                                                                                                           in if List.null defs then
+                                                                                                                                  []
+                                                                                                                              else
+                                                                                                                                  [J.ConstStat (vector defs)]
+                                                                                                                           end
                                                                                                              in (i, (J.Numeral (Int.toString i), vector (dec @ doCExp ctx recEnv body)) :: cases)
                                                                                                              end
                                                                                                          ) (n, []) defs)
@@ -662,10 +689,22 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
   | doCExp ctx env (C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (vector (doCVar k :: List.map (doValue ctx) args))]))) ] (* continuation passing style *)
-         | SOME (BREAK_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.BreakStat (SOME label) ] (* direct style *)
-         | SOME (BREAK_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.BreakStat (SOME label) ] (* direct style *)
-         | SOME (CONTINUE_TO { label, which = NONE, params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.ContinueStat (SOME label) ] (* direct style *)
-         | SOME (CONTINUE_TO { label, which = SOME (whichVar, whichVal), params = [p] }) => [ J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))), J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal), J.ContinueStat (SOME label) ] (* direct style *)
+         | SOME (BREAK_TO { label, which, params = [p] }) => let val setWhich = case which of
+                                                                                    NONE => []
+                                                                                  | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
+                                                                 val call = case p of
+                                                                                SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                                              | NONE => J.ExpStat (J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                             in call :: setWhich @ [ J.BreakStat (SOME label) ] (* direct style *)
+                                                             end
+         | SOME (CONTINUE_TO { label, which, params = [p] }) => let val setWhich = case which of
+                                                                                       NONE => []
+                                                                                     | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
+                                                                    val call = case p of
+                                                                                   SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                                                 | NONE => J.ExpStat (J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                                in call :: setWhich @ [ J.ContinueStat (SOME label) ] (* direct style *)
+                                                                end
          | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (Vector.map (doValue ctx) (vector args))]))) ] (* direct style, tail call *)
          | SOME RETURN_SIMPLE => raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation"
@@ -697,7 +736,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
               else
                   let val result = genSym ctx
                       val dec = J.LetStat (vector [(result, NONE)])
-                      val env' = { continuations = C.CVarMap.singleton (successfulExitIn, BREAK_TO { label = CVarToJs successfulExitIn, which = NONE, params = [VIdToJs ctx result] }) }
+                      val env' = { continuations = C.CVarMap.singleton (successfulExitIn, BREAK_TO { label = CVarToJs successfulExitIn, which = NONE, params = [SOME (VIdToJs ctx result)] }) }
                   in save :: install :: dec
                      :: J.BlockStat (SOME (CVarToJs successfulExitIn), vector (doCExp ctx env' body))
                      :: restore
