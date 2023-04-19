@@ -1664,24 +1664,66 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                    end
           )
         | C.RecContDec defs =>
-          if List.exists (fn (f, _, _) => CpsUsageAnalysis.getContUsage (#cont_usage usage, f) <> { direct = NEVER, indirect = NEVER }) defs then
-              let val cenv = List.foldl (fn ((f, params, body), cenv) => C.CVarMap.insert (cenv, f, (params, NONE))) cenv defs
-                  val dec = C.RecContDec (List.map (fn (f, params, body) =>
-                                                       let val params = List.map (fn SOME p => (case CpsUsageAnalysis.getValueUsage (#usage usage, p) of
-                                                                                                    { call = NEVER, project = NEVER, other = NEVER, ... } => NONE
-                                                                                                  | _ => SOME p
-                                                                                               )
-                                                                                 | NONE => NONE
-                                                                                 ) params
-                                                       in (f, params, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))
-                                                       end
-                                                   ) defs)
-              in (env, cenv, subst, csubst, dec :: acc)
-              end
-          else
+          if List.all (fn (f, _, _) => CpsUsageAnalysis.getContUsage (#cont_usage usage, f) = { direct = NEVER, indirect = NEVER }) defs then
               ( #simplificationOccurred ctx := true
               ; (env, cenv, subst, csubst, acc)
               )
+          else
+              let fun transform (name, params, body)
+                      = let val shouldTransformParams = if #indirect (CpsUsageAnalysis.getContUsage (#cont_usage usage, name)) = NEVER then
+                                                            let val t = List.map (tryUnpackContParam (ctx, #usage usage)) params
+                                                            in if List.exists (fn ELIMINATE => true | UNPACK _ => true | KEEP => false) t then
+                                                                   SOME t
+                                                               else
+                                                                   NONE
+                                                            end
+                                                        else
+                                                            NONE
+                        in case shouldTransformParams of
+                               SOME paramTransforms =>
+                               let val () = #simplificationOccurred ctx := true
+                                   val params' = ListPair.foldrEq (fn (SOME p, KEEP, acc) => p :: acc
+                                                                  | (SOME p, ELIMINATE, acc) => acc
+                                                                  | (SOME p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                                  | (NONE, _, acc) => acc
+                                                                  ) [] (params, paramTransforms)
+                                   val env' = ListPair.foldlEq (fn (SOME p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
+                                                               | (SOME p, KEEP, env) => env
+                                                               | (SOME p, ELIMINATE, env) => env
+                                                               | (NONE, _, env) => env
+                                                               ) env (params, paramTransforms)
+                                   val name' = renewCVar (ctx, name)
+                                   val wrapper = let val params' = List.map (Option.map (fn p => renewVId (ctx, p))) params
+                                                     val (decs, args) = ListPair.foldrEq (fn (SOME p, KEEP, (decs, args)) => (decs, C.Var p :: args)
+                                                                                         | (SOME p, ELIMINATE, acc) => acc
+                                                                                         | (SOME p, UNPACK fields, (decs, args)) =>
+                                                                                           List.foldr (fn ((v, label), (decs, args)) =>
+                                                                                                          let val v = renewVId (ctx, v)
+                                                                                                              val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
+                                                                                                                                 , result = SOME v
+                                                                                                                                 }
+                                                                                                          in (dec :: decs, C.Var v :: args)
+                                                                                                          end
+                                                                                                      ) (decs, args) fields
+                                                                                         | (NONE, _, acc) => acc
+                                                                                         ) ([], []) (params', paramTransforms)
+                                                 in (params', SOME (C.Let { decs = vector decs
+                                                                          , cont = C.AppCont { applied = name'
+                                                                                             , args = args
+                                                                                             }
+                                                                          }
+                                                                   )
+                                                    )
+                                                 end
+                               in { origName = name, body = body, newName = name', newParams = List.map SOME params', env = env', inline = wrapper }
+                               end
+                             | NONE => { origName = name, body = body, env = env, newName = name, newParams = params, inline = (params, NONE) }
+                        end
+                  val defs' = List.map transform defs
+                  val cenv = List.foldl (fn ({ origName, inline, ... }, cenv) => C.CVarMap.insert (cenv, origName, inline)) cenv defs'
+                  val dec = C.RecContDec (List.map (fn { newName, newParams, env, body, ... } => (newName, newParams, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs')
+              in (env, cenv, subst, csubst, dec :: acc)
+              end
 and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv : ((C.Var option) list * C.CExp option) C.CVarMap.map, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, usage, e)
     = case e of
           C.Let { decs, cont } =>
@@ -1727,9 +1769,16 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
                  SOME (params, SOME body) =>
                  let val () = #simplificationOccurred ctx := true
                      val subst = ListPair.foldlEq (fn (SOME p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a) | (NONE, _, subst) => subst) subst (params, args)
-                 in case CpsUsageAnalysis.getContUsage (#cont_usage usage, applied) of
-                        { direct = ONCE, indirect = NEVER } => substCExp (subst, csubst, body) (* no alpha conversion *)
-                      | _ => alphaConvert (ctx, subst, csubst, body)
+                     val canOmitAlphaConversion = case CpsUsageAnalysis.getContUsage (#cont_usage usage, applied) of
+                                                      { direct = ONCE, indirect = NEVER } => (case CpsUsageAnalysis.getContUsage (#cont_rec_usage usage, applied) of
+                                                                                                  { direct = NEVER, indirect = NEVER } => true
+                                                                                                | _ => false
+                                                                                             )
+                                                    | _ => false
+                 in if canOmitAlphaConversion then
+                        substCExp (subst, csubst, body) (* no alpha conversion *)
+                    else
+                        alphaConvert (ctx, subst, csubst, body)
                  end
                | _ => C.AppCont { applied = applied, args = args }
           end
