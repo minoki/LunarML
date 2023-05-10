@@ -788,7 +788,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                else
                                                    [L.LocalStat (params', [])]
                                             end
-                            in List.revAppend (revStats, decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, [])) @ L.LabelStat label :: doCExp ctx env body) (* enclose with do statement? *)
+                            in List.revAppend (revStats, decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', decs, finalExp, []) } @ L.LabelStat label :: doCExp ctx env body) (* enclose with do statement? *)
                             end
                   )
                 | C.RecContDec defs =>
@@ -830,7 +830,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                 [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, [])]
                                                             else
                                                                 []
-                                            in decs' @ L.makeDoStat (doDecs (ctx, env', decs, finalExp, []))
+                                            in decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', decs, finalExp, []) }
                                             end
                       val conts = List.map (fn (name, params, body) =>
                                                let val dec = let val params' = List.mapPartial (Option.map (fn v => (v, L.CONST))) params
@@ -839,7 +839,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                 else
                                                                     [L.LocalStat (params', List.mapPartial (Option.map (L.VarExp o L.UserDefinedId)) (mapCommonParams params))]
                                                              end
-                                               in L.LabelStat (doLabel name) :: L.makeDoStat (dec @ doCExp ctx env' body)
+                                               in L.LabelStat (doLabel name) :: L.makeDoStat { loopLike = true, body = dec @ doCExp ctx env' body }
                                                end
                                            ) defs
                   in List.revAppend (revStats, initAndRest @ List.concat conts)
@@ -870,7 +870,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
     = let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
           val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
       in if C.containsApp thenCont then
-             L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat (doCExp ctx env thenCont) @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+             L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont } @ L.LabelStat elseLabel :: doCExp ctx env elseCont
          else
              L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont (* ad hoc *)
       end

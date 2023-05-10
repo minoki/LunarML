@@ -141,6 +141,7 @@ should_run "should_run/" {
   "functor_exception_2.sml",
   "val-rec.sml",
   "datatype-equality.sml",
+  "capture.sml",
 }
 if not luajit_mode then
   should_run "should_run/" {

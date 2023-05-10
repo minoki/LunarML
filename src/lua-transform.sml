@@ -21,7 +21,7 @@ fun hasInnerFunctionStat (L.LocalStat (_, xs)) = List.exists hasInnerFunction xs
   | hasInnerFunctionStat (L.MethodStat (x, _, ys)) = hasInnerFunction x orelse Vector.exists hasInnerFunction ys
   | hasInnerFunctionStat (L.IfStat (x, then', else')) = hasInnerFunction x orelse hasInnerFunctionBlock then' orelse hasInnerFunctionBlock else'
   | hasInnerFunctionStat (L.ReturnStat xs) = Vector.exists hasInnerFunction xs
-  | hasInnerFunctionStat (L.DoStat block) = hasInnerFunctionBlock block
+  | hasInnerFunctionStat (L.DoStat { loopLike, body }) = hasInnerFunctionBlock body
   | hasInnerFunctionStat (L.GotoStat label) = false
   | hasInnerFunctionStat (L.LabelStat label) = false
 and hasInnerFunctionBlock block = Vector.exists hasInnerFunctionStat block
@@ -32,7 +32,7 @@ fun sizeOfStat (L.LocalStat (_, xs), acc) = acc + List.length xs
   | sizeOfStat (L.MethodStat _, acc) = acc + 1
   | sizeOfStat (L.IfStat (_, then', else'), acc) = sizeOfBlock (then', sizeOfBlock (else', acc + 1))
   | sizeOfStat (L.ReturnStat xs, acc) = acc + Vector.length xs
-  | sizeOfStat (L.DoStat xs, acc) = sizeOfBlock (xs, acc)
+  | sizeOfStat (L.DoStat { loopLike, body }, acc) = sizeOfBlock (body, acc)
   | sizeOfStat (L.GotoStat label, acc) = acc + 1
   | sizeOfStat (L.LabelStat label, acc) = acc
 and sizeOfBlock (xs, acc) = Vector.foldl sizeOfStat acc xs
@@ -73,9 +73,9 @@ and freeVarsStat (bound, L.LocalStat (vids, exps)) acc = let val acc = List.fold
                                                            in (bound, acc)
                                                            end
   | freeVarsStat (bound, L.ReturnStat xs) acc = (bound, Vector.foldl (fn (x, acc) => freeVarsExp (bound, x) acc) acc xs)
-  | freeVarsStat (bound, L.DoStat block) acc = let val acc = freeVarsBlock (bound, block) acc
-                                               in (bound, acc)
-                                               end
+  | freeVarsStat (bound, L.DoStat { loopLike, body }) acc = let val acc = freeVarsBlock (bound, body) acc
+                                                            in (bound, acc)
+                                                            end
   | freeVarsStat (bound, L.GotoStat label) acc = (bound, acc)
   | freeVarsStat (bound, L.LabelStat label) acc = (bound, acc)
 and freeVarsBlock (bound, block) acc = let val (_, acc) = Vector.foldl (fn (stat, (bound, acc)) => freeVarsStat (bound, stat) acc) (bound, acc) block
@@ -114,7 +114,7 @@ and substStat map (L.LocalStat (lhs, rhs)) = let val rhs = List.map (substExp ma
   | substStat map (L.MethodStat (x, name, ys)) = (map, L.MethodStat (substExp map x, name, Vector.map (substExp map) ys))
   | substStat map (L.IfStat (exp, then', else')) = (map, L.IfStat (substExp map exp, substBlock map then', substBlock map else'))
   | substStat map (L.ReturnStat xs) = (map, L.ReturnStat (Vector.map (substExp map) xs))
-  | substStat map (L.DoStat block) = (map, L.DoStat (substBlock map block))
+  | substStat map (L.DoStat { loopLike, body }) = (map, L.DoStat { loopLike = loopLike, body = substBlock map body })
   | substStat map (stat as L.GotoStat _) = (map, stat)
   | substStat map (stat as L.LabelStat _) = (map, stat)
 and substBlock map block = let val (_, revStats) = Vector.foldl (fn (stat, (map, revStats)) =>
@@ -182,7 +182,7 @@ and doBlock (numOuter, block)
                                          [] (* should not occur *)
                                      else
                                          [L.LocalStat (hoistedVars, [])]
-                           val doStat = L.DoStat (vector stats)
+                           val doStat = L.DoStat { loopLike = false, body = vector stats }
                            val declared' = List.foldl (fn ((v, _), acc) => L.IdSet.add (acc, L.UserDefinedId v)) L.IdSet.empty vars
                        in dec @ doStat :: goForward (rest, declared', numOuter + List.length hoistedVars, [stat])
                        end
@@ -212,9 +212,9 @@ and doBlock (numOuter, block)
               = let val stat = L.ReturnStat (Vector.map doExp exps)
                 in goForward (rest, declared, numOuter, stat :: revStats)
                 end
-            | goForward ((live, L.DoStat block) :: rest, declared, numOuter, revStats)
+            | goForward ((live, L.DoStat { loopLike, body }) :: rest, declared, numOuter, revStats)
               = let val n = numOuter + L.IdSet.numItems declared
-                    val stat = L.DoStat (doBlock (n, block))
+                    val stat = L.DoStat { loopLike = loopLike, body = doBlock (n, body) }
                 in goForward (rest, declared, numOuter, stat :: revStats)
                 end
             | goForward ((live, stat as L.GotoStat _) :: rest, declared, numOuter, revStats) = goForward (rest, declared, numOuter, stat :: revStats)
@@ -228,7 +228,7 @@ and doBlock (numOuter, block)
                                                                     [] (* should not occur *)
                                                                 else
                                                                     [L.LocalStat (hoistedVars, [])]
-                                                      val doStat = L.DoStat (vector stats)
+                                                      val doStat = L.DoStat { loopLike = false, body = vector stats }
                                                   in (dec @ [ doStat ], numOuter + List.length hoistedVars)
                                                   end
                                               else
@@ -268,7 +268,7 @@ and doStat ctx (L.LocalStat (vars, xs)) = L.LocalStat (vars, List.map (doExp ctx
   | doStat ctx (L.MethodStat (x, name, ys)) = L.MethodStat (doExp ctx x, name, Vector.map (doExp ctx) ys)
   | doStat ctx (L.IfStat (x, then', else')) = L.IfStat (doExp ctx x, doBlock ctx then', doBlock ctx else')
   | doStat ctx (L.ReturnStat xs) = L.ReturnStat (Vector.map (doExp ctx) xs)
-  | doStat ctx (L.DoStat block) = L.DoStat (doBlock ctx block)
+  | doStat ctx (L.DoStat { loopLike, body }) = L.DoStat { loopLike = loopLike, body = doBlock ctx body }
   | doStat ctx (stat as L.GotoStat _) = stat
   | doStat ctx (stat as L.LabelStat _) = stat
 and doBlock ctx block = Vector.map (doStat ctx) block
@@ -354,7 +354,7 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                                end) ([], []) exps
       in case decs of
              [] => (newEnv, [L.LocalStat (vars, exps)])
-           | _ :: _ => (newEnv, [L.LocalStat (List.map (fn (vid, L.CONST) => (vid, L.LATE_INIT) | x => x) vars, []), L.DoStat (vector (decs @ [L.AssignStat (List.map (fn (vid, _) => L.VarExp (L.UserDefinedId vid)) vars, exps)]))])
+           | _ :: _ => (newEnv, [L.LocalStat (List.map (fn (vid, L.CONST) => (vid, L.LATE_INIT) | x => x) vars, []), L.DoStat { loopLike = false, body = vector (decs @ [L.AssignStat (List.map (fn (vid, _) => L.VarExp (L.UserDefinedId vid)) vars, exps)]) }])
       end
   | doStat ctx env (L.AssignStat (vars, exps)) = let val (decs, vars) = List.foldr (fn (x, (decs, xs)) => let val (decs', x) = doExp ctx env x
                                                                                                           in (decs' @ decs, x :: xs)
@@ -406,18 +406,18 @@ and doStat ctx env (L.LocalStat (vars, exps))
                                                                                                           end) ([], []) results
                                             in (env, decs @ [L.ReturnStat (vector results)])
                                             end
-  | doStat ctx env (L.DoStat block) = let val (dynamic, block) = doBlock ctx env block
-                                          val newEnv = { bound = #bound env
-                                                       , dynamic = L.IdMap.mapi (fn (id, attr as L.CONST) => attr
-                                                                                | (id, attr as L.MUTABLE) => attr
-                                                                                | (id, attr as L.LATE_INIT) => (case L.IdMap.find (dynamic, id) of
-                                                                                                                    SOME L.CONST => L.CONST
-                                                                                                                  | _ => attr
-                                                                                                               )
-                                                                                ) (#dynamic env)
-                                                       }
-                                      in (newEnv, [L.DoStat block])
-                                      end
+  | doStat ctx env (L.DoStat { loopLike, body }) = let val (dynamic, block) = doBlock ctx env body
+                                                       val newEnv = { bound = #bound env
+                                                                    , dynamic = L.IdMap.mapi (fn (id, attr as L.CONST) => attr
+                                                                                             | (id, attr as L.MUTABLE) => attr
+                                                                                             | (id, attr as L.LATE_INIT) => (case L.IdMap.find (dynamic, id) of
+                                                                                                                                 SOME L.CONST => L.CONST
+                                                                                                                               | _ => attr
+                                                                                                                            )
+                                                                                             ) (#dynamic env)
+                                                                    }
+                                                   in (newEnv, [L.DoStat { loopLike = loopLike, body = body }])
+                                                   end
   | doStat ctx env (stat as L.GotoStat _) = (env, [stat])
   | doStat ctx env (stat as L.LabelStat _) = (env, [stat])
 and doStats ctx env [] acc = (env, List.concat (List.rev acc))
@@ -430,7 +430,7 @@ and doStats ctx env [] acc = (env, List.concat (List.rev acc))
                                                 ) ([], [], []) defs
       in case decs of
              [] => doStats ctx env' stats' ([funcs @ inits] @ acc)
-           | _ :: _ => doStats ctx env' stats' ([L.DoStat (vector (L.LocalStat (decs, []) :: List.rev funcs @ List.rev inits))] :: acc)
+           | _ :: _ => doStats ctx env' stats' ([L.DoStat { loopLike = false, body = vector (L.LocalStat (decs, []) :: List.rev funcs @ List.rev inits) }] :: acc)
       end
   | doStats ctx env (stat :: stats) acc = let val (newEnv, stat') = doStat ctx env stat
                                           in doStats ctx newEnv stats (stat' :: acc)
@@ -519,7 +519,15 @@ and doStat ctx env (L.LocalStat (vars, exps))
   | doStat ctx env (L.MethodStat (self, method, args)) = (env, [L.MethodStat (doExp ctx env self, method, Vector.map (doExp ctx env) args)])
   | doStat ctx env (L.IfStat (cond, thenPart, elsePart)) = (env, [L.IfStat (doExp ctx env cond, doBlock ctx env thenPart, doBlock ctx env elsePart)])
   | doStat ctx env (L.ReturnStat results) = (env, [L.ReturnStat (Vector.map (doExp ctx env) results)])
-  | doStat ctx env (L.DoStat block) = (env, [L.DoStat (doBlock ctx env block)])
+  | doStat ctx env (L.DoStat { loopLike = true, body }) = (case #locals env of
+                                                               SOME _ => let val locals = genSym (ctx, "LOCAL")
+                                                                             val env' = { currentLocals = #currentLocals env + 1, locals = SOME (locals, ref 1), valMap = #valMap env }
+                                                                             val dec = L.LocalStat ([(locals, L.CONST)], [L.TableExp (vector [])])
+                                                                         in (env, [L.DoStat { loopLike = true, body = vector (dec :: Vector.foldr (op ::) [] (doBlock ctx env' body)) }])
+                                                                         end
+                                                             | NONE => (env, [L.DoStat { loopLike = true, body = doBlock ctx env body }])
+                                                          )
+  | doStat ctx env (L.DoStat { loopLike = false, body }) = (env, [L.DoStat { loopLike = false, body = doBlock ctx env body }])
   | doStat ctx env (stat as L.GotoStat _) = (env, [stat])
   | doStat ctx env (stat as L.LabelStat _) = (env, [stat])
 and doBlock ctx env stats = vector (List.concat (List.rev (#2 (Vector.foldl (fn (stat, (env, acc)) => let val (env, stat) = doStat ctx env stat

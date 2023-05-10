@@ -74,15 +74,16 @@ datatype Exp = ConstExp of LuaConst
               | MethodStat of Exp * string * Exp vector (* name must be a valid Lua identifier *)
               | IfStat of Exp * Block * Block (* 'elseif' will be synthesized by writer *)
               | ReturnStat of Exp vector (* must be the last statement in a block *)
-              | DoStat of Block
+              | DoStat of { loopLike : bool, body : Block }
               | GotoStat of Label
               | LabelStat of Label
 withtype Block = Stat vector
 
-fun makeDoStat (stats : Stat list) = if List.exists (fn LocalStat _ => true | ReturnStat _ => true | LabelStat _ => true | _ => false) stats then
-                                         [DoStat (vector stats)]
-                                     else
-                                         stats
+fun makeDoStat { loopLike : bool, body : Stat list }
+    = if List.exists (fn LocalStat _ => true | ReturnStat _ => true | LabelStat _ => true | _ => false) body then
+          [DoStat { loopLike = loopLike, body = vector body }]
+      else
+          body
 
 fun freeVarsInExp (bound : IdSet.set, ConstExp _, acc : IdSet.set) = acc
   | freeVarsInExp (bound, VarExp v, acc) = if IdSet.member (bound, v) then
@@ -121,9 +122,9 @@ and freeVarsInStat (LocalStat (lhs, rhs), (bound, acc)) = let val acc = List.fol
   | freeVarsInStat (ReturnStat xs, (bound, acc)) = let val acc = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc xs
                                                    in (bound, acc)
                                                    end
-  | freeVarsInStat (DoStat block, (bound, acc)) = let val acc = freeVarsInBlock (bound, block, acc)
-                                                  in (bound, acc)
-                                                  end
+  | freeVarsInStat (DoStat { loopLike, body }, (bound, acc)) = let val acc = freeVarsInBlock (bound, body, acc)
+                                                               in (bound, acc)
+                                                               end
   | freeVarsInStat (GotoStat _, bound_acc) = bound_acc
   | freeVarsInStat (LabelStat _, bound_acc) = bound_acc
 and freeVarsInBlock (bound, block, acc) = #2 (Vector.foldl freeVarsInStat (bound, acc) block)
@@ -384,7 +385,7 @@ and doStat ([], acc) = acc
                                                           doStat (rest, Indent :: Fragment "return" :: LineTerminator :: acc)
                                                       else
                                                           doStat (rest, Indent :: Fragment "return " :: commaSepV (Vector.map (#exp o doExp) exps) @ OptSemicolon :: acc)
-  | doStat (LuaSyntax.DoStat block :: rest, acc) = doStat (rest, Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent :: doBlock block @ DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator :: acc)
+  | doStat (LuaSyntax.DoStat { loopLike, body } :: rest, acc) = doStat (rest, Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent :: doBlock body @ DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator :: acc)
   | doStat (LuaSyntax.GotoStat label :: rest, acc) = doStat (rest, Indent :: Fragment "goto " :: idToFragment label @ LineTerminator :: acc)
   | doStat (LuaSyntax.LabelStat label :: rest, acc) = doStat (rest, Indent :: Fragment "::" :: idToFragment label @ Fragment "::" :: LineTerminator :: acc)
 and doBlock stats = let val revStats = Vector.foldl (op ::) [] stats
