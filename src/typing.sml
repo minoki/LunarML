@@ -211,7 +211,8 @@ and isConexp (env : Env, TypedSyntax.TypedExp (_, e, _)) = isConexp (env, e)
 fun isExhaustive (ctx, env : Env, TypedSyntax.WildcardPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.SConPat _) = false
   | isExhaustive (ctx, env, TypedSyntax.VarPat _) = true
-  | isExhaustive (ctx, env, TypedSyntax.RecordPat { fields, ... }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
+  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
+  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = SOME ellipsisPat }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields andalso isExhaustive (ctx, env, ellipsisPat)
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME (innerTy, innerPat), tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1 andalso isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo = NONE }) = false

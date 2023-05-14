@@ -270,6 +270,7 @@ should_compile "successor_ml/should_compile/" {
 }
 should_not_compile "successor_ml/should_not_compile/" {
   "nonexhaustive_bind.sml",
+  "nonexhaustive_bind_2.sml",
   "val_rec_override.sml",
   "typealias_in_signature.sml",
   "record_extension_pattern_1.sml",
