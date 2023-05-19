@@ -107,6 +107,7 @@ datatype PrimOp = EQUAL (* = *)
                 | DelimCont_withSubCont (* DelimCont.withSubCont *)
                 | DelimCont_pushSubCont (* DelimCont.pushSubCont *)
                 | assumeDiscardable (* assumeDiscardable *)
+                | unreachable (* unreachable *)
                 | Lua_sub (* Lua.sub *)
                 | Lua_set (* Lua.set *)
                 | Lua_isNil (* Lua.isNil *)
@@ -432,6 +433,7 @@ fun toString EQUAL = "="
   | toString DelimCont_withSubCont = "DelimCont.withSubCont"
   | toString DelimCont_pushSubCont = "DelimCont.pushSubCont"
   | toString assumeDiscardable = "assumeDiscardable"
+  | toString unreachable = "unreachable"
   | toString Lua_sub = "Lua.sub"
   | toString Lua_set = "Lua.set"
   | toString Lua_isNil = "Lua.isNil"
@@ -757,6 +759,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "DelimCont.withSubCont" = SOME DelimCont_withSubCont
   | fromString "DelimCont.pushSubCont" = SOME DelimCont_pushSubCont
   | fromString "assumeDiscardable" = SOME assumeDiscardable
+  | fromString "unreachable" = SOME unreachable
   | fromString "Lua.sub" = SOME Lua_sub
   | fromString "Lua.set" = SOME Lua_set
   | fromString "Lua.isNil" = SOME Lua_isNil
@@ -930,6 +933,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise DelimCont_withSubCont = true
   | mayRaise DelimCont_pushSubCont = true
   | mayRaise assumeDiscardable = true
+  | mayRaise unreachable = true
   | mayRaise Lua_sub = true
   | mayRaise Lua_set = true
   | mayRaise Lua_isNil = false
@@ -1102,6 +1106,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable DelimCont_withSubCont = false
   | isDiscardable DelimCont_pushSubCont = false
   | isDiscardable assumeDiscardable = true
+  | isDiscardable unreachable = false
   | isDiscardable Lua_sub = false
   | isDiscardable Lua_set = false
   | isDiscardable Lua_isNil = true
@@ -1529,6 +1534,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
   | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
   | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [function1Of (tyB, tyA), tyA], result = tyB }
+  | typeOf Primitives.unreachable = { vars = [(tyVarA, [])], args = vector [], result = tyA }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }

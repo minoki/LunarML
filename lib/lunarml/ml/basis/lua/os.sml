@@ -320,10 +320,10 @@ val system : string -> status = fn command => let val () = Lua.call0 os_execute 
                                               end
 (* val atExit : (unit -> unit) -> unit *)
 val exit : status -> 'a = fn status => let val () = Lua.call0 os_exit #[Lua.fromInt status, Lua.fromBool true]
-                                       in raise Fail "os.exit not available"
+                                       in _primCall "unreachable" ()
                                        end
 val terminate : status -> 'a = fn status => let val () = Lua.call0 os_exit #[Lua.fromInt status, Lua.fromBool false]
-                                            in raise Fail "os.exit not available"
+                                            in _primCall "unreachable" ()
                                             end
 val getEnv : string -> string option = fn name => let val result = Lua.call1 os_getenv #[Lua.fromString name]
                                                   in if Lua.isNil result then

@@ -886,6 +886,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
                     )
          ]
       end
+  | doCExp ctx env C.Unreachable = []
 
 fun doProgram ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }

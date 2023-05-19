@@ -791,6 +791,13 @@ do
       mayraise = true,
       discardable = true,
     },
+    {
+      name = "unreachable",
+      srcname = "unreachable",
+      type = { vars = {TV.a}, args = {}, result = TV.a },
+      mayraise = true,
+      discardable = false,
+    },
 
     --
     -- Lua backend

@@ -198,10 +198,10 @@ fun system (command : string) = ( JavaScript.method (child_process, "execSync") 
                                 )
 (* val atExit : (unit -> unit) -> unit *)
 fun exit (status : status) : 'a = ( JavaScript.method (process, "exit") #[JavaScript.fromInt status]
-                                  ; raise Fail "process.exit not available"
+                                  ; _primCall "unreachable" ()
                                   )
 fun terminate (status : status) : 'a = ( JavaScript.method (process, "exit") #[JavaScript.fromInt status]
-                                       ; raise Fail "process.exit not available"
+                                       ; _primCall "unreachable" ()
                                        )
 fun getEnv (name : string) : string option = let val env = JavaScript.field (process, "env")
                                                  val value = JavaScript.field (env, JavaScript.decodeUtf8 name)

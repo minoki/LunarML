@@ -65,6 +65,7 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
                       , elseCont : CExp
                       }
               | Handle of { body : CExp, handler : Var * CExp, successfulExitIn : CVar, successfulExitOut : CVar }
+              | Unreachable
 local structure F = FSyntax in
 fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.WordConstOp _, ... }) = true
@@ -136,6 +137,7 @@ and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists con
   | containsApp (AppCont _) = false
   | containsApp (If { cond, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
   | containsApp (Handle { body, handler = (_, h), ... }) = containsApp body orelse containsApp h
+  | containsApp Unreachable = false
 
 fun freeVarsInValue bound (v, acc)
     = case v of
@@ -201,6 +203,7 @@ and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = Vect
   | freeVarsInExp (bound, AppCont { applied, args }, acc) = List.foldl (freeVarsInValue bound) acc args
   | freeVarsInExp (bound, If { cond, thenCont, elseCont }, acc) = freeVarsInExp (bound, elseCont, freeVarsInExp (bound, thenCont, freeVarsInValue bound (cond, acc)))
   | freeVarsInExp (bound, Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = freeVarsInExp (bound, body, freeVarsInExp (TypedSyntax.VIdSet.add (bound, e), h, acc))
+  | freeVarsInExp (bound, Unreachable, acc) = acc
 
 fun recurseCExp f
     = let fun goSimpleExp (e as PrimOp _) = e
@@ -218,6 +221,7 @@ fun recurseCExp f
                              | AppCont _ => e
                              | If { cond, thenCont, elseCont } => If { cond = cond, thenCont = goExp thenCont, elseCont = goExp elseCont }
                              | Handle { body, handler = (k, h), successfulExitIn, successfulExitOut } => Handle { body = goExp body, handler = (k, goExp h), successfulExitIn = successfulExitIn, successfulExitOut = successfulExitOut }
+                             | Unreachable => e
                           )
       in goExp
       end
@@ -326,6 +330,8 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                      )
          | F.PrimExp (F.PrimFnOp Primitives.Unsafe_cast, tyargs, [arg]) =>
            transformX (ctx, env) arg (revDecs, k)
+         | F.PrimExp (F.PrimFnOp Primitives.unreachable, _, _) =>
+           C.Unreachable
          | F.PrimExp (primOp, tyargs, args) =>
            foldlCont (fn (e, (revDecs, acc), cont) => transform (ctx, env) e { revDecs = revDecs, resultHint = NONE } (fn (revDecs, v) => cont (revDecs, v :: acc)))
                      (revDecs, [])
@@ -614,6 +620,7 @@ and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, Vector.foldl (goDec g
   | goExp (g, C.AppCont { applied, args }, acc) = List.foldl addValue acc args
   | goExp (g, C.If { cond, thenCont, elseCont }, acc) = goExp (g, elseCont, goExp (g, thenCont, addValue (cond, acc)))
   | goExp (g, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = goExp (g, body, goExp (g, h, acc))
+  | goExp (g, C.Unreachable, acc) = acc
 (* val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
 fun makeGraph program = let val g = TypedSyntax.VIdTable.mkTable (1, Fail "dead code analysis table lookup failed")
                         in (g, goExp (g, program, TypedSyntax.VIdSet.empty))
@@ -845,6 +852,7 @@ and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (con
           ; add (env, e)
           ; goCExp (env, renv, cenv, crenv, h)
           )
+        | C.Unreachable => ()
 end (* local *)
 fun analyze exp = let val dca = CpsDeadCodeAnalysis.analyze exp
                       val usage = TypedSyntax.VIdTable.mkTable (1, Fail "usage table lookup failed")
@@ -909,6 +917,7 @@ and sizeOfCExp (e, threshold)
             | C.AppCont { applied, args } => threshold - List.length args
             | C.If { cond, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
             | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
+            | C.Unreachable => threshold
 fun substValue (subst : C.Value TypedSyntax.VIdMap.map) (x as C.Var v) = (case TypedSyntax.VIdMap.find (subst, v) of
                                                                               SOME w => w
                                                                             | NONE => x
@@ -931,6 +940,7 @@ and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap
   | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, csubst, thenCont), elseCont = substCExp (subst, csubst, elseCont) }
   | substCExp (subst, csubst, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = C.Handle { body = substCExp (subst, csubst, body), handler = (e, substCExp (subst, csubst, h)), successfulExitIn = successfulExitIn, successfulExitOut = substCVar csubst successfulExitOut }
+  | substCExp (subst, csubst, e as C.Unreachable) = e
 val substCExp = fn (subst, csubst, e) => if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
                                              e
                                          else
@@ -1045,6 +1055,7 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
                   , successfulExitOut = substCVar csubst successfulExitOut
                   }
       end
+  | alphaConvert (ctx, subst, csubst, e as C.Unreachable) = e
 datatype simplify_result = VALUE of C.Value
                          | SIMPLE_EXP of C.SimpleExp
                          | NOT_SIMPLIFIED
@@ -1092,6 +1103,7 @@ and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, con
   | isDiscardableExp (env, C.AppCont _) = true
   | isDiscardableExp (env, C.If { cond, thenCont, elseCont }) = isDiscardableExp (env, thenCont) andalso isDiscardableExp (env, elseCont)
   | isDiscardableExp (env, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
+  | isDiscardableExp (env, C.Unreachable) = false
 datatype param_transform = KEEP | ELIMINATE | UNPACK of (C.Var * Syntax.Label) list
 fun tryUnpackParam (ctx, usage) param = case CpsUsageAnalysis.getValueUsage (usage, param) of
                                             { call = NEVER, project = NEVER, other = NEVER, ... } => ELIMINATE
@@ -1861,6 +1873,7 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
                    , successfulExitIn = successfulExitIn
                    , successfulExitOut = substCVar csubst successfulExitOut
                    }
+        | C.Unreachable => e
 
 fun prependDecs ([], cont) = cont
   | prependDecs (decs, C.Let { decs = decs', cont }) = C.Let { decs = Vector.fromList (decs @ Vector.foldr (op ::) [] decs'), cont = cont }
@@ -1901,6 +1914,7 @@ and finalizeCExp (ctx, C.Let { decs, cont })
   | finalizeCExp (ctx, e as C.AppCont _) = e
   | finalizeCExp (ctx, C.If { cond, thenCont, elseCont }) = C.If { cond = cond, thenCont = finalizeCExp (ctx, thenCont), elseCont = finalizeCExp (ctx, elseCont) }
   | finalizeCExp (ctx, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = C.Handle { body = finalizeCExp (ctx, body), handler = (e, finalizeCExp (ctx, h)), successfulExitIn = successfulExitIn, successfulExitOut = successfulExitOut }
+  | finalizeCExp (ctx, e as C.Unreachable) = e
 end
 end;
 
@@ -1976,6 +1990,7 @@ and go (table, level, C.Let { decs, cont }, acc)
        ; C.CVarSet.app (fn k => ignore (escape (table, level + 1, k, C.CVarSet.empty))) free
        ; go (table, level, body, C.CVarSet.union (acc, free))
       end
+  | go (table, level, C.Unreachable, acc) = acc
 fun contEscape (cont, cexp) = let val table = C.CVarTable.mkTable (1, C.InvalidCode "unbound continuation")
                               in C.CVarTable.insert table (cont, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
                                ; ignore (go (table, 0, cexp, C.CVarSet.empty))

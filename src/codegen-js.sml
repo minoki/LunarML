@@ -744,6 +744,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
                   end
            end
       )
+  | doCExp ctx env C.Unreachable = []
 
 fun doProgramDirect ctx cont cexp
     = let val label = CVarToJs cont
