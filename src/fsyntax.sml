@@ -40,9 +40,15 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | LuaCallOp (* value argument: function, arguments *)
                 | LuaCall1Op (* value argument: function, arguments *)
                 | LuaMethodOp of string (* value argument: object, arguments *)
+datatype PatternSCon = IntegerConstant of IntInf.int
+                     | WordConstant of IntInf.int
+                     | CharConstant of char
+                     | Char16Constant of int
+                     | StringConstant of string
+                     | String16Constant of int vector
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of { sourceSpan : SourcePos.span
-                          , scon : Syntax.SCon
+                          , scon : PatternSCon
                           , equality : Exp
                           , cookedValue : Exp
                           }
@@ -419,7 +425,12 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp LuaCall1Op = "LuaCall1Op"
   | print_PrimOp (LuaMethodOp _) = "LuaMethodOp"
 fun print_Pat (WildcardPat _) = "WildcardPat"
-  | print_Pat (SConPat { sourceSpan, scon, equality, cookedValue }) = "SConPat(" ^ Syntax.print_SCon scon ^ ")"
+  | print_Pat (SConPat { sourceSpan, scon = IntegerConstant x, equality, cookedValue }) = "SConPat(IntegerConstant " ^ IntInf.toString x ^ ")"
+  | print_Pat (SConPat { sourceSpan, scon = WordConstant x, equality, cookedValue }) = "SConPat(WordConstant " ^ IntInf.toString x ^ ")"
+  | print_Pat (SConPat { sourceSpan, scon = CharConstant x, equality, cookedValue }) = "SConPat(CharConstant #\"" ^ Char.toString x ^ "\")"
+  | print_Pat (SConPat { sourceSpan, scon = Char16Constant x, equality, cookedValue }) = "SConPat(Char16Constant " ^ Int.toString x ^ ")"
+  | print_Pat (SConPat { sourceSpan, scon = StringConstant x, equality, cookedValue }) = "SConPat(StringConstant \"" ^ String.toString x ^ "\")"
+  | print_Pat (SConPat { sourceSpan, scon = String16Constant x, equality, cookedValue }) = "SConPat(String16Constant)"
   | print_Pat (VarPat(_, vid, ty)) = "VarPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ ")"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ValConPat { sourceSpan = _, info, payload }) = "ValConPat(" ^ #tag info ^ "," ^ Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload ^ ")"
@@ -808,7 +819,8 @@ fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement
                                                                               x
                                                                           else
                                                                               emitError (ctx, [span], "invalid character constant: out of range")
-                        in F.PrimExp (F.Char8ConstOp (Char.chr x), [toFTy (ctx, env, ty)], [])
+                            val c = Char.chr x
+                        in (F.CharConstant c, F.PrimExp (F.Char8ConstOp c, [toFTy (ctx, env, ty)], []))
                         end
                 | C16 => let val x = case value of
                                          StringElement.CODEUNIT x => if 0 <= x andalso x <= 0xffff then
@@ -819,7 +831,7 @@ fun cookCharacterConstant (ctx : Context, env : Env, span, value : StringElement
                                                                                x
                                                                            else
                                                                                emitError (ctx, [span], "invalid character constant: out of range")
-                         in F.PrimExp (F.Char16ConstOp x, [toFTy (ctx, env, ty)], [])
+                         in (F.Char16Constant x, F.PrimExp (F.Char16ConstOp x, [toFTy (ctx, env, ty)], []))
                          end
            end
          | _ => emitError (ctx, [span], "invalid character constant: type")
@@ -846,45 +858,49 @@ fun cookStringConstant (ctx : Context, env : Env, span, value, ty)
            in case w of
                   C8 => let val cooked = StringElement.encode8bit value
                                          handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
-                        in F.PrimExp (F.String8ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                        in (F.StringConstant cooked, F.PrimExp (F.String8ConstOp cooked, [toFTy (ctx, env, ty)], []))
                         end
                 | C16 => let val cooked = StringElement.encode16bit value
                                           handle Chr => emitError (ctx, [span], "invalid string constant: out of range")
-                         in F.PrimExp (F.String16ConstOp cooked, [toFTy (ctx, env, ty)], [])
+                         in (F.String16Constant cooked, F.PrimExp (F.String16ConstOp cooked, [toFTy (ctx, env, ty)], []))
                          end
            end
          | _ => emitError (ctx, [span], "invalid string constant: type")
       )
 fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.empty, F.WildcardPat span)
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.IntegerConstant value, ty))
+  | toFPat (ctx, env, T.SConPat (span, Syntax.IntegerConstant value, ty))
     = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
-                                           , scon = scon
+                                           , scon = F.IntegerConstant value
                                            , equality = getEquality (ctx, env, ty)
                                            , cookedValue = cookIntegerConstant (ctx, env, span, value, ty)
                                            }
       )
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.WordConstant value, ty))
+  | toFPat (ctx, env, T.SConPat (span, Syntax.WordConstant value, ty))
     = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
-                                           , scon = scon
+                                           , scon = F.WordConstant value
                                            , equality = getEquality (ctx, env, ty)
                                            , cookedValue = cookWordConstant (ctx, env, span, value, ty)
                                            }
       )
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.RealConstant value, ty)) = emitError (ctx, [span], "invalid real constant in pattern")
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.CharacterConstant value, ty))
-    = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
-                                           , scon = scon
-                                           , equality = getEquality (ctx, env, ty)
-                                           , cookedValue = cookCharacterConstant (ctx, env, span, value, ty)
-                                           }
-      )
-  | toFPat (ctx, env, T.SConPat (span, scon as Syntax.StringConstant value, ty))
-    = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
-                                           , scon = scon
-                                           , equality = getEquality (ctx, env, ty)
-                                           , cookedValue = cookStringConstant (ctx, env, span, value, ty)
-                                           }
-      )
+  | toFPat (ctx, env, T.SConPat (span, Syntax.RealConstant value, ty)) = emitError (ctx, [span], "invalid real constant in pattern")
+  | toFPat (ctx, env, T.SConPat (span, Syntax.CharacterConstant value, ty))
+    = let val (scon, cookedValue) = cookCharacterConstant (ctx, env, span, value, ty)
+      in (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                              , scon = scon
+                                              , equality = getEquality (ctx, env, ty)
+                                              , cookedValue = cookedValue
+                                              }
+         )
+      end
+  | toFPat (ctx, env, T.SConPat (span, Syntax.StringConstant value, ty))
+    = let val (scon, cookedValue) = cookStringConstant (ctx, env, span, value, ty)
+      in (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span
+                                              , scon = scon
+                                              , equality = getEquality (ctx, env, ty)
+                                              , cookedValue = cookedValue
+                                              }
+         )
+      end
   | toFPat (ctx, env, T.VarPat (span, vid, ty)) = let val ty = toFTy (ctx, env, ty)
                                                   in (TypedSyntax.VIdMap.singleton (vid, ty), F.VarPat (span, vid, ty))
                                                   end
@@ -930,8 +946,8 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
 and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant value, ty)) = cookIntegerConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.WordConstant value, ty)) = cookWordConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = cookRealConstant (ctx, env, span, value, ty)
-  | toFExp (ctx, env, T.SConExp (span, Syntax.StringConstant value, ty)) = cookStringConstant (ctx, env, span, value, ty)
-  | toFExp (ctx, env, T.SConExp (span, Syntax.CharacterConstant value, ty)) = cookCharacterConstant (ctx, env, span, value, ty)
+  | toFExp (ctx, env, T.SConExp (span, Syntax.StringConstant value, ty)) = #2 (cookStringConstant (ctx, env, span, value, ty))
+  | toFExp (ctx, env, T.SConExp (span, Syntax.CharacterConstant value, ty)) = #2 (cookCharacterConstant (ctx, env, span, value, ty))
   | toFExp (ctx, env, T.VarExp (span, longvid as TypedSyntax.MkShortVId vid, _, [(tyarg, cts)]))
     = (case TypedSyntax.VIdMap.find (overloads, vid) of
            SOME key => (case tyarg of
