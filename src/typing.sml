@@ -211,8 +211,8 @@ and isConexp (env : Env, TypedSyntax.TypedExp (_, e, _)) = isConexp (env, e)
 fun isExhaustive (ctx, env : Env, TypedSyntax.WildcardPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.SConPat _) = false
   | isExhaustive (ctx, env, TypedSyntax.VarPat _) = true
-  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
-  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = SOME ellipsisPat }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields andalso isExhaustive (ctx, env, ellipsisPat)
+  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = NONE, wholeRecordType }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields
+  | isExhaustive (ctx, env, TypedSyntax.RecordPat { sourceSpan, fields, ellipsis = SOME ellipsisPat, wholeRecordType }) = List.all (fn (_, e) => isExhaustive (ctx, env, e)) fields andalso isExhaustive (ctx, env, ellipsisPat)
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload = SOME (innerTy, innerPat), tyargs, valueConstructorInfo = SOME info }) = Syntax.VIdSet.numItems (#allConstructors info) = 1 andalso isExhaustive (ctx, env, innerPat)
   | isExhaustive (ctx, env, TypedSyntax.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo = NONE }) = false
@@ -847,9 +847,11 @@ fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHin
                  val (baseTy, vars', basePat) = typeCheckPat (ctx, env, basePat, NONE)
                  val fieldConstrs = T.UnaryConstraint (sourceSpan, baseTy, T.IsRecord) :: List.map (fn (label, _) => T.UnaryConstraint (sourceSpan, baseTy, T.NoField label)) fields
              in unify (ctx, env, T.EqConstr (sourceSpan, recordTy, T.RecordExtType (sourceSpan, fieldTypes, baseTy)) :: fieldConstrs)
-              ; (recordTy, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [sourceSpan], "duplicate identifier in a pattern")) (vars, vars'), T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME basePat })
+              ; (recordTy, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [sourceSpan], "duplicate identifier in a pattern")) (vars, vars'), T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME basePat, wholeRecordType = recordTy })
              end
-           | NONE => (T.RecordType (sourceSpan, fieldTypes), vars, T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = NONE })
+           | NONE => let val recordTy = T.RecordType (sourceSpan, fieldTypes)
+                     in (recordTy, vars, T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = NONE, wholeRecordType = recordTy })
+                     end
       end
   | typeCheckPat (ctx, env, S.ConPat (span, longvid, optInnerPat), typeHint)
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
@@ -2030,9 +2032,11 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
           fun goPat (T.WildcardPat _) = ()
             | goPat (T.SConPat _) = ()
             | goPat (T.VarPat (_, _, ty)) = goTy ty
-            | goPat (T.RecordPat { sourceSpan, fields, ellipsis }) = ( List.app (fn (label, pat) => goPat pat) fields
-                                                                     ; Option.app goPat ellipsis
-                                                                     )
+            | goPat (T.RecordPat { sourceSpan, fields, ellipsis, wholeRecordType })
+              = ( List.app (fn (label, pat) => goPat pat) fields
+                ; Option.app goPat ellipsis
+                ; goTy wholeRecordType
+                )
             | goPat (T.ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ( List.app goTy tyargs
                                                                                                 ; Option.app (fn (ty, pat) => (goTy ty; goPat pat)) payload
                                                                                                 )

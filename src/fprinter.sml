@@ -50,7 +50,7 @@ fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
   | doPat prec (F.SConPat { scon = F.StringConstant x, ... }) = [P.Fragment (String.toString x)]
   | doPat prec (F.SConPat { scon = F.String16Constant x, ... }) = [P.Fragment "<string16>"]
   | doPat prec (F.VarPat (_, vid, ty)) = showParen (prec >= 1) (P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty)
-  | doPat prec (F.RecordPat { sourceSpan, fields, ellipsis }) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (case ellipsis of SOME basePat => [P.Fragment "...=" :: doPat 0 basePat] | NONE => []) fields) @ [P.Fragment "}"]
+  | doPat prec (F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, pat), xs) => (doLabel label @ P.Fragment ": " :: doPat 0 pat) :: xs) (case ellipsis of SOME basePat => [P.Fragment "...=" :: doPat 0 basePat] | NONE => []) fields) @ [P.Fragment "}"]
   | doPat prec (F.ValConPat { sourceSpan = _, info, payload = NONE }) = showParen (prec >= 1) [P.Fragment (#tag info)]
   | doPat prec (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) = showParen (prec >= 1) (P.Fragment (#tag info) :: P.Fragment " " :: doPat 1 payloadPat)
   | doPat prec (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = showParen (prec >= 1) (doExp 0 tagPath)

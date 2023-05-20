@@ -155,7 +155,7 @@ type FunSig = { bound : { tyname : TyName, arity : int, admitsEquality : bool, l
 datatype Pat = WildcardPat of SourcePos.span
              | SConPat of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarPat of SourcePos.span * VId * Ty (* variable *)
-             | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option }
+             | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option, wholeRecordType : Ty }
              | ConPat of { sourceSpan : SourcePos.span
                          , longvid : LongVId
                          , payload : (Ty * Pat) option
@@ -226,7 +226,6 @@ local
     fun doFields i nil = nil
       | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
 in
-fun TuplePat(span, xs) = RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 end
 
@@ -427,7 +426,7 @@ fun applySubstTyInPat subst
           fun doPat (pat as WildcardPat _) = pat
             | doPat (SConPat (span, scon, ty)) = SConPat (span, scon, doTy ty)
             | doPat (VarPat (span, vid, ty)) = VarPat (span, vid, doTy ty)
-            | doPat (RecordPat { sourceSpan, fields, ellipsis }) = RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat pat)) fields, ellipsis = Option.map doPat ellipsis }
+            | doPat (RecordPat { sourceSpan, fields, ellipsis, wholeRecordType }) = RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat pat)) fields, ellipsis = Option.map doPat ellipsis, wholeRecordType = doTy wholeRecordType }
             | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
             | doPat (TypedPat (span, pat, ty)) = TypedPat (span, doPat pat, doTy ty)
             | doPat (LayeredPat (span, vid, ty, pat)) = LayeredPat (span, vid, doTy ty, doPat pat)
@@ -487,8 +486,8 @@ fun applySubstTyInExpOrDec subst
 fun boundVIdsInPat (WildcardPat _) = VIdSet.empty
   | boundVIdsInPat (SConPat _) = VIdSet.empty
   | boundVIdsInPat (VarPat (span, vid, ty)) = VIdSet.singleton vid
-  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) VIdSet.empty fields
-  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME base }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) (boundVIdsInPat base) fields
+  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE, wholeRecordType }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) VIdSet.empty fields
+  | boundVIdsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME base, wholeRecordType }) = List.foldl (fn ((label, pat), acc) => VIdSet.union (boundVIdsInPat pat, acc)) (boundVIdsInPat base) fields
   | boundVIdsInPat (ConPat { sourceSpan, longvid, payload = NONE, tyargs, valueConstructorInfo }) = VIdSet.empty
   | boundVIdsInPat (ConPat { sourceSpan, longvid, payload = SOME (ty, pat), tyargs, valueConstructorInfo }) = boundVIdsInPat pat
   | boundVIdsInPat (TypedPat (span, pat, ty)) = boundVIdsInPat pat
@@ -610,7 +609,7 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a })
           and doPat(pat as WildcardPat _) = pat
             | doPat(SConPat(span, scon, ty)) = SConPat(span, scon, doTy ty)
             | doPat(VarPat(span, vid, ty)) = VarPat(span, vid, doTy ty)
-            | doPat(RecordPat{sourceSpan, fields, ellipsis}) = RecordPat{sourceSpan=sourceSpan, fields=Syntax.mapRecordRow doPat fields, ellipsis=Option.map doPat ellipsis}
+            | doPat (RecordPat { sourceSpan, fields, ellipsis, wholeRecordType }) = RecordPat { sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis, wholeRecordType = doTy wholeRecordType }
             | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload, tyargs = List.map doTy tyargs, valueConstructorInfo = valueConstructorInfo }
             | doPat(TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, doTy ty)
             | doPat(LayeredPat(span, vid, ty, pat)) = LayeredPat(span, vid, doTy ty, doPat pat)
@@ -668,7 +667,7 @@ fun freeTyVarsInPat (bound, pat)
            WildcardPat _ => []
          | SConPat (_, _, ty) => freeAnonymousTyVarsInTy ty
          | VarPat (_, _, ty) => freeAnonymousTyVarsInTy ty
-         | RecordPat { fields = xs, ... } => List.foldl (fn ((_, pat), set) => freeTyVarsInPat (bound, pat) @ set) [] xs
+         | RecordPat { fields = xs, wholeRecordType, ... } => List.foldl (fn ((_, pat), set) => freeTyVarsInPat (bound, pat) @ set) (freeAnonymousTyVarsInTy wholeRecordType) xs
          | ConPat { payload = NONE, tyargs, ... } => List.foldl (fn (ty, set) => freeAnonymousTyVarsInTy ty @ set) [] tyargs
          | ConPat { payload = SOME (ty, pat), tyargs, ... } => List.foldl (fn (ty, set) => freeAnonymousTyVarsInTy ty @ set) (freeAnonymousTyVarsInTy ty @ freeTyVarsInPat (bound, pat)) tyargs
          | TypedPat (_, pat, ty) => freeTyVarsInPat (bound, pat) @ freeAnonymousTyVarsInTy ty
@@ -730,7 +729,7 @@ fun filterVarsInPat pred =
                             WildcardPat _ => pat
                           | SConPat _ => pat
                           | VarPat(span, vid, ty) => if pred vid then pat else WildcardPat span
-                          | RecordPat { sourceSpan, fields, ellipsis } => RecordPat{ sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis }
+                          | RecordPat { sourceSpan, fields, ellipsis, wholeRecordType } => RecordPat { sourceSpan = sourceSpan, fields = Syntax.mapRecordRow doPat fields, ellipsis = Option.map doPat ellipsis, wholeRecordType = wholeRecordType }
                           | ConPat { payload = NONE, ... } => pat
                           | ConPat { sourceSpan, longvid, payload = SOME (innerTy, innerPat), tyargs, valueConstructorInfo } => ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = SOME (innerTy, doPat innerPat), tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
                           | TypedPat(span, innerPat, ty) => TypedPat(span, doPat innerPat, ty)
@@ -747,10 +746,12 @@ fun renameVarsInPat m =
                                                         NONE => pat
                                                       | SOME repl => VarPat(span, repl, ty)
                                                    )
-          | doPat (RecordPat { sourceSpan, fields, ellipsis }) = RecordPat { sourceSpan = sourceSpan
-                                                                           , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
-                                                                           , ellipsis = Option.map doPat ellipsis
-                                                                           }
+          | doPat (RecordPat { sourceSpan, fields, ellipsis, wholeRecordType })
+            = RecordPat { sourceSpan = sourceSpan
+                        , fields = List.map (fn (label, pat) => (label, doPat pat)) fields
+                        , ellipsis = Option.map doPat ellipsis
+                        , wholeRecordType = wholeRecordType
+                        }
           | doPat (ConPat { sourceSpan, longvid, payload, tyargs, valueConstructorInfo }) = ConPat { sourceSpan = sourceSpan, longvid = longvid, payload = Option.map (fn (ty, pat) => (ty, doPat pat)) payload, tyargs = tyargs, valueConstructorInfo = valueConstructorInfo }
           | doPat (TypedPat(span, pat, ty)) = TypedPat(span, doPat pat, ty)
           | doPat (LayeredPat(span, vid, ty, pat)) = LayeredPat(span, case VIdMap.find(m, vid) of

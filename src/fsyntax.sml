@@ -56,6 +56,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | RecordPat of { sourceSpan : SourcePos.span
                             , fields : (Syntax.Label * Pat) list
                             , ellipsis : Pat option
+                            , allFields : Syntax.LabelSet.set
                             }
              | ValConPat of { sourceSpan : SourcePos.span, info : Syntax.ValueConstructorInfo, payload : (Ty * Pat) option }
              | ExnConPat of { sourceSpan : SourcePos.span, tagPath : Exp, payload : (Ty * Pat) option }
@@ -101,7 +102,8 @@ fun TupleType xs = let fun doFields i [] acc = acc
 fun PairType(a, b) = RecordType (Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
 fun TuplePat (span, xs) = let fun doFields i nil = nil
                                 | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
-                          in RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE }
+                              val allFields = #2 (List.foldl (fn (_, (i, set)) => (i + 1, Syntax.LabelSet.add (set, Syntax.NumericLabel i))) (1, Syntax.LabelSet.empty) xs)
+                          in RecordPat { sourceSpan = span, fields = doFields 1 xs, ellipsis = NONE, allFields = allFields }
                           end
 fun TupleExp xs = let fun doFields i nil = nil
                         | doFields i (x :: xs) = (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
@@ -219,7 +221,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
         fun doPat (pat as WildcardPat _) = pat
           | doPat (SConPat { sourceSpan, scon, equality, cookedValue }) = SConPat { sourceSpan = sourceSpan, scon = scon, equality = doExp equality, cookedValue = doExp cookedValue }
           | doPat (VarPat (span, vid, ty)) = VarPat (span, vid, doTy ty)
-          | doPat (RecordPat { sourceSpan, fields, ellipsis }) = RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat pat)) fields, ellipsis = Option.map doPat ellipsis }
+          | doPat (RecordPat { sourceSpan, fields, ellipsis, allFields }) = RecordPat { sourceSpan = sourceSpan, fields = List.map (fn (label, pat) => (label, doPat pat)) fields, ellipsis = Option.map doPat ellipsis, allFields = allFields }
           | doPat (ValConPat { sourceSpan, info, payload }) = ValConPat { sourceSpan = sourceSpan, info = info, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload }
           | doPat (ExnConPat { sourceSpan, tagPath, payload }) = ExnConPat { sourceSpan = sourceSpan, tagPath = doExp tagPath, payload = Option.map (fn (ty, pat) => (doTy ty, doPat pat)) payload }
           | doPat (LayeredPat (span, vid, ty, pat)) = LayeredPat (span, vid, doTy ty, doPat pat)
@@ -274,8 +276,8 @@ fun freeTyVarsInTy (bound : TypedSyntax.TyVarSet.set, TyVar tv) acc = if TypedSy
 fun freeTyVarsInPat (bound, WildcardPat _) acc = acc
   | freeTyVarsInPat (bound, SConPat { sourceSpan = _, scon = _, equality, cookedValue }) acc = freeTyVarsInExp (bound, equality) (freeTyVarsInExp (bound, cookedValue) acc)
   | freeTyVarsInPat (bound, VarPat (_, vid, ty)) acc = freeTyVarsInTy (bound, ty) acc
-  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = NONE }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) acc fields
-  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) (freeTyVarsInPat (bound, basePat) acc) fields
+  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = NONE, allFields }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) acc fields
+  | freeTyVarsInPat (bound, RecordPat { sourceSpan, fields, ellipsis = SOME basePat, allFields }) acc = List.foldl (fn ((label, pat), acc) => freeTyVarsInPat (bound, pat) acc) (freeTyVarsInPat (bound, basePat) acc) fields
   | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = NONE }) acc = acc
   | freeTyVarsInPat (bound, ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInPat (bound, payloadPat) acc)
   | freeTyVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath, payload = NONE }) acc = freeTyVarsInExp (bound, tagPath) acc
@@ -334,8 +336,8 @@ and freeTyVarsInDecs (bound, decs) acc = List.foldl (fn (dec, (bound, acc)) => f
 fun varsInPat (WildcardPat _) acc = acc
   | varsInPat (SConPat _) acc = acc
   | varsInPat (VarPat (_, vid, ty)) acc = TypedSyntax.VIdSet.add (acc, vid)
-  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) acc fields
-  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) (varsInPat basePat acc) fields
+  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = NONE, allFields }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) acc fields
+  | varsInPat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat, allFields }) acc = List.foldl (fn ((label, pat), acc) => varsInPat pat acc) (varsInPat basePat acc) fields
   | varsInPat (ValConPat { sourceSpan = _, info = _, payload = SOME (_, payloadPat) }) acc = varsInPat payloadPat acc
   | varsInPat (ValConPat { sourceSpan = _, info = _, payload = NONE }) acc = acc
   | varsInPat (ExnConPat { sourceSpan = _, tagPath = _, payload = SOME (_, payloadPat) }) acc = varsInPat payloadPat acc
@@ -346,8 +348,8 @@ fun varsInPat (WildcardPat _) acc = acc
 fun freeVarsInPat (bound : TypedSyntax.VIdSet.set, WildcardPat _) acc = acc
   | freeVarsInPat (bound, SConPat { sourceSpan = _, scon = _, equality, cookedValue }) acc = freeVarsInExp (bound, equality) (freeVarsInExp (bound, cookedValue) acc)
   | freeVarsInPat (bound, VarPat _) acc = acc
-  | freeVarsInPat (bound, RecordPat { sourceSpan = _, fields, ellipsis = NONE }) acc = List.foldl (fn ((_, pat), acc) => freeVarsInPat (bound, pat) acc) acc fields
-  | freeVarsInPat (bound, RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) acc = List.foldl (fn ((_, pat), acc) => freeVarsInPat (bound, pat) acc) (freeVarsInPat (bound, basePat) acc) fields
+  | freeVarsInPat (bound, RecordPat { sourceSpan = _, fields, ellipsis = NONE, allFields }) acc = List.foldl (fn ((_, pat), acc) => freeVarsInPat (bound, pat) acc) acc fields
+  | freeVarsInPat (bound, RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat, allFields }) acc = List.foldl (fn ((_, pat), acc) => freeVarsInPat (bound, pat) acc) (freeVarsInPat (bound, basePat) acc) fields
   | freeVarsInPat (bound, ValConPat { sourceSpan = _, info = _, payload = NONE }) acc = acc
   | freeVarsInPat (bound, ValConPat { sourceSpan = _, info = _, payload = SOME (_, payloadPat) }) acc = freeVarsInPat (bound, payloadPat) acc
   | freeVarsInPat (bound, ExnConPat { sourceSpan = _, tagPath, payload = NONE }) acc = freeVarsInExp (bound, tagPath) acc
@@ -435,12 +437,12 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (LayeredPat (_, vid, ty, pat)) = "TypedPat(" ^ print_VId vid ^ "," ^ print_Ty ty ^ "," ^ print_Pat pat ^ ")"
   | print_Pat (ValConPat { sourceSpan = _, info, payload }) = "ValConPat(" ^ #tag info ^ "," ^ Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload ^ ")"
   | print_Pat (ExnConPat { sourceSpan = _, tagPath, payload }) = "ExnConPat(" ^ print_Exp tagPath ^ "," ^ Syntax.print_option (Syntax.print_pair (print_Ty, print_Pat)) payload ^ ")"
-  | print_Pat (RecordPat { sourceSpan, fields, ellipsis = NONE })
+  | print_Pat (RecordPat { sourceSpan, fields, ellipsis = NONE, allFields })
     = (case Syntax.extractTuple (1, fields) of
            NONE => "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) fields ^ ",NONE)"
          | SOME ys => "TuplePat " ^ Syntax.print_list print_Pat ys
       )
-  | print_Pat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat }) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) fields ^ ",SOME(" ^ print_Pat basePat ^ "))"
+  | print_Pat (RecordPat { sourceSpan, fields, ellipsis = SOME basePat, allFields }) = "RecordPat(" ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Pat)) fields ^ ",SOME(" ^ print_Pat basePat ^ "))"
   | print_Pat (VectorPat _) = "VectorPat"
 and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primOp ^ "," ^ String.concatWith "," (List.map print_Ty tyargs) ^ "," ^ String.concatWith "," (List.map print_Exp args) ^ ")"
   | print_Exp (VarExp(x)) = "VarExp(" ^ print_VId x ^ ")"
@@ -904,7 +906,7 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
   | toFPat (ctx, env, T.VarPat (span, vid, ty)) = let val ty = toFTy (ctx, env, ty)
                                                   in (TypedSyntax.VIdMap.singleton (vid, ty), F.VarPat (span, vid, ty))
                                                   end
-  | toFPat (ctx, env, T.RecordPat { sourceSpan, fields, ellipsis })
+  | toFPat (ctx, env, T.RecordPat { sourceSpan, fields, ellipsis, wholeRecordType })
     = let val (newEnv, ellipsis) = case ellipsis of
                                        NONE => (TypedSyntax.VIdMap.empty, NONE)
                                      | SOME pat => let val (m, pat) = toFPat (ctx, env, pat)
@@ -914,7 +916,10 @@ fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.
                                                 let val (m, pat) = toFPat (ctx, env, pat)
                                                 in (TypedSyntax.VIdMap.unionWith #2 (newEnv, m), (label, pat) :: fields)
                                                 end) (newEnv, []) fields
-      in (newEnv, F.RecordPat { sourceSpan = sourceSpan, fields = fields, ellipsis = ellipsis })
+          val allFields = case wholeRecordType of
+                              T.RecordType (_, fieldTypes) => Syntax.LabelMap.foldli (fn (label, _, acc) => Syntax.LabelSet.add (acc, label)) Syntax.LabelSet.empty fieldTypes
+                            | _ => emitError (ctx, [sourceSpan], "invalid record pattern")
+      in (newEnv, F.RecordPat { sourceSpan = sourceSpan, fields = fields, ellipsis = ellipsis, allFields = allFields })
       end
   | toFPat (ctx, env, T.ConPat { sourceSpan = span, longvid, payload, tyargs, valueConstructorInfo })
     = let val (m, payload) = case payload of

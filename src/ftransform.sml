@@ -17,8 +17,8 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
 fun isWildcardPat (F.WildcardPat _) = true
   | isWildcardPat (F.SConPat _) = false
   | isWildcardPat (F.VarPat _) = false
-  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (label, pat) => isWildcardPat pat) fields
-  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isWildcardPat basePat andalso List.all (fn (label, pat) => isWildcardPat pat) fields
+  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE, allFields }) = List.all (fn (label, pat) => isWildcardPat pat) fields
+  | isWildcardPat (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat, allFields }) = isWildcardPat basePat andalso List.all (fn (label, pat) => isWildcardPat pat) fields
   | isWildcardPat (F.ValConPat _) = false (* TODO *)
   | isWildcardPat (F.ExnConPat _) = false
   | isWildcardPat (F.LayeredPat _) = false
@@ -79,7 +79,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
           and genMatcher exp _ (F.WildcardPat _) : F.Exp = F.VarExp InitialEnv.VId_true (* always match *)
             | genMatcher exp ty (F.SConPat { sourceSpan, scon, equality, cookedValue }) = F.AppExp (equality, F.TupleExp [exp, cookedValue])
             | genMatcher exp ty (F.VarPat (_, vid, _)) = F.VarExp InitialEnv.VId_true (* always match *)
-            | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE })
+            | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE, allFields })
               = List.foldr (fn ((label, pat), e) =>
                                case Syntax.LabelMap.find (fieldTypes, label) of
                                    SOME fieldTy => let val exp = genMatcher (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) fieldTy pat
@@ -89,7 +89,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                            )
                            (F.VarExp InitialEnv.VId_true)
                            fields
-            | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
+            | genMatcher exp (recordTy as F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat, allFields })
               = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
                     val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) :: xs) [] restTypes)
                     val init = genMatcher restExp (F.RecordType restTypes) basePat
@@ -103,7 +103,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                               init
                               fields
                 end
-            | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
+            | genMatcher exp _ (F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
                      { representation = Syntax.REP_LIST, tag = "::", ... } =>
@@ -165,13 +165,13 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
           and genBinders exp ty (F.WildcardPat _) = []
             | genBinders exp ty (F.SConPat _) = []
             | genBinders exp _ (F.VarPat (span, vid, ty)) = [(vid, SOME ty, exp)]
-            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE }) = List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
-            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat })
+            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = NONE, allFields }) = List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
+            | genBinders exp (F.RecordType fieldTypes) (F.RecordPat { sourceSpan, fields, ellipsis = SOME basePat, allFields })
               = let val restTypes = List.foldl (fn ((label, _), fieldTypes) => #1 (Syntax.LabelMap.remove (fieldTypes, label))) fieldTypes fields
                     val restExp = F.RecordExp (Syntax.LabelMap.foldri (fn (label, fieldTy, xs) => (label, F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) :: xs) [] restTypes)
                 in genBinders restExp (F.RecordType restTypes) basePat @ List.concat (List.map (fn (label, innerPat) => genBinders (F.ProjectionExp { label = label, record = exp, fieldTypes = fieldTypes }) (Syntax.LabelMap.lookup (fieldTypes, label)) innerPat) fields)
                 end
-            | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
+            | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
                      { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
@@ -195,8 +195,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
           and isExhaustive (F.WildcardPat _) = true
             | isExhaustive (F.SConPat _) = false
             | isExhaustive (F.VarPat _) = true
-            | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE }) = List.all (fn (_, e) => isExhaustive e) fields
-            | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat }) = isExhaustive basePat andalso List.all (fn (_, e) => isExhaustive e) fields
+            | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = NONE, allFields }) = List.all (fn (_, e) => isExhaustive e) fields
+            | isExhaustive (F.RecordPat { sourceSpan = _, fields, ellipsis = SOME basePat, allFields }) = isExhaustive basePat andalso List.all (fn (_, e) => isExhaustive e) fields
             | isExhaustive (F.ValConPat _) = false (* TODO *)
             | isExhaustive (F.ExnConPat _) = false
             | isExhaustive (F.LayeredPat (_, _, _, innerPat)) = isExhaustive innerPat
@@ -306,7 +306,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
 fun doPat (F.WildcardPat _) acc = acc
   | doPat (F.SConPat { sourceSpan = _, scon = _, equality, cookedValue }) acc = #1 (doExp equality (#1 (doExp cookedValue acc)))
   | doPat (F.VarPat _) acc = acc
-  | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis }) acc = List.foldl (fn ((label, pat), acc) => doPat pat acc) (case ellipsis of NONE => acc | SOME basePat => doPat basePat acc) fields
+  | doPat (F.RecordPat { sourceSpan = _, fields, ellipsis, allFields }) acc = List.foldl (fn ((label, pat), acc) => doPat pat acc) (case ellipsis of NONE => acc | SOME basePat => doPat basePat acc) fields
   | doPat (F.ValConPat { sourceSpan = _, info, payload = NONE }) acc = acc
   | doPat (F.ValConPat { sourceSpan = _, info, payload = SOME (payloadTy, payloadPat) }) acc = doPat payloadPat acc
   | doPat (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) acc = #1 (doExp tagPath acc)
