@@ -1,0 +1,14 @@
+Real.fromString "" = NONE
+Real.fromString "0" = SOME 0
+Real.fromString "1.0" = SOME 1
+Real.fromString "inf" = SOME inf
+Real.fromString "+inf" = SOME inf
+Real.fromString " ~INF" = SOME ~inf
+Real.fromString "\t-Inf" = SOME ~inf
+Real.fromString "-NaN" = SOME nan
+Real.fromString "1z" = SOME 1
+Real.fromString "~.5e0" = SOME ~0.5
+Real.fromString "~5e~1" = SOME ~0.5
+Real.fromString "~5E-1" = SOME ~0.5
+Real.fromString "+5E" = SOME 5
+Real.fromString "5E1000" = SOME inf

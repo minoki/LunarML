@@ -254,6 +254,8 @@ should_run "mlbasis/should_run/" {
   "substring.sml",
   "os-path.sml",
   "char.sml",
+  "scan-word.sml",
+  "scan-real.sml",
 }
 should_run "lua/should_run/" {
   "nil_in_vector.sml",
