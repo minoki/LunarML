@@ -12,6 +12,8 @@ sources = \
   pluto/parser-combinator.fun \
   pluto/char-parser.sig \
   pluto/char-parser.fun \
+  src/list-util.sml \
+  src/vector-util.sml \
   src/numeric.sml \
   src/text.sml \
   src/strongly-connected-components.sml \

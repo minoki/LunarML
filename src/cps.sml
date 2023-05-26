@@ -231,6 +231,7 @@ end
 structure CpsTransform = struct
 local structure F = FSyntax
       structure C = CSyntax
+      val foldlCont = ListUtil.foldlCont
 in
 
 type Context = { targetInfo : TargetInfo.target_info
@@ -247,14 +248,6 @@ fun genSym (ctx : Context) = let val n = !(#nextVId ctx)
                                  val _ = #nextVId ctx := n + 1
                              in TypedSyntax.MkVId ("tmp", n)
                              end
-
-(* mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r *)
-fun mapCont f [] cont = cont []
-  | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
-
-(* foldlCont : ('a * 'b * ('b -> 'r) -> 'r) -> 'b -> 'a list -> ('b -> 'r) -> 'r *)
-fun foldlCont f init [] cont = cont init
-  | foldlCont f init (x :: xs) cont = f (x, init, fn y => foldlCont f y xs cont)
 
 fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
   | stripTyAbs e = e
@@ -1060,15 +1053,6 @@ datatype simplify_result = VALUE of C.Value
                          | SIMPLE_EXP of C.SimpleExp
                          | NOT_SIMPLIFIED
 type value_info = { exp : C.SimpleExp option, isDiscardableFunction : bool }
-fun foldlOption (f : 'a * 'b -> 'b option) (init : 'b) (v : 'a vector) : 'b option
-    = let fun loop (i, acc) = if i < Vector.length v then
-                                  case f (Vector.sub (v, i), acc) of
-                                      SOME acc => loop (i + 1, acc)
-                                    | NONE => NONE
-                              else
-                                  SOME acc
-      in loop (0, init)
-      end
 fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
     = case dec of
           C.ValDec { exp, result } =>
@@ -1090,7 +1074,7 @@ fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
                                                   NONE
         | C.RecContDec _ => NONE
 and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, cont })
-    = (case foldlOption isDiscardableDec env decs of
+    = (case VectorUtil.foldlOption isDiscardableDec env decs of
            SOME env => isDiscardableExp (env, cont)
          | NONE => false
       )
