@@ -48,6 +48,7 @@ fun skip0wx (getc, strm) = case getc strm of
                                                | NONE => strm
                                          else
                                              strm
+                                       | NONE => strm
                                     )
                                   | SOME (#"x", strm'') =>
                                     (case getc strm'' of

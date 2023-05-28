@@ -140,7 +140,7 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                        val strm = skip0wx (getc, strm)
                                    in scanDigits (0w16, Char.isHexDigit, getc) strm
                                    end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+fun fromString s = StringCvt.scanString (scan StringCvt.HEX) s
 end
 open Word
 end;
@@ -188,7 +188,7 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                        val strm = skip0wx (getc, strm)
                                    in scanDigits (0w16, Char.isHexDigit, getc) strm
                                    end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+fun fromString s = StringCvt.scanString (scan StringCvt.HEX) s
 end
 open Word8
 end;
@@ -236,7 +236,7 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                        val strm = skip0wx (getc, strm)
                                    in scanDigits (0w16, Char.isHexDigit, getc) strm
                                    end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+fun fromString s = StringCvt.scanString (scan StringCvt.HEX) s
 end
 open Word16
 end;
@@ -284,7 +284,7 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                        val strm = skip0wx (getc, strm)
                                    in scanDigits (0w16, Char.isHexDigit, getc) strm
                                    end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+fun fromString s = StringCvt.scanString (scan StringCvt.HEX) s
 end
 open Word32
 end;
@@ -332,7 +332,7 @@ fun scan StringCvt.BIN getc strm = let val strm = skipInitialWhitespace (getc, s
                                        val strm = skip0wx (getc, strm)
                                    in scanDigits (0w16, Char.isHexDigit, getc) strm
                                    end
-fun fromString s = StringCvt.scanString (scan StringCvt.DEC) s
+fun fromString s = StringCvt.scanString (scan StringCvt.HEX) s
 end
 open Word64
 end;
@@ -345,6 +345,7 @@ fun scanSubstring (getc, strm, s) = case Substring.getc s of
                                                                                     scanSubstring (getc, strm', s')
                                                                                 else
                                                                                     NONE
+                                                          | NONE => NONE
 fun scanZeroOrMoreDigits (getc, strm, revAcc) = case getc strm of
                                                     SOME (c, strm') => if Char.isDigit c then
                                                                            scanZeroOrMoreDigits (getc, strm', c :: revAcc)
@@ -362,11 +363,11 @@ fun scanOptFracPart (getc, strm, revAcc) = case getc strm of
                                                                           SOME (revAcc, strm'') => (revAcc, strm'')
                                                                         | NONE => (revAcc, strm)
                                                                      )
-                                             | NONE => (revAcc, strm)
+                                             | _ => (revAcc, strm)
 fun scanOptExpPart (getc, strm, revAcc) = case getc strm of
                                               SOME (c, strm') => if c = #"e" orelse c = #"E" then
                                                                      let val (isNegative, strm'') = scanSign (getc, strm')
-                                                                     in case scanOneOrMoreDigits (getc, strm'', if isNegative then [#"-", #"e"] else [#"e"]) of
+                                                                     in case scanOneOrMoreDigits (getc, strm'', if isNegative then #"-" :: #"e" :: revAcc else #"e" :: revAcc) of
                                                                             SOME (revAcc, strm''') => (revAcc, strm''')
                                                                           | NONE => (revAcc, strm)
                                                                      end
@@ -409,6 +410,7 @@ fun scan getc strm = let val strm = skipInitialWhitespace (getc, strm)
                                                    end
                                                else
                                                    NONE
+                          | NONE => NONE
                      end
 fun fromString s = StringCvt.scanString scan s
 open Real
