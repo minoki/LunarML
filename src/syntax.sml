@@ -45,6 +45,21 @@ fun compare (MkVId x, MkVId y) = String.compare (x,y)
                                                          )
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
+structure VIdSet = struct
+(* compatibility with older smlnj-lib *)
+open VIdSet
+fun minItem set = let val p = foldl (fn (x, NONE) => SOME x
+                                    | (x, y' as SOME y) => if VIdKey.compare (x, y) = LESS then
+                                                               SOME x
+                                                           else
+                                                               y'
+                                    ) NONE set
+                  in case p of
+                         NONE => raise Empty
+                       | SOME x => x
+                  end
+open VIdSet
+end
 structure VIdMap = RedBlackMapFn(VIdKey)
 structure StrIdKey = struct
 type ord_key = StrId
