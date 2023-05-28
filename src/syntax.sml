@@ -141,6 +141,7 @@ datatype ValueConstructorRep = REP_BOXED
 
 type ValueConstructorInfo = { tag : string
                             , allConstructors : VIdSet.set
+                            , constructorsWithPayload : VIdSet.set
                             , representation : ValueConstructorRep
                             }
 

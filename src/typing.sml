@@ -1537,11 +1537,13 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                 )
                               val tyvars = List.map #2 tyvars
                               val allConstructors = List.foldl (fn (Syntax.ConBind (span, vid, _), set) => Syntax.VIdSet.add (set, vid)) Syntax.VIdSet.empty conbinds
+                              val constructorsWithPayload = List.foldl (fn (Syntax.ConBind (span, vid, optTy), set) => if Option.isSome optTy then Syntax.VIdSet.add (set, vid) else set) Syntax.VIdSet.empty conbinds
                               val (valEnv, conbinds) = List.foldr (fn (S.ConBind(span, vid, optTy), (valEnv, conbinds)) =>
                                                                       let val vid' = newVId (#context ctx, vid)
                                                                           val optTy = Option.map (fn ty => evalTy (#context ctx, env, ty)) optTy
                                                                           val info = { tag = Syntax.getVIdName vid
                                                                                      , allConstructors = allConstructors
+                                                                                     , constructorsWithPayload = constructorsWithPayload
                                                                                      , representation = Syntax.REP_BOXED
                                                                                      }
                                                                           val idstatus = Syntax.ValueConstructor info
@@ -2475,6 +2477,7 @@ and addSpec (ctx : Context, env : SigEnv, S.ValDesc (span, descs)) : T.QSignatur
                                         , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars env') tyvarPairs
                                         }
                             val allConstructors = List.foldl (fn (Syntax.ConBind (span, vid, _), set) => Syntax.VIdSet.add (set, vid)) Syntax.VIdSet.empty condescs
+                            val constructorsWithPayload = List.foldl (fn (Syntax.ConBind (span, vid, optTy), set) => if Option.isSome optTy then Syntax.VIdSet.add (set, vid) else set) Syntax.VIdSet.empty condescs
                             val valEnv = List.foldl (fn (S.ConBind(span, vid, optTy), valEnv) =>
                                                         let val tysc = T.TypeScheme (List.map (fn tv => (tv, [])) tyvars, case optTy of
                                                                                                                               NONE => ty
@@ -2482,6 +2485,7 @@ and addSpec (ctx : Context, env : SigEnv, S.ValDesc (span, descs)) : T.QSignatur
                                                                                     )
                                                             val idstatus = Syntax.ValueConstructor { tag = Syntax.getVIdName vid
                                                                                                    , allConstructors = allConstructors
+                                                                                                   , constructorsWithPayload = constructorsWithPayload
                                                                                                    , representation = Syntax.REP_BOXED
                                                                                                    }
                                                         in Syntax.VIdMap.insert(valEnv, vid, (tysc, idstatus))

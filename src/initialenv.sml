@@ -142,13 +142,15 @@ val initialEnv : Typing.Env
           val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
           val mkValMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueVariable))) Syntax.VIdMap.empty
           fun mkValConMap (cons, rep) = let val allConstructors = List.foldl (fn ((vid, _), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid)) Syntax.VIdSet.empty cons
-                                        in List.foldl (fn ((vid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, representation = rep }
+                                            val constructorsWithPayload = List.foldl (fn ((vid, TypedSyntax.TypeScheme (_, TypedSyntax.FnType _)), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid) | (_, set) => set) Syntax.VIdSet.empty cons
+                                        in List.foldl (fn ((vid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, constructorsWithPayload = constructorsWithPayload, representation = rep }
                                                                               in Syntax.VIdMap.insert (m, Syntax.MkVId vid, (tysc, idstatus))
                                                                               end
                                                       ) Syntax.VIdMap.empty cons
                                         end
           fun mkTopValConMap (cons, rep) = let val allConstructors = List.foldl (fn ((vid, _, _), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid)) Syntax.VIdSet.empty cons
-                                           in List.foldl (fn ((vid, conid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, representation = rep }
+                                               val constructorsWithPayload = List.foldl (fn ((vid, _, TypedSyntax.TypeScheme (_, TypedSyntax.FnType _)), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid) | (_, set) => set) Syntax.VIdSet.empty cons
+                                           in List.foldl (fn ((vid, conid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, constructorsWithPayload = constructorsWithPayload, representation = rep }
                                                                                         in Syntax.VIdMap.insert (m, Syntax.MkVId vid, (tysc, idstatus, TypedSyntax.MkShortVId conid))
                                                                                         end
                                                          ) Syntax.VIdMap.empty cons

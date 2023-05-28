@@ -33,6 +33,7 @@ sources = \
   src/printer.sml \
   src/fsyntax.sml \
   src/fprinter.sml \
+  src/pattern-match.sml \
   src/ftransform.sml \
   src/cps.sml \
   src/lua-syntax.sml \
