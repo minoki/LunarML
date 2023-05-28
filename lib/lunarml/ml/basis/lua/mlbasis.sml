@@ -928,30 +928,54 @@ fun fmt (StringCvt.SCI prec) r = let val prec = Option.getOpt (prec, 6)
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dE", Lua.fromInt prec]
-                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue result : string
+                                 in if isNan r then
+                                        "nan"
+                                    else if r == posInf then
+                                        "inf"
+                                    else if r == negInf then
+                                        "~inf"
+                                    else
+                                        let val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dE", Lua.fromInt prec]
+                                            val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                            val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                        in Lua.unsafeFromValue result : string
+                                        end
                                  end
   | fmt (StringCvt.FIX prec) r = let val prec = Option.getOpt (prec, 6)
                                      val () = if prec < 0 then
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%df", Lua.fromInt prec]
-                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue result : string
+                                 in if isNan r then
+                                        "nan"
+                                    else if r == posInf then
+                                        "inf"
+                                    else if r == negInf then
+                                        "~inf"
+                                    else
+                                        let val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%df", Lua.fromInt prec]
+                                            val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                            val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                        in Lua.unsafeFromValue result : string
+                                        end
                                  end
   | fmt (StringCvt.GEN prec) r = let val prec = Option.getOpt (prec, 12)
                                      val () = if prec < 1 then
                                                   raise Size
                                               else
                                                   ()
-                                     val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dG", Lua.fromInt prec] (* TODO *)
-                                     val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
-                                     val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
-                                 in Lua.unsafeFromValue result : string
+                                 in if isNan r then
+                                        "nan"
+                                    else if r == posInf then
+                                        "inf"
+                                    else if r == negInf then
+                                        "~inf"
+                                    else
+                                        let val fmt = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%%.%dG", Lua.fromInt prec] (* TODO *)
+                                            val result = Lua.call1 Lua.Lib.string.format #[fmt, Lua.fromReal r]
+                                            val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
+                                        in Lua.unsafeFromValue result : string
+                                        end
                                  end
   | fmt StringCvt.EXACT r = raise Fail "Real.fmt StringCvt.EXACT: not implemented yet"
 val toString = fmt (StringCvt.GEN NONE)
