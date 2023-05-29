@@ -38,14 +38,14 @@ function compile_and_run(file)
   local succ = h:close()
   assert(type(succ) == "boolean" or succ == nil, "Use Lua 5.2 or later")
   if not succ then
-    return false, ""
+    return false, output
   end
   local expected_output_file = file:gsub("%.sml$", ".stdout"):gsub("%.mlb$", ".stdout")
   local h = assert(io.open(expected_output_file, "r"))
   local expected_output = normalize_line_ending(h:read("a"))
   h:close()
   if actual_output == expected_output then
-    return true
+    return true, output
   else
     if #expected_output < 10000 and #actual_output < 10000 then
       if expected_output:sub(-1) ~= "\n" then
@@ -62,7 +62,7 @@ function compile_and_run(file)
       h:close()
       os.execute(string.format("diff %s %s", expected_output_file, actual_output_file))
     end
-    return false, ""
+    return false, output
   end
 end
 function should_run(dir)
@@ -76,6 +76,8 @@ function should_run(dir)
           io.stderr:write(string.format("%s failed with:\n%s", file, output))
         end
         os.exit(1)
+      elseif output ~= "" then
+        io.stderr:write(string.format("%s: %s", file, output))
       end
     end
   end
@@ -86,9 +88,12 @@ function should_compile(dir)
       local file = testdir .. "/" .. dir .. f
       print("Compiling " .. dir .. f .. "...")
       local jsfile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
-      if not compile(file, jsfile) then
+      local succ, output = compile(file, jsfile)
+      if not succ then
         io.stderr:write(string.format("%s should compile, but it did not!\n", file))
         os.exit(1)
+      elseif output ~= "" then
+        io.stderr:write(string.format("%s: %s", file, output))
       end
     end
   end
@@ -99,7 +104,8 @@ function should_not_compile(dir)
       local file = testdir .. "/" .. dir .. f
       print("Compiling " .. dir .. f .. "...")
       local jsfile = file:gsub("%.sml$", outext):gsub("%.mlb$", outext)
-      if compile(file, jsfile) then
+      local succ, output = compile(file, jsfile)
+      if succ then
         io.stderr:write(string.format("%s should not compile, but it did!\n", file))
         os.exit(1)
       end
