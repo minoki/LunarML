@@ -23,7 +23,8 @@ in
 end;
 let
     infix D
-    fun (A :: C) D E = A ^ E;
+    fun (A :: C) D E = A ^ E
+      | nil D E = E;
 in
     print (op D (["Hello "], "world!\n"))
 end;
