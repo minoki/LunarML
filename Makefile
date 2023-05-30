@@ -55,11 +55,14 @@ typecheck:
 bin/lunarml: LunarML.mlb $(sources)
 	mlton -output $@ LunarML.mlb
 
-bin/lunarml.gen2: bin/lunarml LunarML.mlb $(sources)
-	bin/lunarml compile -o lunarml.gen2.lua LunarML.mlb
-	echo "#!/usr/bin/env lua" > $@
-	cat lunarml.gen2.lua >> $@
-	chmod +x $@
+bin/lunarml.gen2.lua: bin/lunarml LunarML.mlb $(sources)
+	bin/lunarml compile -o $@ LunarML.mlb
+
+bin/lunarml.gen2-luajit.lua: bin/lunarml LunarML.mlb $(sources)
+	bin/lunarml compile --luajit -o $@ LunarML.mlb
+
+bin/lunarml.gen2.js: bin/lunarml LunarML.mlb $(sources)
+	bin/lunarml compile --js-cps -o $@ LunarML.mlb
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
@@ -105,4 +108,13 @@ validate-js: bin/lunarml
 	$(NODE) lunarml.gen2.js -Blib/lunarml compile -o lunarml.gen3.js --js-cps --print-timings LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 
-.PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
+verify-lua: bin/lunarml bin/lunarml.gen2.lua
+	$(MAKE) -C test verify-lua VARIANT=lua LUA=$(LUA) LUNARML_GEN2="$(LUA) ../bin/lunarml.gen2.lua" VARIANT_GEN2=gen2
+
+verify-luajit: bin/lunarml bin/lunarml.gen2-luajit.lua
+	$(MAKE) -C test verify-luajit VARIANT=luajit LUAJIT=$(LUAJIT) LUNARML_GEN2="$(LUAJIT) ../bin/lunarml.gen2-luajit.lua" VARIANT_GEN2=gen2-luajit
+
+verify-js: bin/lunarml bin/lunarml.gen2.js
+	$(MAKE) -C test verify-nodejs-cps VARIANT=nodejs-cps NODE=$(NODE) LUNARML_GEN2="$(NODE) ../bin/lunarml.gen2.js" VARIANT_GEN2=gen2
+
+.PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js verify-lua verify-luajit verify-js

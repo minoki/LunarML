@@ -6,6 +6,9 @@ LUA= lua
 LUAJIT= luajit
 NODE= node
 
+LUNARML_GEN2= false
+VARIANT_GEN2= gen2
+
 ifeq ($(VARIANT), lua)
 LUNARML_OPTION= --lua
 OUTEXT= .lua
@@ -241,6 +244,7 @@ all: test-$(VARIANT)
 
 define should_run_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
+verify-$(VARIANT): $(basename $1).$(VARIANT).verify
 
 $(basename $1).$(VARIANT)$(OUTEXT): $1 $(lunarml)
 	@$(LUNARML) compile $(LUNARML_OPTION) --output "$$@" "$$<"
@@ -250,9 +254,13 @@ $(basename $1).$(VARIANT).ok: $(basename $1).$(VARIANT)$(OUTEXT)
 	@$(INTERPRETER) "$$<" 2>&1 > $(basename $1).$(VARIANT).output
 	@diff $(basename $1).stdout $(basename $1).$(VARIANT).output
 
-.PHONY: $(basename $1).$(VARIANT).ok
+$(basename $1).$(VARIANT).verify: $1 $(basename $1).$(VARIANT)$(OUTEXT)
+	$(LUNARML_GEN2) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)-$(VARIANT_GEN2)$(OUTEXT)" "$$<"
+	diff $(basename $1).$(VARIANT)$(OUTEXT) $(basename $1).$(VARIANT)-$(VARIANT_GEN2)$(OUTEXT)
 
-INTERMEDIATE_FILES += $(basename $1).$(VARIANT)$(OUTEXT) $(basename $1).$(VARIANT).output
+.PHONY: $(basename $1).$(VARIANT).ok $(basename $1).$(VARIANT).verify
+
+INTERMEDIATE_FILES += $(basename $1).$(VARIANT)$(OUTEXT) $(basename $1).$(VARIANT).output $(basename $1).$(VARIANT)-$(VARIANT_GEN2)$(OUTEXT)
 
 endef
 
