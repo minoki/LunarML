@@ -73,20 +73,22 @@ src/primitives.sml: src/primitives.lua
 src/command-line-settings.sml: util/record.lua Makefile
 	$(LUA) util/record.lua CommandLineSettings "subcommand,output,outputMode,dump,optimizationLevel,backend,libDir,printTimings" > $@
 
-test: bin/lunarml
-	$(LUA) test/run.lua bin/lunarml $(LUA)
+test: test-lua
+
+test-lua: bin/lunarml
+	$(MAKE) -C test VARIANT=lua
 
 test-lua-continuations: bin/lunarml
-	$(LUA) test/run.lua bin/lunarml $(LUA) continuations
+	$(MAKE) -C test VARIANT=lua-continuations LUA=$(LUA)
 
 test-luajit: bin/lunarml
-	$(LUA) test/run.lua bin/lunarml $(LUAJIT) luajit
+	$(MAKE) -C test VARIANT=luajit LUAJIT=$(LUAJIT)
 
 test-nodejs: bin/lunarml
-	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE)
+	$(MAKE) -C test VARIANT=nodejs NODE=$(NODE)
 
 test-nodejs-cps: bin/lunarml
-	$(LUA) test/run-nodejs.lua bin/lunarml $(NODE) cps
+	$(MAKE) -C test VARIANT=nodejs-cps NODE=$(NODE)
 
 validate-lua: bin/lunarml
 	bin/lunarml compile -o lunarml.gen2.lua --print-timings LunarML.mlb
@@ -103,4 +105,4 @@ validate-js: bin/lunarml
 	$(NODE) lunarml.gen2.js -Blib/lunarml compile -o lunarml.gen3.js --js-cps --print-timings LunarML.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 
-.PHONY: all typecheck test test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js
+.PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js

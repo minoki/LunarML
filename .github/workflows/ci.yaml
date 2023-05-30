@@ -13,7 +13,7 @@ jobs:
       - name: Build
         run: make
       - name: Test (Lua)
-        run: make test
+        run: make test-lua
       - name: Test (LuaJIT)
         run: make test-luajit
         env:

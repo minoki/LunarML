@@ -8,7 +8,7 @@ You need a recent version of MLton to build the executable, and Lua 5.3+ or rece
 
 ```sh-session
 $ make
-$ make test
+$ make test-lua
 $ make test-lua-continuations
 $ make test-luajit
 $ make test-nodejs

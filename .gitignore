@@ -7,6 +7,7 @@ test/*/*.lua
 test/*/*/*.lua
 test/*/*.js
 test/*/*/*.js
+test/**/*.output
 bin/lunarml
 thirdparty/smlnj-lib/
 thirdparty/smlnj-lib-original/
