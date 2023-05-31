@@ -172,6 +172,8 @@ datatype DatBind = DatBind of SourcePos.span * TyVar list * TyName * ConBind lis
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
+datatype match_type = CASE | VAL | HANDLE
+
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
@@ -186,7 +188,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | HandleExp of SourcePos.span * Exp * (Pat * Exp) list
              | RaiseExp of SourcePos.span * Ty * Exp (* result type, exception *)
              | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
-             | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list
+             | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list * match_type
              | FnExp of SourcePos.span * VId * Ty * Exp (* parameter name, parameter type, body *)
              | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
              | ListExp of SourcePos.span * Exp vector * Ty
@@ -246,7 +248,7 @@ fun getSourceSpanOfExp(SConExp(span, _, _)) = span
   | getSourceSpanOfExp(HandleExp(span, _, _)) = span
   | getSourceSpanOfExp(RaiseExp(span, _, _)) = span
   | getSourceSpanOfExp(IfThenElseExp(span, _, _, _)) = span
-  | getSourceSpanOfExp(CaseExp(span, _, _, _)) = span
+  | getSourceSpanOfExp (CaseExp (span, _, _, _, _)) = span
   | getSourceSpanOfExp(FnExp(span, _, _, _)) = span
   | getSourceSpanOfExp(ProjectionExp{sourceSpan, ...}) = sourceSpan
   | getSourceSpanOfExp(ListExp(span, _, _)) = span
@@ -319,7 +321,7 @@ fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (HandleExp(_,x,y)) = "HandleExp(" ^ print_Exp x ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat, print_Exp)) y ^ ")"
   | print_Exp (RaiseExp(_,ty,x)) = "RaiseExp(" ^ print_Ty ty ^ "," ^ print_Exp x ^ ")"
   | print_Exp (IfThenElseExp(_,x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
-  | print_Exp (CaseExp(_,x,ty,y)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (CaseExp (_, x, ty, y, _)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
   | print_Exp (FnExp(_,pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label = label, recordTy = recordTy, fieldTy = fieldTy, ... }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",recordTy=" ^ print_Ty recordTy ^ ",fieldTy=" ^ print_Ty fieldTy ^ "}"
   | print_Exp (ListExp _) = "ListExp"
@@ -447,7 +449,7 @@ fun applySubstTyInExpOrDec subst
             | doExp (HandleExp (span, exp, matches)) = HandleExp (span, doExp exp, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
             | doExp (RaiseExp (span, ty, exp)) = RaiseExp (span, doTy ty, doExp exp)
             | doExp (IfThenElseExp (span, exp1, exp2, exp3)) = IfThenElseExp (span, doExp exp1, doExp exp2, doExp exp3)
-            | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches)
+            | doExp (CaseExp (span, exp, ty, matches, t)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches, t)
             | doExp (FnExp (span, vid, ty, exp)) = FnExp (span, vid, doTy ty, doExp exp)
             | doExp (ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
             | doExp (ListExp (span, elems, elemTy)) = ListExp (span, Vector.map doExp elems, doTy elemTy)
@@ -519,7 +521,7 @@ fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdSta
             | doExp (HandleExp (span, exp, matches)) = HandleExp (span, doExp exp, doMatches matches)
             | doExp (RaiseExp (span, ty, exp)) = RaiseExp (span, ty, doExp exp)
             | doExp (IfThenElseExp (span, exp1, exp2, exp3)) = IfThenElseExp (span, doExp exp1, doExp exp2, doExp exp3)
-            | doExp (CaseExp (span, exp, ty, matches)) = CaseExp (span, doExp exp, ty, doMatches matches)
+            | doExp (CaseExp (span, exp, ty, matches, t)) = CaseExp (span, doExp exp, ty, doMatches matches, t)
             | doExp (FnExp (span, vid, ty, exp)) = let val subst' = remove' (subst, vid)
                                                    in FnExp (span, vid, ty, #doExp (substVId subst') exp)
                                                    end
@@ -589,7 +591,7 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a })
             | doExp(HandleExp(span, e, matches)) = HandleExp(span, doExp e, List.map doMatch matches)
             | doExp(RaiseExp(span, ty, e)) = RaiseExp(span, doTy ty, doExp e)
             | doExp(IfThenElseExp(span, e1, e2, e3)) = IfThenElseExp(span, doExp e1, doExp e2, doExp e3)
-            | doExp(CaseExp(span, e, ty, matches)) = CaseExp(span, doExp e, doTy ty, List.map doMatch matches)
+            | doExp (CaseExp (span, e, ty, matches, t)) = CaseExp (span, doExp e, doTy ty, List.map doMatch matches, t)
             | doExp(FnExp(span, vid, ty, body)) = FnExp(span, vid, doTy ty, doExp body)
             | doExp(ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ProjectionExp { sourceSpan = sourceSpan, label = label, recordTy = doTy recordTy, fieldTy = doTy fieldTy }
             | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
@@ -688,7 +690,7 @@ fun freeTyVarsInExp (bound, exp)
          | HandleExp (_, exp, matches) => freeTyVarsInExp (bound, exp) @ freeTyVarsInMatches (bound, matches, [])
          | RaiseExp (_, ty, exp) => freeAnonymousTyVarsInTy ty @ freeTyVarsInExp (bound, exp)
          | IfThenElseExp (_, exp1, exp2, exp3) => freeTyVarsInExp (bound, exp1) @ freeTyVarsInExp (bound, exp2) @ freeTyVarsInExp (bound, exp3)
-         | CaseExp (_, exp, ty, matches) => freeTyVarsInExp (bound, exp) @ freeAnonymousTyVarsInTy ty @ freeTyVarsInMatches (bound, matches, [])
+         | CaseExp (_, exp, ty, matches, _) => freeTyVarsInExp (bound, exp) @ freeAnonymousTyVarsInTy ty @ freeTyVarsInMatches (bound, matches, [])
          | FnExp (_, vid, ty, body) => freeAnonymousTyVarsInTy ty @ freeTyVarsInExp (bound, body)
          | ProjectionExp { recordTy = recordTy, fieldTy = fieldTy, ... } => freeAnonymousTyVarsInTy recordTy @ freeAnonymousTyVarsInTy fieldTy
          | ListExp (_, xs, ty) => Vector.foldl (fn (x, set) => freeTyVarsInExp (bound, x) @ set) (freeAnonymousTyVarsInTy ty) xs

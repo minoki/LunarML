@@ -368,7 +368,7 @@ fun emitWarning (ctx : Context, spans, message)
     = let val { warnings, ... } = ctx
       in warnings := (spans, message) :: !warnings
       end
-fun checkMatch (ctx, span, matches)
+fun checkExhaustiveness (ctx, span, matches)
     = let val matrix = List.map (fn (pat, _) => [pat]) matches
       in case nonMatching (matrix, 1) of
              NONE => () (* exhaustive *)
@@ -382,10 +382,13 @@ fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.AppExp (x, y)) = (goExp (ctx, x); goExp (ctx, y))
   | goExp (ctx, F.HandleExp { body, exnName, handler }) = (goExp (ctx, body); goExp (ctx, handler))
   | goExp (ctx, F.IfThenElseExp (x, y, z)) = (goExp (ctx, x); goExp (ctx, y); goExp (ctx, z))
-  | goExp (ctx, F.CaseExp (span, exp, ty, match)) = ( goExp (ctx, exp)
-                                                    ; List.app (fn (_, exp) => goExp (ctx, exp)) match
-                                                    ; checkMatch (ctx, span, match)
-                                                    )
+  | goExp (ctx, F.CaseExp (span, exp, ty, match, matchTy)) = ( goExp (ctx, exp)
+                                                             ; List.app (fn (_, exp) => goExp (ctx, exp)) match
+                                                             ; if matchTy <> TypedSyntax.HANDLE then
+                                                                   checkExhaustiveness (ctx, span, match)
+                                                               else
+                                                                   ()
+                                                             )
   | goExp (ctx, F.FnExp (vid, ty, body)) = goExp (ctx, body)
   | goExp (ctx, F.ProjectionExp { label, record, fieldTypes }) = goExp (ctx, record)
   | goExp (ctx, F.TyAbsExp (_, _, exp)) = goExp (ctx, exp)
