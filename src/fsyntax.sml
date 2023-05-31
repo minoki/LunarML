@@ -72,7 +72,7 @@ datatype Pat = WildcardPat of SourcePos.span
                             , handler : Exp
                             }
              | IfThenElseExp of Exp * Exp * Exp
-             | CaseExp of SourcePos.span * Exp * Ty * (Pat * Exp) list * TypedSyntax.match_type
+             | CaseExp of { sourceSpan : SourcePos.span, subjectExp : Exp, subjectTy : Ty, matches : (Pat * Exp) list, matchType : TypedSyntax.match_type, resultTy : Ty }
              | FnExp of TypedSyntax.VId * Ty * Exp
              | ProjectionExp of { label : Syntax.Label, record : Exp, fieldTypes : Ty Syntax.LabelMap.map }
              | TyAbsExp of TyVar * Kind * Exp
@@ -233,7 +233,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doExp (AppExp (exp1, exp2)) = AppExp (doExp exp1, doExp exp2)
           | doExp (HandleExp { body, exnName, handler }) = HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
           | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
-          | doExp (CaseExp (span, exp, ty, matches, t)) = CaseExp (span, doExp exp, doTy ty, List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches, t)
+          | doExp (CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) = CaseExp { sourceSpan = sourceSpan, subjectExp = doExp subjectExp, subjectTy = doTy subjectTy, matches = List.map (fn (pat, exp) => (doPat pat, doExp exp)) matches, matchType = matchType, resultTy = doTy resultTy }
           | doExp (FnExp (vid, ty, exp)) = FnExp (vid, doTy ty, doExp exp)
           | doExp (ProjectionExp { label, record, fieldTypes }) = ProjectionExp { label = label, record = doExp record, fieldTypes = Syntax.LabelMap.map doTy fieldTypes }
           | doExp (TyAbsExp (tv, kind, exp)) = if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
@@ -295,10 +295,12 @@ and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, 
   | freeTyVarsInExp (bound, AppExp (exp1, exp2)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) acc)
   | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler) acc)
   | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) (freeTyVarsInExp (bound, exp3) acc))
-  | freeTyVarsInExp (bound, CaseExp (span, exp, ty, matches, _)) acc = let val acc = freeTyVarsInExp (bound, exp) acc
-                                                                           val acc = freeTyVarsInTy (bound, ty) acc
-                                                                       in List.foldl (fn ((pat, exp), acc) => freeTyVarsInPat (bound, pat) (freeTyVarsInExp (bound, exp) acc)) acc matches
-                                                                       end
+  | freeTyVarsInExp (bound, CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) acc
+    = let val acc = freeTyVarsInExp (bound, subjectExp) acc
+          val acc = freeTyVarsInTy (bound, subjectTy) acc
+          val acc = freeTyVarsInTy (bound, resultTy) acc
+      in List.foldl (fn ((pat, exp), acc) => freeTyVarsInPat (bound, pat) (freeTyVarsInExp (bound, exp) acc)) acc matches
+      end
   | freeTyVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInExp (bound, ProjectionExp { label, record, fieldTypes }) acc = freeTyVarsInExp (bound, record) (Syntax.LabelMap.foldl (fn (ty, acc) => freeTyVarsInTy (bound, ty) acc) acc fieldTypes)
   | freeTyVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeTyVarsInExp (TypedSyntax.TyVarSet.add (bound, tv), exp) acc
@@ -368,7 +370,7 @@ and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args
   | freeVarsInExp (bound, AppExp (exp1, exp2)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) acc)
   | freeVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeVarsInExp (bound, body) (freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler) acc)
   | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) (freeVarsInExp (bound, exp3) acc))
-  | freeVarsInExp (bound, CaseExp (span, exp, ty, matches, _)) acc = List.foldl (fn ((pat, exp), acc) => freeVarsInExp (varsInPat pat bound, exp) (freeVarsInPat (bound, pat) acc)) (freeVarsInExp (bound, exp) acc) matches
+  | freeVarsInExp (bound, CaseExp { sourceSpan = _, subjectExp, subjectTy = _, matches, matchType = _, resultTy = _ }) acc = List.foldl (fn ((pat, exp), acc) => freeVarsInExp (varsInPat pat bound, exp) (freeVarsInPat (bound, pat) acc)) (freeVarsInExp (bound, subjectExp) acc) matches
   | freeVarsInExp (bound, FnExp (vid, ty, exp)) acc = freeVarsInExp (TypedSyntax.VIdSet.add (bound, vid), exp) acc
   | freeVarsInExp (bound, ProjectionExp { label, record, fieldTypes }) acc = freeVarsInExp (bound, record) acc
   | freeVarsInExp (bound, TyAbsExp (tv, kind, exp)) acc = freeVarsInExp (bound, exp) acc
@@ -454,7 +456,7 @@ and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (HandleExp { body, exnName, handler }) = "HandleExp{body=" ^ print_Exp body ^ ",exnName=" ^ TypedSyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
-  | print_Exp (CaseExp (_, x, ty, y, _)) = "CaseExp(" ^ print_Exp x ^ "," ^ print_Ty ty ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) y ^ ")"
+  | print_Exp (CaseExp { subjectExp, subjectTy, matches, ... }) = "CaseExp(" ^ print_Exp subjectExp ^ "," ^ print_Ty subjectTy ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Pat,print_Exp)) matches ^ ")"
   | print_Exp (FnExp(pname,pty,body)) = "FnExp(" ^ print_VId pname ^ "," ^ print_Ty pty ^ "," ^ print_Exp body ^ ")"
   | print_Exp (ProjectionExp { label, record, fieldTypes }) = "ProjectionExp{label=" ^ Syntax.print_Label label ^ ",record=" ^ print_Exp record ^ "}"
   | print_Exp (TyAbsExp(tv, kind, exp)) = "TyAbsExp(" ^ print_TyVar tv ^ "," ^ print_Exp exp ^ ")"
@@ -1017,12 +1019,18 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
   | toFExp (ctx, env, T.AppExp (span, e1, e2)) = F.AppExp (toFExp (ctx, env, e1), toFExp (ctx, env, e2))
   | toFExp (ctx, env, T.TypedExp (span, exp, _)) = toFExp (ctx, env, exp)
   | toFExp (ctx, env, T.IfThenElseExp (span, e1, e2, e3)) = F.IfThenElseExp (toFExp (ctx, env, e1), toFExp (ctx, env, e2), toFExp (ctx, env, e3))
-  | toFExp (ctx, env, T.CaseExp (span, e, ty, matches, matchType))
+  | toFExp (ctx, env, T.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy })
     = let fun doMatch (pat, exp) = let val (valMap, pat') = toFPat (ctx, env, pat)
                                        val env' = updateValMap (fn m => T.VIdMap.unionWith #2 (m, valMap), env)
                                    in (pat', toFExp (ctx, env', exp))
                                    end
-      in F.CaseExp (span, toFExp (ctx, env, e), toFTy (ctx, env, ty), List.map doMatch matches, matchType)
+      in F.CaseExp { sourceSpan = sourceSpan
+                   , subjectExp = toFExp (ctx, env, subjectExp)
+                   , subjectTy = toFTy (ctx, env, subjectTy)
+                   , matches = List.map doMatch matches
+                   , matchType = matchType
+                   , resultTy = toFTy (ctx, env, resultTy)
+                   }
       end
   | toFExp (ctx, env, T.FnExp (span, vid, ty, body))
     = let val ty = toFTy(ctx, env, ty)
@@ -1037,7 +1045,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                              | _ => emitError (ctx, [span], "invalid record type")
       in F.FnExp (vid, recordTy, F.ProjectionExp { label = label, record = F.VarExp vid, fieldTypes = fieldTypes })
       end
-  | toFExp (ctx, env, T.HandleExp (span, exp, matches))
+  | toFExp (ctx, env, T.HandleExp (span, exp, matches, resultTy))
     = let val exnName = freshVId(ctx, "exn")
           val exnTy = F.TyVar(F.tyNameToTyVar(Typing.primTyName_exn))
           fun doMatch (pat, exp) = let val (valMap, pat') = toFPat (ctx, env, pat)
@@ -1047,7 +1055,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
           val matches' = List.map doMatch matches
       in F.HandleExp { body = toFExp(ctx, env, exp)
                      , exnName = exnName
-                     , handler = F.CaseExp (span, F.VarExp exnName, exnTy, matches', T.HANDLE)
+                     , handler = F.CaseExp { sourceSpan = span, subjectExp = F.VarExp exnName, subjectTy = exnTy, matches = matches', matchType = T.HANDLE, resultTy = toFTy (ctx, env, resultTy) }
                      }
       end
   | toFExp (ctx, env, T.RaiseExp (span, ty, exp)) = F.RaiseExp (span, toFTy (ctx, env, ty), toFExp (ctx, env, exp))
@@ -1322,32 +1330,33 @@ and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.
                                                  end
                                in F.FnExp ( param
                                           , paramTy
-                                          , F.CaseExp ( span
-                                                      , F.VarExp(param)
-                                                      , paramTy
-                                                      , List.foldr (fn (T.ConBind (span, conName, NONE, info), rest) =>
-                                                                       let val conPat = F.ValConPat { sourceSpan = span, info = info, payload = NONE }
-                                                                       in ( F.TuplePat (span, [conPat, conPat])
-                                                                          , F.VarExp(InitialEnv.VId_true)
-                                                                          ) :: rest
-                                                                       end
-                                                                   | (T.ConBind (span, conName, SOME payloadTy, info), rest) =>
-                                                                     let val payload1 = freshVId(ctx, "a")
-                                                                         val payload2 = freshVId(ctx, "b")
-                                                                         val payloadEq = getEquality(ctx, env'', payloadTy)
-                                                                         val payloadTy = toFTy(ctx, env, payloadTy)
-                                                                     in ( F.TuplePat (span, [ F.ValConPat { sourceSpan = span, info = info, payload = SOME (payloadTy, F.VarPat (span, payload1, payloadTy)) }
-                                                                                            , F.ValConPat { sourceSpan = span, info = info, payload = SOME (payloadTy, F.VarPat (span, payload2, payloadTy)) }
-                                                                                            ]
-                                                                                     )
-                                                                        , F.AppExp(payloadEq, F.TupleExp [F.VarExp(payload1), F.VarExp(payload2)])
-                                                                        ) :: rest
-                                                                     end
-                                                                   )
-                                                                   [(F.WildcardPat span, F.VarExp(InitialEnv.VId_false))]
-                                                                   conbinds
-                                                      , T.CASE
-                                                      )
+                                          , F.CaseExp { sourceSpan = span
+                                                      , subjectExp = F.VarExp param
+                                                      , subjectTy = paramTy
+                                                      , matches = List.foldr (fn (T.ConBind (span, conName, NONE, info), rest) =>
+                                                                                 let val conPat = F.ValConPat { sourceSpan = span, info = info, payload = NONE }
+                                                                                 in ( F.TuplePat (span, [conPat, conPat])
+                                                                                    , F.VarExp(InitialEnv.VId_true)
+                                                                                    ) :: rest
+                                                                                 end
+                                                                             | (T.ConBind (span, conName, SOME payloadTy, info), rest) =>
+                                                                               let val payload1 = freshVId(ctx, "a")
+                                                                                   val payload2 = freshVId(ctx, "b")
+                                                                                   val payloadEq = getEquality(ctx, env'', payloadTy)
+                                                                                   val payloadTy = toFTy(ctx, env, payloadTy)
+                                                                               in ( F.TuplePat (span, [ F.ValConPat { sourceSpan = span, info = info, payload = SOME (payloadTy, F.VarPat (span, payload1, payloadTy)) }
+                                                                                                      , F.ValConPat { sourceSpan = span, info = info, payload = SOME (payloadTy, F.VarPat (span, payload2, payloadTy)) }
+                                                                                                      ]
+                                                                                               )
+                                                                                  , F.AppExp(payloadEq, F.TupleExp [F.VarExp(payload1), F.VarExp(payload2)])
+                                                                                  ) :: rest
+                                                                               end
+                                                                             )
+                                                                             [(F.WildcardPat span, F.VarExp(InitialEnv.VId_false))]
+                                                                             conbinds
+                                                      , matchType = T.CASE
+                                                      , resultTy = F.TyVar (F.tyNameToTyVar Typing.primTyName_bool)
+                                                      }
                                           )
                                end
                     val body = List.foldr (fn ((tv, eqParam), body) => F.FnExp ( eqParam

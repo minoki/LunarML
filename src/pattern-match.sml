@@ -382,13 +382,14 @@ fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.AppExp (x, y)) = (goExp (ctx, x); goExp (ctx, y))
   | goExp (ctx, F.HandleExp { body, exnName, handler }) = (goExp (ctx, body); goExp (ctx, handler))
   | goExp (ctx, F.IfThenElseExp (x, y, z)) = (goExp (ctx, x); goExp (ctx, y); goExp (ctx, z))
-  | goExp (ctx, F.CaseExp (span, exp, ty, match, matchTy)) = ( goExp (ctx, exp)
-                                                             ; List.app (fn (_, exp) => goExp (ctx, exp)) match
-                                                             ; if matchTy <> TypedSyntax.HANDLE then
-                                                                   checkExhaustiveness (ctx, span, match)
-                                                               else
-                                                                   ()
-                                                             )
+  | goExp (ctx, F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy })
+    = ( goExp (ctx, subjectExp)
+      ; List.app (fn (_, exp) => goExp (ctx, exp)) matches
+      ; if matchType <> TypedSyntax.HANDLE then
+            checkExhaustiveness (ctx, sourceSpan, matches)
+        else
+            ()
+      )
   | goExp (ctx, F.FnExp (vid, ty, body)) = goExp (ctx, body)
   | goExp (ctx, F.ProjectionExp { label, record, fieldTypes }) = goExp (ctx, record)
   | goExp (ctx, F.TyAbsExp (_, _, exp)) = goExp (ctx, exp)

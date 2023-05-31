@@ -1145,7 +1145,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
           val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME primTy_exn, SOME expTy)
       in addConstraint (ctx, env, T.EqConstr (span, patTy, primTy_exn)) (* patTy = exn *)
        ; addConstraint (ctx, env, T.EqConstr (span, expTy, retTy))
-       ; (expTy, T.HandleExp (span, exp, matches))
+       ; (expTy, T.HandleExp (span, exp, matches, expTy))
       end
   | typeCheckExp (ctx, env, S.RaiseExp (span, exp), typeHint)
     = let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME primTy_exn)
@@ -1167,7 +1167,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
     = let val (expTy, exp) = typeCheckExp (ctx, env, exp, NONE)
           val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME expTy, typeHint)
       in addConstraint (ctx, env, T.EqConstr (span, expTy, patTy))
-       ; (retTy, T.CaseExp (span, exp, expTy, matches, T.CASE))
+       ; (retTy, T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = matches, matchType = T.CASE, resultTy = retTy })
       end
   | typeCheckExp (ctx, env, S.FnExp (span, matches), typeHint)
     = let val (argTyHint, retTyHint) = case typeHint of
@@ -1177,7 +1177,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
           val fnExp = case matches of
                           [(T.VarPat (span2, vid, _), body)] => T.FnExp (span, vid, argTy, body)
                         | _ => let val vid = newVId (#context ctx, Syntax.MkVId "a")
-                               in T.FnExp (span, vid, argTy, T.CaseExp (span, T.VarExp (span, T.MkShortVId vid, Syntax.ValueVariable, []), argTy, matches, T.CASE))
+                               in T.FnExp (span, vid, argTy, T.CaseExp { sourceSpan = span, subjectExp = T.VarExp (span, T.MkShortVId vid, Syntax.ValueVariable, []), subjectTy = argTy, matches = matches, matchType = T.CASE, resultTy = retTy })
                                end
       in (T.FnType (span, argTy, retTy), fnExp)
       end
@@ -1277,7 +1277,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                                                            | _ => let val espan = T.getSourceSpanOfExp exp
                                                                                       val vid' = renewVId (#context ctx) vid
                                                                                       val pat' = T.renameVarsInPat (T.VIdMap.insert (T.VIdMap.empty, vid, vid')) pat
-                                                                                  in T.CaseExp (span, exp, expTy, [(pat', T.VarExp (espan, T.MkShortVId vid', Syntax.ValueVariable, []))], T.VAL)
+                                                                                  in T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = [(pat', T.VarExp (espan, T.MkShortVId vid', Syntax.ValueVariable, []))], matchType = T.VAL, resultTy = ty }
                                                                                   end
                                                                        )
                                       in (valbind' :: valbinds, S.VIdMap.unionWith (fn _ => emitTypeError (ctx, [span], "duplicate identifier in a binding")) (S.VIdMap.map (fn (vid, ty) => (vid, T.TypeScheme ([], ty))) valEnv, valEnvRest))
@@ -1287,7 +1287,8 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                 val varsMap = List.foldl T.VIdMap.insert' T.VIdMap.empty vars'
                                 val pat' = T.renameVarsInPat varsMap pat
                                 val tup = T.TupleExp (espan, List.map (fn (_, vid') => T.VarExp (espan, T.MkShortVId vid', Syntax.ValueVariable, [])) vars')
-                                val valbind' = T.TupleBind (span, vars, T.CaseExp (span, exp, expTy, [(pat', tup)], T.VAL))
+                                val tupleTy = T.TupleType (espan, List.map #2 vars)
+                                val valbind' = T.TupleBind (span, vars, T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = [(pat', tup)], matchType = T.VAL, resultTy = tupleTy })
                             in (valbind' :: valbinds, S.VIdMap.unionWith (fn _ => emitTypeError (ctx, [span], "duplicate identifier in a binding")) (S.VIdMap.map (fn (vid, ty) => (vid, T.TypeScheme ([], ty))) valEnv, valEnvRest))
                             end
                 end
@@ -1331,10 +1332,11 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                     val espan = TypedSyntax.getSourceSpanOfExp exp
                     fun polyPart [] = []
                       | polyPart ((vid, T.TypeScheme ([], _)) :: rest) = polyPart rest
-                      | polyPart ((vid, tysc) :: rest) = let val vid' = renewVId (#context ctx) vid
-                                                             val pat' = TypedSyntax.renameVarsInPat (TypedSyntax.VIdMap.insert (TypedSyntax.VIdMap.empty, vid, vid')) pat
-                                                         in T.PolyVarBind (span, vid, tysc, TypedSyntax.CaseExp (span, exp, expTy, [(TypedSyntax.filterVarsInPat (fn x => x = vid') pat', TypedSyntax.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))], T.VAL)) :: polyPart rest
-                                                         end
+                      | polyPart ((vid, tysc as T.TypeScheme (_, ty)) :: rest)
+                        = let val vid' = renewVId (#context ctx) vid
+                              val pat' = TypedSyntax.renameVarsInPat (TypedSyntax.VIdMap.insert (TypedSyntax.VIdMap.empty, vid, vid')) pat
+                          in T.PolyVarBind (span, vid, tysc, TypedSyntax.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = [(TypedSyntax.filterVarsInPat (fn x => x = vid') pat', TypedSyntax.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))], matchType = T.VAL, resultTy = ty }) :: polyPart rest
+                          end
                     fun isMonoVar vid = List.exists (fn (vid', T.TypeScheme (tvs, _)) => T.eqVId (vid, vid') andalso List.null tvs) valEnv'L
                     val valbind' = if allPoly then
                                        if List.null valEnv'L then
@@ -1352,13 +1354,14 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                                        in case xs of
                                               [(vid, ty)] => let val vid' = renewVId (#context ctx) vid
                                                                  val pat' = TypedSyntax.renameVarsInPat (TypedSyntax.VIdMap.insert (TypedSyntax.VIdMap.empty, vid, vid')) (TypedSyntax.filterVarsInPat isMonoVar pat)
-                                                             in T.PolyVarBind (span, vid, T.TypeScheme ([], ty), T.CaseExp (span, exp, expTy, [(pat', T.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))], T.VAL)) :: polyPart valEnv'L
+                                                             in T.PolyVarBind (span, vid, T.TypeScheme ([], ty), T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = [(pat', T.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, []))], matchType = T.VAL, resultTy = ty }) :: polyPart valEnv'L
                                                              end
                                             | _ => let val vars' = List.map (fn (vid, _) => (vid, renewVId (#context ctx) vid)) xs
                                                        val varsMap = List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty vars'
                                                        val pat' = TypedSyntax.renameVarsInPat varsMap (TypedSyntax.filterVarsInPat isMonoVar pat)
                                                        val tup = T.TupleExp (espan, List.map (fn (_, vid') => T.VarExp (espan, TypedSyntax.MkShortVId vid', Syntax.ValueVariable, [])) vars')
-                                                   in T.TupleBind (span, xs, T.CaseExp (span, exp, expTy, [(pat', tup)], T.VAL)) :: polyPart valEnv'L
+                                                       val tupleTy = T.TupleType (espan, List.map #2 xs)
+                                                   in T.TupleBind (span, xs, T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = [(pat', tup)], matchType = T.VAL, resultTy = tupleTy }) :: polyPart valEnv'L
                                                    end
                                        end
                 in (valbind' @ valbinds, Syntax.VIdMap.unionWith (fn _ => emitTypeError (ctx, [span], "duplicate identifier in a binding")) (valEnv', valEnvRest))
@@ -2041,10 +2044,10 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                      end
             | goExp (T.AppExp (span, exp1, exp2)) = ( goExp exp1; goExp exp2 )
             | goExp (T.TypedExp (span, exp, ty)) = ( goExp exp; goTy ty )
-            | goExp (T.HandleExp (span, exp, matches)) = ( goExp exp; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
+            | goExp (T.HandleExp (span, exp, matches, resultTy)) = ( goExp exp; goTy resultTy; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
             | goExp (T.RaiseExp (span, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (T.IfThenElseExp (span, exp1, exp2, exp3)) = ( goExp exp1; goExp exp2; goExp exp3 )
-            | goExp (T.CaseExp (span, exp, ty, matches, _)) = ( goExp exp; goTy ty; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
+            | goExp (T.CaseExp { sourceSpan = _, subjectExp, subjectTy, matches, matchType = _, resultTy }) = ( goExp subjectExp; goTy subjectTy; goTy resultTy; List.app (fn (pat, exp) => (goPat pat; goExp exp)) matches )
             | goExp (T.FnExp (span, vid, ty, exp)) = ( goTy ty; goExp exp )
             | goExp (T.ProjectionExp { sourceSpan, label, recordTy, fieldTy }) = ( goTy recordTy; goTy fieldTy )
             | goExp (T.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )

@@ -38,27 +38,27 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                    | F.TyAbsExp (tv, kind, exp) => F.TyAbsExp (tv, kind, doExp exp)
                    | F.TyAppExp (exp, ty) => F.TyAppExp (doExp exp, ty)
                    | F.PackExp { payloadTy, exp, packageTy } => F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
-                   | F.CaseExp (span, exp, ty, [(F.VarPat (span2, vid, ty'), exp2 as F.VarExp vid')], matchType) =>
+                   | F.CaseExp { sourceSpan, subjectExp, subjectTy, matches = [(F.VarPat (span2, vid, ty'), exp2 as F.VarExp vid')], matchType, resultTy } =>
                      if TypedSyntax.eqVId (vid, vid') then
-                         doExp exp
+                         doExp subjectExp
                      else
-                         F.LetExp (F.ValDec (vid, SOME ty', doExp exp), exp2)
-                   | F.CaseExp (span, exp, ty, matches, matchType) =>
+                         F.LetExp (F.ValDec (vid, SOME ty', doExp subjectExp), exp2)
+                   | F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy } =>
                      let val canIgnore = case matches of
                                              [(pat, innerExp)] => if isWildcardPat pat then SOME innerExp else NONE
                                            | _ => NONE
                      in case canIgnore of
-                            SOME innerExp => F.LetExp (F.IgnoreDec (doExp exp), doExp innerExp)
+                            SOME innerExp => F.LetExp (F.IgnoreDec (doExp subjectExp), doExp innerExp)
                           | NONE => let val examinedVId = freshVId(ctx, "exp")
                                         val examinedExp = F.VarExp(examinedVId)
                                         fun go [] = (case matchType of
-                                                         TypedSyntax.CASE => F.RaiseExp (span, (* TODO: type of raise *) F.RecordType Syntax.LabelMap.empty, F.VarExp InitialEnv.VId_Match)
-                                                       | TypedSyntax.VAL => F.RaiseExp (span, (* TODO: type *) F.RecordType Syntax.LabelMap.empty, F.VarExp InitialEnv.VId_Bind)
-                                                       | TypedSyntax.HANDLE => F.RaiseExp (SourcePos.nullSpan, (* TODO: type *) F.RecordType Syntax.LabelMap.empty, examinedExp)
+                                                         TypedSyntax.CASE => F.RaiseExp (sourceSpan, resultTy, F.VarExp InitialEnv.VId_Match)
+                                                       | TypedSyntax.VAL => F.RaiseExp (sourceSpan, resultTy, F.VarExp InitialEnv.VId_Bind)
+                                                       | TypedSyntax.HANDLE => F.RaiseExp (SourcePos.nullSpan, resultTy, examinedExp)
                                                     )
                                           | go ((pat, innerExp) :: rest)
-                                            = let val binders = genBinders examinedExp ty pat
-                                                  val matcher = genMatcher examinedExp ty pat
+                                            = let val binders = genBinders examinedExp subjectTy pat
+                                                  val matcher = genMatcher examinedExp subjectTy pat
                                               in if isExhaustive pat then
                                                      if List.null rest then
                                                          List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders
@@ -67,7 +67,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                                  else
                                                      F.IfThenElseExp (matcher, List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders, go rest)
                                               end
-                                    in F.LetExp (F.ValDec (examinedVId, SOME ty, doExp exp), go matches)
+                                    in F.LetExp (F.ValDec (examinedVId, SOME subjectTy, doExp subjectExp), go matches)
                                     end
                      end
                 )
@@ -228,7 +228,7 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.m
                                                                  , handler = doExp handler
                                                                  }
   | doExp (F.IfThenElseExp (exp1, exp2, exp3)) = F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
-  | doExp (F.CaseExp (span, exp, ty, matches, t)) = F.CaseExp (span, doExp exp, ty, List.map (fn (pat, exp) => (pat, doExp exp)) matches, t)
+  | doExp (F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) = F.CaseExp { sourceSpan = sourceSpan, subjectExp = doExp subjectExp, subjectTy = subjectTy, matches = List.map (fn (pat, exp) => (pat, doExp exp)) matches, matchType = matchType, resultTy = resultTy }
   | doExp (F.FnExp (vid, ty, exp)) = F.FnExp (vid, ty, doExp exp)
   | doExp (F.ProjectionExp { label, record, fieldTypes }) = F.ProjectionExp { label = label, record = doExp record, fieldTypes = fieldTypes }
   | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
@@ -300,7 +300,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3
-  | isDiscardable (F.CaseExp (span, exp, ty, matches, _)) = false (* TODO *)
+  | isDiscardable (F.CaseExp { sourceSpan = _, subjectExp, subjectTy = _, matches, matchType = _, resultTy = _ }) = false (* TODO *)
   | isDiscardable (F.FnExp (vid, ty, exp)) = true
   | isDiscardable (F.ProjectionExp { label, record, fieldTypes }) = isDiscardable record
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
@@ -344,13 +344,14 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
                                                          val (used3, exp3) = doExp exp3 used2
                                                      in (used3, F.IfThenElseExp (exp1, exp2, exp3))
                                                      end
-  | doExp (F.CaseExp (span, exp, ty, matches, matchType)) acc = let val (used, exp) = doExp exp acc
-                                                                    val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doExp exp acc
-                                                                                                                                          in (doPat pat used', (pat, exp) :: matches)
-                                                                                                                                          end)
-                                                                                                     (used, []) matches
-                                                                in (used, F.CaseExp (span, exp, ty, matches, matchType))
-                                                                end
+  | doExp (F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) acc
+    = let val (used, subjectExp) = doExp subjectExp acc
+          val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doExp exp acc
+                                                                                in (doPat pat used', (pat, exp) :: matches)
+                                                                                end)
+                                           (used, []) matches
+      in (used, F.CaseExp { sourceSpan = sourceSpan, subjectExp = subjectExp, subjectTy = subjectTy, matches = matches, matchType = matchType, resultTy = resultTy })
+      end
   | doExp (F.FnExp (vid, ty, exp)) acc = let val (used, exp) = doExp exp acc
                                          in (used, F.FnExp (vid, ty, exp))
                                          end
@@ -404,14 +405,15 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                                                    in (used1, [F.IfThenElseExp (exp1, exp2, exp3)])
                                                                                    end
                                                             end
-  | doIgnoredExp (F.CaseExp (span, exp, ty, matches, matchType)) acc = let val (used, exp) = doExp exp acc
-                                                                           val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doIgnoredExpAsExp exp used
-                                                                                                                                                     val used'' = doPat pat used'
-                                                                                                                                                 in (used'', (pat, exp) :: matches)
-                                                                                                                                                 end)
-                                                                                                            (used, []) matches
-                                                                       in (used, [F.CaseExp (span, exp, ty, matches, matchType)])
-                                                                       end
+  | doIgnoredExp (F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) acc
+    = let val (used, subjectExp) = doExp subjectExp acc
+          val (used, matches) = List.foldr (fn ((pat, exp), (used, matches)) => let val (used', exp) = doIgnoredExpAsExp exp used
+                                                                                    val used'' = doPat pat used'
+                                                                                in (used'', (pat, exp) :: matches)
+                                                                                end)
+                                           (used, []) matches
+      in (used, [F.CaseExp { sourceSpan = sourceSpan, subjectExp = subjectExp, subjectTy = subjectTy, matches = matches, matchType = matchType, resultTy = resultTy }])
+      end
   | doIgnoredExp (F.FnExp _) acc = (acc, [])
   | doIgnoredExp (F.ProjectionExp { label, record, fieldTypes }) acc = doIgnoredExp record acc
   | doIgnoredExp (F.TyAbsExp (tyvar, kind, exp)) acc = let val (used, exp) = doIgnoredExpAsExp exp acc (* should be pure *)
