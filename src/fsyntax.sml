@@ -388,6 +388,15 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (
   | freeVarsInDec (bound, ExportModule exps) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc exps)
   | freeVarsInDec (bound, GroupDec (_, decs)) acc = List.foldl (fn (dec, (bound, acc)) => freeVarsInDec (bound, dec) acc) (bound, acc) decs
 
+fun getSourceSpanOfPat (WildcardPat span) = span
+  | getSourceSpanOfPat (SConPat { sourceSpan, ... }) = sourceSpan
+  | getSourceSpanOfPat (VarPat (span, _, _)) = span
+  | getSourceSpanOfPat (RecordPat { sourceSpan, ... }) = sourceSpan
+  | getSourceSpanOfPat (ValConPat { sourceSpan, ... }) = sourceSpan
+  | getSourceSpanOfPat (ExnConPat { sourceSpan, ... }) = sourceSpan
+  | getSourceSpanOfPat (LayeredPat (span, _, _, _)) = span
+  | getSourceSpanOfPat (VectorPat (span, _, _, _)) = span
+
 structure PrettyPrint = struct
 val print_TyVar = TypedSyntax.print_TyVar
 val print_VId = TypedSyntax.print_VId
@@ -1328,6 +1337,10 @@ and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.
                                    val paramTy = let val ty = F.TyCon(tyvars'', tyname)
                                                  in F.PairType(ty, ty)
                                                  end
+                                   val hasMultipleConstructors = case conbinds of
+                                                                     [] => true (* ? *)
+                                                                   | [_] => false
+                                                                   | _ => true
                                in F.FnExp ( param
                                           , paramTy
                                           , F.CaseExp { sourceSpan = span
@@ -1352,7 +1365,11 @@ and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.
                                                                                   ) :: rest
                                                                                end
                                                                              )
-                                                                             [(F.WildcardPat span, F.VarExp(InitialEnv.VId_false))]
+                                                                             (if hasMultipleConstructors then
+                                                                                  [(F.WildcardPat span, F.VarExp InitialEnv.VId_false)]
+                                                                              else
+                                                                                  []
+                                                                             )
                                                                              conbinds
                                                       , matchType = T.CASE
                                                       , resultTy = F.TyVar (F.tyNameToTyVar Typing.primTyName_bool)

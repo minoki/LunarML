@@ -60,10 +60,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                             = let val binders = genBinders examinedExp subjectTy pat
                                                   val matcher = genMatcher examinedExp subjectTy pat
                                               in if isExhaustive pat then
-                                                     if List.null rest then
-                                                         List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders
-                                                     else
-                                                         raise Fail "A redundant pattern match found"
+                                                     List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders
                                                  else
                                                      F.IfThenElseExp (matcher, List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders, go rest)
                                               end

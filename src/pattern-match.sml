@@ -3,7 +3,7 @@
  * This file is part of LunarML.
  *)
 (*
- * Check exhaustiveness (TODO: redundancy)
+ * Check exhaustiveness and redundancy
  *
  * The algorithm is based on:
  *
@@ -169,13 +169,44 @@ fun specializeValCon (con, hasPayload)
             | goMatrix _ = raise Fail "invalid pattern matrix"
       in goMatrix
       end
-fun specializeChar c
-    = let fun goPat (F.WildcardPat span, ps) = [ps]
-            | goPat (F.SConPat { scon = F.CharConstant c', ... }, ps) = if c = c' then
-                                                                            [ps]
-                                                                        else
-                                                                            []
+fun sameExp (F.VarExp x, F.VarExp y) = x = y
+  | sameExp (F.ProjectionExp { label, record, fieldTypes = _ }, F.ProjectionExp { label = label', record = record', fieldTypes = _ }) = label = label' andalso sameExp (record, record')
+  | sameExp _ = false
+fun specializeExnCon (tag, hasPayload)
+    = let fun goPat (F.WildcardPat span, ps) = if hasPayload then
+                                                   [F.WildcardPat span :: ps]
+                                               else
+                                                   [ps]
             | goPat (F.SConPat _, ps) = [] (* should not occur *)
+            | goPat (F.VarPat (span, _, _), ps) = if hasPayload then
+                                                      [F.WildcardPat span :: ps]
+                                                  else
+                                                      [ps]
+            | goPat (F.RecordPat _, ps) = [] (* should not occur *)
+            | goPat (F.ValConPat _, ps) = [] (* should not occur *)
+            | goPat (F.ExnConPat { sourceSpan, tagPath, payload = NONE }, ps)
+              = if sameExp (tag, tagPath) andalso not hasPayload then
+                    [ps]
+                else
+                    []
+            | goPat (F.ExnConPat { sourceSpan, tagPath, payload = SOME (_, pat) }, ps)
+              = if sameExp (tag, tagPath) andalso hasPayload then
+                    [pat :: ps]
+                else
+                    []
+            | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
+            | goPat (F.VectorPat _, ps) = [] (* should not occur *)
+          fun goMatrix [] = []
+            | goMatrix ((p :: ps) :: rest) = goPat (p, ps) @ goMatrix rest
+            | goMatrix _ = raise Fail "invalid pattern matrix"
+      in goMatrix
+      end
+fun specializeSCon scon
+    = let fun goPat (F.WildcardPat span, ps) = [ps]
+            | goPat (F.SConPat { scon = scon', ... }, ps) = if scon' = scon then
+                                                                [ps]
+                                                            else
+                                                                []
             | goPat (F.VarPat (span, _, _), ps) = [ps]
             | goPat (F.RecordPat _, ps) = [] (* should not occur *)
             | goPat (F.ValConPat _, ps) = [] (* should not occur *)
@@ -187,42 +218,24 @@ fun specializeChar c
             | goMatrix _ = raise Fail "invalid pattern matrix"
       in goMatrix
       end
-fun specializeChar16 c
-    = let fun goPat (F.WildcardPat span, ps) = [ps]
-            | goPat (F.SConPat { scon = F.Char16Constant c', ... }, ps) = if c = c' then
-                                                                              [ps]
-                                                                          else
-                                                                              []
-            | goPat (F.SConPat _, ps) = [] (* should not occur *)
-            | goPat (F.VarPat (span, _, _), ps) = [ps]
-            | goPat (F.RecordPat _, ps) = [] (* should not occur *)
-            | goPat (F.ValConPat _, ps) = [] (* should not occur *)
-            | goPat (F.ExnConPat _, ps) = [] (* should not occur *)
-            | goPat (F.LayeredPat (_, _, _, pat), ps) = goPat (pat, ps)
-            | goPat (F.VectorPat _, ps) = [] (* should not occur *)
-          fun goMatrix [] = []
-            | goMatrix ((p :: ps) :: rest) = goPat (p, ps) @ goMatrix rest
-            | goMatrix _ = raise Fail "invalid pattern matrix"
-      in goMatrix
+fun getFieldFromList (label, fields, ellipsis)
+    = let fun loop [] = (case ellipsis of
+                             NONE => raise Fail "invalid pattern: missing field"
+                           | SOME ellipsisPat => getFieldFromPat (label, ellipsisPat)
+                        )
+            | loop ((label', pat) :: rest) = if label = label' then
+                                                 pat
+                                             else
+                                                 loop rest
+      in loop fields
       end
+and getFieldFromPat (label, pat as F.WildcardPat span) = pat
+  | getFieldFromPat (label, F.VarPat (span, _, _)) = F.WildcardPat span
+  | getFieldFromPat (label, F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = getFieldFromList (label, fields, ellipsis)
+  | getFieldFromPat (label, F.LayeredPat (_, _, _, pat)) = getFieldFromPat (label, pat)
+  | getFieldFromPat _ = raise Fail "invalid pattern: record"
 fun specializeRecord labels
-    = let fun getFieldFromList (label, fields, ellipsis)
-              = let fun loop [] = (case ellipsis of
-                                       NONE => raise Fail "invalid pattern: missing field"
-                                     | SOME ellipsisPat => getFieldFromPat (label, ellipsisPat)
-                                  )
-                      | loop ((label', pat) :: rest) = if label = label' then
-                                                           pat
-                                                       else
-                                                           loop rest
-                in loop fields
-                end
-          and getFieldFromPat (label, pat as F.WildcardPat span) = pat
-            | getFieldFromPat (label, F.VarPat (span, _, _)) = F.WildcardPat span
-            | getFieldFromPat (label, F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = getFieldFromList (label, fields, ellipsis)
-            | getFieldFromPat (label, F.LayeredPat (_, _, _, pat)) = getFieldFromPat (label, pat)
-            | getFieldFromPat _ = raise Fail "invalid pattern: record"
-          fun goPat (F.WildcardPat span, ps) = [List.tabulate (Syntax.LabelSet.numItems labels, fn _ => F.WildcardPat span) @ ps]
+    = let fun goPat (F.WildcardPat span, ps) = [List.tabulate (Syntax.LabelSet.numItems labels, fn _ => F.WildcardPat span) @ ps]
             | goPat (F.SConPat _, ps) = [] (* should not occur *)
             | goPat (F.VarPat (span, _, _), ps) = [List.tabulate (Syntax.LabelSet.numItems labels, fn _ => F.WildcardPat span) @ ps]
             | goPat (F.RecordPat { sourceSpan, fields, ellipsis, allFields }, ps) = if Syntax.LabelSet.equal (labels, allFields) then
@@ -284,7 +297,7 @@ fun isComplete (C.VALCON { seen, all, withPayload })
   | isComplete (C.INT _) = INCOMPLETE (SOME Example.SOME_INT) (* TODO *)
   | isComplete (C.WORD _) = INCOMPLETE (SOME Example.SOME_WORD) (* TODO *)
   | isComplete (C.CHAR seen) = let fun loop i = if i >= 256 then
-                                                    COMPLETE (List.tabulate (256, fn i => (specializeChar (chr i), 0, fn [] => Example.CHAR (chr i) | _ => raise Fail "invalid payload")))
+                                                    COMPLETE (List.tabulate (256, fn i => (specializeSCon (F.CharConstant (chr i)), 0, fn [] => Example.CHAR (chr i) | _ => raise Fail "invalid payload")))
                                                 else
                                                     let val c = Char.chr i
                                                     in if CharSet.member (seen, c) then
@@ -295,7 +308,7 @@ fun isComplete (C.VALCON { seen, all, withPayload })
                                in loop 0
                                end
   | isComplete (C.CHAR16 seen) = let fun loop i = if i >= 65536 then
-                                                      COMPLETE (List.tabulate (65536, fn i => (specializeChar16 i, 0, fn [] => Example.CHAR16 i | _ => raise Fail "invalid payload")))
+                                                      COMPLETE (List.tabulate (65536, fn i => (specializeSCon (F.Char16Constant i), 0, fn [] => Example.CHAR16 i | _ => raise Fail "invalid payload")))
                                                   else if IntRedBlackSet.member (seen, i) then
                                                       loop (i + 1)
                                                   else
@@ -362,6 +375,27 @@ fun nonMatching ([], n) : (Example.example list) option = SOME (List.tabulate (n
                              )
              )
       end
+(* useful : (* matrix *) F.Pat list list * (* vector *) F.Pat list -> bool *)
+fun useful ([], _) = true
+  | useful (_ (* should be ([] :: _) *), []) = false
+  | useful (matrix, q :: qs) = let fun wildcard () = let val firsts = List.map List.hd matrix
+                                                         val constructors = List.foldl collectConstructors ConstructorSet.EMPTY firsts
+                                                     in case isComplete constructors of
+                                                            COMPLETE specializers => List.exists (fn (specialize, arity, construct) => useful (specialize matrix, List.tabulate (arity, fn _ => F.WildcardPat SourcePos.nullSpan) @ qs)) specializers
+                                                          | INCOMPLETE _ => useful (defaultMatrix matrix, qs)
+                                                     end
+                                   fun goPat (F.WildcardPat _) = wildcard ()
+                                     | goPat (F.SConPat { scon, ... }) = useful (specializeSCon scon matrix, qs)
+                                     | goPat (F.VarPat _) = wildcard ()
+                                     | goPat (F.RecordPat { sourceSpan = _, fields, ellipsis, allFields }) = useful (specializeRecord allFields matrix, Syntax.LabelSet.foldr (fn (label, qs) => getFieldFromList (label, fields, ellipsis) :: qs) qs allFields)
+                                     | goPat (F.ValConPat { sourceSpan = _, info = { tag, ... }, payload = NONE }) = useful (specializeValCon (Syntax.MkVId tag, false) matrix, qs)
+                                     | goPat (F.ValConPat { sourceSpan = _, info = { tag, ... }, payload = SOME (ty, innerPat) }) = useful (specializeValCon (Syntax.MkVId tag, true) matrix, innerPat :: qs)
+                                     | goPat (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = useful (specializeExnCon (tagPath, false) matrix, qs)
+                                     | goPat (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (ty, innerPat) }) = useful (specializeExnCon (tagPath, true) matrix, innerPat :: qs)
+                                     | goPat (F.LayeredPat (_, _, _, pat)) = goPat pat
+                                     | goPat (F.VectorPat (_, pats, ellipsis, _)) = useful (specializeVector (Vector.length pats) matrix, Vector.foldr (op ::) qs pats)
+                               in goPat q
+                               end
 type Context = { warnings : (SourcePos.span list * string) list ref
                }
 fun emitWarning (ctx : Context, spans, message)
@@ -372,8 +406,17 @@ fun checkExhaustiveness (ctx, span, matches)
     = let val matrix = List.map (fn (pat, _) => [pat]) matches
       in case nonMatching (matrix, 1) of
              NONE => () (* exhaustive *)
-           | SOME [example] => emitWarning (ctx, [span], "Pattern match is non-exhaustive. Example of non-matching value: " ^ Example.toString example) (* non-exhaustive *)
+           | SOME [example] => emitWarning (ctx, [span], "pattern match is non-exhaustive. Example of non-matching value: " ^ Example.toString example) (* non-exhaustive *)
            | SOME _ => raise Fail "invalid number of examples"
+      end
+fun checkRedundancy (ctx, matches)
+    = let val matrix = List.map (fn (pat, _) => [pat]) matches
+          fun go ([], _) = ()
+            | go ((pat, _) :: matches, seen) = if useful (seen, [pat]) then (* the order of matrix (seen) is reversed, but should not affect usefulness *)
+                                                   go (matches, [pat] :: seen)
+                                               else
+                                                   emitWarning (ctx, [F.getSourceSpanOfPat pat], "redundant pattern found")
+      in go (matches, [])
       end
 fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.VarExp _) = ()
@@ -389,6 +432,7 @@ fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
             checkExhaustiveness (ctx, sourceSpan, matches)
         else
             ()
+      ; checkRedundancy (ctx, matches)
       )
   | goExp (ctx, F.FnExp (vid, ty, body)) = goExp (ctx, body)
   | goExp (ctx, F.ProjectionExp { label, record, fieldTypes }) = goExp (ctx, record)
