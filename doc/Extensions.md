@@ -34,7 +34,7 @@ The hexadecimal floating-point constants must be exact; `0x1.0000_0000_0000_01p0
 ## UTF-encoded escape sequence in text constants
 
 The `\u{}` escape sequence allows you to embed a Unicode scalar value in a text constant.
-The compiler encodes the character in UTF-{8,16,32}, depending on the type.
+The compiler encodes the character in UTF-8/16/32, depending on the type.
 
 The scalar value is expressed in hexadecimal format; `\u{3B1}` or `\u{3b1}` for U+03B1 GREEK SMALL LETTER ALPHA.
 Underscores are not allowed between hexadecimal digits.
@@ -47,16 +47,20 @@ Examples:
 ("\u{3042}" : string) = "\227\129\130"
 ("\u{80}" : string) = "\194\128"
 ("\u{1F600}" : string) = "\240\159\152\128"
-("\u{1F600}" : WideString.string) = "\240\159\152\128" (* if WideChar.maxOrd = 255 *)
-("\u{1F600}" : WideString.string) = "\uD83D\uDE00" (* if WideChar.maxOrd = 65535 *)
-("\u{1F600}" : WideString.string) = "\U0001F600" (* if WideChar.maxOrd = 1114111 *)
+if WideChar.maxOrd = 255 then
+    ("\u{1F600}" : WideString.string) = "\240\159\152\128"
+else if WideChar.maxOrd = 65535 then
+    ("\u{1F600}" : WideString.string) = "\uD83D\uDE00"
+else if WideChar.maxOrd = 1114111 then
+    ("\u{1F600}" : WideString.string) = "\U0001F600"
 ```
 
 Examples of invalid constants:
 
 ```sml
 #"\u{80}" : char (* equivalent to #"\194\128" *)
-#"\u{10000}" : WideChar.char (* equivalent to #"\uD800\uDC00" if WideChar.maxOrd = 65535 *)
+if WideChar.maxOrd = 65535 then
+    #"\u{10000}" : WideChar.char (* equivalent to #"\uD800\uDC00" *)
 ```
 
 ## Infixing dot

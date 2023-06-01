@@ -55,4 +55,4 @@ Output type:
 * [Interface to Lua](doc/LuaInterface.md)
 * [Interface to JavaScript](doc/JavaScriptInterface.md)
 * [Delimited continuations](doc/DelimitedContinuations.md) (experimental)
-* ML Basis system like [MLton](http://mlton.org/MLBasis)
+* ML Basis system like [MLton](http://mlton.org/MLBasis) or [ML Kit](https://elsman.com/mlkit/mlbasisfiles.html)
