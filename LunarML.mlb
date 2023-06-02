@@ -7,6 +7,7 @@ pluto/pluto.mlb
 src/numeric.sml
 src/text.sml
 src/strongly-connected-components.sml
+src/language-options-record.sml
 src/language-options.sml
 src/primitives.sml
 src/target-info.sml

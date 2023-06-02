@@ -69,27 +69,27 @@ fun parseIgnoreWarnError "ignore" = SOME LanguageOptions.IGNORE
   | parseIgnoreWarnError _ = NONE
 fun applyAnnotation (ann, langopt) = case String.tokens Char.isSpace ann of
                                          ["nonexhaustiveBind", x] => (case parseIgnoreWarnError x of
-                                                                          SOME x => LanguageOptions.setNonexhaustiveBind x langopt
+                                                                          SOME x => LanguageOptions.set.nonexhaustiveBind x langopt
                                                                         | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                      )
                                        | ["nonexhaustiveMatch", x] => (case parseIgnoreWarnError x of
-                                                                           SOME x => LanguageOptions.setNonexhaustiveMatch x langopt
+                                                                           SOME x => LanguageOptions.set.nonexhaustiveMatch x langopt
                                                                          | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                       )
                                        | ["nonexhaustiveRaise", x] => (case parseIgnoreWarnError x of
-                                                                          SOME x => LanguageOptions.setNonexhaustiveRaise x langopt
+                                                                          SOME x => LanguageOptions.set.nonexhaustiveRaise x langopt
                                                                         | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                      )
                                        | ["redundantBind", x] => (case parseIgnoreWarnError x of
-                                                                      SOME x => LanguageOptions.setRedundantBind x langopt
+                                                                      SOME x => LanguageOptions.set.redundantBind x langopt
                                                                     | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                  )
                                        | ["redundantMatch", x] => (case parseIgnoreWarnError x of
-                                                                       SOME x => LanguageOptions.setRedundantMatch x langopt
+                                                                       SOME x => LanguageOptions.set.redundantMatch x langopt
                                                                      | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                   )
                                        | ["redundantRaise", x] => (case parseIgnoreWarnError x of
-                                                                       SOME x => LanguageOptions.setRedundantRaise x langopt
+                                                                       SOME x => LanguageOptions.set.redundantRaise x langopt
                                                                      | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                   )
                                        | [name, value] => (case LanguageOptions.setByName name of

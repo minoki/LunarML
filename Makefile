@@ -17,6 +17,7 @@ sources = \
   src/numeric.sml \
   src/text.sml \
   src/strongly-connected-components.sml \
+  src/language-options-record.sml \
   src/language-options.sml \
   src/target-info.sml \
   src/primitives.sml \
@@ -67,14 +68,14 @@ bin/lunarml.gen2.js: bin/lunarml LunarML.mlb $(sources)
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
 
-src/language-options.sml: src/language-options.lua
-	$(LUA) src/language-options.lua $@
-
 src/primitives.sml: src/primitives.lua
 	$(LUA) src/primitives.lua $@ > /dev/null
 
-src/command-line-settings.sml: util/record.lua Makefile
-	$(LUA) util/record.lua CommandLineSettings "subcommand,output,outputMode,dump,optimizationLevel,backend,libDir,printTimings" > $@
+src/command-line-settings.sml: src/command-line-settings.lua util/record.lua
+	$(LUA) util/record.lua $< > $@
+
+src/language-options-record.sml: src/language-options-record.lua util/record.lua
+	$(LUA) util/record.lua $< > $@
 
 test: test-lua
 

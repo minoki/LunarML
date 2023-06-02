@@ -1,11 +1,8 @@
 -- The poor man's record update
 
-local structname = arg[1] or "MyRecord"
-local fieldsCommaSep = arg[2] or "a,b,c,x',foo012_'bar,zzz"
-local fields = {}
+local structname, fields = dofile(assert(arg[1]))
 local usedFields = {}
-for s in string.gmatch(fieldsCommaSep, "[a-zA-Z][a-zA-Z0-9_']*") do
-  table.insert(fields, s)
+for _, s in ipairs(fields) do
   usedFields[s] = true
 end
 
