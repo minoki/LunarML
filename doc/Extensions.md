@@ -65,6 +65,14 @@ if WideChar.maxOrd = 65535 then
 
 ## Infixing dot
 
+To use this extension, `allowInfixingDot` annotation in MLB file is needed:
+
+```
+ann "allowInfixingDot true" in
+...
+end
+```
+
 `infexp_1 .longvid. infexp_2` is equivalent to `op longvid (infexp_1, infexp_2)`.
 
 `pat_1 .longvid. pat_2` is equivalent to `op longvid (pat_1, pat_2)`.

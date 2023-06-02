@@ -24,6 +24,7 @@ local options = {
   {"allowPrim", "bool"},
   {"allowBindEqual", "bool"},
   {"allowOverload", "bool"},
+  {"allowInfixingDot", "bool"},
 }
 local f = assert(io.open(arg[1] or "language-options.sml", "wb"))
 f:write[[
@@ -86,6 +87,7 @@ val default : options = { allowExtendedNumConsts = true
                         , allowPrim = false
                         , allowBindEqual = false
                         , allowOverload = false
+                        , allowInfixingDot = false
                         }
 fun setSuccessorML value = setAllowExtendedNumConsts value
                            o setAllowExtendedTextConsts value

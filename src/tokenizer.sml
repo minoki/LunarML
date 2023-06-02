@@ -175,7 +175,11 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                      let fun finalize () = if startingDot then
                                                                let val p1 = pos (l, c0)
                                                                    val p2 = pos (l, c1 + String.size name)
-                                                               in SOME (Tokens.InfixIdent (([], name), p1, p2), l, c1 + String.size name + 1, xs)
+                                                               in if #allowInfixingDot opts then
+                                                                      ()
+                                                                  else
+                                                                      emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                                ; SOME (Tokens.InfixIdent (([], name), p1, p2), l, c1 + String.size name + 1, xs)
                                                                end
                                                            else
                                                                SOME (tok, l, c1 + String.size name, input)
@@ -214,9 +218,14 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                    SOME (name, p2) =>
                                    if x = #"." then
                                        let fun finalize () = if startingDot then
-                                                                 case List.rev rstrids of
-                                                                     strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
-                                                                   | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                                 ( if #allowInfixingDot opts then
+                                                                       ()
+                                                                   else
+                                                                       emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                                 ; case List.rev rstrids of
+                                                                       strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                                     | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                                 )
                                                              else
                                                                  SOME (tok, l, c1 + String.size name, input)
                                        in case xs of
@@ -337,13 +346,22 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                       let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
                       in if List.null rstrids then
                              case ident of
-                                 SOME (name, p2) => SOME (Tokens.InfixIdent (([], name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                 SOME (name, p2) => ( if #allowInfixingDot opts then
+                                                          ()
+                                                      else
+                                                          emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                    ; SOME (Tokens.InfixIdent (([], name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                    )
                                | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, input) )
                          else
                              case ident of
-                                 SOME (name, p2) => (case List.rev rstrids of
-                                                         strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
-                                                       | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                 SOME (name, p2) => ( if #allowInfixingDot opts then
+                                                          ()
+                                                      else
+                                                          emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                    ; case List.rev rstrids of
+                                                          strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                        | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
                                                     )
                                | NONE => ( emitError (l, c0, "stray dot")
                                          ; emitError (l, c1, "invalid qualified name")
