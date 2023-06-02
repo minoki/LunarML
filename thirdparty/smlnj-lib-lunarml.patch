@@ -1,6 +1,6 @@
-diff --recursive -u -N -x '*~' smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util/base64.sml
---- smlnj-lib-original/Util/base64.sml	2012-09-25 00:54:30.000000000 +0900
-+++ smlnj-lib-lunarml/Util/base64.sml	2022-06-26 10:23:02.000000000 +0900
+diff --recursive -u -N -x *~ smlnj-lib-original/Util/base64.sml smlnj-lib-lunarml/Util/base64.sml
+--- smlnj-lib-original/Util/base64.sml	2012-09-25 00:54:30
++++ smlnj-lib-lunarml/Util/base64.sml	2022-06-19 19:17:44
 @@ -15,6 +15,7 @@
      structure W8V = Word8Vector
      structure W8A = Word8Array
@@ -40,9 +40,9 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/base64.sml smlnj-lib-luna
  	    end
      in
  
-diff --recursive -u -N -x '*~' smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
---- smlnj-lib-original/Util/graph-scc-fn.sml	2020-04-20 05:46:13.000000000 +0900
-+++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-26 10:23:02.000000000 +0900
+diff --recursive -u -N -x *~ smlnj-lib-original/Util/graph-scc-fn.sml smlnj-lib-lunarml/Util/graph-scc-fn.sml
+--- smlnj-lib-original/Util/graph-scc-fn.sml	2020-04-20 05:46:13
++++ smlnj-lib-lunarml/Util/graph-scc-fn.sml	2022-06-18 17:18:17
 @@ -9,7 +9,7 @@
   * author: Matthias Blume
   *)
@@ -52,9 +52,9 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/graph-scc-fn.sml smlnj-li
    struct
      structure Nd = Nd
  
-diff --recursive -u -N -x '*~' smlnj-lib-original/Util/hash-table-rep.sml smlnj-lib-lunarml/Util/hash-table-rep.sml
---- smlnj-lib-original/Util/hash-table-rep.sml	2018-09-26 21:01:19.000000000 +0900
-+++ smlnj-lib-lunarml/Util/hash-table-rep.sml	2022-06-26 21:57:10.000000000 +0900
+diff --recursive -u -N -x *~ smlnj-lib-original/Util/hash-table-rep.sml smlnj-lib-lunarml/Util/hash-table-rep.sml
+--- smlnj-lib-original/Util/hash-table-rep.sml	2018-09-26 21:01:19
++++ smlnj-lib-lunarml/Util/hash-table-rep.sml	2023-06-02 21:28:31
 @@ -75,7 +75,7 @@
  		  val i' = i+i
  		  in
@@ -64,10 +64,10 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/hash-table-rep.sml smlnj-
  	  in
  	    f 0x10000
  	  end
-diff --recursive -u -N -x '*~' smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
---- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00.000000000 +0900
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2022-06-26 10:23:02.000000000 +0900
-@@ -0,0 +1,226 @@
+diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
+--- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2023-06-02 21:21:29
+@@ -0,0 +1,234 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
 +ansi-term.sml
@@ -87,9 +87,13 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-l
 +ord-set-sig.sml
 +binary-set-fn.sml
 +atom-binary-set.sml
++ann "nonexhaustiveBind ignore" in
 +redblack-map-fn.sml
++end
 +atom-redblack-map.sml
++ann "nonexhaustiveBind ignore" in
 +redblack-set-fn.sml
++end
 +atom-redblack-set.sml
 +atom-map.sml
 +atom-set.sml
@@ -132,8 +136,10 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-l
 +int-hash-table.sml
 +int-list-map.sml
 +int-list-set.sml
++ann "nonexhaustiveBind ignore" in
 +int-redblack-map.sml
 +int-redblack-set.sml
++end
 +interval-domain-sig.sml
 +interval-set-sig.sml
 +interval-set-fn.sml
@@ -177,8 +183,10 @@ diff --recursive -u -N -x '*~' smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-l
 +(* time-limit.sml *)
 +uref.sml
 +word-hash-table.sml
++ann "nonexhaustiveBind ignore" in
 +word-redblack-map.sml
 +word-redblack-set.sml
++end
 +(* real-order-stats.sml
 +univariate-stats.sml *)
 +utf8-sig.sml
