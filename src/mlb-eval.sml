@@ -63,9 +63,35 @@ val initialCode = { tynameset = InitialEnv.initialTyNameSet
  * valrecConstr {warn|error|ignore}
  * warnUnused {false|true}
  *)
+fun parseIgnoreWarnError "ignore" = SOME LanguageOptions.IGNORE
+  | parseIgnoreWarnError "warn" = SOME LanguageOptions.WARN
+  | parseIgnoreWarnError "error" = SOME LanguageOptions.ERROR
+  | parseIgnoreWarnError _ = NONE
 fun applyAnnotation (ann, langopt) = case String.tokens Char.isSpace ann of
-                                         ["nonexhaustiveMatch", _] => langopt (* not implemented yet *)
-                                       | ["nonexhaustiveBind", _] => langopt (* not implemented yet *)
+                                         ["nonexhaustiveBind", x] => (case parseIgnoreWarnError x of
+                                                                          SOME x => LanguageOptions.setNonexhaustiveBind x langopt
+                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                     )
+                                       | ["nonexhaustiveMatch", x] => (case parseIgnoreWarnError x of
+                                                                           SOME x => LanguageOptions.setNonexhaustiveMatch x langopt
+                                                                         | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                      )
+                                       | ["nonexhaustiveRaise", x] => (case parseIgnoreWarnError x of
+                                                                          SOME x => LanguageOptions.setNonexhaustiveRaise x langopt
+                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                     )
+                                       | ["redundantBind", x] => (case parseIgnoreWarnError x of
+                                                                      SOME x => LanguageOptions.setRedundantBind x langopt
+                                                                    | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                 )
+                                       | ["redundantMatch", x] => (case parseIgnoreWarnError x of
+                                                                       SOME x => LanguageOptions.setRedundantMatch x langopt
+                                                                     | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                  )
+                                       | ["redundantRaise", x] => (case parseIgnoreWarnError x of
+                                                                       SOME x => LanguageOptions.setRedundantRaise x langopt
+                                                                     | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                  )
                                        | [name, value] => (case LanguageOptions.setByName name of
                                                               SOME setter => (case value of
                                                                                   "true" => setter true langopt

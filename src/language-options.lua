@@ -25,10 +25,17 @@ local options = {
   {"allowBindEqual", "bool"},
   {"allowOverload", "bool"},
   {"allowInfixingDot", "bool"},
+  {"nonexhaustiveBind", "ignore_warn_error"},
+  {"nonexhaustiveMatch", "ignore_warn_error"},
+  {"nonexhaustiveRaise", "ignore_warn_error"},
+  {"redundantBind", "ignore_warn_error"},
+  {"redundantMatch", "ignore_warn_error"},
+  {"redundantRaise", "ignore_warn_error"},
 }
 local f = assert(io.open(arg[1] or "language-options.sml", "wb"))
 f:write[[
 structure LanguageOptions = struct
+datatype ignore_warn_error = IGNORE | WARN | ERROR
 ]]
 for i, v in ipairs(options) do
   local head
@@ -67,7 +74,9 @@ for i, v in ipairs(options) do
   else
     head = "  |"
   end
-  f:write(string.format("%s setByName %q = SOME %s\n", head, name, setter))
+  if ty == "bool" then
+    f:write(string.format("%s setByName %q = SOME %s\n", head, name, setter))
+  end
 end
 f:write("  | setByName (_ : string) : (bool -> options -> options) option = NONE\n")
 f:write[[
@@ -88,6 +97,12 @@ val default : options = { allowExtendedNumConsts = true
                         , allowBindEqual = false
                         , allowOverload = false
                         , allowInfixingDot = false
+                        , nonexhaustiveBind = WARN
+                        , nonexhaustiveMatch = WARN
+                        , nonexhaustiveRaise = IGNORE
+                        , redundantBind = WARN
+                        , redundantMatch = WARN
+                        , redundantRaise = WARN
                         }
 fun setSuccessorML value = setAllowExtendedNumConsts value
                            o setAllowExtendedTextConsts value

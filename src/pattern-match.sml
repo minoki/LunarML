@@ -396,26 +396,28 @@ fun useful ([], _) = true
                                      | goPat (F.VectorPat (_, pats, ellipsis, _)) = useful (specializeVector (Vector.length pats) matrix, Vector.foldr (op ::) qs pats)
                                in goPat q
                                end
-type Context = { warnings : (SourcePos.span list * string) list ref
+datatype message_type = WARNING | ERROR
+type Context = { options : LanguageOptions.options
+               , messages : (SourcePos.span list * string * message_type) list ref
                }
-fun emitWarning (ctx : Context, spans, message)
-    = let val { warnings, ... } = ctx
-      in warnings := (spans, message) :: !warnings
+fun emitWarningOrError (ctx : Context, spans, message, mtype)
+    = let val { messages, ... } = ctx
+      in messages := (spans, message, mtype) :: !messages
       end
-fun checkExhaustiveness (ctx, span, matches)
+fun checkExhaustiveness (ctx, span, matches, mtype)
     = let val matrix = List.map (fn (pat, _) => [pat]) matches
       in case nonMatching (matrix, 1) of
              NONE => () (* exhaustive *)
-           | SOME [example] => emitWarning (ctx, [span], "pattern match is non-exhaustive. Example of non-matching value: " ^ Example.toString example) (* non-exhaustive *)
+           | SOME [example] => emitWarningOrError (ctx, [span], "pattern match is non-exhaustive. Example of non-matching value: " ^ Example.toString example, mtype) (* non-exhaustive *)
            | SOME _ => raise Fail "invalid number of examples"
       end
-fun checkRedundancy (ctx, matches)
+fun checkRedundancy (ctx, matches, mtype)
     = let val matrix = List.map (fn (pat, _) => [pat]) matches
           fun go ([], _) = ()
             | go ((pat, _) :: matches, seen) = if useful (seen, [pat]) then (* the order of matrix (seen) is reversed, but should not affect usefulness *)
                                                    go (matches, [pat] :: seen)
                                                else
-                                                   emitWarning (ctx, [F.getSourceSpanOfPat pat], "redundant pattern found")
+                                                   emitWarningOrError (ctx, [F.getSourceSpanOfPat pat], "redundant pattern found", mtype)
       in go (matches, [])
       end
 fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
@@ -428,11 +430,24 @@ fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy })
     = ( goExp (ctx, subjectExp)
       ; List.app (fn (_, exp) => goExp (ctx, exp)) matches
-      ; if matchType <> TypedSyntax.HANDLE then
-            checkExhaustiveness (ctx, sourceSpan, matches)
-        else
-            ()
-      ; checkRedundancy (ctx, matches)
+      ; let val opt = case matchType of
+                          TypedSyntax.CASE => #nonexhaustiveMatch (#options ctx)
+                        | TypedSyntax.VAL => #nonexhaustiveBind (#options ctx)
+                        | TypedSyntax.HANDLE => #nonexhaustiveRaise (#options ctx)
+        in case opt of
+               LanguageOptions.IGNORE => ()
+             | LanguageOptions.WARN => checkExhaustiveness (ctx, sourceSpan, matches, WARNING)
+             | LanguageOptions.ERROR => checkExhaustiveness (ctx, sourceSpan, matches, ERROR)
+        end
+      ; let val opt = case matchType of
+                          TypedSyntax.CASE => #redundantMatch (#options ctx)
+                        | TypedSyntax.VAL => #redundantBind (#options ctx)
+                        | TypedSyntax.HANDLE => #redundantRaise (#options ctx)
+        in case opt of
+               LanguageOptions.IGNORE => ()
+             | LanguageOptions.WARN => checkRedundancy (ctx, matches, WARNING)
+             | LanguageOptions.ERROR => checkRedundancy (ctx, matches, ERROR)
+        end
       )
   | goExp (ctx, F.FnExp (vid, ty, body)) = goExp (ctx, body)
   | goExp (ctx, F.ProjectionExp { label, record, fieldTypes }) = goExp (ctx, record)

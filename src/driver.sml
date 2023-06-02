@@ -131,6 +131,25 @@ fun compile({ typingContext, toFContext } : Context, langopt : LanguageOptions.o
            val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
            val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
            val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
+           val () = let val patternMatchContext = { options = langopt, messages = ref [] }
+                        fun messageTypeToString CheckPatternMatch.WARNING = "warning: "
+                          | messageTypeToString CheckPatternMatch.ERROR = "error: "
+                        fun showWarningOrError ([], message, mtype) = print (messageTypeToString mtype ^ message ^ "\n")
+                          | showWarningOrError (spans as ({ start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 } } :: _), message, mtype)
+                            = if f1 = f2 then
+                                  if p1 = p2 then
+                                      print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
+                                  else
+                                      print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
+                              else
+                                  print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
+                    in List.app (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
+                     ; List.app showWarningOrError (List.rev (!(#messages patternMatchContext)))
+                     ; if List.exists (fn (_, _, CheckPatternMatch.ERROR) => true | _ => false) (!(#messages patternMatchContext)) then
+                           raise Abort
+                       else
+                           ()
+                    end
            val modifiedEnv = { fixity = fixity'
                              , typingEnv = typingEnv'
                              , tynameset = tynameset

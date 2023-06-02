@@ -225,19 +225,6 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-          val () = let val patternMatchContext = { warnings = ref [] }
-                       fun showWarning ([], message) = print (message ^ "\n")
-                         | showWarning (spans as ({ start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 } } :: _), message)
-                           = if f1 = f2 then
-                                 if p1 = p2 then
-                                     print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
-                                 else
-                                     print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                             else
-                                 print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                   in List.app (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
-                    ; List.app showWarning (List.rev (!(#warnings patternMatchContext)))
-                   end
           val fdecs = #doDecs (DesugarPatternMatches.desugarPatternMatches (#toFContext (#driverContext ctx))) fdecs
           val fdecs = DecomposeValRec.doDecs fdecs
           val (_, fdecs) = DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, fdecs)
