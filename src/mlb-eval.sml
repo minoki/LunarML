@@ -216,7 +216,7 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                                                           val cache = M.StringMap.insert (#cache acc, path, env')
                                                                                       in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
                                                                                       end
-                                                       | MLBParser.P.ParseError e => ( print (e ^ "\n") ; raise Driver.Abort )
+                                                       | MLBParser.P.ParseError e => ( TextIO.output (TextIO.stdErr, e ^ "\n") ; raise Message.Abort )
                                                   end
                                         | SOME e => (e, acc)
                                    end

@@ -467,8 +467,6 @@ fun print_StrIdMap print_elem x = print_list (print_pair (print_StrId,print_elem
 end
 open PrettyPrint
 
-exception SyntaxError of SourcePos.span list * string
-
 end (* structure Syntax *)
 
 structure UnfixedSyntax = struct

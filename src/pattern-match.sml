@@ -398,12 +398,10 @@ fun useful ([], _) = true
                                end
 datatype message_type = WARNING | ERROR
 type Context = { options : LanguageOptions.options
-               , messages : (SourcePos.span list * string * message_type) list ref
+               , messageHandler : Message.handler
                }
-fun emitWarningOrError (ctx : Context, spans, message, mtype)
-    = let val { messages, ... } = ctx
-      in messages := (spans, message, mtype) :: !messages
-      end
+fun emitWarningOrError (ctx : Context, spans, message, WARNING) = Message.warning (#messageHandler ctx, spans, "code generator", message)
+  | emitWarningOrError (ctx, spans, message, ERROR) = Message.error (#messageHandler ctx, spans, "code generator", message)
 fun checkExhaustiveness (ctx, span, matches, mtype)
     = let val matrix = List.map (fn (pat, _) => [pat]) matches
       in case nonMatching (matrix, 1) of

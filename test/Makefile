@@ -286,7 +286,7 @@ test-$(VARIANT): $(basename $1).$(VARIANT).ok
 
 $(basename $1).$(VARIANT).ok: $1 $(lunarml)
 	@echo "Compiling $1..."
-	@! $(LUNARML) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)$(OUTEXT)" "$$<" 2>&1 >/dev/null
+	@! $(LUNARML) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)$(OUTEXT)" "$$<" >/dev/null 2>&1
 
 .PHONY: $(basename $1).$(VARIANT).ok
 

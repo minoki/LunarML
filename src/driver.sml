@@ -4,26 +4,8 @@
  *)
 structure Driver = struct
 
-datatype OutputMode = ExecutableMode | LibraryMode
-
-fun rep(c, n) = CharVector.tabulate(n, fn _ => c)
+fun rep (c, n) = CharVector.tabulate (n, fn _ => c)
 fun untab s = String.map (fn #"\t" => #" " | c => c) s
-fun printPos (name, lines, p : SourcePos.pos) =
-    if #file p = name then
-        let val l = #line p - 1
-            val c = #column p - 1
-        in if 0 <= l andalso l < Vector.length lines then
-               let val text = Vector.sub (lines, l)
-                   val start = Int.max (0, c - 30)
-                   val e = Int.min(String.size text, c + 30)
-               in print (String.substring (text, start, e - start) ^ "\n")
-                ; print (rep(#" ", c - start) ^ "^" ^ "\n")
-               end
-           else
-               () (* not available *)
-        end
-    else
-        () (* what to do? *)
 fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
     if #file p1 = name andalso #file p2 = name then
         if #line p1 = #line p2 then
@@ -34,8 +16,7 @@ fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
                    let val text = Vector.sub (lines, l)
                        val start = Int.max (0, c1 - 30)
                        val e = Int.min (String.size text, c2 + 30)
-                   in print (untab (String.substring (text, start, e - start)) ^ "\n")
-                    ; print (rep(#" ", c1 - start) ^ "^" ^ rep(#"~", c2 - c1) ^ "\n")
+                   in TextIO.output (TextIO.stdErr, untab (String.substring (text, start, e - start)) ^ "\n" ^ rep(#" ", c1 - start) ^ "^" ^ rep(#"~", c2 - c1) ^ "\n")
                    end
                else
                    () (* not available *)
@@ -47,8 +28,7 @@ fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
                      let val text = Vector.sub (lines, l1)
                          val start = Int.max (0, c1 - 30)
                          val e = Int.min(String.size text, c1 + 30)
-                     in print (untab (String.substring (text, start, e - start)) ^ "\n")
-                      ; print (rep(#" ", c1 - start) ^ "^" ^ rep(#"~", e - c1 - 1) ^ "\n")
+                     in TextIO.output (TextIO.stdErr, untab (String.substring (text, start, e - start)) ^ "\n" ^ rep(#" ", c1 - start) ^ "^" ^ rep(#"~", e - c1 - 1) ^ "\n")
                      end
                  else
                      () (* not available *)
@@ -59,8 +39,7 @@ fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
                      let val text = Vector.sub (lines, l2)
                          val start = Int.max (0, c2 - 30)
                          val e = Int.min(String.size text, c2 + 30)
-                     in print (untab (String.substring (text, start, e - start)) ^ "\n")
-                      ; print (rep(#"~", c2 - start + 1) ^ "\n")
+                     in TextIO.output (TextIO.stdErr, untab (String.substring (text, start, e - start)) ^ "\n" ^ rep(#"~", c2 - start + 1) ^ "\n")
                      end
                  else
                      () (* not available *)
@@ -69,46 +48,18 @@ fun printSpan (name, lines, { start = p1, end_ = p2 } : SourcePos.span) =
     else
         () (* what to do? *)
 
-exception Abort
-
-fun parse({ nextVId, languageOptions }, fixityEnv, name, lines, str)
-    = let fun printError (s, p1 as {file = f1, line = l1, column = c1}, p2 as {file = f2, line = l2, column = c2})
-              = ( if p1 = p2 then
-                      print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ s ^ "\n")
-                  else
-                      print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
-                ; printSpan (name, lines, { start = p1, end_ = p2 })
-                )
-          val lexErrors = ref []
-          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, languageOptions, lexErrors)
-          val error = case !lexErrors of
-                          [] => false
-                        | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
-                                                                                         ; printPos (name, lines, pos)
-                                                                                         )
-                                               | LunarMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
-                                                                                         ; printPos (name, lines, pos)
-                                                                                         )
-                                               ) errors
-                                    ; List.exists (fn LunarMLLex.TokError _ => true | _ => false) errors
-                                    )
-          val result = Fixity.doProgram ({ nextVId = nextVId }, fixityEnv, #1 (LunarMLParser.parse((* lookahead *) 0, lexer, printError, name)))
-      in if error then
-             raise Abort
-         else
-             result
-      end
-
-type Context = { typingContext : Typing.Context
-               , toFContext : ToFSyntax.Context
+type Context = { nextTyVar : int ref
+               , nextVId : int ref
+               , targetInfo : TargetInfo.target_info
+               , errorCounter : Message.counter
                }
-fun newContext (targetInfo : TargetInfo.target_info) : Context
-    = let val typingContext as { nextVId, nextTyVar } = Typing.newContext()
-      in { typingContext = typingContext
-         , toFContext = { nextVId = nextVId
-                        , nextTyVar = nextTyVar
-                        , targetInfo = targetInfo
-                        }
+fun newContext (targetInfo : TargetInfo.target_info, errorCounter : Message.counter) : Context
+    = let val nextTyVar = Typing.newTyVarCounter ()
+          val nextVId = Typing.newVIdCounter ()
+      in { nextTyVar = nextTyVar
+         , nextVId = nextVId
+         , targetInfo = targetInfo
+         , errorCounter = errorCounter
          }
       end
 
@@ -123,84 +74,45 @@ val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
                        , toFEnv = ToFSyntax.initialEnv
                        }
 
-fun compile({ typingContext, toFContext } : Context, langopt : LanguageOptions.options, { fixity, typingEnv, tynameset, toFEnv } : Env, name, source) =
-    let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
-    in let val (fixity', ast1) = parse ({ nextVId = #nextVId typingContext, languageOptions = langopt }, fixity, name, lines, source)
-           val () = CheckSyntacticRestrictions.checkProgram langopt ast1
-           val ast1' = PostParsing.scopeTyVarsInProgram(ast1)
-           val (typingEnv', decs) = Typing.typeCheckProgram(typingContext, typingEnv, ast1')
-           val tynameset = Typing.checkTyScopeOfProgram(typingContext, tynameset, decs)
-           val (toFEnv, fdecs) = ToFSyntax.programToFDecs(toFContext, toFEnv, List.concat decs)
-           val () = let val patternMatchContext = { options = langopt, messages = ref [] }
-                        fun messageTypeToString CheckPatternMatch.WARNING = "warning: "
-                          | messageTypeToString CheckPatternMatch.ERROR = "error: "
-                        fun showWarningOrError ([], message, mtype) = print (messageTypeToString mtype ^ message ^ "\n")
-                          | showWarningOrError (spans as ({ start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 } } :: _), message, mtype)
-                            = if f1 = f2 then
-                                  if p1 = p2 then
-                                      print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
-                                  else
-                                      print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
-                              else
-                                  print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ messageTypeToString mtype ^ message ^ "\n")
-                    in List.app (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
-                     ; List.app showWarningOrError (List.rev (!(#messages patternMatchContext)))
-                     ; if List.exists (fn (_, _, CheckPatternMatch.ERROR) => true | _ => false) (!(#messages patternMatchContext)) then
-                           raise Abort
-                       else
-                           ()
-                    end
-           val modifiedEnv = { fixity = fixity'
-                             , typingEnv = typingEnv'
-                             , tynameset = tynameset
-                             , toFEnv = toFEnv
-                             }
-       in (modifiedEnv, fdecs)
-       end handle LunarMLParser.ParseError => raise Abort
-                | Syntax.SyntaxError ([], message) =>
-                  ( print ("error: " ^ message ^ "\n")
-                  ; raise Abort
-                  )
-                | Syntax.SyntaxError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
-                  ( if f1 = f2 then
-                        if p1 = p2 then
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
-                        else
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                    else
-                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                  ; List.app (fn s => printSpan(name, lines, s)) spans
-                  ; raise Abort
-                  )
-                | Typing.TypeError ([], message) =>
-                  ( print ("type error: " ^ message ^ "\n")
-                  ; raise Abort
-                  )
-                | Typing.TypeError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
-                  ( if f1 = f2 then
-                        if p1 = p2 then
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
-                        else
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                    else
-                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                  ; List.app (fn s => printSpan(name, lines, s)) spans
-                  ; raise Abort
-                  )
-                | ToFSyntax.Error ([], message) =>
-                  ( print ("code generation error: " ^ message ^ "\n")
-                  ; raise Abort
-                  )
-                | ToFSyntax.Error (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
-                  ( if f1 = f2 then
-                        if p1 = p2 then
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
-                        else
-                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                    else
-                        print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
-                  ; List.app (fn s => printSpan(name, lines, s)) spans
-                  ; raise Abort
-                  )
-    end
+fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt : LanguageOptions.options, origEnv as { fixity, typingEnv, tynameset, toFEnv } : Env, name, source)
+    = let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
+          fun printMessage { spans, domain, message, type_ }
+              = let val t = case type_ of
+                                Message.WARNING => "warning: "
+                              | Message.ERROR => "error: "
+                in case spans of
+                       [] => TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                     | { start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 }} :: _ =>
+                       ( if f1 = f2 then
+                             if p1 = p2 then
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
+                             else
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                         else
+                             TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                       ; List.app (fn s => printSpan (name, lines, s)) spans
+                       )
+                end
+          val messageHandler = Message.newHandler (errorCounter, printMessage)
+          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString source) (name, langopt, messageHandler)
+          val (decs, _) = let fun onError (message, p1, p2) = Message.error (messageHandler, [{ start = p1, end_ = p2 }], "syntax", message)
+                          in LunarMLParser.parse ((* lookahead *) 0, lexer, onError, name)
+                          end handle LunarMLParser.ParseError => raise Message.Abort
+          val (fixity', decs) = Fixity.doProgram ({ nextVId = nextVId, messageHandler = messageHandler }, fixity, decs)
+          val () = CheckSyntacticRestrictions.checkProgram { messageHandler = messageHandler, languageOptions = langopt } decs
+          val decs = PostParsing.scopeTyVarsInProgram decs
+          val typingContext = { nextTyVar = nextTyVar, nextVId = nextVId, messageHandler = messageHandler, matchContext = [] }
+          val (typingEnv', decs) = Typing.typeCheckProgram (typingContext, typingEnv, decs)
+          val tynameset = Typing.checkTyScopeOfProgram (typingContext, tynameset, decs)
+          val (toFEnv, fdecs) = ToFSyntax.programToFDecs ({ nextVId = nextVId, nextTyVar = nextTyVar, targetInfo = targetInfo, messageHandler = messageHandler }, toFEnv, List.concat decs)
+          val () = let val patternMatchContext = { options = langopt, messageHandler = messageHandler }
+                   in List.app (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
+                   end
+          val modifiedEnv = { fixity = fixity'
+                            , typingEnv = typingEnv'
+                            , tynameset = tynameset
+                            , toFEnv = toFEnv
+                            }
+      in (modifiedEnv, fdecs)
+      end
 end; (* structure Driver *)

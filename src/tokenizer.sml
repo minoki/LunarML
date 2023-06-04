@@ -2,29 +2,28 @@
  * Copyright (c) 2021 ARATA Mizuki
  * This file is part of LunarML.
  *)
-functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
-        datatype TokError = TokError of SourcePos.pos * string
-                          | TokWarning of SourcePos.pos * string
+functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
         structure UserDeclarations = struct
         type pos = SourcePos.pos (* line, column; both 1-based *)
         type svalue = Tokens.svalue
         type ('a,'b) token = ('a,'b) Tokens.token
         type result = (svalue,pos) token
-        type arg = string * LanguageOptions.options * (TokError list) ref (* (filename, options, errorsAndWarnings) *)
+        type arg = (* filename *) string * LanguageOptions.options * Message.handler
         end
         datatype NumericLitType = NLTUnsigned
                                 | NLTNegative
                                 | NLTWord
         (* read a token *)
-        fun tokenizeAllString (opts : LanguageOptions.options, name, s) = let
-            fun pos(l,c) = { file = name, line = l, column = c }
-            val errorsAndWarnings = ref [] : (TokError list) ref
-            fun emitWarning(l,c,message) = let val e = !errorsAndWarnings
-                                           in errorsAndWarnings := TokWarning ({ file = name, line = l, column = c }, message) :: e
-                                           end
-            fun emitError(l,c,message) = let val e = !errorsAndWarnings
-                                         in errorsAndWarnings := TokError ({ file = name, line = l, column = c }, message) :: e
-                                         end
+        fun tokenizeAllString (messageHandler : Message.handler, opts : LanguageOptions.options, name, s) = let
+            fun pos (l, c) = { file = name, line = l, column = c }
+            fun emitWarning (l, c, message) = let val pos = { file = name, line = l, column = c }
+                                                  val span = { start = pos, end_ = pos }
+                                              in Message.warning (messageHandler, [span], "lexical", message)
+                                              end
+            fun emitError (l, c, message) = let val pos = { file = name, line = l, column = c }
+                                                val span = { start = pos, end_ = pos }
+                                            in Message.error (messageHandler, [span], "lexical", message)
+                                            end
             fun isBinDigit c = c = #"0" orelse c = #"1"
             fun tokenizeOne (l, c, nil) = NONE (* end of input *)
               | tokenizeOne (l, c, #"(" :: #"*" :: xs) = skipComment (l, c, l, c+2, 0, xs) (* beginning of comment *)
@@ -758,8 +757,7 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
             fun tokenizeAll (l, c, xs, revAcc) = case tokenizeOne (l, c, xs) of
                                                      NONE => List.rev revAcc
                                                    | SOME (t, l', c', rest) => tokenizeAll (l', c', rest, t :: revAcc)
-            val result = tokenizeAll (1, 1, String.explode s, [])
-        in (result, rev (!errorsAndWarnings))
+        in tokenizeAll (1, 1, String.explode s, [])
         end
         fun readAll input = let val x = input 1024
                             in if x = "" then
@@ -767,17 +765,17 @@ functor LunarMLLexFun(structure Tokens: LunarML_TOKENS) = struct
                                else
                                    x ^ readAll input
                             end
-        fun makeLexer input (name, opts, ewRef) = let val (tokens, ew) = tokenizeAllString (opts, name, readAll input)
-                                                      val tokensRef = ref tokens
-                                                  in ewRef := ew
-                                                   ; fn _ => case !tokensRef of
-                                                                 nil => Tokens.EOF ({file=name,line=0,column=0},{file=name,line=0,column=0})
-                                                               | x :: xs => (tokensRef := xs; x)
-                                                  end
+        fun makeLexer input (name, opts, messageHandler)
+            = let val tokens = tokenizeAllString (messageHandler, opts, name, readAll input)
+                  val tokensRef = ref tokens
+              in fn _ => case !tokensRef of
+                             nil => Tokens.EOF ({ file = name, line = 0, column = 0 }, { file = name, line = 0, column = 0 })
+                           | x :: xs => (tokensRef := xs; x)
+              end
         fun makeInputFromString str = let val i = ref false
                                       in fn _ => if !i then
                                                      ""
                                                  else
                                                      (i := true; str)
                                       end
-        end
+end; (* functor LunarMLLexFun *)

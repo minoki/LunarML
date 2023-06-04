@@ -583,7 +583,7 @@ fun forceTy (ty as TyVar _) = ty
                                                      end
 
 (* forceTyIn : Context -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, ... } *)
-fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a })
+fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c })
     = let val doTy = forceTy
           fun doTypeScheme (TypeScheme (tyvarsWithConstraints, ty)) = TypeScheme (tyvarsWithConstraints, doTy ty)
           val doValEnv = VIdMap.map (fn (tysc, idstatus) => (doTypeScheme tysc, idstatus))

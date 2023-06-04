@@ -13,6 +13,7 @@ src/primitives.sml
 src/target-info.sml
 src/syntax.grm.sig
 src/sourcepos.sml
+src/message.sml
 src/tokenizer.sml
 src/syntax.sml
 src/syntax.grm.sml

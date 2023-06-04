@@ -11,6 +11,9 @@ end
 structure Main = struct
 structure M = MLBSyntax;
 structure S = CommandLineSettings;
+
+datatype OutputMode = ExecutableMode | LibraryMode
+
 val progName = CommandLine.name ();
 fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
@@ -44,7 +47,7 @@ datatype backend = BACKEND_LUA of lua_runtime
 datatype subcommand = SUBCOMMAND_COMPILE
 type options = { subcommand : subcommand option
                , output : string option
-               , outputMode : Driver.OutputMode option
+               , outputMode : OutputMode option
                , dump : dump_mode
                , optimizationLevel : int
                , backend : backend
@@ -210,22 +213,42 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                                     )
                                    ]
           val targetInfo = getTargetInfo opts
-          val ctx = { driverContext = Driver.newContext targetInfo
+          val errorCounter = Message.newCounter { errorTolerance = 10 }
+          val ctx = { driverContext = Driver.newContext (targetInfo, errorCounter)
                     , baseDir = OS.FileSys.getDir ()
                     , pathMap = pathMap
                     , targetInfo = targetInfo
                     }
           val timer = Timer.startCPUTimer ()
           val (env, { tynameset, toFEnv, fdecs, cache }) = f ctx
-          val fdecs = case Option.getOpt (#outputMode opts, Driver.ExecutableMode) of
-                          Driver.ExecutableMode => fdecs
-                        | Driver.LibraryMode => ToFSyntax.addExport (#toFContext (#driverContext ctx), #typing env, toFEnv, fdecs)
+          val toFContext = let fun printMessage { spans, domain, message, type_ }
+                                   = let val t = case type_ of
+                                                     Message.WARNING => "warning: "
+                                                   | Message.ERROR => "error: "
+                                     in case spans of
+                                            [] => TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                                          | { start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 }} :: _ =>
+                                            ( if f1 = f2 then
+                                                  if p1 = p2 then
+                                                      TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
+                                                  else
+                                                      TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                                              else
+                                                  TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ message ^ "\n")
+                                            )
+                                     end
+                               val messageHandler = Message.newHandler (errorCounter, printMessage)
+                           in { nextVId = #nextVId (#driverContext ctx), nextTyVar = #nextTyVar (#driverContext ctx), targetInfo = targetInfo, messageHandler = messageHandler }
+                           end
+          val fdecs = case Option.getOpt (#outputMode opts, ExecutableMode) of
+                          ExecutableMode => fdecs
+                        | LibraryMode => ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
           val frontTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
                    else
                        ()
-          val fdecs = #doDecs (DesugarPatternMatches.desugarPatternMatches (#toFContext (#driverContext ctx))) fdecs
+          val fdecs = #doDecs (DesugarPatternMatches.desugarPatternMatches toFContext) fdecs
           val fdecs = DecomposeValRec.doDecs fdecs
           val (_, fdecs) = DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, fdecs)
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
@@ -238,7 +261,7 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                               \[TIME] optimization (F): " ^ LargeInt.toString (optTime - frontTime) ^ " us\n")
                    else
                        ()
-          val nextId = #nextVId (#toFContext (#driverContext ctx))
+          val nextId = #nextVId (#driverContext ctx)
           val cont = let val n = !nextId
                          val _ = nextId := n + 1
                      in CSyntax.CVar.fromInt n
@@ -257,8 +280,12 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                        print ("[TIME] CPS optimization (total): " ^ LargeInt.toString (optTime - cpsTime) ^ " us\n")
                    else
                        ()
+          val () = if Message.anyError errorCounter then
+                       raise Message.Abort
+                   else
+                       ()
       in emit opts targetInfo fileName cont nextId cexp
-      end handle Driver.Abort => OS.Process.exit OS.Process.failure
+      end handle Message.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
                  ( print ("internal error: " ^ message ^ "\n")
                  ; OS.Process.exit OS.Process.failure
@@ -374,13 +401,13 @@ fun parseArgs (opts : options) args
                                                 | SOME _ => showMessageAndFail "--output was given multiple times.\n"
                                              )
         | SOME (OPT_EXE, args) => (case #outputMode opts of
-                                       NONE => parseArgs (S.set.outputMode (SOME Driver.ExecutableMode) opts) args
-                                     | SOME Driver.ExecutableMode => parseArgs opts args
+                                       NONE => parseArgs (S.set.outputMode (SOME ExecutableMode) opts) args
+                                     | SOME ExecutableMode => parseArgs opts args
                                      | SOME _ => showMessageAndFail "--exe or --lib was given multiple times.\n"
                                   )
         | SOME (OPT_LIB, args) => (case #outputMode opts of
-                                       NONE => parseArgs (S.set.outputMode (SOME Driver.LibraryMode) opts) args
-                                     | SOME Driver.LibraryMode => parseArgs opts args
+                                       NONE => parseArgs (S.set.outputMode (SOME LibraryMode) opts) args
+                                     | SOME LibraryMode => parseArgs opts args
                                      | SOME _ => showMessageAndFail "--exe or --lib was given multiple times.\n"
                                   )
         | SOME (OPT_TARGET_LUA, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args

@@ -8,6 +8,7 @@ structure F = FSyntax
 type Context = { nextVId : int ref
                , nextTyVar : int ref
                , targetInfo : TargetInfo.target_info
+               , messageHandler : Message.handler
                }
 fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
                                             in #nextVId ctx := n + 1

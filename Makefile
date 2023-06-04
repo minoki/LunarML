@@ -23,6 +23,7 @@ sources = \
   src/primitives.sml \
   src/syntax.grm.sig \
   src/sourcepos.sml \
+  src/message.sml \
   src/tokenizer.sml \
   src/syntax.sml \
   src/syntax.grm.sml \
