@@ -189,6 +189,11 @@ should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lu
 else ifeq ($(VARIANT), luajit)
 should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.sml
 endif
+should_compile += $(addprefix interface/should_compile/,\
+  INTEGER.sml \
+  WORD.sml \
+  CHAR.sml \
+)
 should_run += $(addprefix successor_ml/should_run/,\
   record_extension_pattern.sml \
   record_extension_pattern_2.sml \
