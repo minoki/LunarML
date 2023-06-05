@@ -986,7 +986,12 @@ fun doPat ctx (S.WildcardPat _) = ()
                                                        ; Option.app (doTy ctx) optTy
                                                        ; doPat ctx pat
                                                        )
-  | doPat ctx (S.VectorPat (span, pats, _)) = Vector.app (doPat ctx) pats
+  | doPat ctx (S.VectorPat (span, pats, _)) = ( if #allowVectorPats (#languageOptions ctx) then
+                                                    ()
+                                                else
+                                                    emitError (ctx, [span], "vector pattern is not allowed here; you may want to set \"allowVectorPats true\"")
+                                              ; Vector.app (doPat ctx) pats
+                                              )
 
 (* doExp : context * S.TyVarSet -> S.Exp -> unit *)
 (* doDec : context * S.TyVarSet -> S.Dec -> unit *)
@@ -1011,7 +1016,12 @@ fun doExp (ctx : context, env : S.TyVarSet.set) (S.SConExp span) = ()
   | doExp (ctx, env) (S.FnExp (span, matches)) = doMatches (ctx, env) matches
   | doExp (ctx, env) (S.ProjectionExp (span, label)) = ()
   | doExp (ctx, env) (S.ListExp (span, exps)) = Vector.app (fn exp => doExp (ctx, env) exp) exps
-  | doExp (ctx, env) (S.VectorExp (span, exps)) = Vector.app (fn exp => doExp (ctx, env) exp) exps
+  | doExp (ctx, env) (S.VectorExp (span, exps)) = ( if #allowVectorExps (#languageOptions ctx) then
+                                                        ()
+                                                    else
+                                                        emitError (ctx, [span], "vector expression is not allowed here; you may want to set \"allowVectorExps true\"")
+                                                  ; Vector.app (fn exp => doExp (ctx, env) exp) exps
+                                                  )
   | doExp (ctx, env) (S.PrimExp (span, primOp, tyargs, args)) = ( Vector.app (doTy ctx) tyargs ; Vector.app (doExp (ctx, env)) args )
 and doMatches (ctx, env) matches = List.app (fn (pat, exp) => ( doPat ctx pat ; doExp (ctx, env) exp) ) matches
 and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, valbinds))
