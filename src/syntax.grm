@@ -70,6 +70,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
     | PRIMNS | PRIMCALL | OVERLOAD | EQUALITY
+    (* special comment (extension) *)
+    | START_SIGNATURE_COMMENT | END_SPECIAL_COMMENT
     (* other *)
     | EOF
 %nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list

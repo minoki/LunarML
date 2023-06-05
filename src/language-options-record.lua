@@ -25,6 +25,7 @@ return "LanguageOptionsRecord", {
   "allowBindEqual",
   "allowOverload",
   "allowInfixingDot",
+  "allowSignatureComment",
   "nonexhaustiveBind",
   "nonexhaustiveMatch",
   "nonexhaustiveRaise",
