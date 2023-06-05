@@ -131,19 +131,26 @@ Primitives
 * `'a array`: Same as `'a vector`, but mutable.
 * `'a ref`: `{ [1] = <the payload> }`.
 * `Lua.value`: any Lua value, including `nil`.
+* `'a list`: nil is `nil` and `x :: xs` is `{ [1] = x, [2] = xs }`.
 
 Non-empty records: `{ [1] = <#1 of the record>, foo = <#foo of the record> }`
 
 Datatypes:
 
-For datatypes like
+Suppose we have:
 
 ```sml
 datatype 'a option = NONE | SOME of 'a
-datatype 'a list = nil | :: of 'a * 'a list
+datatype alias_of_int = ALIAS_OF_INT of int
+datatype enum_like = A | B | C
+datatype unit_like = UNIT_LIKE
 ```
 
-the values for `'a option` will be `{ tag = "NONE" }` or `{ tag = "SOME", payload = x }`.
+* The values for `'a option` will be `{ tag = "NONE" }` or `{ tag = "SOME", payload = x }`.
+* The value `ALIAS_OF_INT 42` will be represented by `42`; the constructor is erased.
+* The values for `enum_like` will be `"A"`, `"B"` or `"C"`.
+* The value `UNIT_LIKE` will be represented by `nil`.
+
 
 Functions:
 

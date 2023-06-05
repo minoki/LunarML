@@ -152,7 +152,9 @@ datatype ValueConstructorRep = REP_BOXED
                              | REP_REF
                              | REP_LIST (* nil, :: *)
                              | REP_BOOL (* true, false *)
-                             (* REP_ENUM, REP_ALIAS, REP_UNIT *)
+                             | REP_ENUM (* multiple constructors with no payload *)
+                             | REP_ALIAS (* single constructor with payload *)
+                             | REP_UNIT (* single constructor with no payload *)
 
 type ValueConstructorInfo = { tag : string
                             , allConstructors : VIdSet.set

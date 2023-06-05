@@ -253,19 +253,34 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                 | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result } =>
                   pure (result, J.ArrayExp (Vector.map (doValue ctx) (vector xs)))
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsString16Op info, tyargs = _, args = [exp] }, result } =>
-                  pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "tag")))
+                  (case #representation info of
+                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "tag")))
+                     | Syntax.REP_ENUM => pure (result, doValue ctx exp)
+                     | _ => raise CodeGenError "unexpected datatype representation for DataTagAsString16Op"
+                  )
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result } =>
-                  pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "payload")))
+                  (case #representation info of
+                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "payload")))
+                     | Syntax.REP_ALIAS => pure (result, doValue ctx exp)
+                     | _ => raise CodeGenError "unexpected datatype representation for DataPayloadOp"
+                  )
                 | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result } =>
                   pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "payload")))
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result } =>
                   let val tag = #tag info
-                  in pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))]))
+                  in case #representation info of
+                         Syntax.REP_BOXED => pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))]))
+                       | Syntax.REP_ENUM => pure (result, J.ConstExp (J.asciiStringAsWide tag))
+                       | Syntax.REP_UNIT => pure (result, J.ConstExp J.Null)
+                       | _ => raise CodeGenError "unexpected datatype representation for ConstructValOp"
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result } =>
                   let val tag = #tag info
                       val payload = doValue ctx payload
-                  in pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)]))
+                  in case #representation info of
+                         Syntax.REP_BOXED => pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)]))
+                       | Syntax.REP_ALIAS => pure (result, payload)
+                       | _ => raise CodeGenError "unexpected datatype representation for ConstructValWithPayloadOp"
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result } =>
                   let val tag = doValue ctx tag

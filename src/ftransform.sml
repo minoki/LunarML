@@ -119,7 +119,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      end
                    | { representation = Syntax.REP_REF, tag = "ref", ... } =>
                      genMatcher (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
-                   | { tag, ... } =>
+                   | { representation = Syntax.REP_ALIAS, ... } =>
+                     genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
+                   | { tag, ... } => (* REP_BOXED *)
                      let val payload = genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                          val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
                                                          TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
@@ -137,7 +139,8 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                         | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
                      in F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])
                      end
-                   | { representation = _, tag, ... } =>
+                   | { representation = Syntax.REP_UNIT, ... } => F.VarExp InitialEnv.VId_true
+                   | { representation = _, tag, ... } => (* REP_BOXED or REP_ENUM *)
                      let val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
                                                          TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
                                                        | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)

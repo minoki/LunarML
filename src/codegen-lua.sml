@@ -275,19 +275,34 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                   in pure (result, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs))))
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsStringOp info, tyargs = _, args = [exp] }, result } =>
-                  pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "tag")))
+                  (case #representation info of
+                       Syntax.REP_BOXED => pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "tag")))
+                     | Syntax.REP_ENUM => pure (result, doValue ctx exp)
+                     | _ => raise CodeGenError "unexpected datatype representation for DataTagAsStringOp"
+                  )
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result } =>
-                  pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload")))
+                  (case #representation info of
+                       Syntax.REP_BOXED => pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload")))
+                     | Syntax.REP_ALIAS => pure (result, doValue ctx exp)
+                     | _ => raise CodeGenError "unexpected datatype representation for DataPayloadOp"
+                  )
                 | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result } =>
                   pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload")))
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result } =>
                   let val tag = #tag info
-                  in pure (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))]))
+                  in case #representation info of
+                         Syntax.REP_BOXED => pure (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))]))
+                       | Syntax.REP_ENUM => pure (result, L.ConstExp (L.LiteralString tag))
+                       | Syntax.REP_UNIT => pure (result, L.ConstExp L.Nil)
+                       | _ => raise CodeGenError "unexpected datatype representation for ConstructValOp"
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result } =>
                   let val tag = #tag info
                       val payload = doValue ctx payload
-                  in pure (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag)), (L.StringKey "payload", payload)]))
+                  in case #representation info of
+                         Syntax.REP_BOXED => pure (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag)), (L.StringKey "payload", payload)]))
+                       | Syntax.REP_ALIAS => pure (result, payload)
+                       | _ => raise CodeGenError "unexpected datatype representation for ConstructValWithPayloadOp"
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result } =>
                   let val tag = doValue ctx tag
