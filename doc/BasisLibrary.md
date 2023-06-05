@@ -382,7 +382,7 @@ end
 structure Math :> MATH where type real = Real.real
 ```
 
-## signature CHAR (structure Char, WideChar) - partial
+## signature CHAR (structure Char, WideChar) - complete
 
 ```sml
 signature CHAR = sig
@@ -423,7 +423,7 @@ signature CHAR = sig
   val fromCString : String.string -> char option
 end
 structure Char :> CHAR where type char = char where type string = String.string
-structure WideChar (* :> CHAR where type string = WideString.string; currently JavaScript backend only *)
+structure WideChar :> CHAR where type string = WideString.string
 ```
 
 On Lua backend, `WideChar.maxOrd` is 255 and `WideChar` is an opaque alias of `Char`.
@@ -469,8 +469,8 @@ signature STRING = sig
   (* https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING *)
   val implodeRev : char list -> string
 end
-structure String :> STRING where type string = string
-structure WideString :> STRING
+structure String :> STRING where type string = string where type char = char
+structure WideString :> STRING where type char = WideChar.char
 ```
 
 ## signature SUBSTRING (structure Substring, WideSubstring) - partial
