@@ -251,7 +251,7 @@ define should_run_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
 verify-$(VARIANT): $(basename $1).$(VARIANT).verify
 
-$(basename $1).$(VARIANT)$(OUTEXT): $1 $(lunarml)
+$(basename $1).$(VARIANT)$(OUTEXT): $1 $(LUNARML)
 	@$(LUNARML) compile $(LUNARML_OPTION) --output "$$@" "$$<"
 
 $(basename $1).$(VARIANT).ok: $(basename $1).$(VARIANT)$(OUTEXT)
@@ -274,7 +274,7 @@ $(foreach file, $(should_run), $(eval $(call should_run_template, $(file))))
 define should_compile_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
 
-$(basename $1).$(VARIANT).ok: $1 $(lunarml)
+$(basename $1).$(VARIANT).ok: $1 $(LUNARML)
 	@echo "Compiling $1..."
 	@$(LUNARML) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)$(OUTEXT)" "$$<"
 
@@ -289,7 +289,7 @@ $(foreach file, $(should_compile), $(eval $(call should_compile_template, $(file
 define should_not_compile_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
 
-$(basename $1).$(VARIANT).ok: $1 $(lunarml)
+$(basename $1).$(VARIANT).ok: $1 $(LUNARML)
 	@echo "Compiling $1..."
 	@! $(LUNARML) compile $(LUNARML_OPTION) --output "$(basename $1).$(VARIANT)$(OUTEXT)" "$$<" >/dev/null 2>&1
 
