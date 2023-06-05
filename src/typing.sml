@@ -108,6 +108,7 @@ type Context = { nextTyVar : int ref
                , nextVId : int ref
                , messageHandler : Message.handler
                , matchContext : Syntax.VId list
+               , languageOptions : LanguageOptions.options
                }
 
 type InferenceContext = { context : Context
@@ -1284,7 +1285,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
       in (resultType, T.PrimExp (span, primOp, vector tyargs, args))
       end
 (* typeCheckDec : InferenceContext * Env * S.Dec -> (* created environment *) Env * T.Dec list *)
-and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, valbinds))
+and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
           val valbinds = let val env = { valMap = #valMap env
                                        , tyConMap = #tyConMap env
@@ -1416,9 +1417,35 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, T.MkShortVId vid)) valEnv)
-      in (env', [T.ValDec (span, valbinds)])
+          val descs = List.mapPartial (fn (span, vid, tyvarseq', ty) =>
+                                          case S.VIdMap.find (valEnv, vid) of
+                                              SOME (_, tysc) =>
+                                              let val tyvarseq = tyvarseq @ tyvarseq'
+                                                  val boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
+                                                  val env = { valMap = #valMap env
+                                                            , tyConMap = #tyConMap env
+                                                            , tyNameMap = #tyNameMap env
+                                                            , strMap = #strMap env
+                                                            , sigMap = #sigMap env
+                                                            , funMap = #funMap env
+                                                            , boundTyVars = boundTyVars
+                                                            }
+                                                  val ty = evalTy (#context ctx, env, ty)
+                                                  fun doTyVar tv = case S.TyVarMap.find (boundTyVars, tv) of
+                                                                       SOME tv => if T.tyVarAdmitsEquality tv then
+                                                                                      (tv, [T.IsEqType])
+                                                                                  else
+                                                                                      (tv, [])
+                                                                     | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
+                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc })
+                                              end
+                                            | NONE => ( emitTypeError (ctx, [span], "type description for undefined variable")
+                                                      ; NONE
+                                                      )
+                                 ) descs
+      in (env', T.ValDec (span, valbinds) :: descs)
       end
-  | typeCheckDec(ctx, env, S.RecValDec(span, tyvarseq, valbinds))
+  | typeCheckDec (ctx, env, S.RecValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
           val valbinds' : (SourcePos.span * (T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat) * S.Exp) list
               = List.map (fn S.PatBind (span, pat, exp) => (span, typeCheckPat (ctx', env, pat, NONE), exp)) valbinds
@@ -1517,7 +1544,33 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                 end
           val valbinds' = List.map fixRecursion valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc, _) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
-      in (env', [T.RecValDec (span, valbinds')])
+          val descs = List.mapPartial (fn (span, vid, tyvarseq', ty) =>
+                                          case S.VIdMap.find (valEnv, vid) of
+                                              SOME (_, tysc, _) =>
+                                              let val tyvarseq = tyvarseq @ tyvarseq'
+                                                  val boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
+                                                  val env = { valMap = #valMap env
+                                                            , tyConMap = #tyConMap env
+                                                            , tyNameMap = #tyNameMap env
+                                                            , strMap = #strMap env
+                                                            , sigMap = #sigMap env
+                                                            , funMap = #funMap env
+                                                            , boundTyVars = boundTyVars
+                                                            }
+                                                  val ty = evalTy (#context ctx, env, ty)
+                                                  fun doTyVar tv = case S.TyVarMap.find (boundTyVars, tv) of
+                                                                       SOME tv => if T.tyVarAdmitsEquality tv then
+                                                                                      (tv, [T.IsEqType])
+                                                                                  else
+                                                                                      (tv, [])
+                                                                     | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
+                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc })
+                                              end
+                                            | NONE=> ( emitTypeError (ctx, [span], "type description for undefined variable")
+                                                     ; NONE
+                                                     )
+                                      ) descs
+      in (env', T.RecValDec (span, valbinds') :: descs)
       end
   | typeCheckDec(ctx, env, S.TypeDec(span, typbinds))
     = let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))
@@ -2054,6 +2107,98 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
     in List.app doTyVar (TypedSyntax.freeTyVarsInDecs ([], decs))
     end
 
+local
+    fun checkValDesc (ctx, env, span, expected as T.TypeScheme (tyvarsE, tyE), actual as T.TypeScheme (tyvarsA, tyA))
+        = let val ictx = { context = ctx
+                         , level = 0
+                         }
+              val (tyE, tyargsE) = instantiate (ictx, span, expected)
+              val (tyA, tyargsA) = instantiate (ictx, span, actual)
+              fun onMismatch expected
+                  = case #valDescInComments (#languageOptions ctx) of
+                        LanguageOptions.ERROR => ( Message.error (#messageHandler ctx, [span], "type", "value description mismatch")
+                                                 ; false
+                                                 )
+                      | LanguageOptions.WARN => ( Message.warning (#messageHandler ctx, [span], "type", "value description mismatch")
+                                                ; false
+                                                )
+                      | LanguageOptions.IGNORE => false
+              fun equalTy (expected as T.TyVar (_, tv), T.TyVar (_, tv'))
+                  = if tv = tv' then
+                        true
+                    else
+                        onMismatch expected
+                | equalTy (expected as T.AnonymousTyVar (_, data as ref (T.Unbound (constraints, _))), T.AnonymousTyVar (_, data' as ref (T.Unbound (constraints', _))))
+                  = if data <> data' then
+                        let val isEqType = List.exists (fn (_, T.IsEqType) => true | _ => false) constraints
+                            val isEqType' = List.exists (fn (_, T.IsEqType) => true | _ => false) constraints'
+                        in if isEqType = isEqType' then
+                               let val ty = T.TyVar (span, genTyVar (ctx, Syntax.MkTyVar "?"))
+                               in data := T.Link ty
+                                ; data' := T.Link ty
+                                ; true
+                               end
+                           else
+                               onMismatch expected
+                        end
+                    else
+                        true
+                | equalTy (T.AnonymousTyVar (_, ref (T.Link ty)), ty') = equalTy (ty, ty')
+                | equalTy (ty, T.AnonymousTyVar (_, ref (T.Link ty'))) = equalTy (ty, ty')
+                | equalTy (expected as T.RecordType (_, fields), T.RecordType (_, fields'))
+                  = if S.LabelMap.numItems fields = S.LabelMap.numItems fields' then
+                        S.LabelMap.alli (fn (label, ty) => case S.LabelMap.find (fields', label) of
+                                                               SOME ty' => equalTy (ty, ty')
+                                                             | NONE => onMismatch expected
+                                        ) fields
+                    else
+                        onMismatch expected
+                | equalTy (expected as T.TyCon (_, tyargs, tyname), T.TyCon (_, tyargs', tyname'))
+                  = if tyname = tyname' andalso List.length tyargs = List.length tyargs' then
+                        ListPair.allEq equalTy (tyargs, tyargs')
+                    else
+                        onMismatch expected
+                | equalTy (T.FnType (_, ty1, ty2), T.FnType (_, ty1', ty2'))
+                  = equalTy (ty1, ty1') andalso equalTy (ty2, ty2')
+                | equalTy (ty1, ty2) = onMismatch ty1
+          in ignore (equalTy (tyE, tyA))
+          end
+    fun checkExp (ctx : Context, env, T.SConExp _) : unit = ()
+      | checkExp (ctx, env, T.VarExp _) = ()
+      | checkExp (ctx, env, T.RecordExp (span, fields)) = List.app (fn (label, exp) => checkExp (ctx, env, exp)) fields
+      | checkExp (ctx, env, T.RecordExtExp { sourceSpan, fields, baseExp, baseTy })
+        = ( List.app (fn (label, exp) => checkExp (ctx, env, exp)) fields
+          ; checkExp (ctx, env, baseExp)
+          )
+      | checkExp (ctx, env, T.LetInExp (span, decs, exp)) = (checkDecs (ctx, env, decs); checkExp (ctx, env, exp))
+      | checkExp (ctx, env, T.AppExp (span, e1, e2)) = (checkExp (ctx, env, e1); checkExp (ctx, env, e2))
+      | checkExp (ctx, env, T.TypedExp (span, e, ty)) = checkExp (ctx, env, e)
+      | checkExp (ctx, env, T.HandleExp (span, exp, match, ty)) = (checkExp (ctx, env, exp); checkMatch (ctx, env, match))
+      | checkExp (ctx, env, T.RaiseExp (span, ty, exp)) = checkExp (ctx, env, exp)
+      | checkExp (ctx, env, T.IfThenElseExp (span, e1, e2, e3)) = (checkExp (ctx, env, e1); checkExp (ctx, env, e2); checkExp (ctx, env, e3))
+      | checkExp (ctx, env, T.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy }) = (checkExp (ctx, env, subjectExp); checkMatch (ctx, env, matches))
+      | checkExp (ctx, env, T.FnExp (span, vid, ty, exp)) = checkExp (ctx, env, exp)
+      | checkExp (ctx, env, T.ProjectionExp _) = ()
+      | checkExp (ctx, env, T.ListExp (span, elems, ty)) = Vector.app (fn e => checkExp (ctx, env, e)) elems
+      | checkExp (ctx, env, T.VectorExp (span, elems, ty)) = Vector.app (fn e => checkExp (ctx, env, e)) elems
+      | checkExp (ctx, env, T.PrimExp (span, _, _, args)) = Vector.app (fn e => checkExp (ctx, env, e)) args
+    and checkDec (ctx, env, T.ValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
+      | checkDec (ctx, env, T.RecValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
+      | checkDec (ctx, env, T.TypeDec _) = ()
+      | checkDec (ctx, env, T.DatatypeDec _) = ()
+      | checkDec (ctx, env, T.ExceptionDec _) = ()
+      | checkDec (ctx, env, T.GroupDec (_, decs)) = checkDecs (ctx, env, decs)
+      | checkDec (ctx, env, T.OverloadDec (span, class, name, map)) = Syntax.OverloadKeyMap.app (fn exp => checkExp (ctx, env, exp)) map
+      | checkDec (ctx, env, T.EqualityDec (span, tyvars, tyname, exp)) = checkExp (ctx, T.TyVarSet.addList (env, tyvars), exp)
+      | checkDec (ctx, env, T.ValDescDec { sourceSpan, expected, actual }) = checkValDesc (ctx, env, sourceSpan, expected, actual)
+    and checkDecs (ctx, env, decs) = List.app (fn dec => checkDec (ctx, env, dec)) decs
+    and checkMatch (ctx, env, matches) = List.app (fn (pat, exp) => checkExp (ctx, env, exp)) matches
+    and checkValBind (ctx, env, T.TupleBind (_, _, exp)) = checkExp (ctx, env, exp)
+      | checkValBind (ctx, env, T.PolyVarBind (span, _, T.TypeScheme (tyvars, ty), exp)) = checkExp (ctx, T.TyVarSet.addList (env, List.map #1 tyvars), exp)
+in
+val checkTypeDescriptionInDecs = checkDecs
+end
+
 fun typeCheckCoreDecs (ctx : Context, env, decs) : Env * TypedSyntax.Dec list
     = let val ictx = { context = ctx
                      , level = 0
@@ -2061,6 +2206,7 @@ fun typeCheckCoreDecs (ctx : Context, env, decs) : Env * TypedSyntax.Dec list
           val (env, decs) = typeCheckDecs (ictx, env, decs)
           val () = applyDefaultTypes (ctx, decs)
           val decs = #doDecs (TypedSyntax.forceTyIn ctx) decs
+          val () = checkTypeDescriptionInDecs (ctx, T.TyVarSet.empty, decs)
       in (env, decs)
       end
 
@@ -2162,6 +2308,11 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                     ; #goExp (checkTyScope (ctx, T.TyVarSet.addList (tvset, typarams), tynameset)) exp
                                                                     ; tynameset
                                                                     )
+            | goDec (T.ValDescDec { sourceSpan, expected = T.TypeScheme (tyvars, ty), actual = T.TypeScheme (tyvars', ty') })
+              = ( #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars), tynameset)) ty
+                ; #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars'), tynameset)) ty'
+                ; tynameset
+                )
           and goDecs decs = List.foldl (fn (dec, tynameset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                in goDec dec
                                                                end)
@@ -2785,6 +2936,7 @@ and matchSignature (ctx, env, span, expected : T.Signature, longstrid : T.LongSt
                                                                                         , nextVId = #nextVId ctx
                                                                                         , messageHandler = #messageHandler ctx
                                                                                         , matchContext = vid :: #matchContext ctx
+                                                                                        , languageOptions = #languageOptions ctx
                                                                                         }
                                                                      val (tysc, decs, longvid') = matchValDesc (innerContext, env, span, tyscE, longvid, tyscA, idsA)
                                                                      val () = if (case idsE of Syntax.ExceptionConstructor => true | _ => false) andalso (case idsA of Syntax.ExceptionConstructor => false | _ => true) then

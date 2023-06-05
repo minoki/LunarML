@@ -70,6 +70,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
     | PRIMNS | PRIMCALL | OVERLOAD | EQUALITY
+    (* special comment (extension) *)
+    | START_VAL_DESC_COMMENT | END_SPECIAL_COMMENT
     (* other *)
     | EOF
 %nonterm START of ((UnfixedSyntax.Dec Syntax.TopDec) list) list
@@ -128,6 +130,10 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | HeadExp_NoMatch of UnfixedSyntax.Exp
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
        | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
+       | ValDescInComment of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDescInCommentVal of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDescInCommentVals of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDesc' of (SourcePos.span * Syntax.VId * Syntax.Ty) list
        | Dec_NoLocal of UnfixedSyntax.Dec
        | OverloadSpec of string * UnfixedSyntax.Exp
        | OverloadSpecs of (string * UnfixedSyntax.Exp) list
@@ -466,18 +472,29 @@ Exp_NoMatch : OrelseExp_NoMatch (OrelseExp_NoMatch)
 MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: MatchClauses)
              | Pat DARROW Exp ((Pat, Exp) :: nil)
 
+ValDescInComment : START_VAL_DESC_COMMENT ValDescInCommentVal ValDescInCommentVals END_SPECIAL_COMMENT ValDescInComment (ValDescInCommentVal @ ValDescInCommentVals @ ValDescInComment)
+                 | ([])
+
+ValDescInCommentVal : VAL ValDesc' (ValDesc')
+
+ValDescInCommentVals : ValDescInCommentVal ValDescInCommentVals (ValDescInCommentVal @ ValDescInCommentVals)
+                     | ([])
+
+ValDesc' : VId COLON Ty ((span (VIdleft, Tyright), VId, Ty) :: nil)
+         | VId COLON Ty AND ValDesc' ((span (VIdleft, Tyright), VId, Ty) :: ValDesc')
+
 (* a declaration, excluding local-in-end *)
-Dec_NoLocal : VAL ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), nil, ValBind)) (* value declaration (non-recursive) *)
-            | VAL TyVar ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* value declaration (non-recursive) *)
-            | VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.ValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* value declaration (non-recursive) *)
-            | VAL REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), nil, ValBind)) (* value declaration (recursive) *)
-            | VAL REC TyVar ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* [Successor ML-style] value declaration (recursive) *)
-            | VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* [Successor ML-style] value declaration (recursive) *)
-            | VAL TyVar REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), [TyVar], ValBind)) (* [SML97-style] value declaration (recursive) *)
-            | VAL LPAREN TyVar TyVarSeqRest RPAREN REC ValBind (UnfixedSyntax.RecValDec (span(VALleft, ValBindright), TyVar :: TyVarSeqRest, ValBind)) (* [SML97-style] value declaration (recursive) *)
-            | FUN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), [], FValBind)) (* [derived] function declaration *)
-            | FUN TyVar FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), [TyVar], FValBind)) (* [derived] function declaration *)
-            | FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (span(FUNleft, FValBindright), TyVar :: TyVarSeqRest, FValBind)) (* [derived] function declaration *)
+Dec_NoLocal : ValDescInComment VAL ValBind (UnfixedSyntax.ValDec (span (VALleft, ValBindright), [], ValDescInComment, ValBind)) (* value declaration (non-recursive) *)
+            | ValDescInComment VAL TyVar ValBind (UnfixedSyntax.ValDec (span (VALleft, ValBindright), [TyVar], ValDescInComment, ValBind)) (* value declaration (non-recursive) *)
+            | ValDescInComment VAL LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.ValDec (span (VALleft, ValBindright), TyVar :: TyVarSeqRest, ValDescInComment, ValBind)) (* value declaration (non-recursive) *)
+            | ValDescInComment VAL REC ValBind (UnfixedSyntax.RecValDec (span (VALleft, ValBindright), nil, ValDescInComment, ValBind)) (* value declaration (recursive) *)
+            | ValDescInComment VAL REC TyVar ValBind (UnfixedSyntax.RecValDec (span (VALleft, ValBindright), [TyVar], ValDescInComment, ValBind)) (* [Successor ML-style] value declaration (recursive) *)
+            | ValDescInComment VAL REC LPAREN TyVar TyVarSeqRest RPAREN ValBind (UnfixedSyntax.RecValDec (span (VALleft, ValBindright), TyVar :: TyVarSeqRest, ValDescInComment, ValBind)) (* [Successor ML-style] value declaration (recursive) *)
+            | ValDescInComment VAL TyVar REC ValBind (UnfixedSyntax.RecValDec (span (VALleft, ValBindright), [TyVar], ValDescInComment, ValBind)) (* [SML97-style] value declaration (recursive) *)
+            | ValDescInComment VAL LPAREN TyVar TyVarSeqRest RPAREN REC ValBind (UnfixedSyntax.RecValDec (span (VALleft, ValBindright), TyVar :: TyVarSeqRest, ValDescInComment, ValBind)) (* [SML97-style] value declaration (recursive) *)
+            | ValDescInComment FUN FValBind (UnfixedSyntax.FValDec (span (FUNleft, FValBindright), [], ValDescInComment, FValBind)) (* [derived] function declaration *)
+            | ValDescInComment FUN TyVar FValBind (UnfixedSyntax.FValDec (span (FUNleft, FValBindright), [TyVar], ValDescInComment, FValBind)) (* [derived] function declaration *)
+            | ValDescInComment FUN LPAREN TyVar TyVarSeqRest RPAREN FValBind (UnfixedSyntax.FValDec (span (FUNleft, FValBindright), TyVar :: TyVarSeqRest, ValDescInComment, FValBind)) (* [derived] function declaration *)
             | TYPE TypBind (UnfixedSyntax.TypeDec(span(TYPEleft, TypBindright), TypBind)) (* type declaration *)
             (* | DATATYPE DatBind (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, DatBindright), DatBind)) (* datatype declaration *) *)
             | DATATYPE TyCon EQUALS ConBind DatBindRest Withtype (UnfixedSyntax.DatatypeDec(span(DATATYPEleft, Withtyperight), Syntax.DatBind (span(TyConleft, ConBindright), [], TyCon, ConBind) :: DatBindRest, Withtype)) (* datatype declaration *)
@@ -704,5 +721,5 @@ TopDecs : Dec_NoLocal TopDecs (Syntax.StrDec(Syntax.CoreDec(span(Dec_NoLocalleft
         | (nil)
 
 Program : TopDecs SEMICOLON Program (TopDecs :: Program)
-        | Exp SEMICOLON Program ([Syntax.StrDec(Syntax.CoreDec(span(Expleft, Expright), UnfixedSyntax.ValDec(span(Expleft, Expright), nil, [UnfixedSyntax.PatBind(span(Expleft, Expright), UnfixedSyntax.NonInfixVIdPat(span(Expleft, Expleft), Syntax.MkLongVId([], Syntax.MkVId "it")), Exp)])))] :: Program) (* val it = Exp *)
+        | Exp SEMICOLON Program ([Syntax.StrDec (Syntax.CoreDec (span (Expleft, Expright), UnfixedSyntax.ValDec (span (Expleft, Expright), [], [], [UnfixedSyntax.PatBind (span (Expleft, Expright), UnfixedSyntax.NonInfixVIdPat (span (Expleft, Expleft), Syntax.MkLongVId ([], Syntax.MkVId "it")), Exp)])))] :: Program) (* val it = Exp *)
         | TopDecs ([TopDecs]) (* topdecs without semicolon *)

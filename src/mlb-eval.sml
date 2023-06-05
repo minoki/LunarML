@@ -92,6 +92,10 @@ fun applyAnnotation (ann, langopt) = case String.tokens Char.isSpace ann of
                                                                        SOME x => LanguageOptions.set.redundantRaise x langopt
                                                                      | NONE => raise Fail ("unrecognized annotation: " ^ ann)
                                                                   )
+                                       | ["valDescInComments", x] => (case parseIgnoreWarnError x of
+                                                                          SOME x => LanguageOptions.set.valDescInComments x langopt
+                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
+                                                                     )
                                        | [name, value] => (case LanguageOptions.setByName name of
                                                               SOME setter => (case value of
                                                                                   "true" => setter true langopt

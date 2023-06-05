@@ -31,4 +31,5 @@ return "LanguageOptionsRecord", {
   "redundantBind",
   "redundantMatch",
   "redundantRaise",
+  "valDescInComments",
 }

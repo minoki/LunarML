@@ -101,7 +101,7 @@ fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt
           val (fixity', decs) = Fixity.doProgram ({ nextVId = nextVId, messageHandler = messageHandler }, fixity, decs)
           val () = CheckSyntacticRestrictions.checkProgram { messageHandler = messageHandler, languageOptions = langopt } decs
           val decs = PostParsing.scopeTyVarsInProgram decs
-          val typingContext = { nextTyVar = nextTyVar, nextVId = nextVId, messageHandler = messageHandler, matchContext = [] }
+          val typingContext = { nextTyVar = nextTyVar, nextVId = nextVId, messageHandler = messageHandler, matchContext = [], languageOptions = langopt }
           val (typingEnv', decs) = Typing.typeCheckProgram (typingContext, typingEnv, decs)
           val tynameset = Typing.checkTyScopeOfProgram (typingContext, tynameset, decs)
           val (toFEnv, fdecs) = ToFSyntax.programToFDecs ({ nextVId = nextVId, nextTyVar = nextTyVar, targetInfo = targetInfo, messageHandler = messageHandler }, toFEnv, List.concat decs)

@@ -24,6 +24,7 @@ type options = { allowExtendedNumConsts : bool
                , redundantBind : ignore_warn_error
                , redundantMatch : ignore_warn_error
                , redundantRaise : ignore_warn_error
+               , valDescInComments : ignore_warn_error
                }
 fun setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowExtendedTextConsts" = SOME set.allowExtendedTextConsts
@@ -66,6 +67,7 @@ val default : options = { allowExtendedNumConsts = true
                         , redundantBind = WARN
                         , redundantMatch = WARN
                         , redundantRaise = WARN
+                        , valDescInComments = IGNORE
                         }
 fun setSuccessorML value : options -> options
     = set.allowExtendedNumConsts value

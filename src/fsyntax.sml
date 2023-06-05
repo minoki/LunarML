@@ -1331,6 +1331,7 @@ and toFDecs (ctx, env, []) = (env, [])
                                                                                 val (env, decs) = toFDecs (ctx, env, decs)
                                                                             in (env, dec :: decs)
                                                                             end
+  | toFDecs (ctx, env, T.ValDescDec _ :: decs) = toFDecs (ctx, env, decs)
 and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.Ty * F.Exp) list
     = let val nameMap = List.foldl (fn (T.DatBind (span, tyvars, tycon as TypedSyntax.MkTyName (name, _), conbinds, true), map) => TypedSyntax.TyNameMap.insert (map, tycon, freshVId (ctx, "EQUAL" ^ name))
                                    | (_, map) => map) TypedSyntax.TyNameMap.empty datbinds

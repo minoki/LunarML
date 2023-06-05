@@ -13,6 +13,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
         datatype NumericLitType = NLTUnsigned
                                 | NLTNegative
                                 | NLTWord
+        datatype state = NORMAL | SPECIAL_COMMENT
         (* read a token *)
         fun tokenizeAllString (messageHandler : Message.handler, opts : LanguageOptions.options, name, s) = let
             fun pos (l, c) = { file = name, line = l, column = c }
@@ -25,111 +26,123 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                             in Message.error (messageHandler, [span], "lexical", message)
                                             end
             fun isBinDigit c = c = #"0" orelse c = #"1"
-            fun tokenizeOne (l, c, nil) = NONE (* end of input *)
-              | tokenizeOne (l, c, #"(" :: #"*" :: xs) = skipComment (l, c, l, c+2, 0, xs) (* beginning of comment *)
-              | tokenizeOne (l, c, #"(" :: xs) = SOME (Tokens.LPAREN (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #")" :: xs) = SOME (Tokens.RPAREN (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"[" :: xs) = SOME (Tokens.LBRACK (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"]" :: xs) = SOME (Tokens.RBRACK (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"{" :: xs) = SOME (Tokens.LBRACE (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"}" :: xs) = SOME (Tokens.RBRACE (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"," :: xs) = SOME (Tokens.COMMA (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #";" :: xs) = SOME (Tokens.SEMICOLON (pos(l,c),pos(l,c)), l, c+1, xs)
-              | tokenizeOne (l, c, #"." :: #"." :: #"." :: xs) = SOME (Tokens.ELLIPSIS (pos(l,c),pos(l,c+2)), l, c+3, xs)
-              | tokenizeOne (l, c, #"." :: x :: xs) = if Char.isAlpha x then
-                                                          readIdentifierOrKeyword (l, c, c + 1, true, [], [x], xs)
-                                                      else if isSymbolChar x then
-                                                          readSymbolicIdentifier (l, c, c + 1, true, [], [x], xs)
-                                                      else
-                                                          SOME (Tokens.DOT (pos (l, c), pos (l, c)), l, c + 1, xs)
-              | tokenizeOne (l, c, #"." :: (xs as nil)) = SOME (Tokens.DOT (pos (l, c), pos (l, c)), l, c + 1, xs)
-              | tokenizeOne (l, c, #"#" :: #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+2, nil, xs)
-                                                              val value = case str of
-                                                                              [value] => value
-                                                                            | _ => ( emitError (l, c, "invalid character constant")
-                                                                                   ; StringElement.CODEUNIT 0
-                                                                                   )
-                                                          in SOME (Tokens.CharacterConst (value, pos (l, c), pos (l', c' - 1)), l', c', rest)
-                                                          end
-              | tokenizeOne (l, c, #"#" :: #"[" :: xs) = SOME (Tokens.HASHLBRACK (pos(l,c),pos(l,c+1)), l, c+2, xs)
-              | tokenizeOne (l, c, #"\"" :: xs) = let val (l', c', str, rest) = readStringLit (l, c, l, c+1, nil, xs)
-                                                      val str = vector str
-                                                  in case StringElement.toAsciiString str of
-                                                         NONE => SOME (Tokens.StringConst (str, pos (l, c), pos (l', c' - 1)), l', c', rest)
-                                                       | SOME ascii => SOME (Tokens.AsciiStringConst ((ascii, str), pos (l, c), pos (l', c' - 1)), l', c', rest)
-                                                  end
-              | tokenizeOne (l, c, #"~" :: #"0" :: (zr as #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                                  readHexadecimalConstant (l, c, c+4, NLTNegative, hexDigitToLargeInt x, xs)
-                                                                              else
-                                                                                  ( emitWarning (l, c+2, "there should be a space between a numeric literal and an identifier")
-                                                                                  ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c+1)), l, c+2, zr)
-                                                                                  )
-              | tokenizeOne (l, c, #"~" :: #"0" :: (zr as #"b" :: x :: xs)) = if isBinDigit x then
-                                                                                  readBinaryConstant (l, c, c + 4, NLTNegative, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
-                                                                              else
-                                                                                  ( emitWarning (l, c + 2, "there should be a space between a numeric literal and an identifier")
-                                                                                  ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c + 1)), l, c + 2, zr)
-                                                                                  )
-              | tokenizeOne (l, c, #"~" :: (rest0 as x :: xs)) = if Char.isDigit x then
-                                                                     readDecimalConstant (l, c, c+2, NLTNegative, digitToLargeInt x, xs)
+            fun tokenizeOne (state, l, c, input)
+                = (case input of
+                      nil => NONE (* end of input *)
+                    | #"(" :: #"*" :: xs => if state = NORMAL andalso #valDescInComments opts <> LanguageOptions.IGNORE then
+                                                case xs of
+                                                    #"!" :: xss => SOME (Tokens.START_VAL_DESC_COMMENT (pos (l, c), pos (l, c + 2)), SPECIAL_COMMENT, l, c + 3, xss)
+                                                  | _ => skipComment (state, l, c, l, c + 2, 0, xs) (* beginning of comment *)
+                                            else
+                                                skipComment (state, l, c, l, c + 2, 0, xs) (* beginning of comment *)
+                    | #"(" :: xs => SOME (Tokens.LPAREN (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #")" :: xs => SOME (Tokens.RPAREN (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"[" :: xs => SOME (Tokens.LBRACK (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"]" :: xs => SOME (Tokens.RBRACK (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"{" :: xs => SOME (Tokens.LBRACE (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"}" :: xs => SOME (Tokens.RBRACE (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"," :: xs => SOME (Tokens.COMMA (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #";" :: xs => SOME (Tokens.SEMICOLON (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"." :: #"." :: #"." :: xs => SOME (Tokens.ELLIPSIS (pos (l, c), pos (l, c + 2)), state, l, c + 3, xs)
+                    | #"." :: x :: xs => if Char.isAlpha x then
+                                             readIdentifierOrKeyword (state, l, c, c + 1, true, [], [x], xs)
+                                         else if isSymbolChar x then
+                                             readSymbolicIdentifier (state, l, c, c + 1, true, [], [x], xs)
+                                         else
+                                             SOME (Tokens.DOT (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"." :: (xs as nil) => SOME (Tokens.DOT (pos (l, c), pos (l, c)), state, l, c + 1, xs)
+                    | #"#" :: #"\"" :: xs => let val (l', c', str, rest) = readStringLit (l, c, l, c + 2, nil, xs)
+                                                 val value = case str of
+                                                                 [value] => value
+                                                               | _ => ( emitError (l, c, "invalid character constant")
+                                                                      ; StringElement.CODEUNIT 0
+                                                                      )
+                                             in SOME (Tokens.CharacterConst (value, pos (l, c), pos (l', c' - 1)), state, l', c', rest)
+                                             end
+                    | #"#" :: #"[" :: xs => SOME (Tokens.HASHLBRACK (pos (l, c), pos (l, c + 1)), state, l, c + 2, xs)
+                    | #"\"" :: xs => let val (l', c', str, rest) = readStringLit (l, c, l, c + 1, nil, xs)
+                                         val str = vector str
+                                     in case StringElement.toAsciiString str of
+                                            NONE => SOME (Tokens.StringConst (str, pos (l, c), pos (l', c' - 1)), state, l', c', rest)
+                                          | SOME ascii => SOME (Tokens.AsciiStringConst ((ascii, str), pos (l, c), pos (l', c' - 1)), state, l', c', rest)
+                                     end
+                    | #"~" :: #"0" :: (zr as #"x" :: x :: xs) => if Char.isHexDigit x then
+                                                                     readHexadecimalConstant (state, l, c, c + 4, NLTNegative, hexDigitToLargeInt x, xs)
                                                                  else
-                                                                     readSymbolicIdentifier (l, c, c, false, [], [#"~"], rest0)
-              | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                                     readHexadecimalConstant (l, c, c+3, NLTWord, hexDigitToLargeInt x, xs)
-                                                                                 else
-                                                                                     ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier")
-                                                                                     ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
-                                                                                     )
-              | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: #"b" :: x :: xs)) = if isBinDigit x then
-                                                                                     readBinaryConstant (l, c, c + 3, NLTWord, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
-                                                                                 else
-                                                                                     ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
-                                                                                     ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), l, c + 1, rest0)
-                                                                                     )
-              | tokenizeOne (l, c, #"0" :: (rest0 as #"w" :: x :: xs)) = if Char.isDigit x then
-                                                                             readDecimalConstant (l, c, c+3, NLTWord, digitToLargeInt x, xs)
-                                                                         else
-                                                                             ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier")
-                                                                             ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
-                                                                             )
-              | tokenizeOne (l, c, #"0" :: (rest0 as #"x" :: x :: xs)) = if Char.isHexDigit x then
-                                                                             readHexadecimalConstant (l, c, c+3, NLTUnsigned, hexDigitToLargeInt x, xs)
-                                                                         else
-                                                                             ( emitWarning (l, c+1, "there should be a space between a numeric literal and an identifier ")
-                                                                             ; SOME (Tokens.ZNIntConst (0,pos(l,c),pos(l,c)), l, c+1, rest0)
-                                                                             )
-              | tokenizeOne (l, c, #"0" :: (rest0 as #"b" :: x :: xs)) = if isBinDigit x then
-                                                                             readBinaryConstant (l, c, c + 3, NLTUnsigned, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
-                                                                         else
-                                                                             ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier ")
-                                                                             ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), l, c + 1, rest0)
-                                                                             )
-              | tokenizeOne (l, c, #"\n" :: xs) = tokenizeOne (l+1, 1, xs)
-              | tokenizeOne (l, c, x :: xs) = if Char.isAlpha x orelse x = #"_" orelse x = #"'" then
-                                                  readIdentifierOrKeyword (l, c, c, false, [], [x], xs)
-                                              else if Char.isDigit x then
-                                                  (* integer in decimal notation, or real constant *)
-                                                  readDecimalConstant (l, c, c+1, NLTUnsigned, digitToLargeInt x, xs)
-                                              else if isSymbolChar x then
-                                                  readSymbolicIdentifier (l, c, c, false, [], [x], xs)
-                                              else if Char.isSpace x then
-                                                  tokenizeOne (l, c+1, xs)
-                                              else
-                                                  ( emitError (l, c, "invalid character '" ^ Char.toString x ^ "'")
-                                                  ; tokenizeOne (l, c+1, xs) (* continue *)
-                                                  )
-            (* isAscii, isAlpha, isAlphaNum, isDigit, isSpace *)
-            and skipComment (l0, c0, l, c, n, #"*" :: #")" :: xs) = if n = 0 then
-                                                                        tokenizeOne (l, c+2, xs)
+                                                                     ( emitWarning (l, c + 2, "there should be a space between a numeric literal and an identifier")
+                                                                     ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c + 1)), state, l, c + 2, zr)
+                                                                     )
+                    | #"~" :: #"0" :: (zr as #"b" :: x :: xs) => if isBinDigit x then
+                                                                     readBinaryConstant (state, l, c, c + 4, NLTNegative, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
+                                                                 else
+                                                                     ( emitWarning (l, c + 2, "there should be a space between a numeric literal and an identifier")
+                                                                     ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c + 1)), state, l, c + 2, zr)
+                                                                     )
+                    | #"~" :: (rest0 as x :: xs) => if Char.isDigit x then
+                                                        readDecimalConstant (state, l, c, c + 2, NLTNegative, digitToLargeInt x, xs)
+                                                    else
+                                                        readSymbolicIdentifier (state, l, c, c, false, [], [#"~"], rest0)
+                    | #"0" :: (rest0 as #"w" :: #"x" :: x :: xs) => if Char.isHexDigit x then
+                                                                        readHexadecimalConstant (state, l, c, c + 3, NLTWord, hexDigitToLargeInt x, xs)
                                                                     else
-                                                                        skipComment (l0, c0, l, c+2, n - 1, xs)
-              | skipComment (l0, c0, l, c, n, #"(" :: #"*" :: xs) = skipComment (l0, c0, l, c+2, n + 1, xs)
-              | skipComment (l0, c0, l, c, n, #"\n" :: xs) = skipComment (l0, c0, l+1, 1, n, xs)
-              | skipComment (l0, c0, l, c, n, _ :: xs) = skipComment (l0, c0, l, c+1, n, xs)
-              | skipComment (l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
-                                                     ; NONE
-                                                     )
-            and readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, accum, nil)
+                                                                        ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
+                                                                        ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
+                                                                        )
+                    | #"0" :: (rest0 as #"w" :: #"b" :: x :: xs) => if isBinDigit x then
+                                                                        readBinaryConstant (state, l, c, c + 3, NLTWord, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
+                                                                    else
+                                                                        ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
+                                                                        ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
+                                                                        )
+                    | #"0" :: (rest0 as #"w" :: x :: xs) => if Char.isDigit x then
+                                                                readDecimalConstant (state, l, c, c + 3, NLTWord, digitToLargeInt x, xs)
+                                                            else
+                                                                ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
+                                                                ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
+                                                                )
+                    | #"0" :: (rest0 as #"x" :: x :: xs) => if Char.isHexDigit x then
+                                                                readHexadecimalConstant (state, l, c, c + 3, NLTUnsigned, hexDigitToLargeInt x, xs)
+                                                            else
+                                                                ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier ")
+                                                                ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
+                                                                )
+                    | #"0" :: (rest0 as #"b" :: x :: xs) => if isBinDigit x then
+                                                                readBinaryConstant (state, l, c, c + 3, NLTUnsigned, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
+                                                            else
+                                                                ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier ")
+                                                                ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
+                                                                )
+                    | #"\n" :: xs => tokenizeOne (state, l + 1, 1, xs)
+                    | x :: xs => if Char.isAlpha x orelse x = #"_" orelse x = #"'" then
+                                     readIdentifierOrKeyword (state, l, c, c, false, [], [x], xs)
+                                 else if Char.isDigit x then
+                                     (* integer in decimal notation, or real constant *)
+                                     readDecimalConstant (state, l, c, c + 1, NLTUnsigned, digitToLargeInt x, xs)
+                                 else if isSymbolChar x then
+                                     if state = SPECIAL_COMMENT andalso x = #"*" then
+                                         case xs of
+                                             #")" :: xss => SOME (Tokens.END_SPECIAL_COMMENT (pos (l, c), pos (l, c + 1)), NORMAL, l, c + 2, xss)
+                                           | _ => readSymbolicIdentifier (state, l, c, c, false, [], [x], xs)
+                                     else
+                                         readSymbolicIdentifier (state, l, c, c, false, [], [x], xs)
+                                 else if Char.isSpace x then
+                                     tokenizeOne (state, l, c + 1, xs)
+                                 else
+                                     ( emitError (l, c, "invalid character '" ^ Char.toString x ^ "'")
+                                     ; tokenizeOne (state, l, c + 1, xs) (* continue *)
+                                     )
+                  )
+            and skipComment (state, l0, c0, l, c, n, #"*" :: #")" :: xs) = if n = 0 then
+                                                                               tokenizeOne (state, l, c + 2, xs)
+                                                                           else
+                                                                               skipComment (state, l0, c0, l, c + 2, n - 1, xs)
+              | skipComment (state, l0, c0, l, c, n, #"(" :: #"*" :: xs) = skipComment (state, l0, c0, l, c + 2, n + 1, xs)
+              | skipComment (state, l0, c0, l, c, n, #"\n" :: xs) = skipComment (state, l0, c0, l + 1, 1, n, xs)
+              | skipComment (state, l0, c0, l, c, n, _ :: xs) = skipComment (state, l0, c0, l, c + 1, n, xs)
+              | skipComment (state, l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
+                                                            ; NONE
+                                                            )
+            and readIdentifierOrKeyword (state, l, c0, c1, startingDot, rstrids, accum, nil)
                 = let val name = String.implode (List.rev accum)
                       val (tok, ident) = recognizeKeyword (l, c1, name)
                   in if name = "_Prim" then
@@ -137,12 +150,12 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                      else
                          ()
                    ; case (rstrids, startingDot, ident) of
-                         ([], false, _) => SOME (tok, l, c1 + String.size name, nil)
+                         ([], false, _) => SOME (tok, state, l, c1 + String.size name, nil)
                        | ([], true, SOME (name, p2)) => let val p1 = pos (l, c0)
-                                                        in SOME (Tokens.DotAlnumIdent (name, p1, p2), l, c1 + String.size name, nil)
+                                                        in SOME (Tokens.DotAlnumIdent (name, p1, p2), state, l, c1 + String.size name, nil)
                                                         end
                        | ([], true, NONE) => ( emitError (l, c0, "stray dot")
-                                             ; SOME (tok, l, c1 + String.size name, nil)
+                                             ; SOME (tok, state, l, c1 + String.size name, nil)
                                              )
                        | (_, _, SOME (name, p2)) =>
                          ( if startingDot then
@@ -150,20 +163,20 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                            else
                                ()
                          ; case List.rev rstrids of
-                               strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, nil)
-                             | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, nil)
+                               strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), state, l, c1 + String.size name, nil)
+                             | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), state, l, c1 + String.size name, nil)
                          )
                        | (_, _, NONE) => ( if startingDot then
                                                emitError (l, c0, "stray dot")
                                            else
                                                ()
                                          ; emitError (l, c1, "invalid qualified name")
-                                         ; SOME (tok, l, c1 + String.size name, nil)
+                                         ; SOME (tok, state, l, c1 + String.size name, nil)
                                          )
                   end
-              | readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
+              | readIdentifierOrKeyword (state, l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
                 = if Char.isAlphaNum x orelse x = #"_" orelse x = #"'" then
-                      readIdentifierOrKeyword (l, c0, c1, startingDot, rstrids, x :: accum, xs)
+                      readIdentifierOrKeyword (state, l, c0, c1, startingDot, rstrids, x :: accum, xs)
                   else
                       let val name = String.implode (List.rev accum)
                           val (tok, ident) = recognizeKeyword (l, c1, name)
@@ -178,15 +191,15 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                       ()
                                                                   else
                                                                       emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
-                                                                ; SOME (Tokens.InfixIdent (([], name), p1, p2), l, c1 + String.size name + 1, xs)
+                                                                ; SOME (Tokens.InfixIdent (([], name), p1, p2), state, l, c1 + String.size name + 1, xs)
                                                                end
                                                            else
-                                                               SOME (tok, l, c1 + String.size name, input)
+                                                               SOME (tok, state, l, c1 + String.size name, input)
                                      in case xs of
                                             x' :: xs' => if Char.isAlpha x' then
-                                                             readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                             readIdentifierOrKeyword (state, l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
                                                          else if isSymbolChar x' then
-                                                             readSymbolicIdentifier (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                             readSymbolicIdentifier (state, l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
                                                          else
                                                              finalize ()
                                           | [] => finalize ()
@@ -200,13 +213,13 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                            emitError (l, c1, "_Prim not allowed here")
                                        else
                                            ()
-                                     ; SOME (tok, l, c1 + String.size name, input)
+                                     ; SOME (tok, state, l, c1 + String.size name, input)
                                      )
                                | NONE => ( if startingDot then
                                                emitError (l, c0, "stray dot")
                                            else
                                                ()
-                                         ; SOME (tok, l, c1 + String.size name, input)
+                                         ; SOME (tok, state, l, c1 + String.size name, input)
                                          )
                          else
                              ( if name = "_Prim" then
@@ -222,16 +235,16 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                    else
                                                                        emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
                                                                  ; case List.rev rstrids of
-                                                                       strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
-                                                                     | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + String.size name + 1, xs)
+                                                                       strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + String.size name + 1, xs)
+                                                                     | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + String.size name + 1, xs)
                                                                  )
                                                              else
-                                                                 SOME (tok, l, c1 + String.size name, input)
+                                                                 SOME (tok, state, l, c1 + String.size name, input)
                                        in case xs of
                                               x' :: xs' => if Char.isAlpha x' then
-                                                               readIdentifierOrKeyword (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                               readIdentifierOrKeyword (state, l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
                                                            else if isSymbolChar x' then
-                                                               readSymbolicIdentifier (l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
+                                                               readSymbolicIdentifier (state, l, c0, c1 + String.size name + 1, startingDot, name :: rstrids, [x'], xs')
                                                            else
                                                                finalize ()
                                             | [] => finalize ()
@@ -242,15 +255,15 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                          else
                                              ()
                                        ; case List.rev rstrids of
-                                             strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + String.size name, input)
-                                           | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), l, c1 + String.size name, input)
+                                             strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), state, l, c1 + String.size name, input)
+                                           | strids => SOME (Tokens.QualifiedAlnumIdent ((strids, name), pos (l, c0), p2), state, l, c1 + String.size name, input)
                                        )
                                  | NONE => ( if startingDot then
                                                  emitError (l, c0, "stray dot")
                                              else
                                                  ()
                                            ; emitError (l, c1, "invalid qualified name")
-                                           ; SOME (tok, l, c1 + String.size name, input)
+                                           ; SOME (tok, state, l, c1 + String.size name, input)
                                            )
                              )
                       end
@@ -330,17 +343,17 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                     val p2 = pos(l,c + String.size name - 1)
                                                 in (tok (pos(l, c), p2), Option.map (fn name => (name, p2)) ident)
                                                 end
-            and readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, accum, nil) = let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
-                                                                                       in if startingDot then
-                                                                                              case ident of
-                                                                                                  SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), l, c1 + length accum, nil)
-                                                                                                | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, nil) )
-                                                                                          else
-                                                                                              SOME (tok, l, c1 + length accum, nil)
-                                                                                       end
-              | readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
+            and readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, accum, nil) = let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                                                                                              in if startingDot then
+                                                                                                     case ident of
+                                                                                                         SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), state, l, c1 + length accum, nil)
+                                                                                                       | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, nil) )
+                                                                                                 else
+                                                                                                     SOME (tok, state, l, c1 + length accum, nil)
+                                                                                              end
+              | readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
                 = if isSymbolChar x then
-                      readSymbolicIdentifier (l, c0, c1, startingDot, rstrids, x :: accum, xs)
+                      readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, x :: accum, xs)
                   else if startingDot andalso x = #"." then
                       let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
                       in if List.null rstrids then
@@ -349,9 +362,9 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                           ()
                                                       else
                                                           emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
-                                                    ; SOME (Tokens.InfixIdent (([], name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                    ; SOME (Tokens.InfixIdent (([], name), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
                                                     )
-                               | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, input) )
+                               | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, input) )
                          else
                              case ident of
                                  SOME (name, p2) => ( if #allowInfixingDot opts then
@@ -359,12 +372,12 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                       else
                                                           emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
                                                     ; case List.rev rstrids of
-                                                          strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
-                                                        | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), l, c1 + length accum, xs)
+                                                          strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (([], String.concatWith "." (strids @ [name])), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
+                                                        | strids => SOME (Tokens.InfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
                                                     )
                                | NONE => ( emitError (l, c0, "stray dot")
                                          ; emitError (l, c1, "invalid qualified name")
-                                         ; SOME (tok, l, c1 + length accum, input)
+                                         ; SOME (tok, state, l, c1 + length accum, input)
                                          )
                       end
                   else
@@ -372,10 +385,10 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                       in if List.null rstrids then
                              if startingDot then
                                  case ident of
-                                     SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), l, c1 + length accum, input)
-                                   | _ => ( emitError (l, c0, "stray dot"); SOME (tok, l, c1 + length accum, input) )
+                                     SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), state, l, c1 + length accum, input)
+                                   | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, input) )
                              else
-                                 SOME (tok, l, c1 + length accum, input)
+                                 SOME (tok, state, l, c1 + length accum, input)
                          else
                              ( if startingDot then
                                    emitError (l, c0, "stray dot")
@@ -383,11 +396,11 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                    ()
                              ; case ident of
                                    SOME (name, p2) => (case List.rev rstrids of
-                                                           strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), l, c1 + length accum, input)
-                                                         | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), l, c1 + length accum, input)
+                                                           strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), state, l, c1 + length accum, input)
+                                                         | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), state, l, c1 + length accum, input)
                                                       )
                                  | NONE => ( emitError (l, c1, "invalid qualified name")
-                                           ; SOME (tok, l, c1 + length accum, input)
+                                           ; SOME (tok, state, l, c1 + length accum, input)
                                            )
                              )
                       end
@@ -443,7 +456,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                  else
                                                                      NONE
               | skipUnderscoresAndReadBinaryDigit (c, []) = NONE
-            and readDecimalConstant (l1, c1, c', numericLitType : NumericLitType, x0 : IntInf.int, xs : char list)
+            and readDecimalConstant (state, l1, c1, c', numericLitType : NumericLitType, x0 : IntInf.int, xs : char list)
                 (* x0 is a decimal digit *)
                 = let fun mkIntConst (anyUnderscores, p2, a) = if numericLitType = NLTWord then
                                                                    Tokens.WordConst (a, pos (l1, c1), p2)
@@ -466,7 +479,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                 parseFracPart (l, c+2, a, [digitToInt x2], rest1)
                             else
                                 ( emitWarning (l, c, "there should be a space between a numeric literal and a dot")
-                                ; SOME (mkIntConst (anyUnderscores, pos (l, c - 1), a), l, c, rest0)
+                                ; SOME (mkIntConst (anyUnderscores, pos (l, c - 1), a), state, l, c, rest0)
                                 )
                         | parseIntPart (anyUnderscores, l, c, a, rest0 as x1 :: #"~" :: x2 :: rest1)
                           = if numericLitType <> NLTWord andalso (x1 = #"e" orelse x1 = #"E") andalso Char.isDigit x2 then
@@ -491,7 +504,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
                                            else
                                                ()
-                                         ; SOME (mkIntConst (anyUnderscores, pos (l, c - 1), a), l, c, rest0)
+                                         ; SOME (mkIntConst (anyUnderscores, pos (l, c - 1), a), state, l, c, rest0)
                                          )
                             )
                       and parseFracPart (l, c, intPart : IntInf.int, revFracPart : int list, rest0)
@@ -505,42 +518,42 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                                              parseExpPart (l, c + 3, intPart, fracPart, ~1, digitToInt y, ys)
                                                                                          else
                                                                                              ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
-                                                                                             ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                                                             ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                                                                              )
                                                                     | #"-" :: y :: _ => ( if Char.isDigit y then
                                                                                               emitWarning (l, c + 1, "use tilde (~) for negative sign")
                                                                                           else
                                                                                               ()
                                                                                         ; emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
-                                                                                        ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                                                        ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                                                                         )
                                                                     | y :: ys => if Char.isDigit y then
                                                                                      parseExpPart (l, c+2, intPart, fracPart, 1, digitToInt y, ys)
                                                                                  else
                                                                                      ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
-                                                                                     ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                                                     ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                                                                      )
                                                                     | [] => ( emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
-                                                                            ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                                            ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                                                             )
                                                               else
                                                                   ( if Char.isAlpha x then
                                                                         emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
                                                                     else
                                                                         ()
-                                                                  ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                                                  ; SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                                                   )
-                                              | [] => SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), l, c, rest0)
+                                              | [] => SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, 0), state, l, c, rest0)
                                          end
                             )
                       and parseExpPart (l, c, intPart : IntInf.int, fracPart : int vector, expSign : int, expPart : int, rest0)
                           = (case skipUnderscoresAndReadDigit (false, c, rest0) of
                                  SOME (_, c', x, rest1) => parseExpPart (l, c', intPart, fracPart, expSign, expPart * 10 + digitToInt x, rest1)
-                               | NONE => SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, expSign * expPart), l, c, rest0)
+                               | NONE => SOME (mkRealConst (pos (l, c - 1), intPart, fracPart, expSign * expPart), state, l, c, rest0)
                             )
                   in parseIntPart (false, l1, c', x0, xs)
                   end
-            and readHexadecimalConstant (l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
+            and readHexadecimalConstant (state, l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
                 (* x is a hexadecimal digit *)
                 (*
                  * <hexadecimal-integer-constant> ::= '~'? '0' 'w'? 'x' <hexadecimal-digit-sequence>
@@ -586,8 +599,8 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                            )
                                               | _ => ()
                                           ; case (optFracPart, optExpPart) of
-                                                (NONE, NONE) => SOME (mkIntConst (pos (l, c'' - 1), a), l, c'', rest2)
-                                              | (_, _) => SOME (mkRealConst (pos (l, c'' - 1), a, Option.getOpt (optFracPart, vector []), Option.getOpt (optExpPart, 0)), l, c'', rest2) (* [extension] hexadecimal floating-point constant *)
+                                                (NONE, NONE) => SOME (mkIntConst (pos (l, c'' - 1), a), state, l, c'', rest2)
+                                              | (_, _) => SOME (mkRealConst (pos (l, c'' - 1), a, Option.getOpt (optFracPart, vector []), Option.getOpt (optExpPart, 0)), state, l, c'', rest2) (* [extension] hexadecimal floating-point constant *)
                                          end
                             )
                       and parseFracPart (l, c, #"." :: (xs as (x :: xss)))
@@ -618,7 +631,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                 )
                   in parseIntPart (l1, c', x, xs)
                   end
-            and readBinaryConstant (l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
+            and readBinaryConstant (state, l1, c1, c', numericLitType : NumericLitType, x : IntInf.int, xs : char list)
                 (* x is a binary digit *)
                 = let fun mkIntConst (p2, a) = if numericLitType = NLTWord then
                                                    Tokens.WordConst (a, pos (l1, c1), p2)
@@ -634,7 +647,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                              emitWarning (l, c, "there should be a space between a numeric literal and an identifier")
                                                                          else
                                                                              ()
-                                                                       ; SOME (mkIntConst (pos (l, c - 1), a), l, c, rest0)
+                                                                       ; SOME (mkIntConst (pos (l, c - 1), a), state, l, c, rest0)
                                                                        )
                                                           )
                   in parseIntPart (l1, c', x, xs)
@@ -754,10 +767,10 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
                                                                               ( emitError (l, c, "invalid formatting character in string literal")
                                                                               ; skipFormattingCharacters (l0, c0, l, c+1, accum, xs)
                                                                               )
-            fun tokenizeAll (l, c, xs, revAcc) = case tokenizeOne (l, c, xs) of
+            fun tokenizeAll (state, l, c, xs, revAcc) = case tokenizeOne (state, l, c, xs) of
                                                      NONE => List.rev revAcc
-                                                   | SOME (t, l', c', rest) => tokenizeAll (l', c', rest, t :: revAcc)
-        in tokenizeAll (1, 1, String.explode s, [])
+                                                   | SOME (t, state', l', c', rest) => tokenizeAll (state', l', c', rest, t :: revAcc)
+        in tokenizeAll (NORMAL, 1, 1, String.explode s, [])
         end
         fun readAll input = let val x = input 1024
                             in if x = "" then
