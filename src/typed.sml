@@ -200,8 +200,8 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | ListExp of SourcePos.span * Exp vector * Ty
              | VectorExp of SourcePos.span * Exp vector * Ty
              | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
-     and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
-             | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
+     and Dec = ValDec of SourcePos.span * (VId * Ty) list * ValBind list (* non-recursive *)
+             | RecValDec of SourcePos.span * (VId * Ty) list * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
