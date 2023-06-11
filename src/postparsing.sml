@@ -331,7 +331,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
       in Syntax.LetInExp( span
                         , [ Syntax.RecValDec( span
                                             , [] (* tyvars *)
-                                            , [] (* signature *)
+                                            , [] (* description *)
                                             , [Syntax.PatBind( span
                                                              , Syntax.VarPat(span, fnName)
                                                              , Syntax.FnExp( span
@@ -341,7 +341,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                                                      , Syntax.LetInExp( span
                                                                                                                       , [ Syntax.ValDec( span
                                                                                                                                        , [] (* tyvars *)
-                                                                                                                                       , [] (* signature *)
+                                                                                                                                       , [] (* description *)
                                                                                                                                        , [ Syntax.PatBind(span, Syntax.WildcardPat span, doExp(ctx, env, e2)) ]
                                                                                                                                        )
                                                                                                                         ]
@@ -376,9 +376,9 @@ and doDecs(ctx, env, nil) = (emptyEnv, nil)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
                                     in (mergeEnv(env', env''), dec' @ decs')
                                     end
-and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, spec, valbind)) = (emptyEnv, [Syntax.ValDec (span, tyvars, spec, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
-  | doDec (ctx, env, UnfixedSyntax.RecValDec (span, tyvars, spec, valbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, spec, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
-  | doDec (ctx, env, UnfixedSyntax.FValDec (span, tyvars, spec, fvalbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, spec, List.map (fn fvb => doFValBind (ctx, env, fvb)) fvalbind)])
+and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.ValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
+  | doDec (ctx, env, UnfixedSyntax.RecValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
+  | doDec (ctx, env, UnfixedSyntax.FValDec (span, tyvars, desc, fvalbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn fvb => doFValBind (ctx, env, fvb)) fvalbind)])
   | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
   | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds, typbinds))
     = let fun doConBinds (conbinds : Syntax.ConBind list) : (unit Syntax.IdStatus) Syntax.VIdMap.map
@@ -842,25 +842,23 @@ local
 in
 val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds
-val unguardedTyVarsInValSpec : TyVarSet.set * (VId * Ty) list -> TyVarSet.set = fn (bound, spec) => List.foldl (fn ((_, ty), set) => TyVarSet.union (set, freeTyVarsInTy (bound, ty))) TyVarSet.empty spec
 end (* local *)
 
 (* The Definition 4.6 *)
 (* scopeTyVarsInDec: TyVarSet.set * Dec -> Dec *)
 local
-    fun doDec (bound, ValDec (span, expbound, spec, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
+    fun scopeTyVarsInValDesc bound (vid, _, ty) = (vid, TyVarSet.listItems (freeTyVarsInTy (bound, ty)), ty)
+    fun doDec (bound, ValDec (span, expbound, desc, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
                                                                     val unguarded = unguardedTyVarsInValBind (bound', valbind)
-                                                                    val unguarded2 = unguardedTyVarsInValSpec (bound', spec)
-                                                                    val expbound' = expbound @ TyVarSet.listItems unguarded2 @ TyVarSet.listItems unguarded
+                                                                    val expbound' = expbound @ TyVarSet.listItems unguarded
                                                                     val bound'' = TyVarSet.union (bound', unguarded)
-                                                                in ValDec (span, expbound', spec, List.map (fn vb => doValBind (bound'', vb)) valbind)
+                                                                in ValDec (span, expbound', List.map (scopeTyVarsInValDesc bound'') desc, List.map (fn vb => doValBind (bound'', vb)) valbind)
                                                                 end
-      | doDec (bound, RecValDec (span, expbound, spec, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
+      | doDec (bound, RecValDec (span, expbound, desc, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
                                                                        val unguarded = unguardedTyVarsInValBind (bound', valbind)
-                                                                       val unguarded2 = unguardedTyVarsInValSpec (bound', spec)
-                                                                       val expbound' = expbound @ TyVarSet.listItems unguarded2 @ TyVarSet.listItems unguarded
+                                                                       val expbound' = expbound @ TyVarSet.listItems unguarded
                                                                        val bound'' = TyVarSet.union (bound', unguarded)
-                                                                   in RecValDec (span, expbound', spec, List.map (fn vb => doValBind (bound'', vb)) valbind)
+                                                                   in RecValDec (span, expbound', List.map (scopeTyVarsInValDesc bound'') desc, List.map (fn vb => doValBind (bound'', vb)) valbind)
                                                                    end
       | doDec(bound, dec as TypeDec _) = dec
       | doDec(bound, dec as DatatypeDec _) = dec
@@ -998,14 +996,15 @@ fun doPat ctx (S.WildcardPat _) = ()
                                               ; Vector.app (doPat ctx) pats
                                               )
 
-fun doValSpec (ctx, env, spec : (S.VId * S.Ty) list) : unit
-    = ignore (List.foldl (fn ((vid, ty), set) => ( doTy ty
-                                                 ; if S.VIdSet.member (set, vid) then
-                                                       emitError (ctx, [span], "duplicate identifier in signature comment")
-                                                   else
-                                                       ()
-                                                 ; S.VIdSet.add (set, vid)
-                                                 )
+fun doValSpec (ctx, env, spec : (S.VId * S.TyVar list * S.Ty) list) : unit
+    = ignore (List.foldl (fn ((vid, tyvars, ty), set) =>
+                             ( doTy ctx ty
+                             ; if S.VIdSet.member (set, vid) then
+                                   emitError (ctx, [], "duplicate identifier in signature comment")
+                               else
+                                   ()
+                             ; S.VIdSet.add (set, vid)
+                             )
                          ) S.VIdSet.empty spec)
 
 (* doExp : context * S.TyVarSet -> S.Exp -> unit *)
@@ -1039,22 +1038,22 @@ fun doExp (ctx : context, env : S.TyVarSet.set) (S.SConExp span) = ()
                                                   )
   | doExp (ctx, env) (S.PrimExp (span, primOp, tyargs, args)) = ( Vector.app (doTy ctx) tyargs ; Vector.app (doExp (ctx, env)) args )
 and doMatches (ctx, env) matches = List.app (fn (pat, exp) => ( doPat ctx pat ; doExp (ctx, env) exp) ) matches
-and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, spec, valbinds))
+and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc, valbinds))
     = let val tyvars = S.TyVarSet.fromList tyvarseq
       in if S.TyVarSet.disjoint (env, S.TyVarSet.fromList tyvarseq) then
              ()
          else
              emitError (ctx, [span], "in a nested value bindings, type variables must be disjoint")
-       ; doValSpec (ctx, env, spec)
+       ; doValSpec (ctx, env, desc)
        ; doValBinds (ctx, S.TyVarSet.union (env, tyvars)) valbinds
       end
-  | doDec (ctx, env) (S.RecValDec (span, tyvarseq, spec, valbinds))
+  | doDec (ctx, env) (S.RecValDec (span, tyvarseq, desc, valbinds))
     = let val tyvars = S.TyVarSet.fromList tyvarseq
       in if S.TyVarSet.disjoint (env, S.TyVarSet.fromList tyvarseq) then
              ()
          else
              emitError (ctx, [span], "in a nested value bindings, type variables must be disjoint")
-       ; doValSpec (ctx, env, spec)
+       ; doValSpec (ctx, env, desc)
        ; doValBinds (ctx, S.TyVarSet.union (env, tyvars)) valbinds
       end
   | doDec (ctx, env) (S.TypeDec (span, typbinds))

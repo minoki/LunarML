@@ -18,7 +18,7 @@ type options = { allowExtendedNumConsts : bool
                , allowBindEqual : bool
                , allowOverload : bool
                , allowInfixingDot : bool
-               , allowSignatureComment : bool
+               , allowValDescInComments : bool
                , nonexhaustiveBind : ignore_warn_error
                , nonexhaustiveMatch : ignore_warn_error
                , nonexhaustiveRaise : ignore_warn_error
@@ -43,7 +43,7 @@ fun setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowBindEqual" = SOME set.allowBindEqual
   | setByName "allowOverload" = SOME set.allowOverload
   | setByName "allowInfixingDot" = SOME set.allowInfixingDot
-  | setByName "allowSignatureComment" = SOME set.allowSignatureComment
+  | setByName "allowValDescInComments" = SOME set.allowValDescInComments
   | setByName (_ : string) : (bool -> options -> options) option = NONE
 val default : options = { allowExtendedNumConsts = true
                         , allowExtendedTextConsts = true
@@ -62,7 +62,7 @@ val default : options = { allowExtendedNumConsts = true
                         , allowBindEqual = false
                         , allowOverload = false
                         , allowInfixingDot = false
-                        , allowSignatureComment = false
+                        , allowValDescInComments = false
                         , nonexhaustiveBind = WARN
                         , nonexhaustiveMatch = WARN
                         , nonexhaustiveRaise = IGNORE

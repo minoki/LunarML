@@ -1284,7 +1284,7 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
       in (resultType, T.PrimExp (span, primOp, vector tyargs, args))
       end
 (* typeCheckDec : InferenceContext * Env * S.Dec -> (* created environment *) Env * T.Dec list *)
-and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, valbinds))
+and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
           val valbinds = let val env = { valMap = #valMap env
                                        , tyConMap = #tyConMap env
@@ -1416,9 +1416,34 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                 end
           val (valbinds, valEnv) = List.foldr generalize ([], Syntax.VIdMap.empty) valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc) => (tysc, Syntax.ValueVariable, T.MkShortVId vid)) valEnv)
-      in (env', [T.ValDec (span, valbinds)])
+          val descs = List.mapPartial (fn (vid, tyvarseq, ty) =>
+                                          case S.VIdMap.find (valEnv, vid) of
+                                              SOME (vid', _) =>
+                                              let val boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
+                                                  val env = { valMap = #valMap env
+                                                            , tyConMap = #tyConMap env
+                                                            , tyNameMap = #tyNameMap env
+                                                            , strMap = #strMap env
+                                                            , sigMap = #sigMap env
+                                                            , funMap = #funMap env
+                                                            , boundTyVars = boundTyVars
+                                                            }
+                                                  val ty = evalTy (#context ctx, env, ty)
+                                                  fun doTyVar tv = case S.TyVarMap.find (boundTyVars, tv) of
+                                                                       SOME tv => if T.tyVarAdmitsEquality tv then
+                                                                                      (tv, [T.IsEqType])
+                                                                                  else
+                                                                                      (tv, [])
+                                                                     | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
+                                              in SOME (T.ValDescDec (span, vid', T.TypeScheme (List.map doTyVar tyvarseq, ty)))
+                                              end
+                                            | NONE => ( emitTypeError (ctx, [span], "type description for undefined variable")
+                                                      ; NONE
+                                                      )
+                                 ) descs
+      in (env', T.ValDec (span, valbinds) :: descs)
       end
-  | typeCheckDec(ctx, env, S.RecValDec(span, tyvarseq, valbinds))
+  | typeCheckDec (ctx, env, S.RecValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
           val valbinds' : (SourcePos.span * (T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat) * S.Exp) list
               = List.map (fn S.PatBind (span, pat, exp) => (span, typeCheckPat (ctx', env, pat, NONE), exp)) valbinds
@@ -1517,7 +1542,32 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, v
                 end
           val valbinds' = List.map fixRecursion valbinds
           val env' = envWithValEnv (Syntax.VIdMap.map (fn (vid, tysc, _) => (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)) valEnv)
-      in (env', [T.RecValDec (span, valbinds')])
+          val descs = List.mapPartial (fn (vid, tyvarseq, ty) =>
+                                          case S.VIdMap.find (valEnv, vid) of
+                                              SOME (vid', _, _) =>
+                                              let val boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
+                                                  val env = { valMap = #valMap env
+                                                            , tyConMap = #tyConMap env
+                                                            , tyNameMap = #tyNameMap env
+                                                            , strMap = #strMap env
+                                                            , sigMap = #sigMap env
+                                                            , funMap = #funMap env
+                                                            , boundTyVars = boundTyVars
+                                                            }
+                                                  val ty = evalTy (#context ctx, env, ty)
+                                                  fun doTyVar tv = case S.TyVarMap.find (boundTyVars, tv) of
+                                                                       SOME tv => if T.tyVarAdmitsEquality tv then
+                                                                                      (tv, [T.IsEqType])
+                                                                                  else
+                                                                                      (tv, [])
+                                                                     | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
+                                              in SOME (T.ValDescDec (span, vid', T.TypeScheme (List.map doTyVar tyvarseq, ty)))
+                                              end
+                                            | NONE=> ( emitTypeError (ctx, [span], "type description for undefined variable")
+                                                     ; NONE
+                                                     )
+                                      ) descs
+      in (env', T.RecValDec (span, valbinds') :: descs)
       end
   | typeCheckDec(ctx, env, S.TypeDec(span, typbinds))
     = let fun doTypBind (S.TypBind(span, tyvars, tycon, ty), (tyConEnv, typbinds))
@@ -2162,6 +2212,9 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                     ; #goExp (checkTyScope (ctx, T.TyVarSet.addList (tvset, typarams), tynameset)) exp
                                                                     ; tynameset
                                                                     )
+            | goDec (T.ValDescDec (span, vid, T.TypeScheme (tyvars, ty))) = ( #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars), tynameset)) ty
+                                                                            ; tynameset
+                                                                            )
           and goDecs decs = List.foldl (fn (dec, tynameset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                in goDec dec
                                                                end)

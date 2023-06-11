@@ -290,8 +290,8 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
              | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
-     and Dec = ValDec of SourcePos.span * TyVar list * (VId * Ty) list * ValBind list (* non-recursive *)
-             | RecValDec of SourcePos.span * TyVar list * (VId * Ty) list * ValBind list (* recursive (val rec) *)
+     and Dec = ValDec of SourcePos.span * TyVar list * (VId * TyVar list * Ty) list * ValBind list (* non-recursive *)
+             | RecValDec of SourcePos.span * TyVar list * (VId * TyVar list * Ty) list * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list
              | DatatypeDec of SourcePos.span * DatBind list * TypBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
