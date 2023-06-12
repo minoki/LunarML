@@ -86,6 +86,54 @@ Examples:
 fun a .foo. b = print (a ^ ", " ^ b ^ "\n"); (* equivalent to fun foo (a, b) = ... *)
 ```
 
+## Value description in comments
+
+To use this extension, `allowValDescInComments` annotation in MLB file is needed:
+
+```
+ann "allowValDescInComments true" in
+...
+end
+```
+
+With this extension, comments that start with `(*!` will be parsed and the compatibility with the following value declaration (`val`, `fun`) is checked against.
+Type mismatch is reported as warning.
+
+The content in the special comment does not affect type inference.
+
+Good examples:
+
+```sml
+(*! val fact : int -> int *)
+fun fact 0 = 1
+  | fact n = n * fact (n - 1);
+
+(*! val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
+fun curry f x y = f (x, y);
+```
+
+Bad examples:
+
+```sml
+(*! val fact : IntInf.int -> IntInf.int *)
+fun fact 0 = 1
+  | fact n = n * fact (n - 1);
+
+(*! val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
+fun curry f x y = f (y, x);
+```
+
+Syntax:
+
+```
+<valspec> ::= 'val' <valdesc>
+<valspecs> ::= <valspec> <valspecs>
+             | <valspec>
+<valdescincomment> ::= '(*!' <valspecs> '*)'
+<dec> ::= <valdescincomment> 'val' ...
+        | <valdescincomment> 'fun' ...
+```
+
 ## Other extensions planned
 
 * [ ] Packaged modules (like in Alice ML or HaMLet S)

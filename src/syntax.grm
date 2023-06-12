@@ -130,9 +130,10 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | HeadExp_NoMatch of UnfixedSyntax.Exp
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
        | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
-       | ValDescInComment of (Syntax.VId * Syntax.Ty) list
-       | ValDescInCommentVal of (Syntax.VId * Syntax.Ty) list
-       | ValDescInCommentVals of (Syntax.VId * Syntax.Ty) list
+       | ValDescInComment of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDescInCommentVal of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDescInCommentVals of (SourcePos.span * Syntax.VId * Syntax.Ty) list
+       | ValDesc' of (SourcePos.span * Syntax.VId * Syntax.Ty) list
        | Dec_NoLocal of UnfixedSyntax.Dec
        | OverloadSpec of string * UnfixedSyntax.Exp
        | OverloadSpecs of (string * UnfixedSyntax.Exp) list
@@ -474,10 +475,13 @@ MatchClauses : Pat DARROW Exp_NoMatch BAR MatchClauses ((Pat, Exp_NoMatch) :: Ma
 ValDescInComment : START_VAL_DESC_COMMENT ValDescInCommentVal ValDescInCommentVals END_SPECIAL_COMMENT ValDescInComment (ValDescInCommentVal @ ValDescInCommentVals @ ValDescInComment)
                  | ([])
 
-ValDescInCommentVal : VAL ValDesc (ValDesc)
+ValDescInCommentVal : VAL ValDesc' (ValDesc')
 
 ValDescInCommentVals : ValDescInCommentVal ValDescInCommentVals (ValDescInCommentVal @ ValDescInCommentVals)
                      | ([])
+
+ValDesc' : VId COLON Ty ((span (VIdleft, Tyright), VId, Ty) :: nil)
+         | VId COLON Ty AND ValDesc' ((span (VIdleft, Tyright), VId, Ty) :: ValDesc')
 
 (* a declaration, excluding local-in-end *)
 Dec_NoLocal : ValDescInComment VAL ValBind (UnfixedSyntax.ValDec (span (VALleft, ValBindright), [], ValDescInComment, ValBind)) (* value declaration (non-recursive) *)

@@ -376,9 +376,9 @@ and doDecs(ctx, env, nil) = (emptyEnv, nil)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
                                     in (mergeEnv(env', env''), dec' @ decs')
                                     end
-and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.ValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
-  | doDec (ctx, env, UnfixedSyntax.RecValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
-  | doDec (ctx, env, UnfixedSyntax.FValDec (span, tyvars, desc, fvalbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (vid, ty) => (vid, [], ty)) desc, List.map (fn fvb => doFValBind (ctx, env, fvb)) fvalbind)])
+and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.ValDec (span, tyvars, List.map (fn (span, vid, ty) => (span, vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
+  | doDec (ctx, env, UnfixedSyntax.RecValDec (span, tyvars, desc, valbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (span, vid, ty) => (span, vid, [], ty)) desc, List.map (fn vb => doValBind (ctx, env, vb)) valbind)])
+  | doDec (ctx, env, UnfixedSyntax.FValDec (span, tyvars, desc, fvalbind)) = (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (span, vid, ty) => (span, vid, [], ty)) desc, List.map (fn fvb => doFValBind (ctx, env, fvb)) fvalbind)])
   | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
   | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds, typbinds))
     = let fun doConBinds (conbinds : Syntax.ConBind list) : (unit Syntax.IdStatus) Syntax.VIdMap.map
@@ -847,7 +847,7 @@ end (* local *)
 (* The Definition 4.6 *)
 (* scopeTyVarsInDec: TyVarSet.set * Dec -> Dec *)
 local
-    fun scopeTyVarsInValDesc bound (vid, _, ty) = (vid, TyVarSet.listItems (freeTyVarsInTy (bound, ty)), ty)
+    fun scopeTyVarsInValDesc bound (span, vid, _, ty) = (span, vid, TyVarSet.listItems (freeTyVarsInTy (bound, ty)), ty)
     fun doDec (bound, ValDec (span, expbound, desc, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
                                                                     val unguarded = unguardedTyVarsInValBind (bound', valbind)
                                                                     val expbound' = expbound @ TyVarSet.listItems unguarded
@@ -996,11 +996,11 @@ fun doPat ctx (S.WildcardPat _) = ()
                                               ; Vector.app (doPat ctx) pats
                                               )
 
-fun doValSpec (ctx, env, spec : (S.VId * S.TyVar list * S.Ty) list) : unit
-    = ignore (List.foldl (fn ((vid, tyvars, ty), set) =>
+fun doValSpec (ctx, env, spec : (SourcePos.span * S.VId * S.TyVar list * S.Ty) list) : unit
+    = ignore (List.foldl (fn ((span, vid, tyvars, ty), set) =>
                              ( doTy ctx ty
                              ; if S.VIdSet.member (set, vid) then
-                                   emitError (ctx, [], "duplicate identifier in signature comment")
+                                   emitError (ctx, [span], "duplicate identifier in signature comment")
                                else
                                    ()
                              ; S.VIdSet.add (set, vid)

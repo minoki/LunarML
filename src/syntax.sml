@@ -290,8 +290,8 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
              | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
-     and Dec = ValDec of SourcePos.span * TyVar list * (VId * TyVar list * Ty) list * ValBind list (* non-recursive *)
-             | RecValDec of SourcePos.span * TyVar list * (VId * TyVar list * Ty) list * ValBind list (* recursive (val rec) *)
+     and Dec = ValDec of SourcePos.span * TyVar list * (SourcePos.span * VId * TyVar list * Ty) list * ValBind list (* non-recursive *)
+             | RecValDec of SourcePos.span * TyVar list * (SourcePos.span * VId * TyVar list * Ty) list * ValBind list (* recursive (val rec) *)
              | TypeDec of SourcePos.span * TypBind list
              | DatatypeDec of SourcePos.span * DatBind list * TypBind list
              | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
@@ -507,9 +507,9 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
              | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
-     and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (Syntax.VId * Syntax.Ty) list * ValBind list
-             | RecValDec of SourcePos.span * Syntax.TyVar list * (Syntax.VId * Syntax.Ty) list * ValBind list
-             | FValDec of SourcePos.span * Syntax.TyVar list * (Syntax.VId * Syntax.Ty) list * FValBind list
+     and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
+             | RecValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
+             | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * FValBind list
              | TypeDec of SourcePos.span * Syntax.TypBind list
              | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
              | DatatypeRepDec of SourcePos.span * Syntax.TyCon * Syntax.LongTyCon
