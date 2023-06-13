@@ -307,7 +307,13 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
-(* doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set *)
+(*!
+val doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set
+and doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp
+and doIgnoredExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp list
+and doDec : TypedSyntax.VIdSet.set * F.Dec -> TypedSyntax.VIdSet.set * F.Dec list
+and doDecs : TypedSyntax.VIdSet.set * F.Dec list -> TypedSyntax.VIdSet.set * F.Dec list
+ *)
 fun doPat (F.WildcardPat _) acc = acc
   | doPat (F.SConPat { sourceSpan = _, scon = _, equality, cookedValue }) acc = #1 (doExp equality (#1 (doExp cookedValue acc)))
   | doPat (F.VarPat _) acc = acc
@@ -318,7 +324,6 @@ fun doPat (F.WildcardPat _) acc = acc
   | doPat (F.ExnConPat { sourceSpan = _, tagPath, payload = SOME (payloadTy, payloadPat) }) acc = doPat payloadPat (#1 (doExp tagPath acc))
   | doPat (F.LayeredPat (_, vid, ty, innerPat)) acc = doPat innerPat acc
   | doPat (F.VectorPat (_, pats, ellipsis, elemTy)) acc = Vector.foldl (fn (pat, acc) => doPat pat acc) acc pats
-(* doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp *)
 and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.set * F.Exp
     = let val (acc, args') = List.foldr (fn (x, (acc, xs)) => let val (acc, x) = doExp x acc in (acc, x :: xs) end) (acc, []) args
       in (acc, F.PrimExp (primOp, tyargs, args'))
@@ -371,7 +376,6 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
 and doIgnoredExpAsExp exp acc = let val (used, exps) = doIgnoredExp exp acc
                                 in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
                                 end
-(* doIgnoredExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp list *)
 and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
     = if isDiscardablePrimOp primOp then
           List.foldr (fn (x, (acc, xs)) => let val (acc, ys) = doIgnoredExp x acc in (acc, ys @ xs) end) (acc, []) args
@@ -432,7 +436,6 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                                         F.RecordExp [] => (used, [])
                                                                       | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
                                                                  end
-(* doDec : TypedSyntax.VIdSet.set * F.Dec -> TypedSyntax.VIdSet.set * F.Dec list *)
 and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyntax.VIdSet.set * F.Dec list
     = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
@@ -492,7 +495,6 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
                                                              end
                                             )
                                          end
-(* doDecs : TypedSyntax.VIdSet.set * F.Dec list -> TypedSyntax.VIdSet.set * F.Dec list *)
 and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
                                                                 end) (used, []) decs

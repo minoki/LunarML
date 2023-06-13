@@ -375,7 +375,7 @@ fun nonMatching ([], n) : (Example.example list) option = SOME (List.tabulate (n
                              )
              )
       end
-(* useful : (* matrix *) F.Pat list list * (* vector *) F.Pat list -> bool *)
+(*! val useful : (* matrix *) F.Pat list list * (* vector *) F.Pat list -> bool *)
 fun useful ([], _) = true
   | useful (_ (* should be ([] :: _) *), []) = false
   | useful (matrix, q :: qs) = let fun wildcard () = let val firsts = List.map List.hd matrix

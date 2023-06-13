@@ -133,7 +133,7 @@ fun EqualityType t = FnType (PairType (t, t), TyVar (tyNameToTyVar (Typing.primT
 fun arityToKind 0 = TypeKind
   | arityToKind n = ArrowKind (TypeKind, arityToKind (n - 1))
 
-(* occurCheck : TyVar -> Ty -> bool *)
+(*! val occurCheck : TyVar -> Ty -> bool *)
 fun occurCheck tv =
     let fun check (TyVar tv') = TypedSyntax.eqUTyVar (tv, tv')
           | check (RecordType xs) = Syntax.LabelMap.exists check xs
@@ -154,7 +154,7 @@ fun occurCheck tv =
     in check
     end
 
-(* substituteTy : TyVar * Ty -> Ty -> Ty *)
+(*! val substituteTy : TyVar * Ty -> Ty -> Ty *)
 fun substituteTy (tv, replacement) =
     let fun go (ty as TyVar tv') = if TypedSyntax.eqUTyVar (tv, tv') then
                                        replacement
@@ -193,7 +193,7 @@ fun substituteTy (tv, replacement) =
     in go
     end
 
-(* substTy : Ty TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Decs -> Decs } *)
+(*! val substTy : Ty TypedSyntax.TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list } *)
 fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
     let fun doTy (ty as TyVar tv) = (case TypedSyntax.TyVarMap.find (subst, tv) of
                                          NONE => ty
@@ -613,11 +613,6 @@ fun freshVId(ctx : Context, name: string) = let val n = !(#nextVId ctx)
 
 local structure T = TypedSyntax
       structure F = FSyntax
-      (* toFTy : Context * Env * TypedSyntax.Ty -> FSyntax.Ty *)
-      (* toFPat : Context * Env * TypedSyntax.Pat -> unit TypedSyntax.VIdMap.map * FSyntax.Pat *)
-      (* toFExp : Context * Env * TypedSyntax.Exp -> FSyntax.Exp *)
-      (* toFDecs : Context * Env * TypedSyntax.Dec list -> Env * FSyntax.Dec list *)
-      (* getEquality : Context * Env * TypedSyntax.Ty -> FSyntax.Exp *)
       val overloads = let open InitialEnv Syntax
                       in List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
                                     [(VId_abs, OVERLOAD_abs)
@@ -635,6 +630,7 @@ local structure T = TypedSyntax
                                     ]
                       end
 in
+(*! val toFTy : Context * 'dummy * TypedSyntax.Ty -> FSyntax.Ty *)
 fun toFTy (ctx, env : 'dummy, T.TyVar (span, tv)) = F.TyVar tv
   | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = toFTy (ctx, env, ty)
   | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = emitFatalError (ctx, [span], "unexpected anonymous type variable")
@@ -900,6 +896,12 @@ fun cookStringConstant (ctx : Context, env : Env, span, value, ty)
            end
          | _ => emitFatalError (ctx, [span], "invalid string constant: type")
       )
+(*!
+val toFPat : Context * Env * TypedSyntax.Pat -> FSyntax.Ty TypedSyntax.VIdMap.map * FSyntax.Pat
+and toFExp : Context * Env * TypedSyntax.Exp -> FSyntax.Exp
+and toFDecs : Context * Env * TypedSyntax.Dec list -> Env * FSyntax.Dec list
+and getEquality : Context * Env * TypedSyntax.Ty -> FSyntax.Exp
+ *)
 fun toFPat (ctx : Context, env : Env, T.WildcardPat span) = (TypedSyntax.VIdMap.empty, F.WildcardPat span)
   | toFPat (ctx, env, T.SConPat (span, Syntax.IntegerConstant value, ty))
     = (TypedSyntax.VIdMap.empty, F.SConPat { sourceSpan = span

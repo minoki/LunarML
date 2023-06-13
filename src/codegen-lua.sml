@@ -239,7 +239,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
   | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
-(* doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list *)
+(*! val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list *)
 fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
     = (case VectorSlice.getItem decs of
            NONE => List.revAppend (revStats, doCExp ctx env finalExp)

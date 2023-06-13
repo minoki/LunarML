@@ -30,11 +30,11 @@ jobs:
         run: make -C thirdparty install
       - name: Compile myself (Lua)
         run: |
-          bin/lunarml compile LunarML.mlb
-          luac -p LunarML.lua
+          bin/lunarml compile -o lunarml.lua src/lunarml-lunarml.mlb
+          luac -p lunarml.lua
       - name: Compile myself (LuaJIT)
         run: |
-          bin/lunarml compile --luajit LunarML.mlb
-          luajit -bl LunarML.lua > /dev/null
+          bin/lunarml compile --luajit -o lunarml-luajit.lua src/lunarml-lunarml.mlb
+          luajit -bl lunarml-luajit.lua > /dev/null
       - name: Compile myself and validate (JavaScript)
         run: make validate-js

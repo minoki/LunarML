@@ -378,7 +378,7 @@ fun MkInfixExp (exp1, vspan, longvid, exp2) = let val span = SourcePos.mergeSpan
                                               in AppExp (span, VarExp (vspan, longvid), RecordExp (span, [(NumericLabel 1, exp1), (NumericLabel 2, exp2)], NONE))
                                               end
 
-(* extractTuple : int * (Label * 'a) list -> ('a list) option *)
+(*! val extractTuple : int * (Label * 'a) list -> ('a list) option *)
 fun extractTuple (i, nil) = SOME nil
   | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
                                                      case extractTuple (i + 1, xs) of
@@ -388,7 +388,7 @@ fun extractTuple (i, nil) = SOME nil
                                                      NONE
   | extractTuple _ = NONE
 
- (* mapRecordRow : ('a -> 'b) -> (Label * 'a) list -> (Label * 'b) list *)
+(*! val mapRecordRow : ('a -> 'b) -> (Label * 'a) list -> (Label * 'b) list *)
 fun ('a,'b) mapRecordRow (f : 'a -> 'b) (row : (Label * 'a) list) = List.map (fn (label, x) => (label, f x)) row
 
 (* pretty printing *)

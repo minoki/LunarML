@@ -127,7 +127,7 @@ datatype ('op, 'a) InfixList = Leaf of 'a
 fun maxPrec(p, Leaf _) = p
   | maxPrec(p, Tree(_, Syntax.LeftAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
   | maxPrec(p, Tree(_, Syntax.RightAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
-(* resolveFixity : Context * ('a * SourceSpan.span * 'op * 'a -> 'a) -> ('op, 'a) InfixList -> 'a *)
+(*! val resolveFixity : Context * ('a * SourcePos.span * 'op * 'a -> 'a) -> ('op, 'a) InfixList -> 'a *)
 fun resolveFixity (ctx, f)
     = let fun go(Leaf x) = x
             | go(t as Tree(_, assoc, span, _, rest)) = let val p0 = case assoc of
@@ -172,11 +172,7 @@ fun resolveFixity (ctx, f)
       end
 (* let open Fixity in resolveFixity (fn (a,f,b) => f(a,b)) (Tree(3,Syntax.LeftAssoc 5,op +,Tree(2,Syntax.LeftAssoc 6,op *,Leaf 7))) end; should yield 17 *)
 
-(* doPat : Context * Env * UnfixedSyntax.Pat -> Syntax.Pat *)
-(* doExp : Context * Env * UnfixedSyntax.Exp -> Syntax.Exp *)
-(* doDec : Context * Env * UnfixedSyntax.Dec -> Env * Syntax.Dec list *)
-(* doDecs : Context * Env * UnfixedSyntax.Dec list -> Env * Syntax.Dec list *)
-(* doValBind : Context * Env * UnfixedSyntax.ValBind -> Syntax.ValBind *)
+(*! val doPat : Context * Env * UnfixedSyntax.Pat -> Syntax.Pat *)
 fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
   | doPat(ctx, env, UnfixedSyntax.SConPat(span, scon)) = Syntax.SConPat(span, scon)
   | doPat(ctx, env, UnfixedSyntax.InfixOrVIdPat(span, vid)) = (case getFixityStatus(env, vid) of
@@ -260,6 +256,12 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
          | _ => emitError(ctx, [span], "conjunctive: not implemented yet") (* Successor ML *)
       )
   | doPat(ctx, env, UnfixedSyntax.VectorPat(span, pats, ellipsis)) = Syntax.VectorPat(span, Vector.map (fn pat => doPat(ctx, env, pat)) pats, ellipsis)
+(*!
+val doExp : Context * Env * UnfixedSyntax.Exp -> Syntax.Exp
+and doDec : Context * Env * UnfixedSyntax.Dec -> Env * Syntax.Dec list
+and doDecs : Context * Env * UnfixedSyntax.Dec list -> Env * Syntax.Dec list
+and doValBind : Context * Env * UnfixedSyntax.ValBind -> Syntax.ValBind
+ *)
 fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, scon)
   | doExp(ctx, env, UnfixedSyntax.InfixOrVIdExp(span, vid)) = (case getFixityStatus(env, vid) of
                                                                    Syntax.Nonfix => Syntax.VarExp(span, Syntax.MkLongVId([], vid))
@@ -667,9 +669,11 @@ and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.Sharing(span, specs, longtycons)) = doSpecs(ctx, env, specs)
   | doSpec(ctx, env, Syntax.SharingStructure(span, specs, longstrids)) = doSpecs(ctx, env, specs)
   | doSpec(ctx, env, Syntax.TypeAliasDesc(span, descs)) = emptyIdStatusMap
-(* doStrExp : Context * Env * UnfixedSyntax.Dec Syntax.StrExp -> IdStatusMap * Syntax.Dec Syntax.StrExp *)
-(* doStrDec : Context * Env * UnfixedSyntax.Dec Syntax.StrDec -> Env * Syntax.Dec Syntax.StrDec *)
-(* doStrDecs : Context * Env * (UnfixedSyntax.Dec Syntax.StrDec) list -> Env * (Syntax.Dec Syntax.StrDec) list *)
+(*!
+val doStrExp : Context * Env * UnfixedSyntax.Dec Syntax.StrExp -> IdStatusMap * Syntax.Dec Syntax.StrExp
+and doStrDec : Context * Env * UnfixedSyntax.Dec Syntax.StrDec -> Env * (Syntax.Dec Syntax.StrDec) list
+and doStrDecs : Context * Env * (UnfixedSyntax.Dec Syntax.StrDec) list -> Env * (Syntax.Dec Syntax.StrDec) list
+ *)
 fun doStrExp(ctx, env, Syntax.StructExp(span, strdecs)) = let val (env', strdecs) = doStrDecs(ctx, env, strdecs)
                                                           in (#idStatusMap env', Syntax.StructExp(span, strdecs))
                                                           end
@@ -768,7 +772,7 @@ structure PostParsing : sig
 local
     open Syntax
 in
-(* freeTyVarsInTy : TyVarSet * Ty -> TyVarSet *)
+(*! val freeTyVarsInTy : TyVarSet.set * Ty -> TyVarSet.set *)
 fun freeTyVarsInTy(bound, TyVar(_, tv)) = if TyVarSet.member(bound, tv) then
                                               TyVarSet.empty
                                           else
@@ -778,7 +782,7 @@ fun freeTyVarsInTy(bound, TyVar(_, tv)) = if TyVarSet.member(bound, tv) then
   | freeTyVarsInTy(bound, TyCon(_, xs, _)) = List.foldl (fn (ty,set) => TyVarSet.union(freeTyVarsInTy(bound, ty), set)) TyVarSet.empty xs
   | freeTyVarsInTy(bound, FnType(_, s, t)) = TyVarSet.union(freeTyVarsInTy(bound, s), freeTyVarsInTy(bound, t))
 
-(* freeTyVarsInPat : TyVarSet * Pat -> TyVarSet *)
+(*! val freeTyVarsInPat : TyVarSet.set * Pat -> TyVarSet.set *)
 fun freeTyVarsInPat(_, WildcardPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, SConPat _) = TyVarSet.empty
   | freeTyVarsInPat(_, VarPat _) = TyVarSet.empty
@@ -790,7 +794,6 @@ fun freeTyVarsInPat(_, WildcardPat _) = TyVarSet.empty
   | freeTyVarsInPat(bound, LayeredPat(_, _, NONE, pat)) = freeTyVarsInPat(bound, pat)
   | freeTyVarsInPat(bound, VectorPat(_, pats, _)) = Vector.foldl (fn (pat, set) => TyVarSet.union(freeTyVarsInPat(bound, pat), set)) TyVarSet.empty pats
 
-(* unguardedTyVarsInValBind : TyVarSet.set * ValBind -> TyVarSet.set *)
 local
     fun union3(x, y, z) = TyVarSet.union(x, TyVarSet.union(y, z))
     fun collectExp(_, SConExp _) = TyVarSet.empty
@@ -845,7 +848,6 @@ val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn 
 end (* local *)
 
 (* The Definition 4.6 *)
-(* scopeTyVarsInDec: TyVarSet.set * Dec -> Dec *)
 local
     fun scopeTyVarsInValDesc bound (span, vid, _, ty) = (span, vid, TyVarSet.listItems (freeTyVarsInTy (bound, ty)), ty)
     fun doDec (bound, ValDec (span, expbound, desc, valbind)) = let val bound' = TyVarSet.addList (bound, expbound)
@@ -925,7 +927,7 @@ type context = { messageHandler : Message.handler
 
 fun emitError ({ messageHandler, ... } : context, spans, message) = Message.error (messageHandler, spans, "syntax", message)
 
-(* checkRow : (Label * 'a) list -> bool, returns true if the same label is bound twice *)
+(*! val checkRow : (S.Label * 'a) list -> bool (* returns true if the same label is bound twice *) *)
 fun checkRow (row : (S.Label * 'a) list) = doCheckRow (S.LabelSet.empty, row)
 and doCheckRow (seen, []) = false
   | doCheckRow (seen, (label, _) :: xs) = if S.LabelSet.member (seen, label) then
@@ -933,7 +935,7 @@ and doCheckRow (seen, []) = false
                                           else
                                               doCheckRow (S.LabelSet.add (seen, label), xs)
 
-(* checkTyVarSeq : context * SourcePos.span * TyVar list -> unit *)
+(*! val checkTyVarSeq : context * SourcePos.span * S.TyVar list -> unit *)
 fun checkTyVarSeq (ctx, span, xs: S.TyVar list) = doCheckTyVarSeq (ctx, span, S.TyVarSet.empty, xs)
 and doCheckTyVarSeq (ctx, span, seen, []) = ()
   | doCheckTyVarSeq (ctx, span, seen, tv :: xs) = ( if S.TyVarSet.member (seen, tv) then
@@ -943,7 +945,7 @@ and doCheckTyVarSeq (ctx, span, seen, []) = ()
                                                   ; doCheckTyVarSeq (ctx, span, S.TyVarSet.add (seen, tv), xs)
                                                   )
 
-(* doTy : context -> S.Ty -> unit *)
+(*! val doTy : context -> S.Ty -> unit *)
 fun doTy ctx (S.TyVar span) = ()
   | doTy ctx (S.RecordType (span, fields, optBaseTy)) = if checkRow fields then
                                                             emitError (ctx, [span], "no type-expression row may bind the same label twice")
@@ -965,7 +967,7 @@ fun invalidConstructorNames (ctx : context) = if #allowBindEqual (#languageOptio
                                               else
                                                   invalidConstructorNames1
 
-(* doPat : context -> S.Pat -> unit *)
+(*! val doPat : context -> S.Pat -> unit *)
 fun doPat ctx (S.WildcardPat _) = ()
   | doPat ctx (S.SConPat (span, S.RealConstant _)) = emitError (ctx, [span], "no real constant may occur in a pattern")
   | doPat ctx (S.SConPat _) = ()
@@ -1007,9 +1009,11 @@ fun doValSpec (ctx, env, spec : (SourcePos.span * S.VId * S.TyVar list * S.Ty) l
                              )
                          ) S.VIdSet.empty spec)
 
-(* doExp : context * S.TyVarSet -> S.Exp -> unit *)
-(* doDec : context * S.TyVarSet -> S.Dec -> unit *)
-(* doValBind : S.TyVarSet * S.ValBind -> unit *)
+(*!
+val doExp : context * S.TyVarSet.set -> S.Exp -> unit
+and doDec : context * S.TyVarSet.set -> S.Dec -> unit
+and doValBinds : context * S.TyVarSet.set -> S.ValBind list -> unit
+ *)
 fun doExp (ctx : context, env : S.TyVarSet.set) (S.SConExp span) = ()
   | doExp (ctx, env) (S.VarExp span) = ()
   | doExp (ctx, env) (S.RecordExp (span, fields, optBase))
@@ -1170,7 +1174,7 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
   | doDec (ctx, env) (S.EqualityDec (span, typarams, longtycon, exp)) = doExp (ctx, env) exp
 and doValBinds (ctx, env) valbinds = List.app (fn (S.PatBind (_, pat, exp)) => ( doPat ctx pat ; doExp (ctx, env) exp) ) valbinds (* duplicate identifiers are not checked here *)
 
-(* doSpec : LanguageOptions.options -> Syntax.Spec -> unit *)
+(*! val doSpec : context -> Syntax.Spec -> unit *)
 fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), set) =>
                                                                    ( doTy ctx ty
                                                                    ; if Syntax.VIdSet.member (invalidBoundNames ctx, vid) then

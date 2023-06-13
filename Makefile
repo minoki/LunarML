@@ -51,20 +51,20 @@ sources = \
   src/command-line-settings.sml \
   src/main.sml
 
-typecheck:
-	mlton -stop tc LunarML.mlb
+typecheck: src/lunarml.mlb $(sources)
+	mlton -stop tc $<
 
-bin/lunarml: LunarML.mlb $(sources)
-	mlton -output $@ LunarML.mlb
+bin/lunarml: src/lunarml.mlb $(sources)
+	mlton -output $@ $<
 
-bin/lunarml.gen2.lua: bin/lunarml LunarML.mlb $(sources)
-	bin/lunarml compile -o $@ LunarML.mlb
+bin/lunarml.gen2.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile -o $@ $<
 
-bin/lunarml.gen2-luajit.lua: bin/lunarml LunarML.mlb $(sources)
-	bin/lunarml compile --luajit -o $@ LunarML.mlb
+bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --luajit -o $@ $<
 
-bin/lunarml.gen2.js: bin/lunarml LunarML.mlb $(sources)
-	bin/lunarml compile --js-cps -o $@ LunarML.mlb
+bin/lunarml.gen2.js: src/lunarml-lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --js-cps -o $@ $<
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
@@ -96,18 +96,18 @@ test-nodejs-cps: bin/lunarml
 	$(MAKE) -C test VARIANT=nodejs-cps NODE=$(NODE)
 
 validate-lua: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.lua --print-timings LunarML.mlb
-	$(LUA) lunarml.gen2.lua -Blib/lunarml compile -o lunarml.gen3.lua --print-timings LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2.lua --print-timings src/lunarml-lunarml.mlb
+	$(LUA) lunarml.gen2.lua -Blib/lunarml compile -o lunarml.gen3.lua --print-timings src/lunarml-lunarml.mlb
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
 
 validate-luajit: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2-luajit.lua --luajit --print-timings LunarML.mlb
-	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile -o lunarml.gen3-luajit.lua --luajit --print-timings LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2-luajit.lua --luajit --print-timings src/lunarml-lunarml.mlb
+	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile -o lunarml.gen3-luajit.lua --luajit --print-timings src/lunarml-lunarml.mlb
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.js --js-cps --print-timings LunarML.mlb
-	$(NODE) lunarml.gen2.js -Blib/lunarml compile -o lunarml.gen3.js --js-cps --print-timings LunarML.mlb
+	bin/lunarml compile -o lunarml.gen2.js --js-cps --print-timings src/lunarml-lunarml.mlb
+	$(NODE) lunarml.gen2.js -Blib/lunarml compile -o lunarml.gen3.js --js-cps --print-timings src/lunarml-lunarml.mlb
 	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
 
 verify-lua: bin/lunarml bin/lunarml.gen2.lua
