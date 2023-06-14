@@ -84,11 +84,6 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
                            , wordSize = 32
                            }
       )
-type context = { driverContext : Driver.Context
-               , baseDir : string
-               , pathMap : string MLBSyntax.StringMap.map
-               , targetInfo : TargetInfo.target_info
-               }
 fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
   | optimizeCps ctx cexp n = let val () = if #printTimings ctx then
                                               print ("[TIME] optimizeCps " ^ Int.toString n ^ "...")
@@ -197,7 +192,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                        ()
       in ()
       end
-fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Code)
+fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * MLBEval.Code)
     = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "ml" }, relativeTo = OS.FileSys.getDir () })
                                    ,("TARGET_LANG", case #backend opts of
@@ -214,11 +209,18 @@ fun doCompile (opts : options) fileName (f : context -> MLBEval.Env * MLBEval.Co
                                    ]
           val targetInfo = getTargetInfo opts
           val errorCounter = Message.newCounter { errorTolerance = 10 }
-          val ctx = { driverContext = Driver.newContext (targetInfo, errorCounter)
-                    , baseDir = OS.FileSys.getDir ()
-                    , pathMap = pathMap
-                    , targetInfo = targetInfo
-                    }
+          fun printMessage { spans, domain, message, type_ }
+              = let val t = case type_ of
+                                Message.WARNING => "warning: "
+                              | Message.ERROR => "error: "
+                in TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                end
+          val ctx : MLBEval.Context = { driverContext = Driver.newContext (targetInfo, errorCounter)
+                                      , baseDir = OS.FileSys.getDir ()
+                                      , pathMap = pathMap
+                                      , targetInfo = targetInfo
+                                      , messageHandler = Message.newHandler (errorCounter, printMessage)
+                                      }
           val timer = Timer.startCPUTimer ()
           val (env, { tynameset, toFEnv, fdecs, cache }) = f ctx
           val toFContext = let fun printMessage { spans, domain, message, type_ }

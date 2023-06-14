@@ -4,6 +4,7 @@ type Context = { driverContext : Driver.Context
                , baseDir : string
                , pathMap : string M.StringMap.map
                , targetInfo : TargetInfo.target_info
+               , messageHandler : Message.handler
                }
 datatype Env' = MkEnv of Env
 withtype Env = { bas : Env' M.BasMap.map
@@ -67,44 +68,49 @@ fun parseIgnoreWarnError "ignore" = SOME LanguageOptions.IGNORE
   | parseIgnoreWarnError "warn" = SOME LanguageOptions.WARN
   | parseIgnoreWarnError "error" = SOME LanguageOptions.ERROR
   | parseIgnoreWarnError _ = NONE
-fun applyAnnotation (ann, langopt) = case String.tokens Char.isSpace ann of
-                                         ["nonexhaustiveBind", x] => (case parseIgnoreWarnError x of
-                                                                          SOME x => LanguageOptions.set.nonexhaustiveBind x langopt
-                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                     )
-                                       | ["nonexhaustiveMatch", x] => (case parseIgnoreWarnError x of
-                                                                           SOME x => LanguageOptions.set.nonexhaustiveMatch x langopt
-                                                                         | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                      )
-                                       | ["nonexhaustiveRaise", x] => (case parseIgnoreWarnError x of
-                                                                          SOME x => LanguageOptions.set.nonexhaustiveRaise x langopt
-                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                     )
-                                       | ["redundantBind", x] => (case parseIgnoreWarnError x of
-                                                                      SOME x => LanguageOptions.set.redundantBind x langopt
-                                                                    | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                 )
-                                       | ["redundantMatch", x] => (case parseIgnoreWarnError x of
-                                                                       SOME x => LanguageOptions.set.redundantMatch x langopt
-                                                                     | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                  )
-                                       | ["redundantRaise", x] => (case parseIgnoreWarnError x of
-                                                                       SOME x => LanguageOptions.set.redundantRaise x langopt
-                                                                     | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                  )
-                                       | ["valDescInComments", x] => (case parseIgnoreWarnError x of
-                                                                          SOME x => LanguageOptions.set.valDescInComments x langopt
-                                                                        | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                     )
-                                       | [name, value] => (case LanguageOptions.setByName name of
-                                                              SOME setter => (case value of
-                                                                                  "true" => setter true langopt
-                                                                                | "false" => setter false langopt
-                                                                                | _ => raise Fail ("unrecognized annotation: " ^ ann)
-                                                                             )
-                                                            | NONE => raise Fail ("unrecognized annotation: " ^ ann)
-                                                          )
-                                       | _ => raise Fail ("unrecognized annotation: " ^ ann)
+fun applyAnnotation (ctx : Context) (ann, langopt)
+    = let fun unrecognized () = ( Message.warning (#messageHandler ctx, [], "MLB", "unrecognized annotation: " ^ ann)
+                                ; langopt
+                                )
+      in case String.tokens Char.isSpace ann of
+             ["nonexhaustiveBind", x] => (case parseIgnoreWarnError x of
+                                              SOME x => LanguageOptions.set.nonexhaustiveBind x langopt
+                                            | NONE => unrecognized ()
+                                         )
+           | ["nonexhaustiveMatch", x] => (case parseIgnoreWarnError x of
+                                               SOME x => LanguageOptions.set.nonexhaustiveMatch x langopt
+                                             | NONE => unrecognized ()
+                                          )
+           | ["nonexhaustiveRaise", x] => (case parseIgnoreWarnError x of
+                                               SOME x => LanguageOptions.set.nonexhaustiveRaise x langopt
+                                             | NONE => unrecognized ()
+                                          )
+           | ["redundantBind", x] => (case parseIgnoreWarnError x of
+                                          SOME x => LanguageOptions.set.redundantBind x langopt
+                                        | NONE => unrecognized ()
+                                     )
+           | ["redundantMatch", x] => (case parseIgnoreWarnError x of
+                                           SOME x => LanguageOptions.set.redundantMatch x langopt
+                                         | NONE => unrecognized ()
+                                      )
+           | ["redundantRaise", x] => (case parseIgnoreWarnError x of
+                                           SOME x => LanguageOptions.set.redundantRaise x langopt
+                                         | NONE => unrecognized ()
+                                      )
+           | ["valDescInComments", x] => (case parseIgnoreWarnError x of
+                                              SOME x => LanguageOptions.set.valDescInComments x langopt
+                                            | NONE => unrecognized ()
+                                         )
+           | [name, value] => (case LanguageOptions.setByName name of
+                                   SOME setter => (case value of
+                                                       "true" => setter true langopt
+                                                     | "false" => setter false langopt
+                                                     | _ => unrecognized ()
+                                                  )
+                                 | NONE => unrecognized ()
+                              )
+           | _ => unrecognized ()
+      end
 fun doDec (ctx : Context) langopt env (M.BasisDec binds) acc = let val (bas, acc) = List.foldl (fn ((basid, basexp), (bas, acc)) =>
                                                                                                    let val (env', acc) = doExp ctx langopt env basexp acc
                                                                                                    in (M.BasMap.insert (bas, basid, MkEnv env'), acc)
@@ -180,7 +186,7 @@ fun doDec (ctx : Context) langopt env (M.BasisDec binds) acc = let val (bas, acc
                                                     | SOME "mlb" => doMlbSource ctx env path acc
                                                     | _ => raise Fail ("unrecognized file extension: " ^ path)
                                                  )
-  | doDec ctx langopt env (M.AnnotationDec (anns, decs)) acc = let val langopt = List.foldl applyAnnotation langopt anns
+  | doDec ctx langopt env (M.AnnotationDec (anns, decs)) acc = let val langopt = List.foldl (applyAnnotation ctx) langopt anns
                                                                in doDecs ctx langopt env decs acc
                                                                end
   | doDec ctx langopt env M.PrimDec acc = ({ bas = M.BasMap.empty, fixity = InitialEnv.initialFixityEnv, typing = InitialEnv.initialEnv }, acc)
@@ -215,7 +221,7 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                                    in TextIO.inputAll ins before TextIO.closeIn ins
                                                                    end
                                                   in case MLBParser.P.runParser MLBParser.basfile () path (StringStream.fromString { file = path, content = content }) of
-                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx, baseDir = OS.Path.dir path, pathMap = #pathMap ctx, targetInfo = #targetInfo ctx }
+                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx, baseDir = OS.Path.dir path, pathMap = #pathMap ctx, targetInfo = #targetInfo ctx, messageHandler = #messageHandler ctx }
                                                                                           val (env', acc) = doDecs ctx' LanguageOptions.default emptyEnv decs acc
                                                                                           val cache = M.StringMap.insert (#cache acc, path, env')
                                                                                       in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
