@@ -97,6 +97,10 @@ fun applyAnnotation (ctx : Context) (ann, langopt)
                                            SOME x => LanguageOptions.set.redundantRaise x langopt
                                          | NONE => unrecognized ()
                                       )
+           | ["sequenceNonUnit", x] => (case parseIgnoreWarnError x of
+                                            SOME x => LanguageOptions.set.sequenceNonUnit x langopt
+                                          | NONE => unrecognized ()
+                                       )
            | ["valDescInComments", x] => (case parseIgnoreWarnError x of
                                               SOME x => LanguageOptions.set.valDescInComments x langopt
                                             | NONE => unrecognized ()

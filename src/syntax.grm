@@ -18,8 +18,10 @@ fun MkConsPat (span, p1, p2) = UnfixedSyntax.ConPat(span, Syntax.MkLongVId(nil, 
 fun MkListPat (span, nil) = nilPat span
   | MkListPat (span, x :: xs) = MkConsPat (span, x, MkListPat (span, xs))
 fun MkVectorPat (span, xs, ellipsis) = UnfixedSyntax.VectorPat(span, Vector.fromList xs, ellipsis)
-fun MkSequentialExp (span, e1, []) = e1
-  | MkSequentialExp (span, e1, e2 :: xs) = UnfixedSyntax.CaseExp(span,e1,[(UnfixedSyntax.WildcardPat span, MkSequentialExp(span,e2,xs))])
+fun MkSequentialExp (span, x, xs) = let fun go (final, [], acc) = UnfixedSyntax.SequentialExp (span, Vector.fromList (List.rev acc), final)
+                                          | go (s, t :: ts, acc) = go (t, ts, s :: acc)
+                                    in go (x, xs, [])
+                                    end
 fun MkTupleTy(_,[x]) = x
   | MkTupleTy(span, xs) = let fun doFields i nil = nil
                                 | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts

@@ -1234,6 +1234,10 @@ and toFDecs (ctx, env, []) = (env, [])
           val (env, decs) = toFDecs (ctx, env, decs)
       in (env, F.RecValDec valbinds' :: decs)
       end
+  | toFDecs (ctx, env, T.IgnoreDec (span, exp, ty) :: decs) = let val exp = toFExp (ctx, env, exp)
+                                                                  val (env, decs) = toFDecs (ctx, env, decs)
+                                                              in (env, F.IgnoreDec exp :: decs)
+                                                              end
   | toFDecs (ctx, env, T.TypeDec (span, typbinds) :: decs) = toFDecs (ctx, env, decs)
   | toFDecs (ctx, env, T.DatatypeDec (span, datbinds) :: decs)
     = let val dec = F.DatatypeDec (List.map (fn T.DatBind (span, tyvars, tycon, conbinds, _) =>

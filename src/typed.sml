@@ -173,6 +173,7 @@ datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty>
                 | ExReplication of SourcePos.span * VId * LongVId * Ty option
 
 datatype match_type = CASE | VAL | HANDLE
+datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
              | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
@@ -202,13 +203,14 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
      and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
+             | IgnoreDec of SourcePos.span * Exp * Ty (* val _ = ... *)
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
              | GroupDec of SourcePos.span * Dec list
              | OverloadDec of SourcePos.span * Syntax.OverloadClass * TyName * Exp Syntax.OverloadKeyMap.map
              | EqualityDec of SourcePos.span * TyVar list * TyName * Exp
-             | ValDescDec of { sourceSpan : SourcePos.span, expected : TypeScheme, actual : TypeScheme }
+             | ValDescDec of { sourceSpan : SourcePos.span, expected : TypeScheme, actual : TypeScheme, origin : valdesc_origin }
      and ValBind = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
@@ -336,6 +338,7 @@ fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (PrimExp _) = "PrimExp"
 and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (RecValDec(_,valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
+  | print_Dec (IgnoreDec _) = "IgnoreDec"
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
@@ -465,6 +468,7 @@ fun applySubstTyInExpOrDec subst
             | doExp (PrimExp (span, primOp, tyargs, args)) = PrimExp (span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
           and doDec (ValDec (span, valbinds)) = ValDec (span, List.map doValBind valbinds)
             | doDec (RecValDec (span, valbinds)) = RecValDec (span, List.map doValBind valbinds)
+            | doDec (IgnoreDec (span, exp, ty)) = IgnoreDec (span, doExp exp, doTy ty)
             | doDec (TypeDec (span, typbinds)) = let fun doTypBind (TypBind (span, tyvars, tycon, ty)) = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
                                                                                                          in TypBind (span, tyvars, tycon, applySubstTy subst' ty)
                                                                                                          end
@@ -486,10 +490,10 @@ fun applySubstTyInExpOrDec subst
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
                                                                 in EqualityDec (span, tyvars, tyname, #doExp (applySubstTyInExpOrDec subst') exp)
                                                                 end
-            | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty') })
+            | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin })
               = let val subst' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
                     val subst'' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars'
-                in ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, applySubstTy subst' ty), actual = TypeScheme (tyvars, applySubstTy subst'' ty') }
+                in ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, applySubstTy subst' ty), actual = TypeScheme (tyvars, applySubstTy subst'' ty'), origin = origin }
                 end
           and doValBind (TupleBind (span, binds, exp)) = TupleBind (span, List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
             | doValBind (PolyVarBind (span, vid, TypeScheme (tyvars, ty), exp)) = let val subst' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
@@ -555,6 +559,7 @@ fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdSta
                                                                                 ) valbinds
                                                    in (bound, RecValDec (span, valbinds'))
                                                    end
+            | doDec (IgnoreDec (span, exp, ty)) = (VIdSet.empty, IgnoreDec (span, doExp exp, ty))
             | doDec (d as TypeDec (span, typbinds)) = (VIdSet.empty, d)
             | doDec (d as DatatypeDec (span, datbinds)) = (List.foldl (fn (DatBind (_, _, _, conbinds, admitsEquality), acc) => List.foldl (fn (ConBind (_, vid, _, _), acc) => VIdSet.add (acc, vid)) acc conbinds) VIdSet.empty datbinds, d)
             | doDec (d as ExceptionDec (span, exbinds)) = (List.foldl (fn (ExBind (span, vid, optTy), acc) => VIdSet.add (acc, vid)
@@ -613,13 +618,14 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
             | doExp(PrimExp(span, primOp, tyargs, args)) = PrimExp(span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
           and doDec(ValDec(span, valbind)) = ValDec(span, List.map doValBind valbind)
             | doDec(RecValDec(span, valbind)) = RecValDec(span, List.map doValBind valbind)
+            | doDec (IgnoreDec (span, exp, ty)) = IgnoreDec (span, doExp exp, doTy ty)
             | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
             | doDec(DatatypeDec(span, datbinds)) = DatatypeDec(span, List.map doDatBind datbinds)
             | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
             | doDec(GroupDec(span, decs)) = GroupDec(span, List.map doDec decs)
             | doDec(OverloadDec(span, class, tyname, map)) = OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = EqualityDec (span, tyvars, tyname, doExp exp)
-            | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty') }) = ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, doTy ty) (* should not be needed *), actual = TypeScheme (tyvars', doTy ty') }
+            | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin }) = ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, doTy ty) (* should not be needed *), actual = TypeScheme (tyvars', doTy ty'), origin = origin }
           and doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
             | doValBind (PolyVarBind (span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = PolyVarBind (span, vid, TypeScheme (tyvarsWithConstraints, doTy ty), doExp exp)
           and doMatch(pat, exp) = (doPat pat, doExp exp)
@@ -721,13 +727,14 @@ and freeTyVarsInDec (bound, dec)
     = (case dec of
            ValDec (_, valbinds) => List.foldl (fn (valbind, acc) => freeTyVarsInValBind (bound, valbind) @ acc) [] valbinds
          | RecValDec (_, valbinds) => List.foldl (fn (valbind, acc) => acc @ freeTyVarsInValBind (bound, valbind)) [] valbinds
+         | IgnoreDec (_, exp, ty) => freeTyVarsInExp (bound, exp) @ freeAnonymousTyVarsInTy ty
          | TypeDec (_, typbinds) => List.foldl (fn (typbind, acc) => acc @ freeAnonymousTyVarsInTypBind (bound, typbind)) [] typbinds
          | DatatypeDec (_, datbinds) => List.foldl (fn (datbind, acc) => acc @ freeTyVarsInDatBind (bound, datbind)) [] datbinds
          | ExceptionDec (_, exbinds) => List.foldl (fn (exbind, acc) => acc @ freeTyVarsInExBind (bound, exbind)) [] exbinds
          | GroupDec (_, decs) => freeTyVarsInDecs (bound, decs)
          | OverloadDec (_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => acc @ freeTyVarsInExp (bound, exp)) [] map
          | EqualityDec (_, typarams, tyname, exp) => freeTyVarsInExp (bound, exp)
-         | ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty') } => freeAnonymousTyVarsInTy ty (* should be empty *) @ freeAnonymousTyVarsInTy ty'
+         | ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin } => freeAnonymousTyVarsInTy ty (* should be empty *) @ freeAnonymousTyVarsInTy ty'
       )
 and freeTyVarsInValBind (bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => acc @ freeAnonymousTyVarsInTy ty) (freeTyVarsInExp (bound, exp)) xs
   | freeTyVarsInValBind (bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = freeAnonymousTyVarsInTy ty @ freeTyVarsInExp (bound, exp)

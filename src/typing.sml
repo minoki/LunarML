@@ -1289,6 +1289,19 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                  ) argTypes
       in (resultType, T.PrimExp (span, primOp, vector tyargs, args))
       end
+  | typeCheckExp (ctx, env, S.SequentialExp (span, xs, y), typeHint)
+    = let val decs = Vector.foldr (fn (x, decs) =>
+                                      let val span = S.getSourceSpanOfExp x
+                                          val (ty, x) = typeCheckExp (ctx, env, x, NONE)
+                                      in if #sequenceNonUnit (#languageOptions (#context ctx)) = LanguageOptions.IGNORE then
+                                             T.IgnoreDec (span, x, ty) :: decs
+                                         else
+                                             T.IgnoreDec (span, x, ty) :: T.ValDescDec { sourceSpan = span, expected = T.TypeScheme ([], primTy_unit), actual = T.TypeScheme ([], ty), origin = T.VALDESC_SEQUENCE } :: decs
+                                      end
+                                  ) [] xs
+          val (resultType, y) = typeCheckExp (ctx, env, y, typeHint)
+      in (resultType, T.LetInExp (span, decs, y))
+      end
 and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
           val valbinds = let val env = { valMap = #valMap env
@@ -1441,7 +1454,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                                                                                   else
                                                                                       (tv, [])
                                                                      | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
-                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc })
+                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc, origin = T.VALDESC_COMMENT })
                                               end
                                             | NONE => ( emitTypeError (ctx, [span], "type description for undefined variable")
                                                       ; NONE
@@ -1568,7 +1581,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                                                                                   else
                                                                                       (tv, [])
                                                                      | NONE => emitFatalTypeError (ctx, [span], "undefined type variable")
-                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc })
+                                              in SOME (T.ValDescDec { sourceSpan = span, expected = T.TypeScheme (List.map doTyVar tyvarseq, ty), actual = tysc, origin = T.VALDESC_COMMENT })
                                               end
                                             | NONE=> ( emitTypeError (ctx, [span], "type description for undefined variable")
                                                      ; NONE
@@ -2110,21 +2123,32 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
     end
 
 local
-    fun checkValDesc (ctx, env, span, expected as T.TypeScheme (tyvarsE, tyE), actual as T.TypeScheme (tyvarsA, tyA))
+    fun checkValDesc (ctx, env, span, expected as T.TypeScheme (tyvarsE, tyE), actual as T.TypeScheme (tyvarsA, tyA), origin)
         = let val ictx = { context = ctx
                          , level = 0
                          }
               val (tyE, tyargsE) = instantiate (ictx, span, expected)
               val (tyA, tyargsA) = instantiate (ictx, span, actual)
               fun onMismatch expected
-                  = case #valDescInComments (#languageOptions ctx) of
-                        LanguageOptions.ERROR => ( Message.error (#messageHandler ctx, [span], "type", "value description mismatch")
-                                                 ; false
-                                                 )
-                      | LanguageOptions.WARN => ( Message.warning (#messageHandler ctx, [span], "type", "value description mismatch")
-                                                ; false
-                                                )
-                      | LanguageOptions.IGNORE => false
+                  = case origin of
+                        T.VALDESC_COMMENT => (case #valDescInComments (#languageOptions ctx) of
+                                                  LanguageOptions.ERROR => ( Message.error (#messageHandler ctx, [span], "type", "value description mismatch")
+                                                                           ; false
+                                                                           )
+                                                | LanguageOptions.WARN => ( Message.warning (#messageHandler ctx, [span], "type", "value description mismatch")
+                                                                          ; false
+                                                                          )
+                                                | LanguageOptions.IGNORE => false
+                                             )
+                      | T.VALDESC_SEQUENCE => (case #sequenceNonUnit (#languageOptions ctx) of
+                                                   LanguageOptions.ERROR => ( Message.error (#messageHandler ctx, [span], "type", "sequence expression not of type unit")
+                                                                            ; false
+                                                                            )
+                                                 | LanguageOptions.WARN => ( Message.warning (#messageHandler ctx, [span], "type", "sequence expression not of type unit")
+                                                                           ; false
+                                                                           )
+                                                 | LanguageOptions.IGNORE => false
+                                              )
               fun equalTy (expected as T.TyVar (_, tv), T.TyVar (_, tv'))
                   = if tv = tv' then
                         true
@@ -2186,13 +2210,14 @@ local
       | checkExp (ctx, env, T.PrimExp (span, _, _, args)) = Vector.app (fn e => checkExp (ctx, env, e)) args
     and checkDec (ctx, env, T.ValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
       | checkDec (ctx, env, T.RecValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
+      | checkDec (ctx, env, T.IgnoreDec (span, exp, ty)) = checkExp (ctx, env, exp)
       | checkDec (ctx, env, T.TypeDec _) = ()
       | checkDec (ctx, env, T.DatatypeDec _) = ()
       | checkDec (ctx, env, T.ExceptionDec _) = ()
       | checkDec (ctx, env, T.GroupDec (_, decs)) = checkDecs (ctx, env, decs)
       | checkDec (ctx, env, T.OverloadDec (span, class, name, map)) = Syntax.OverloadKeyMap.app (fn exp => checkExp (ctx, env, exp)) map
       | checkDec (ctx, env, T.EqualityDec (span, tyvars, tyname, exp)) = checkExp (ctx, T.TyVarSet.addList (env, tyvars), exp)
-      | checkDec (ctx, env, T.ValDescDec { sourceSpan, expected, actual }) = checkValDesc (ctx, env, sourceSpan, expected, actual)
+      | checkDec (ctx, env, T.ValDescDec { sourceSpan, expected, actual, origin }) = checkValDesc (ctx, env, sourceSpan, expected, actual, origin)
     and checkDecs (ctx, env, decs) = List.app (fn dec => checkDec (ctx, env, dec)) decs
     and checkMatch (ctx, env, matches) = List.app (fn (pat, exp) => checkExp (ctx, env, exp)) matches
     and checkValBind (ctx, env, T.TupleBind (_, _, exp)) = checkExp (ctx, env, exp)
@@ -2275,6 +2300,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
             | goDec (T.RecValDec (span, valbinds)) = ( List.app goValBind valbinds
                                                      ; tynameset
                                                      )
+            | goDec (T.IgnoreDec (span, exp, ty)) = ( goExp exp ; goTy ty ; tynameset )
             | goDec (T.TypeDec (span, typbinds)) = let fun goTypBind (T.TypBind (span, tyvars, tycon, ty)) = let val { goTy, ... } = checkTyScope (ctx, T.TyVarSet.addList (tvset, tyvars), tynameset)
                                                                                                              in goTy ty
                                                                                                              end
@@ -2310,7 +2336,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                     ; #goExp (checkTyScope (ctx, T.TyVarSet.addList (tvset, typarams), tynameset)) exp
                                                                     ; tynameset
                                                                     )
-            | goDec (T.ValDescDec { sourceSpan, expected = T.TypeScheme (tyvars, ty), actual = T.TypeScheme (tyvars', ty') })
+            | goDec (T.ValDescDec { sourceSpan, expected = T.TypeScheme (tyvars, ty), actual = T.TypeScheme (tyvars', ty'), origin })
               = ( #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars), tynameset)) ty
                 ; #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars'), tynameset)) ty'
                 ; tynameset

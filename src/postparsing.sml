@@ -373,6 +373,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
           val args = Vector.map (fn e => doExp(ctx, env, e)) args
       in Syntax.PrimExp(span, primOp, tyargs, args)
       end
+  | doExp (ctx, env, UnfixedSyntax.SequentialExp (span, xs, y)) = Syntax.SequentialExp (span, Vector.map (fn e => doExp (ctx, env, e)) xs, doExp (ctx, env, y))
 and doDecs(ctx, env, nil) = (emptyEnv, nil)
   | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
@@ -813,6 +814,7 @@ local
       | collectExp(bound, PrimExp(_, _, tyargs, args)) = let val acc = Vector.foldl (fn (ty, set) => TyVarSet.union(set, TyVarSet.difference(freeTyVarsInTy(bound, ty), bound))) TyVarSet.empty tyargs
                                                          in Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) acc args
                                                          end
+      | collectExp (bound, SequentialExp (_, xs, y)) = Vector.foldl (fn (x, set) => TyVarSet.union (collectExp (bound, x), set)) (collectExp (bound, y)) xs
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(_, pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
     and collectFRule(bound, (pats, optTy, exp)) = let val tyVarsInPats = List.foldl TyVarSet.union TyVarSet.empty (List.map (fn pat => freeTyVarsInPat(bound, pat)) pats)
@@ -888,6 +890,7 @@ local
       | doExp(bound, ListExp(span, xs)) = ListExp(span, Vector.map (fn x => doExp(bound, x)) xs)
       | doExp(bound, VectorExp(span, xs)) = VectorExp(span, Vector.map (fn x => doExp(bound, x)) xs)
       | doExp(bound, PrimExp(span, name, tyargs, args)) = PrimExp(span, name, tyargs, Vector.map (fn x => doExp(bound, x)) args)
+      | doExp (bound, SequentialExp (span, xs, y)) = SequentialExp (span, Vector.map (fn x => doExp (bound, x)) xs, doExp (bound, y))
     and doMatch(bound, xs) = List.map (fn (pat, exp) => (pat, doExp(bound, exp))) xs
     fun doStrExp(StructExp(span, strdecs)) = StructExp(span, List.map doStrDec strdecs)
       | doStrExp(StrIdExp(span, longstrid)) = StrIdExp(span, longstrid)
@@ -1041,6 +1044,7 @@ fun doExp (ctx : context, env : S.TyVarSet.set) (S.SConExp span) = ()
                                                   ; Vector.app (fn exp => doExp (ctx, env) exp) exps
                                                   )
   | doExp (ctx, env) (S.PrimExp (span, primOp, tyargs, args)) = ( Vector.app (doTy ctx) tyargs ; Vector.app (doExp (ctx, env)) args )
+  | doExp (ctx, env) (S.SequentialExp (span, xs, y)) = ( Vector.app (doExp (ctx, env)) xs ; doExp (ctx, env) y )
 and doMatches (ctx, env) matches = List.app (fn (pat, exp) => ( doPat ctx pat ; doExp (ctx, env) exp) ) matches
 and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc, valbinds))
     = let val tyvars = S.TyVarSet.fromList tyvarseq
