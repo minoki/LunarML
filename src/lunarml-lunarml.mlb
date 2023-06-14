@@ -1,7 +1,7 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
-ann "valDescInComments warn" in
+ann "sequenceNonUnit warn" "valDescInComments warn" in
 list-util.sml
 vector-util.sml
 ../pluto/pluto.mlb

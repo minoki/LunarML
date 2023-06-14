@@ -1,6 +1,7 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
+ann "sequenceNonUnit warn" in
 list-util.sml
 vector-util.sml
 ../pluto/pluto.mlb
@@ -40,3 +41,4 @@ driver.sml
 mlb-eval.sml
 command-line-settings.sml
 main.sml
+end

@@ -2355,7 +2355,9 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                 end
           fun goStrExp (T.StructExp _) = tynameset
             | goStrExp (T.StrIdExp _) = tynameset
-            | goStrExp (T.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = ( goStrExp strExp ; List.foldl (fn ({ tyname, ... }, set) => T.TyNameSet.add (set, tyname)) tynameset (#bound packageSig) )
+            | goStrExp (T.PackedStrExp { sourceSpan, strExp, payloadTypes, packageSig }) = let val _ = goStrExp strExp : T.TyNameSet.set
+                                                                                           in List.foldl (fn ({ tyname, ... }, set) => T.TyNameSet.add (set, tyname)) tynameset (#bound packageSig)
+                                                                                           end
             | goStrExp (T.FunctorAppExp { sourceSpan, funId, argumentTypes, argumentStr, packageSig })
               = let val tynameset = goStrExp argumentStr
                     (* TODO: Check argumentTypes *)
@@ -2374,8 +2376,8 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                           tynameset decs
           fun goFunExp (tynames, strid, s, strexp) = let val tynameset' = List.foldl (fn ({ tyname, ...}, set) => T.TyNameSet.add (set, tyname)) tynameset tynames
                                                          val { goStrExp, ... } = checkTyScope (ctx, tvset, tynameset')
-                                                     in goStrExp strexp
-                                                      ; tynameset
+                                                         val _ = goStrExp strexp : T.TyNameSet.set
+                                                     in tynameset
                                                      end
           fun goTopDec (T.StrDec dec) = goStrDec dec
             | goTopDec (T.FunDec (funid, funexp)) = goFunExp funexp
