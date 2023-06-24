@@ -104,7 +104,16 @@ structure JavaScript : sig
                                           val asIntN : value
                                           val asUintN : value
                                       end
+                            val Int8Array : value
+                            val Int16Array : value
+                            val Int32Array : value
+                            val BigInt64Array : value
                             val Uint8Array : value
+                            val Uint16Array : value
+                            val Uint32Array : value
+                            val BigUint64Array : value
+                            val Float32Array : value
+                            val Float64Array : value
                             val Date : value
                             structure Date : sig
                                           val now : value
@@ -216,7 +225,16 @@ structure BigInt = struct
 val asIntN = LunarML.assumeDiscardable field (BigInt, "asIntN")
 val asUintN = LunarML.assumeDiscardable field (BigInt, "asUintN")
 end
+val Int8Array = LunarML.assumeDiscardable global "Int8Array"
+val Int16Array = LunarML.assumeDiscardable global "Int16Array"
+val Int32Array = LunarML.assumeDiscardable global "Int32Array"
+val BigInt64Array = LunarML.assumeDiscardable global "BigInt64Array"
 val Uint8Array = LunarML.assumeDiscardable global "Uint8Array"
+val Uint16Array = LunarML.assumeDiscardable global "Uint16Array"
+val Uint32Array = LunarML.assumeDiscardable global "Uint32Array"
+val BigUint64Array = LunarML.assumeDiscardable global "BigUint64Array"
+val Float32Array = LunarML.assumeDiscardable global "Float32Array"
+val Float64Array = LunarML.assumeDiscardable global "Float64Array"
 val Date = LunarML.assumeDiscardable global "Date"
 structure Date = struct
 val now = LunarML.assumeDiscardable field (Date, "now")

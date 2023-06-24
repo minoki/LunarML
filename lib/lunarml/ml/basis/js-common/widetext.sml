@@ -362,6 +362,7 @@ local
     val maxLen = Array.maxLen
     val eq = op = : array * array -> bool
     val length = Array.length
+    fun unsafeCreateWithZero n = Array.array (n, #"\000" : WideChar.char) (* TODO *)
     val unsafeCreate = Array.array (* TODO *)
     val fromList = Array.fromList
     fun unsafeFromListN (n, xs) = fromList xs (* TODO *)

@@ -35,8 +35,9 @@ js-common/word-sequence.sml
 js-common/scan-num.sml (* depends on Word8, Substring *)
 large-int-is-int-inf.sml
 js-common/int.sml
+js-common/mono-sequence.sml
+unsafe-mono-sequence.sml
 real.sml
-js-common/unsafe-extra.sml
 byte.sml
 scan-bool.sml
 scan-text.sml
@@ -70,6 +71,8 @@ signature STRING_CVT
 signature SUBSTRING
 signature TEXT
 signature TIME
+signature UNSAFE_MONO_ARRAY (* extension; to be moved... *)
+signature UNSAFE_MONO_VECTOR (* extension; to be moved... *)
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
@@ -79,6 +82,10 @@ structure LunarML (* extension; to be moved... *)
 structure Array
 structure ArraySlice
 structure Bool
+structure BoolArray
+structure BoolArraySlice
+structure BoolVector
+structure BoolVectorSlice
 structure Byte
 structure Char
 structure CharArray
@@ -90,10 +97,26 @@ structure IEEEReal
 structure IO
 structure Int
 structure Int16
+structure Int16Array
+structure Int16ArraySlice
+structure Int16Vector
+structure Int16VectorSlice
 structure Int32
+structure Int32Array
+structure Int32ArraySlice
+structure Int32Vector
+structure Int32VectorSlice
 structure Int54
 structure Int64
+structure Int64Array
+structure Int64ArraySlice
+structure Int64Vector
+structure Int64VectorSlice
 structure Int8
+structure Int8Array
+structure Int8ArraySlice
+structure Int8Vector
+structure Int8VectorSlice
 structure IntInf
 structure LargeInt
 structure LargeReal
@@ -103,6 +126,10 @@ structure ListPair
 structure Math
 structure Option
 structure Real
+structure RealArray
+structure RealArraySlice
+structure RealVector
+structure RealVectorSlice
 structure String
 structure StringCvt
 structure Substring
@@ -120,12 +147,28 @@ structure WideSubstring
 structure WideText
 structure Word
 structure Word16
+structure Word16Array
+structure Word16ArraySlice
+structure Word16Vector
+structure Word16VectorSlice
 structure Word32
+structure Word32Array
+structure Word32ArraySlice
+structure Word32Vector
+structure Word32VectorSlice
 structure Word64
+structure Word64Array
+structure Word64ArraySlice
+structure Word64Vector
+structure Word64VectorSlice
 structure Word8
 structure Word8Vector
 structure Word8VectorSlice
 structure Word8Array
 structure Word8ArraySlice
+structure WordArray
+structure WordArraySlice
+structure WordVector
+structure WordVectorSlice
 top-level-mini.sml
 end

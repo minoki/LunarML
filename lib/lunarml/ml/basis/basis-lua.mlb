@@ -37,7 +37,8 @@ large-int-is-int-inf.sml
 lua/int.sml
 real.sml
 lua/word-sequence.sml
-lua/unsafe-extra.sml
+generic-mono-sequence.sml
+unsafe-mono-sequence.sml
 byte.sml
 text.sml
 widetext-8.sml
@@ -71,16 +72,21 @@ signature SUBSTRING
 signature TEXT
 signature TIME
 signature TIMER
+signature UNSAFE_MONO_ARRAY (* extension; to be moved... *)
+signature UNSAFE_MONO_VECTOR (* extension; to be moved... *)
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
 structure Unsafe (* extension; to be moved... *)
 structure Lua (* extension; to be moved... *)
 structure LunarML (* extension; to be moved... *)
-signature BYTE
 structure Array
 structure ArraySlice
 structure Bool
+structure BoolArray
+structure BoolArraySlice
+structure BoolVector
+structure BoolVectorSlice
 structure Byte
 structure Char
 structure CharArray
@@ -93,11 +99,31 @@ structure IEEEReal
 structure IO
 structure Int
 structure Int16
+structure Int16Array
+structure Int16ArraySlice
+structure Int16Vector
+structure Int16VectorSlice
 structure Int32
+structure Int32Array
+structure Int32ArraySlice
+structure Int32Vector
+structure Int32VectorSlice
 structure Int54
 structure Int64
+structure Int64Array
+structure Int64ArraySlice
+structure Int64Vector
+structure Int64VectorSlice
 structure Int8
+structure Int8Array
+structure Int8ArraySlice
+structure Int8Vector
+structure Int8VectorSlice
+structure IntArray
+structure IntArraySlice
 structure IntInf
+structure IntVector
+structure IntVectorSlice
 structure LargeInt
 structure LargeReal
 structure LargeWord
@@ -107,6 +133,10 @@ structure Math
 structure OS
 structure Option
 structure Real
+structure RealArray
+structure RealArraySlice
+structure RealVector
+structure RealVectorSlice
 structure String
 structure StringCvt
 structure Substring
@@ -126,12 +156,28 @@ structure WideSubstring
 structure WideText
 structure Word
 structure Word16
+structure Word16Array
+structure Word16ArraySlice
+structure Word16Vector
+structure Word16VectorSlice
 structure Word32
+structure Word32Array
+structure Word32ArraySlice
+structure Word32Vector
+structure Word32VectorSlice
 structure Word64
+structure Word64Array
+structure Word64ArraySlice
+structure Word64Vector
+structure Word64VectorSlice
 structure Word8
 structure Word8Array
 structure Word8ArraySlice
 structure Word8Vector
 structure Word8VectorSlice
+structure WordArray
+structure WordArraySlice
+structure WordVector
+structure WordVectorSlice
 top-level.sml
 end

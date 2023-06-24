@@ -46,8 +46,10 @@ local
                   structure CharVectorSlice : MONO_VECTOR_SLICE where type elem = char where type vector = String.string
                   structure CharArray : MONO_ARRAY where type elem = char where type vector = String.string
                   structure CharArraySlice : MONO_ARRAY_SLICE where type elem = char where type vector = String.string
+                  structure UnsafeCharVector : UNSAFE_MONO_VECTOR where type vector = String.string where type elem = char
+                  structure UnsafeCharArray : UNSAFE_MONO_ARRAY where type elem = char
                   structure Substring : SUBSTRING where type substring = CharVectorSlice.slice where type string = String.string where type char = Char.char
-                  sharing type CharArraySlice.array = CharArray.array
+                  sharing type CharArraySlice.array = CharArray.array = UnsafeCharArray.array
                   sharing type CharArraySlice.vector_slice = CharVectorSlice.slice
               end = struct
     local
@@ -70,6 +72,7 @@ local
         val maxLen = Array.maxLen
         val eq = op = : array * array -> bool
         val length = Array.length
+        fun unsafeCreateWithZero n = Array.array (n, #"\000") (* TODO *)
         val unsafeCreate = Array.array (* TODO *)
         val fromList = Array.fromList
         fun unsafeFromListN (n, xs) = fromList xs (* TODO *)
@@ -83,6 +86,8 @@ local
     structure CharVectorSlice = Base.MonoVectorSlice
     structure CharArray = Base.MonoArray
     structure CharArraySlice = Base.MonoArraySlice
+    structure UnsafeCharVector = Base.UnsafeMonoVector
+    structure UnsafeCharArray = Base.UnsafeMonoArray
     structure Substring = struct
     type char = char
     type string = string

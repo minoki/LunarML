@@ -771,7 +771,7 @@ end
 structure ArraySlice :> ARRAY_SLICE
 ```
 
-## signature MONO_VECTOR (structure CharVector, WideCharVector, Word8Vector) - complete
+## signature MONO_VECTOR (structure \{Char,WideChar,Bool,Int,Int8,Int16,Int32,Int64,Word,Word8,Word16,Word32,Word64,Real\}Vector) - complete
 
 ```sml
 signature MONO_VECTOR = sig
@@ -807,10 +807,21 @@ structure CharVector :> MONO_VECTOR where type vector = String.string
                                     where type elem = char
 structure WideCharVector :> MONO_VECTOR where type vector = WideString.string
                                         where type elem = WideChar.char
+structure BoolVector :> MONO_VECTOR where type elem = bool
+structure IntVector :> MONO_VECTOR where type elem = Int.int
+structure Int8Vector :> MONO_VECTOR where type elem = Int8.int
+structure Int16Vector :> MONO_VECTOR where type elem = Int16.int
+structure Int32Vector :> MONO_VECTOR where type elem = Int32.int
+structure Int64Vector :> MONO_VECTOR where type elem = Int64.int
+structure WordVector :> MONO_VECTOR where type elem = Word.word
 structure Word8Vector :> MONO_VECTOR where type elem = Word8.word
+structure Word16Vector :> MONO_VECTOR where type elem = Word16.word
+structure Word32Vector :> MONO_VECTOR where type elem = Word32.word
+structure Word64Vector :> MONO_VECTOR where type elem = Word64.word
+structure RealVector :> MONO_VECTOR where type elem = real
 ```
 
-## signature MONO_VECTOR_SLICE (structure CharVectorSlice, WideCharVectorSlice, Word8VectorSlice) - complete
+## signature MONO_VECTOR_SLICE (structure \{Char,WideChar,Bool,Int,Int8,Int16,Int32,Int64,Word,Word8,Word16,Word32,Word64,Real\}VectorSlice) - complete
 
 ```sml
 signature MONO_VECTOR_SLICE = sig
@@ -847,11 +858,33 @@ structure CharVectorSlice :> MONO_VECTOR_SLICE where type vector = CharVector.ve
 structure WideCharVectorSlice :> MONO_VECTOR_SLICE where type vector = WideCharVector.vector
                                                    where type elem = WideChar.char
                                                    where type slice = WideSubstring.substring
+structure BoolVectorSlice :> MONO_VECTOR_SLICE where type vector = BoolVector.vector
+                                               where type elem = bool
+structure IntVectorSlice :> MONO_VECTOR_SLICE where type vector = IntVector.vector
+                                              where type elem = Int.int
+structure Int8VectorSlice :> MONO_VECTOR_SLICE where type vector = Int8Vector.vector
+                                               where type elem = Int8.int
+structure Int16VectorSlice :> MONO_VECTOR_SLICE where type vector = Int16Vector.vector
+                                                where type elem = Int16.int
+structure Int32VectorSlice :> MONO_VECTOR_SLICE where type vector = Int32Vector.vector
+                                                where type elem = Int32.int
+structure Int64VectorSlice :> MONO_VECTOR_SLICE where type vector = Int64Vector.vector
+                                                where type elem = Int64.int
+structure WordVectorSlice :> MONO_VECTOR_SLICE where type vector = WordVector.vector
+                                               where type elem = Word.word
 structure Word8VectorSlice :> MONO_VECTOR_SLICE where type vector = Word8Vector.vector
                                                 where type elem = Word8.word
+structure Word16VectorSlice :> MONO_VECTOR_SLICE where type vector = Word16Vector.vector
+                                                 where type elem = Word16.word
+structure Word32VectorSlice :> MONO_VECTOR_SLICE where type vector = Word32Vector.vector
+                                                 where type elem = Word32.word
+structure Word64VectorSlice :> MONO_VECTOR_SLICE where type vector = Word64Vector.vector
+                                                 where type elem = Word64.word
+structure RealVectorSlice :> MONO_VECTOR_SLICE where type vector = RealVector.vector
+                                               where type elem = real
 ```
 
-## signature MONO_ARRAY (structure CharArray, WideCharArray, Word8Array) - complete
+## signature MONO_ARRAY (structure \{Char,WideChar,Bool,Int,Int8,Int16,Int32,Int64,Word,Word8,Word16,Word32,Word64,Real\}Array) - complete
 
 ```sml
 signature MONO_ARRAY = sig
@@ -891,11 +924,33 @@ structure CharArray : MONO_ARRAY where type vector = CharVector.vector
                                  where type elem = char
 structure WideCharArray : MONO_ARRAY where type vector = WideCharVector.vector
                                      where type elem = WideChar.char
+structure BoolArray : MONO_ARRAY where type vector = BoolVector.vector
+                                 where type elem = bool
+structure IntArray : MONO_ARRAY where type vector = IntVector.vector
+                                where type elem = Int.int
+structure Int8Array : MONO_ARRAY where type vector = Int8Vector.vector
+                                 where type elem = Int8.int
+structure Int16Array : MONO_ARRAY where type vector = Int16Vector.vector
+                                  where type elem = Int16.int
+structure Int32Array : MONO_ARRAY where type vector = Int32Vector.vector
+                                  where type elem = Int32.int
+structure Int64Array : MONO_ARRAY where type vector = Int64Vector.vector
+                                  where type elem = Int64.int
+structure WordArray : MONO_ARRAY where type vector = WordVector.vector
+                                 where type elem = Word.word
 structure Word8Array : MONO_ARRAY where type vector = Word8Vector.vector
                                   where type elem = Word8.word
+structure Word16Array : MONO_ARRAY where type vector = Word16Vector.vector
+                                   where type elem = Word16.word
+structure Word32Array : MONO_ARRAY where type vector = Word32Vector.vector
+                                   where type elem = Word32.word
+structure Word64Array : MONO_ARRAY where type vector = Word64Vector.vector
+                                   where type elem = Word64.word
+structure RealArray : MONO_ARRAY where type vector = RealVector.vector
+                                 where type elem = real
 ```
 
-## signature MONO_ARRAY_SLICE (structure CharArraySlice, WideCharArraySlice, Word8ArraySlice) - complete
+## signature MONO_ARRAY_SLICE (structure \{Char,WideChar,Bool,Int,Int8,Int16,Int32,Int64,Word,Word8,Word16,Word32,Word64,Real\}ArraySlice) - complete
 
 ```sml
 signature MONO_ARRAY_SLICE = sig
@@ -938,10 +993,54 @@ structure WideCharArraySlice : MONO_ARRAY_SLICE where type vector = WideCharVect
                                                 where type vector_slice = WideCharVectorSlice.slice
                                                 where type array = WideCharArray.array
                                                 where type elem = WideChar.char
+structure BoolArraySlice : MONO_ARRAY_SLICE where type vector = BoolVector.vector
+                                            where type vector_slice = BoolVectorSlice.slice
+                                            where type array = BoolArray.array
+                                            where type elem = bool
+structure IntArraySlice : MONO_ARRAY_SLICE where type vector = IntVector.vector
+                                           where type vector_slice = IntVectorSlice.slice
+                                           where type array = IntArray.array
+                                           where type elem = Int.int
+structure Int8ArraySlice : MONO_ARRAY_SLICE where type vector = Int8Vector.vector
+                                            where type vector_slice = Int8VectorSlice.slice
+                                            where type array = Int8Array.array
+                                            where type elem = Int8.int
+structure Int16ArraySlice : MONO_ARRAY_SLICE where type vector = Int16Vector.vector
+                                             where type vector_slice = Int16VectorSlice.slice
+                                             where type array = Int16Array.array
+                                             where type elem = Int16.int
+structure Int32ArraySlice : MONO_ARRAY_SLICE where type vector = Int32Vector.vector
+                                             where type vector_slice = Int32VectorSlice.slice
+                                             where type array = Int32Array.array
+                                             where type elem = Int32.int
+structure Int64ArraySlice : MONO_ARRAY_SLICE where type vector = Int64Vector.vector
+                                             where type vector_slice = Int64VectorSlice.slice
+                                             where type array = Int64Array.array
+                                             where type elem = Int64.int
+structure WordArraySlice : MONO_ARRAY_SLICE where type vector = WordVector.vector
+                                             where type vector_slice = WordVectorSlice.slice
+                                             where type array = WordArray.array
+                                             where type elem = Word.word
 structure Word8ArraySlice : MONO_ARRAY_SLICE where type vector = Word8Vector.vector
                                              where type vector_slice = Word8VectorSlice.slice
                                              where type array = Word8Array.array
-                                             where type elem = Word8
+                                             where type elem = Word8.word
+structure Word16ArraySlice : MONO_ARRAY_SLICE where type vector = Word16Vector.vector
+                                              where type vector_slice = Word16VectorSlice.slice
+                                              where type array = Word16Array.array
+                                              where type elem = Word16.word
+structure Word32ArraySlice : MONO_ARRAY_SLICE where type vector = Word32Vector.vector
+                                              where type vector_slice = Word32VectorSlice.slice
+                                              where type array = Word32Array.array
+                                              where type elem = Word32.word
+structure Word64ArraySlice : MONO_ARRAY_SLICE where type vector = Word64Vector.vector
+                                              where type vector_slice = Word64VectorSlice.slice
+                                              where type array = Word64Array.array
+                                              where type elem = Word64.word
+structure RealArraySlice : MONO_ARRAY_SLICE where type vector = RealVector.vector
+                                            where type vector_slice = RealVectorSlice.slice
+                                            where type array = RealArray.array
+                                            where type elem = real
 ```
 
 ## structure Byte - partial

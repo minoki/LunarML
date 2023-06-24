@@ -11,8 +11,10 @@ local
                   structure Word8VectorSlice : MONO_VECTOR_SLICE where type elem = Word8.word where type vector = Word8Vector.vector
                   structure Word8Array : MONO_ARRAY where type elem = Word8.word
                   structure Word8ArraySlice : MONO_ARRAY_SLICE where type elem = Word8.word
-                  sharing type Word8VectorExtra.vector = Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector
-                  sharing type Word8Array.array = Word8ArraySlice.array
+                  structure UnsafeWord8Vector : UNSAFE_MONO_VECTOR where type elem = Word8.word
+                  structure UnsafeWord8Array : UNSAFE_MONO_ARRAY where type elem = Word8.word
+                  sharing type Word8VectorExtra.vector = Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector = UnsafeWord8Vector.vector
+                  sharing type Word8Array.array = Word8ArraySlice.array = UnsafeWord8Array.array
                   sharing type Word8VectorSlice.slice = Word8ArraySlice.vector_slice
               end = struct
     local
@@ -35,6 +37,7 @@ local
         val maxLen = Array.maxLen
         val eq = op = : array * array -> bool
         val length = Array.length
+        fun unsafeCreateWithZero n = Array.array (n, 0w0 : Word8.word) (* TODO *)
         val unsafeCreate = Array.array (* TODO *)
         val fromList = Array.fromList
         fun unsafeFromListN (n, xs) = fromList xs (* TODO *)
@@ -48,6 +51,8 @@ local
     structure Word8VectorSlice = Base.MonoVectorSlice
     structure Word8Array = Base.MonoArray
     structure Word8ArraySlice = Base.MonoArraySlice
+    structure UnsafeWord8Vector = Base.UnsafeMonoVector
+    structure UnsafeWord8Array = Base.UnsafeMonoArray
     structure Word8VectorExtra = struct
     fun bytesToString x = x
     fun stringToBytes x = x

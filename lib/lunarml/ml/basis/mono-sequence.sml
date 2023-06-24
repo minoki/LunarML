@@ -177,6 +177,7 @@ signature MONO_SEQUENCE_PRIM = sig
                   val maxLen : int
                   val eq : array * array -> bool
                   val length : array -> int
+                  val unsafeCreateWithZero : int -> array
                   val unsafeCreate : int * elem -> array
                   val fromList : elem list -> array
                   val unsafeFromListN : int * elem list -> array
@@ -185,11 +186,27 @@ signature MONO_SEQUENCE_PRIM = sig
               end
 end
 
+signature UNSAFE_MONO_VECTOR = sig
+    type vector
+    type elem
+    val sub : vector * int -> elem
+end
+
+signature UNSAFE_MONO_ARRAY = sig
+    type array
+    type elem
+    val sub : array * int -> elem
+    val update : array * int * elem -> unit
+    val create : int -> array
+end
+
 functor MonoSequence (P : MONO_SEQUENCE_PRIM) : sig
             structure MonoVector : MONO_VECTOR where type elem = P.elem where type vector = P.vector
             structure MonoVectorSlice : MONO_VECTOR_SLICE where type elem = P.elem where type vector = P.vector where type slice = { base : P.vector, start : int, length : int }
             structure MonoArray : MONO_ARRAY_NOEQTYPE where type elem = P.elem where type array = P.array where type vector = P.vector
             structure MonoArraySlice : MONO_ARRAY_SLICE where type elem = P.elem where type array = P.array where type vector = P.vector where type vector_slice = { base : P.vector, start : int, length : int } where type slice = { base : P.array, start : int, length : int }
+            structure UnsafeMonoVector : UNSAFE_MONO_VECTOR where type elem = P.elem where type vector = P.vector
+            structure UnsafeMonoArray : UNSAFE_MONO_ARRAY where type elem = P.elem where type array = P.array
         end = struct
 structure MonoVector = struct
 type elem = P.elem
@@ -802,5 +819,17 @@ fun collate compare ({ base, start, length }, { base = base', start = start', le
       in loop (start, start')
       end
 fun vector a = P.MonoVector.unsafeFromListN (length a, foldr (op ::) [] a) (* may be overridden with a more efficient implementation *)
+end
+structure UnsafeMonoVector = struct
+type elem = P.elem
+type vector = P.vector
+val sub = P.MonoVector.unsafeSub
+end
+structure UnsafeMonoArray = struct
+type elem = P.elem
+type array = P.array
+val sub = P.MonoArray.unsafeSub
+val update = P.MonoArray.unsafeUpdate
+val create = P.MonoArray.unsafeCreateWithZero
 end
 end;
