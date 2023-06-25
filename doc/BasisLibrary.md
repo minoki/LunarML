@@ -1058,6 +1058,28 @@ end
 structure Byte :> BYTE
 ```
 
+## signature PACK_WORD (structure PackWord8Big, PackWord8Little, PackWord16Big, PackWord16Little, PackWord32Big, PackWord32Little, PackWord64Big, PackWord64Little) - complete
+
+```sml
+signature PACK_WORD = sig
+  val bytesPerElem : int
+  val isBigEndian : bool
+  val subVec : Word8Vector.vector * int -> LargeWord.word
+  val subVecX : Word8Vector.vector * int -> LargeWord.word
+  val subArr : Word8Array.array * int -> LargeWord.word
+  val subArrX : Word8Array.array * int -> LargeWord.word
+  val update : Word8Array.array * int * LargeWord.word -> unit
+end
+structure PackWord8Big :> PACK_WORD
+structure PackWord8Little :> PACK_WORD
+structure PackWord16Big :> PACK_WORD
+structure PackWord16Little :> PACK_WORD
+structure PackWord32Big :> PACK_WORD
+structure PackWord32Little :> PACK_WORD
+structure PackWord64Big :> PACK_WORD
+structure PackWord64Little :> PACK_WORD
+```
+
 ## structure IO - partial
 
 ```sml

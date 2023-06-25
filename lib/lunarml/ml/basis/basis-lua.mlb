@@ -6,7 +6,7 @@ prim.sml
 equal.sml
 end
 local
-ann "allowPrim true" "allowOverload true" in
+ann "allowPrim true" "allowOverload true" "allowInfixingDot true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
 $(TARGET_LANG)/int-prim.sml
@@ -40,6 +40,7 @@ lua/word-sequence.sml
 generic-mono-sequence.sml
 unsafe-mono-sequence.sml
 byte.sml
+pack-word.sml
 text.sml
 widetext-8.sml
 lua/time.sml
@@ -65,6 +66,7 @@ signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
+signature PACK_WORD
 signature REAL
 signature STRING
 signature STRING_CVT
@@ -132,6 +134,14 @@ structure ListPair
 structure Math
 structure OS
 structure Option
+structure PackWord16Big
+structure PackWord16Little
+structure PackWord32Big
+structure PackWord32Little
+structure PackWord64Big
+structure PackWord64Little
+structure PackWord8Big
+structure PackWord8Little
 structure Real
 structure RealArray
 structure RealArraySlice
