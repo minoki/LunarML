@@ -30,7 +30,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, List.map doExp args)
                    | F.VarExp longvid => exp0
                    | F.RecordExp fields => F.RecordExp (List.map (fn (label, e) => (label, doExp e)) fields)
-                   | F.LetExp (dec, exp) => F.LetExp (doDec dec, doExp exp)
+                   | F.LetExp (decs, exp) => F.LetExp (List.map doDec decs, doExp exp)
                    | F.AppExp (exp1, exp2) => F.AppExp (doExp exp1, doExp exp2)
                    | F.HandleExp { body, exnName, handler } => F.HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
                    | F.IfThenElseExp (exp1, exp2, exp3) => F.IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
@@ -43,13 +43,13 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      if TypedSyntax.eqVId (vid, vid') then
                          doExp subjectExp
                      else
-                         F.LetExp (F.ValDec (vid, SOME ty', doExp subjectExp), exp2)
+                         F.LetExp ([F.ValDec (vid, SOME ty', doExp subjectExp)], exp2)
                    | F.CaseExp { sourceSpan, subjectExp, subjectTy, matches, matchType, resultTy } =>
                      let val canIgnore = case matches of
                                              [(pat, innerExp)] => if isWildcardPat pat then SOME innerExp else NONE
                                            | _ => NONE
                      in case canIgnore of
-                            SOME innerExp => F.LetExp (F.IgnoreDec (doExp subjectExp), doExp innerExp)
+                            SOME innerExp => F.LetExp ([F.IgnoreDec (doExp subjectExp)], doExp innerExp)
                           | NONE => let val examinedVId = freshVId(ctx, "exp")
                                         val examinedExp = F.VarExp(examinedVId)
                                         fun go [] = (case matchType of
@@ -61,11 +61,11 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                             = let val binders = genBinders examinedExp subjectTy pat
                                                   val matcher = genMatcher examinedExp subjectTy pat
                                               in if isExhaustive pat then
-                                                     List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders
+                                                     List.foldr (fn (valbind, exp) => F.LetExp ([F.ValDec valbind], exp)) (doExp innerExp) binders
                                                  else
-                                                     F.IfThenElseExp (matcher, List.foldr (fn (valbind, exp) => F.LetExp (F.ValDec valbind, exp)) (doExp innerExp) binders, go rest)
+                                                     F.IfThenElseExp (matcher, List.foldr (fn (valbind, exp) => F.LetExp ([F.ValDec valbind], exp)) (doExp innerExp) binders, go rest)
                                               end
-                                    in F.LetExp (F.ValDec (examinedVId, SOME subjectTy, doExp subjectExp), go matches)
+                                    in F.LetExp ([F.ValDec (examinedVId, SOME subjectTy, doExp subjectExp)], go matches)
                                     end
                      end
                 )
@@ -77,7 +77,6 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | doDec (dec as F.ExceptionDec { name, tagName, payloadTy }) = dec
             | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
             | doDec (F.ExportModule fields) = F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
-            | doDec (F.GroupDec (v, decs)) = F.GroupDec (v, doDecs decs)
           and genMatcher exp _ (F.WildcardPat _) : F.Exp = F.VarExp InitialEnv.VId_true (* always match *)
             | genMatcher exp ty (F.SConPat { sourceSpan, scon, equality, cookedValue }) = F.AppExp (equality, F.TupleExp [exp, cookedValue])
             | genMatcher exp ty (F.VarPat (_, vid, _)) = F.VarExp InitialEnv.VId_true (* always match *)
@@ -206,7 +205,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | isExhaustive (F.ExnConPat _) = false
             | isExhaustive (F.LayeredPat (_, _, _, innerPat)) = isExhaustive innerPat
             | isExhaustive (F.VectorPat (_, pats, ellipsis, elemTy)) = ellipsis andalso Vector.length pats = 0
-          and doDecs decs = List.map doDec decs
+          fun doDecs decs = List.map doDec decs
       in { doExp = doExp
          , doDec = doDec
          , doDecs = doDecs
@@ -220,9 +219,7 @@ type Context = {}
 fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.map doExp args)
   | doExp (exp as F.VarExp _) = exp
   | doExp (F.RecordExp fields) = F.RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
-  | doExp (F.LetExp (dec, exp)) = let val decs = doDec dec
-                                  in List.foldr F.LetExp (doExp exp) decs
-                                  end
+  | doExp (F.LetExp (decs, exp)) = F.LetExp (List.concat (List.map doDec decs), doExp exp)
   | doExp (F.AppExp (exp1, exp2)) = F.AppExp (doExp exp1, doExp exp2)
   | doExp (F.HandleExp { body, exnName, handler }) = F.HandleExp { body = doExp body
                                                                  , exnName = exnName
@@ -263,7 +260,6 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
   | doDec (F.ExportValue exp) = [F.ExportValue (doExp exp)]
   | doDec (F.ExportModule fields) = [F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)]
-  | doDec (F.GroupDec (set, decs)) = [F.GroupDec (set, doDecs decs)]
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
 
@@ -297,7 +293,7 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
 fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primOp andalso List.all isDiscardable args
   | isDiscardable (F.VarExp _) = true
   | isDiscardable (F.RecordExp fields) = List.all (fn (label, exp) => isDiscardable exp) fields
-  | isDiscardable (F.LetExp (dec, exp)) = false (* TODO *)
+  | isDiscardable (F.LetExp (decs, exp)) = false (* TODO *)
   | isDiscardable (F.AppExp (exp1, exp2)) = false (* TODO *)
   | isDiscardable (F.HandleExp { body, exnName, handler }) = false (* TODO *)
   | isDiscardable (F.IfThenElseExp (exp1, exp2, exp3)) = isDiscardable exp1 andalso isDiscardable exp2 andalso isDiscardable exp3
@@ -332,10 +328,12 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
   | doExp (F.RecordExp fields) acc = let val (acc, fields) = List.foldr (fn ((label, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (label, exp) :: xs) end) (acc, []) fields
                                      in (acc, F.RecordExp fields)
                                      end
-  | doExp (F.LetExp (dec, exp)) acc = let val (used, exp) = doExp exp TypedSyntax.VIdSet.empty
-                                          val (used', decs) = doDec (used, dec)
-                                      in (TypedSyntax.VIdSet.union (acc, used'), List.foldr F.LetExp exp decs)
-                                      end
+  | doExp (F.LetExp (decs, exp)) acc = let val (used, exp) = doExp exp TypedSyntax.VIdSet.empty
+                                           val (used', decs) = List.foldr (fn (dec, (used, decs)) => let val (used', decs') = doDec (used, dec)
+                                                                                                     in (used', decs' @ decs)
+                                                                                                     end) (used, []) decs
+                                       in (TypedSyntax.VIdSet.union (acc, used'), F.LetExp (decs, exp))
+                                       end
   | doExp (F.AppExp (exp1, exp2)) acc = let val (used, exp1) = doExp exp1 acc
                                             val (used', exp2) = doExp exp2 used
                                         in (used', F.AppExp (exp1, exp2))
@@ -374,7 +372,7 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
                                                           in (used, F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy })
                                                           end
 and doIgnoredExpAsExp exp acc = let val (used, exps) = doIgnoredExp exp acc
-                                in (used, List.foldr (fn (e1, e2) => F.LetExp (F.IgnoreDec e1, e2)) (F.RecordExp []) exps)
+                                in (used, F.LetExp (List.map F.IgnoreDec exps, F.RecordExp []))
                                 end
 and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
     = if isDiscardablePrimOp primOp then
@@ -385,12 +383,14 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
           end
   | doIgnoredExp (F.VarExp _) acc = (acc, [])
   | doIgnoredExp (F.RecordExp fields) acc = List.foldr (fn ((label, exp), (acc, xs)) => let val (acc, ys) = doIgnoredExp exp acc in (acc, ys @ xs) end) (acc, []) fields
-  | doIgnoredExp (F.LetExp (dec, exp)) acc = let val (used, exp) = doIgnoredExpAsExp exp TypedSyntax.VIdSet.empty
-                                                 val (used, decs) = doDec (used, dec)
-                                             in case List.foldr F.LetExp exp decs of
-                                                    F.RecordExp [] => (TypedSyntax.VIdSet.union (acc, used), [])
-                                                  | exp => (TypedSyntax.VIdSet.union (acc, used), [exp])
-                                             end
+  | doIgnoredExp (F.LetExp (decs, exp)) acc = let val (used, exp) = doIgnoredExpAsExp exp TypedSyntax.VIdSet.empty
+                                                  val (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, decs') = doDec (used, dec)
+                                                                                                           in (used, decs' @ decs)
+                                                                                                           end) (used, []) decs
+                                              in case (decs, exp) of
+                                                     ([], F.RecordExp []) => (TypedSyntax.VIdSet.union (acc, used), [])
+                                                   | _ => (TypedSyntax.VIdSet.union (acc, used), [F.LetExp (decs, exp)])
+                                              end
   | doIgnoredExp (F.AppExp (exp1, exp2)) acc = let val (used1, exp1) = doExp exp1 acc
                                                    val (used2, exp2) = doExp exp2 used1
                                                in (used2, [F.AppExp (exp1, exp2)])
@@ -486,15 +486,6 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
   | doDec (used, F.ExportModule fields) = let val (acc, fields') = Vector.foldr (fn ((label, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (label, exp) :: xs) end) (used, []) fields
                                           in (acc, [F.ExportModule (Vector.fromList fields')])
                                           end
-  | doDec (used, F.GroupDec (_, decs)) = let val (used', decs) = doDecs (used, decs)
-                                         in (used', case decs of
-                                                        [] => decs
-                                                      | [_] => decs
-                                                      | _ => let val defined = definedInDecs decs TypedSyntax.VIdSet.empty
-                                                             in [F.GroupDec (SOME (TypedSyntax.VIdSet.intersection (used, defined)), decs)]
-                                                             end
-                                            )
-                                         end
 and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
                                                                 end) (used, []) decs
@@ -507,5 +498,4 @@ and definedInDec (F.ValDec (vid, _, _)) acc = TypedSyntax.VIdSet.add (acc, vid)
   | definedInDec (F.ExceptionDec { name = _, tagName, payloadTy = _ }) acc = TypedSyntax.VIdSet.add (acc, tagName)
   | definedInDec (F.ExportValue _) acc = acc (* should not occur *)
   | definedInDec (F.ExportModule _) acc = acc (* should not occur *)
-  | definedInDec (F.GroupDec(_, decs)) acc = definedInDecs decs acc (* should not occur *)
 end; (* structure DeadCodeElimination *)

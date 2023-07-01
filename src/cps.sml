@@ -414,44 +414,41 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                   ) k (C.Var result)
                          end
                      )
-         | F.LetExp (F.ValDec (vid, _, exp1), exp2) =>
-           transform (ctx, env) exp1 { revDecs = revDecs, resultHint = SOME vid }
-                     (fn (revDecs, v) =>
-                         transformX (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) exp2 (revDecs, k)
-                     )
-         | F.LetExp (F.RecValDec decs, exp2) =>
-           let val dec = C.RecDec (List.map (fn (vid, _, exp1) =>
-                                                let val contParam = genContSym ctx
-                                                in case stripTyAbs exp1 of
-                                                       F.FnExp (param, _, body) => (vid, contParam, [param], transformT (ctx, env) body ([], contParam))
-                                                     | _ => raise Fail "RecValDec"
-                                                end
-                                            ) decs
-                                  )
-           in transformX (ctx, env) exp2 (dec :: revDecs, k)
-           end
-         | F.LetExp (F.UnpackDec (_, _, vid, _, exp1), exp2) =>
-           transform (ctx, env) exp1 { revDecs = revDecs, resultHint = SOME vid }
-                     (fn (revDecs, v) =>
-                         transformX (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) exp2 (revDecs, k)
-                     )
-         | F.LetExp (F.IgnoreDec exp1, exp2) =>
-           transform (ctx, env) exp1 { revDecs = revDecs, resultHint = NONE }
-                     (fn (revDecs, _) =>
-                         transformX (ctx, env) exp2 (revDecs, k)
-                     )
-         | F.LetExp (F.DatatypeDec _, exp) => transformX (ctx, env) exp (revDecs, k)
-         | F.LetExp (F.ExceptionDec { name, tagName, payloadTy }, exp) =>
-           let val dec = C.ValDec { exp = C.ExnTag { name = name
+         | F.LetExp (decs, finalExp) =>
+           let fun doDecs (env, [], revDecs) = transformX (ctx, env) finalExp (revDecs, k)
+                 | doDecs (env, F.ValDec (vid, _, exp) :: decs, revDecs)
+                   = transform (ctx, env) exp { revDecs = revDecs, resultHint = SOME vid }
+                               (fn (revDecs, v) => doDecs (TypedSyntax.VIdMap.insert (env, vid, v), decs, revDecs))
+                 | doDecs (env, F.RecValDec decs' :: decs, revDecs)
+                   = let val dec = C.RecDec (List.map (fn (vid, _, exp) =>
+                                                          let val contParam = genContSym ctx
+                                                          in case stripTyAbs exp of
+                                                                 F.FnExp (param, _, body) => (vid, contParam, [param], transformT (ctx, env) body ([], contParam))
+                                                               | _ => raise Fail "RecValDec"
+                                                          end
+                                                      ) decs'
+                                            )
+                     in doDecs (env, decs, dec :: revDecs)
+                     end
+                 | doDecs (env, F.UnpackDec (_, _, vid, _, exp) :: decs, revDecs)
+                   = transform (ctx, env) exp { revDecs = revDecs, resultHint = SOME vid }
+                               (fn (revDecs, v) => doDecs (TypedSyntax.VIdMap.insert (env, vid, v), decs, revDecs))
+                 | doDecs (env, F.IgnoreDec exp :: decs, revDecs)
+                   = transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE }
+                               (fn (revDecs, _) => doDecs (env, decs, revDecs))
+                 | doDecs (env, F.DatatypeDec _ :: decs, revDecs) = doDecs (env, decs, revDecs)
+                 | doDecs (env, F.ExceptionDec { name, tagName, payloadTy } :: decs, revDecs)
+                   = let val dec = C.ValDec { exp = C.ExnTag { name = name
                                                    , payloadTy = payloadTy
                                                    }
                                   , result = SOME tagName
-                                  }
-           in transformX (ctx, env) exp (dec :: revDecs, k)
+                                            }
+                     in doDecs (env, decs, dec :: revDecs)
+                     end
+                 | doDecs (env, F.ExportValue _ :: decs, revDecs) = raise Fail "ExportValue must be the last declaration"
+                 | doDecs (env, F.ExportModule _ :: decs, revDecs) = raise Fail "ExportModule must be the last declaration"
+           in doDecs (env, decs, revDecs)
            end
-         | F.LetExp (F.ExportValue _, _) => raise Fail "ExportValue in CPS: not supported"
-         | F.LetExp (F.ExportModule _, _) => raise Fail "ExportModule in CPS: not supported"
-         | F.LetExp (F.GroupDec (_, decs), exp) => transformX (ctx, env) (List.foldr F.LetExp exp decs) (revDecs, k)
          | F.AppExp (applied, arg) =>
            transform (ctx, env) applied { revDecs = revDecs, resultHint = NONE }
                      (fn (revDecs, f) =>
@@ -559,7 +556,6 @@ fun transformDecs (ctx : Context, env) ([] : F.Dec list) (revDecs : C.Dec list, 
                                                           end
          | F.ExportValue exp => raise Fail "ExportValue must be the last declaration"
          | F.ExportModule _ => raise Fail "ExportModule must be the last declaration"
-         | F.GroupDec (_, decs') => transformDecs (ctx, env) (decs' @ decs) (revDecs, k)
       )
 end
 end;

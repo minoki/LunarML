@@ -207,7 +207,6 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
              | DatatypeDec of SourcePos.span * DatBind list
              | ExceptionDec of SourcePos.span * ExBind list
-             | GroupDec of SourcePos.span * Dec list
              | OverloadDec of SourcePos.span * Syntax.OverloadClass * TyName * Exp Syntax.OverloadKeyMap.map
              | EqualityDec of SourcePos.span * TyVar list * TyName * Exp
              | ValDescDec of { sourceSpan : SourcePos.span, expected : TypeScheme, actual : TypeScheme, origin : valdesc_origin }
@@ -225,7 +224,6 @@ datatype StrExp = StructExp of { sourceSpan : SourcePos.span
                 | LetInStrExp of SourcePos.span * StrDec list * StrExp
      and StrDec = CoreDec of SourcePos.span * Dec
                 | StrBindDec of SourcePos.span * StrId * StrExp * PackedSignature
-                | GroupStrDec of SourcePos.span * StrDec list
 type FunExp = { tyname : TyName, arity : int, admitsEquality : bool } list * StrId * Signature * StrExp
 
 datatype TopDec = StrDec of StrDec
@@ -342,7 +340,6 @@ and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind
   | print_Dec (TypeDec(_, typbinds)) = "TypeDec(" ^ Syntax.print_list print_TypBind typbinds ^ ")"
   | print_Dec (DatatypeDec(_, datbinds)) = "DatatypeDec(" ^ Syntax.print_list print_DatBind datbinds ^ ")"
   | print_Dec (ExceptionDec(_, exbinds)) = "ExceptionDec"
-  | print_Dec (GroupDec _) = "GroupDec"
   | print_Dec (OverloadDec _) = "OverloadDec"
   | print_Dec (EqualityDec _) = "EqualityDec"
   | print_Dec (ValDescDec _) = "ValDescDec"
@@ -385,7 +382,6 @@ fun print_StrExp (StructExp { sourceSpan, valMap, tyConMap, strMap }) = "StructE
   | print_StrExp (LetInStrExp (span, strdecs, strexp)) = "LetInStrExp(" ^ Syntax.print_list print_StrDec strdecs ^ "," ^ print_StrExp strexp ^ ")"
 and print_StrDec (CoreDec (span, dec)) = print_Dec dec
   | print_StrDec (StrBindDec (span, strid, strexp, ps)) = "StrBindDec(" ^ print_StrId strid ^ "," ^ print_StrExp strexp ^ ")"
-  | print_StrDec (GroupStrDec (span, strdecs)) = "GroupStrDec" ^ Syntax.print_list print_StrDec strdecs
 fun print_TopDec (StrDec strdec) = print_StrDec strdec
   | print_TopDec (FunDec (funid, (typarams, strid, s, strexp))) = "FunDec(" ^ print_FunId funid ^ ",(" ^ Syntax.print_list (fn { tyname, arity, admitsEquality } => "(" ^ print_TyName tyname ^ "," ^ Int.toString arity ^ "," ^ Bool.toString admitsEquality ^ ")") typarams ^ "," ^ print_Signature s ^ "," ^ print_StrExp strexp ^ "))"
 end (* structure PrettyPrint *)
@@ -485,7 +481,6 @@ fun applySubstTyInExpOrDec subst
                                                            | doExBind (ExReplication (span, vid, longvid, optTy)) = ExReplication (span, vid, longvid, Option.map doTy optTy)
                                                      in ExceptionDec (span, List.map doExBind exbinds)
                                                      end
-            | doDec (GroupDec (span, decs)) = GroupDec (span, List.map doDec decs)
             | doDec (OverloadDec (span, class, tyname, map)) = OverloadDec (span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = let val subst' = List.foldl (fn (tv, s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
                                                                 in EqualityDec (span, tyvars, tyname, #doExp (applySubstTyInExpOrDec subst') exp)
@@ -565,9 +560,6 @@ fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdSta
             | doDec (d as ExceptionDec (span, exbinds)) = (List.foldl (fn (ExBind (span, vid, optTy), acc) => VIdSet.add (acc, vid)
                                                                       | (ExReplication (span, vid, longvid, optTy), acc) => VIdSet.add (acc, vid) (* longvid? *)
                                                                       ) VIdSet.empty exbinds, d)
-            | doDec (GroupDec (span, decs)) = let val (env, decs) = doDecs decs
-                                              in (env, GroupDec (span, decs))
-                                              end
             | doDec (OverloadDec (span, class, tyname, map)) = (VIdSet.empty, OverloadDec (span, class, tyname, Syntax.OverloadKeyMap.map doExp map))
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = (VIdSet.empty, EqualityDec (span, tyvars, tyname, doExp exp))
             | doDec (e as ValDescDec _) = (VIdSet.empty, e)
@@ -622,7 +614,6 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
             | doDec(TypeDec(span, typbinds)) = TypeDec(span, List.map doTypBind typbinds)
             | doDec(DatatypeDec(span, datbinds)) = DatatypeDec(span, List.map doDatBind datbinds)
             | doDec(ExceptionDec(span, exbinds)) = ExceptionDec(span, List.map doExBind exbinds)
-            | doDec(GroupDec(span, decs)) = GroupDec(span, List.map doDec decs)
             | doDec(OverloadDec(span, class, tyname, map)) = OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = EqualityDec (span, tyvars, tyname, doExp exp)
             | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin }) = ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, doTy ty) (* should not be needed *), actual = TypeScheme (tyvars', doTy ty'), origin = origin }
@@ -672,7 +663,6 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
             | doStrExp(LetInStrExp(span, strdecs, strexp)) = LetInStrExp(span, List.map doStrDec strdecs, doStrExp strexp)
           and doStrDec(CoreDec(span, dec)) = CoreDec(span, doDec dec)
             | doStrDec(StrBindDec(span, strid, strexp, { s, bound })) = StrBindDec(span, strid, doStrExp strexp, { s = doSignature s, bound = bound })
-            | doStrDec(GroupStrDec(span, decs)) = GroupStrDec(span, List.map doStrDec decs)
           fun doFunExp(bound, strid, s, strexp) = (bound, strid, doSignature s, doStrExp strexp)
           fun doTopDec(StrDec strdec) = StrDec(doStrDec strdec)
             | doTopDec(FunDec(funid, funexp)) = FunDec(funid, doFunExp funexp)
@@ -731,7 +721,6 @@ and freeTyVarsInDec (bound, dec)
          | TypeDec (_, typbinds) => List.foldl (fn (typbind, acc) => acc @ freeAnonymousTyVarsInTypBind (bound, typbind)) [] typbinds
          | DatatypeDec (_, datbinds) => List.foldl (fn (datbind, acc) => acc @ freeTyVarsInDatBind (bound, datbind)) [] datbinds
          | ExceptionDec (_, exbinds) => List.foldl (fn (exbind, acc) => acc @ freeTyVarsInExBind (bound, exbind)) [] exbinds
-         | GroupDec (_, decs) => freeTyVarsInDecs (bound, decs)
          | OverloadDec (_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => acc @ freeTyVarsInExp (bound, exp)) [] map
          | EqualityDec (_, typarams, tyname, exp) => freeTyVarsInExp (bound, exp)
          | ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin } => freeAnonymousTyVarsInTy ty (* should be empty *) @ freeAnonymousTyVarsInTy ty'

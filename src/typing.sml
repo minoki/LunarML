@@ -1783,10 +1783,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                       , funMap = #funMap env''
                       , boundTyVars = #boundTyVars env''
                       }
-      in (env'', case decs1 @ decs2 of
-                     decs as [] => decs
-                   | decs as [dec] => decs
-                   | decs => [T.GroupDec (span, decs)])
+      in (env'', decs1 @ decs2)
       end
   | typeCheckDec(ctx, env, S.OpenDec(span, longstrids))
     = let fun getStructure(Syntax.MkQualified([], strid))
@@ -2214,7 +2211,6 @@ local
       | checkDec (ctx, env, T.TypeDec _) = ()
       | checkDec (ctx, env, T.DatatypeDec _) = ()
       | checkDec (ctx, env, T.ExceptionDec _) = ()
-      | checkDec (ctx, env, T.GroupDec (_, decs)) = checkDecs (ctx, env, decs)
       | checkDec (ctx, env, T.OverloadDec (span, class, name, map)) = Syntax.OverloadKeyMap.app (fn exp => checkExp (ctx, env, exp)) map
       | checkDec (ctx, env, T.EqualityDec (span, tyvars, tyname, exp)) = checkExp (ctx, T.TyVarSet.addList (env, tyvars), exp)
       | checkDec (ctx, env, T.ValDescDec { sourceSpan, expected, actual, origin }) = checkValDesc (ctx, env, sourceSpan, expected, actual, origin)
@@ -2321,7 +2317,6 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                   ) exbinds
                                                        ; tynameset
                                                        )
-            | goDec (T.GroupDec (span, decs)) = goDecs decs
             | goDec (T.OverloadDec (span, class, tyname, map)) = ( if T.TyNameSet.member (tynameset, tyname) then
                                                                        ()
                                                                    else
@@ -2369,7 +2364,6 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
                                                                  end
           and goStrDec (T.CoreDec (_, dec)) = goDec dec
             | goStrDec (T.StrBindDec (_, strid, strexp, { s, bound })) = List.foldl (fn ({ tyname, ... }, set) => T.TyNameSet.add (set, tyname)) (goStrExp strexp) bound
-            | goStrDec (T.GroupStrDec (_, decs)) = goStrDecs decs
           and goStrDecs decs = List.foldl (fn (dec, tynameset) => let val { goStrDec, ... } = checkTyScope (ctx, tvset, tynameset)
                                                                   in goStrDec dec
                                                                   end)
@@ -3222,12 +3216,8 @@ and typeCheckStrDec (ctx : Context, env : Env, S.CoreDec (span, dec)) : Env * Ty
                      , boundTyVars = Syntax.TyVarMap.empty
                      }
       in (env', List.foldr (fn ((strid, strdecs, strexp, s), strdecs') =>
-                               let val decs = case strdecs @ [T.StrBindDec (span, strid, strexp, s)] of
-                                                  decs as [] => decs
-                                                | decs as [_] => decs
-                                                | decs => [T.GroupStrDec (span, decs)]
-                               in decs @ strdecs'
-                               end) [] binds)
+                               strdecs @ [T.StrBindDec (span, strid, strexp, s)] @ strdecs'
+                           ) [] binds)
       end
   | typeCheckStrDec(ctx, env, S.LocalStrDec(span, decs1, decs2))
     = let val (env', decs1) = typeCheckStrDecs(ctx, env, decs1)
@@ -3240,11 +3230,7 @@ and typeCheckStrDec (ctx : Context, env : Env, S.CoreDec (span, dec)) : Env * Ty
                       , funMap = #funMap env''
                       , boundTyVars = #boundTyVars env''
                       }
-      in (env'', case decs1 @ decs2 of
-                     decs as [] => decs
-                   | decs as [_] => decs
-                   | decs => [T.GroupStrDec (span, decs)]
-         )
+      in (env'', decs1 @ decs2)
       end
 and typeCheckStrDecs(ctx : Context, env : Env, []) = (emptyEnv, [])
   | typeCheckStrDecs(ctx, env, dec :: decs) = let val (env', dec) = typeCheckStrDec(ctx, env, dec)

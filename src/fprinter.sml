@@ -74,7 +74,7 @@ fun doPat prec (F.WildcardPat _) = [P.Fragment "_"]
 and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrimOp primOp @ P.Fragment " [" :: P.commaSep (List.map (doTy 0) types) @ (P.Fragment "] (" :: P.commaSep (List.map (doExp 0) exps) @ [P.Fragment ")"])
   | doExp prec (F.VarExp vid) = [P.Fragment (TypedSyntax.print_VId vid)]
   | doExp prec (F.RecordExp fields) = P.Fragment "{" :: P.commaSep (List.foldr (fn ((label, exp), xs) => (doLabel label @ P.Fragment " = " :: doExp 0 exp) :: xs) [] fields) @ [P.Fragment "}"]
-  | doExp prec (F.LetExp (dec, exp)) = showParen (prec >= 1) (P.Fragment "let " :: doDec dec @ P.Fragment " in " :: doExp 0 exp @ [P.Fragment " end"])
+  | doExp prec (F.LetExp (decs, exp)) = showParen (prec >= 1) (P.Fragment "let " :: P.semicolonSep (List.map doDec decs) @ P.Fragment " in " :: doExp 0 exp @ [P.Fragment " end"])
   | doExp prec (F.AppExp (applied, arg)) = showParen (prec >= 2) (doExp 1 applied @ P.Fragment " " :: doExp 2 arg)
   | doExp prec (F.HandleExp { body, exnName, handler }) = showParen (prec >= 1) (P.Fragment "_try " :: doExp 0 body @ P.Fragment " handle " :: P.Fragment (TypedSyntax.print_VId exnName) :: P.Fragment " => " :: doExp 0 handler)
   | doExp prec (F.IfThenElseExp (exp1, exp2, exp3)) = showParen (prec >= 1) (P.Fragment "if " :: doExp 0 exp1 @ P.Fragment " then " :: doExp 0 exp2 @ P.Fragment " else " :: doExp 0 exp3)
@@ -96,7 +96,5 @@ and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (Type
   | doDec (F.ExceptionDec { name, tagName, payloadTy = SOME payloadTy }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: P.Fragment " of " :: doTy 0 payloadTy
   | doDec (F.ExportValue exp) = P.Fragment "_export " :: doExp 0 exp
   | doDec (F.ExportModule fields) = P.Fragment "_export {" :: P.commaSepV (Vector.map (fn (name, exp) => P.Fragment name :: P.Fragment " = " :: doExp 0 exp) fields) @ [P.Fragment "}"]
-  | doDec (F.GroupDec (NONE,decs)) = P.Fragment "_group" :: P.LineTerminator :: P.IncreaseIndent 2 :: List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs) @ [P.DecreaseIndent 2, P.Indent, P.Fragment "end"]
-  | doDec (F.GroupDec (SOME vidset,decs)) = P.Fragment "_group {" :: P.commaSep (TypedSyntax.VIdSet.foldr (fn (vid, xs) => [P.Fragment (TypedSyntax.print_VId vid)] :: xs) [] vidset) @ [P.Fragment "}", P.LineTerminator, P.IncreaseIndent 2] @ List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs) @ [P.DecreaseIndent 2, P.Indent, P.Fragment "end"]
 fun doDecs decs = List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs)
 end

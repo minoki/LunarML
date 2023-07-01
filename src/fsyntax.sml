@@ -65,7 +65,7 @@ datatype Pat = WildcardPat of SourcePos.span
      and Exp = PrimExp of PrimOp * Ty list * Exp list
              | VarExp of TypedSyntax.VId
              | RecordExp of (Syntax.Label * Exp) list
-             | LetExp of Dec * Exp
+             | LetExp of Dec list * Exp
              | AppExp of Exp * Exp
              | HandleExp of { body : Exp
                             , exnName : TypedSyntax.VId
@@ -86,7 +86,6 @@ datatype Pat = WildcardPat of SourcePos.span
              | ExceptionDec of { name : string, tagName : TypedSyntax.VId, payloadTy : Ty option } (* does not define value-level constructors *)
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
-             | GroupDec of TypedSyntax.VIdSet.set option * Dec list
 fun ValueLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid)
 fun StructLabel (Syntax.MkStrId name) = Syntax.IdentifierLabel ("_" ^ name)
 fun ExnTagLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag")
@@ -229,7 +228,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
         and doExp (PrimExp (primOp, tyargs, args)) = PrimExp (primOp, List.map doTy tyargs, List.map doExp args)
           | doExp (exp as VarExp _) = exp
           | doExp (RecordExp fields) = RecordExp (List.map (fn (label, exp) => (label, doExp exp)) fields)
-          | doExp (LetExp (dec, exp)) = LetExp (doDec dec, doExp exp)
+          | doExp (LetExp (decs, exp)) = LetExp (List.map doDec decs, doExp exp)
           | doExp (AppExp (exp1, exp2)) = AppExp (doExp exp1, doExp exp2)
           | doExp (HandleExp { body, exnName, handler }) = HandleExp { body = doExp body, exnName = exnName, handler = doExp handler }
           | doExp (IfThenElseExp (exp1, exp2, exp3)) = IfThenElseExp (doExp exp1, doExp exp2, doExp exp3)
@@ -253,7 +252,6 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doDec (ExceptionDec { name, tagName, payloadTy }) = ExceptionDec { name = name, tagName = tagName, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
-          | doDec (GroupDec (vars, decs)) = GroupDec (vars, List.map doDec decs)
     in { doTy = doTy
        , doConBind = doConBind
        , doPat = doPat
@@ -289,9 +287,9 @@ and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, 
                                                                                              end
   | freeTyVarsInExp (bound, VarExp _) acc = acc
   | freeTyVarsInExp (bound, RecordExp fields) acc = List.foldl (fn ((label, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc fields
-  | freeTyVarsInExp (bound, LetExp (dec, exp)) acc = let val (bound, acc) = freeTyVarsInDec (bound, dec) acc
-                                                     in freeTyVarsInExp (bound, exp) acc
-                                                     end
+  | freeTyVarsInExp (bound, LetExp (decs, exp)) acc = let val (bound, acc) = List.foldl (fn (dec, (bound, acc)) => freeTyVarsInDec (bound, dec) acc) (bound, acc) decs
+                                                      in freeTyVarsInExp (bound, exp) acc
+                                                      end
   | freeTyVarsInExp (bound, AppExp (exp1, exp2)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) acc)
   | freeTyVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeTyVarsInExp (bound, body) (freeTyVarsInExp (bound, handler) acc)
   | freeTyVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeTyVarsInExp (bound, exp1) (freeTyVarsInExp (bound, exp2) (freeTyVarsInExp (bound, exp3) acc))
@@ -332,7 +330,6 @@ and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) acc = (bound, (case optTy 
                                                                              )
   | freeTyVarsInDec (bound, ExportValue exp) acc = (bound, freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInDec (bound, ExportModule exports) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc exports)
-  | freeTyVarsInDec (bound, GroupDec (v, decs)) acc = freeTyVarsInDecs (bound, decs) acc
 and freeTyVarsInDecs (bound, decs) acc = List.foldl (fn (dec, (bound, acc)) => freeTyVarsInDec (bound, dec) acc) (bound, acc) decs
 
 fun varsInPat (WildcardPat _) acc = acc
@@ -364,9 +361,9 @@ and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args
                                             else
                                                 TypedSyntax.VIdSet.add (acc, vid)
   | freeVarsInExp (bound, RecordExp fields) acc = List.foldl (fn ((label, exp), acc) => freeVarsInExp (bound, exp) acc) acc fields
-  | freeVarsInExp (bound, LetExp (dec, exp)) acc = let val (bound, acc) = freeVarsInDec (bound, dec) acc
-                                                   in freeVarsInExp (bound, exp) acc
-                                                   end
+  | freeVarsInExp (bound, LetExp (decs, exp)) acc = let val (bound, acc) = List.foldl (fn (dec, (bound, acc)) => freeVarsInDec (bound, dec) acc) (bound, acc) decs
+                                                    in freeVarsInExp (bound, exp) acc
+                                                    end
   | freeVarsInExp (bound, AppExp (exp1, exp2)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) acc)
   | freeVarsInExp (bound, HandleExp { body, exnName, handler }) acc = freeVarsInExp (bound, body) (freeVarsInExp (TypedSyntax.VIdSet.add (bound, exnName), handler) acc)
   | freeVarsInExp (bound, IfThenElseExp (exp1, exp2, exp3)) acc = freeVarsInExp (bound, exp1) (freeVarsInExp (bound, exp2) (freeVarsInExp (bound, exp3) acc))
@@ -386,7 +383,6 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (
   | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) acc = (TypedSyntax.VIdSet.add (bound, tagName), acc)
   | freeVarsInDec (bound, ExportValue exp) acc = (bound, freeVarsInExp (bound, exp) acc)
   | freeVarsInDec (bound, ExportModule exps) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc exps)
-  | freeVarsInDec (bound, GroupDec (_, decs)) acc = List.foldl (fn (dec, (bound, acc)) => freeVarsInDec (bound, dec) acc) (bound, acc) decs
 
 fun getSourceSpanOfPat (WildcardPat span) = span
   | getSourceSpanOfPat (SConPat { sourceSpan, ... }) = sourceSpan
@@ -461,7 +457,7 @@ and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
                                    NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                  | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
                               )
-  | print_Exp (LetExp(dec,x)) = "LetExp(" ^ print_Dec dec ^ "," ^ print_Exp x ^ ")"
+  | print_Exp (LetExp (decs, x)) = "LetExp(" ^ Syntax.print_list print_Dec decs ^ "," ^ print_Exp x ^ ")"
   | print_Exp (AppExp(x,y)) = "AppExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ ")"
   | print_Exp (HandleExp { body, exnName, handler }) = "HandleExp{body=" ^ print_Exp body ^ ",exnName=" ^ TypedSyntax.print_VId exnName ^ ",handler=" ^ print_Exp handler ^ ")"
   | print_Exp (IfThenElseExp(x,y,z)) = "IfThenElseExp(" ^ print_Exp x ^ "," ^ print_Exp y ^ "," ^ print_Exp z ^ ")"
@@ -482,7 +478,6 @@ and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
   | print_Dec (ExceptionDec _) = "ExceptionDec"
   | print_Dec (ExportValue _) = "ExportValue"
   | print_Dec (ExportModule _) = "ExportModule"
-  | print_Dec (GroupDec (vids, decs)) = "GroupDec(" ^ Syntax.print_list print_Dec decs ^ ")"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -1033,12 +1028,12 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
           val baseFields = Syntax.LabelMap.foldri (fn (label, _, fields) =>
                                                       (label, F.ProjectionExp { label = label, record = baseExp, fieldTypes = baseFieldTypes }) :: fields
                                                   ) [] baseFields
-      in List.foldr F.LetExp (F.LetExp (baseDec, F.RecordExp (fields @ baseFields))) decs
+      in F.LetExp (decs @ [baseDec], F.RecordExp (fields @ baseFields))
       end
   | toFExp (ctx, env, T.RecordExtExp { sourceSpan, fields, baseExp, baseTy }) = emitFatalError (ctx, [sourceSpan], "record extension of non-record type: " ^ T.print_Ty baseTy)
   | toFExp (ctx, env, T.LetInExp (span, decs, e))
     = let val (env, decs) = toFDecs(ctx, env, decs)
-      in List.foldr F.LetExp (toFExp(ctx, env, e)) decs
+      in F.LetExp (decs, toFExp (ctx, env, e))
       end
   | toFExp (ctx, env, T.AppExp (span, T.ProjectionExp { label, recordTy, ... }, e2))
     = let val recordTy = toFTy (ctx, env, recordTy)
@@ -1177,18 +1172,18 @@ and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
                  val pairTy = F.PairType (recordTy, recordTy)
                  val lhs = freshVId (ctx, "x")
                  val rhs = freshVId (ctx, "y")
-                 val body = F.LetExp ( F.ValDec (lhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitFatalError (ctx, [span], "invalid record type") })
-                                     , F.LetExp ( F.ValDec (rhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitFatalError (ctx, [span], "invalid record type") })
-                                                , Syntax.LabelMap.foldli (fn (label, ty, rest) =>
-                                                                             F.SimplifyingAndalsoExp ( F.AppExp ( getEquality (ctx, env, ty)
-                                                                                                                , F.TupleExp [ F.ProjectionExp { label = label, record = F.VarExp lhs, fieldTypes = fieldTypes }
-                                                                                                                             , F.ProjectionExp { label = label, record = F.VarExp rhs, fieldTypes = fieldTypes }
-                                                                                                                             ]
-                                                                                                                )
-                                                                                                     , rest
+                 val body = F.LetExp ( [ F.ValDec (lhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 1, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitFatalError (ctx, [span], "invalid record type") })
+                                       , F.ValDec (rhs, SOME recordTy, F.ProjectionExp { label = Syntax.NumericLabel 2, record = F.VarExp param, fieldTypes = case pairTy of F.RecordType fieldTypes => fieldTypes | _ => emitFatalError (ctx, [span], "invalid record type") })
+                                       ]
+                                     , Syntax.LabelMap.foldli (fn (label, ty, rest) =>
+                                                                  F.SimplifyingAndalsoExp ( F.AppExp ( getEquality (ctx, env, ty)
+                                                                                                     , F.TupleExp [ F.ProjectionExp { label = label, record = F.VarExp lhs, fieldTypes = fieldTypes }
+                                                                                                                  , F.ProjectionExp { label = label, record = F.VarExp rhs, fieldTypes = fieldTypes }
+                                                                                                                  ]
                                                                                                      )
-                                                                         ) (F.VarExp InitialEnv.VId_true) fields
-                                                )
+                                                                                          , rest
+                                                                                          )
+                                                              ) (F.VarExp InitialEnv.VId_true) fields
                                      )
              in F.FnExp (param, pairTy, body)
              end
@@ -1306,14 +1301,6 @@ and toFDecs (ctx, env, []) = (env, [])
           val (env, decs) = toFDecs(ctx, env, decs)
       in (env, List.rev revExbinds @ decs)
       end
-  | toFDecs (ctx, env, T.GroupDec (span, decs) :: decs') = let val (env, decs) = toFDecs (ctx, env, decs)
-                                                               val (env, decs') = toFDecs (ctx, env, decs')
-                                                           in (env, case decs of
-                                                                        [] => decs'
-                                                                      | [dec] => dec :: decs'
-                                                                      | _ => F.GroupDec (NONE, decs) :: decs'
-                                                              )
-                                                           end
   | toFDecs (ctx, env, T.OverloadDec (span, class, tyname, map) :: decs) = let val map = Syntax.OverloadKeyMap.map (fn exp => toFExp (ctx, env, exp)) map
                                                                                val env = updateOverloadMap (fn m => TypedSyntax.TyNameMap.insert (m, tyname, map), env)
                                                                                val (env, decs) = toFDecs (ctx, env, decs)
@@ -1560,15 +1547,8 @@ and strDecToFDecs (ctx, env : Env, T.CoreDec (span, dec)) = toFDecs (ctx, env, [
                                                           | _ => emitFatalError (ctx, [span], "expected ExistsType, but got " ^ F.PrettyPrint.print_Ty packageTy)
                                                     ) ([], exp, packageTy, env'') bound
           (* ty and ty' should be the same *)
-      in (env, [F.GroupDec(NONE, decs0 @ List.rev (F.ValDec (vid, SOME ty, exp) :: revDecs))])
+      in (env, decs0 @ List.rev (F.ValDec (vid, SOME ty, exp) :: revDecs))
       end
-  | strDecToFDecs (ctx, env, T.GroupStrDec (span, decs)) = let val (env, decs) = strDecsToFDecs (ctx, env, decs)
-                                                           in (env, case decs of
-                                                                        [] => decs
-                                                                      | [_] => decs
-                                                                      | _ => [F.GroupDec (NONE, decs)]
-                                                              )
-                                                         end
 and strDecsToFDecs(ctx, env : Env, []) = (env, [])
   | strDecsToFDecs(ctx, env, dec :: decs) = let val (env, dec) = strDecToFDecs(ctx, env, dec)
                                                 val (env, decs) = strDecsToFDecs(ctx, env, decs)
@@ -1593,7 +1573,7 @@ fun funDecToFDec(ctx, env, (funid, (types, paramStrId, paramSig, bodyStr))) : En
           val paramSigTy = signatureToTy (ctx, env, paramSig)
           val env' = updateValMap (fn m => T.VIdMap.insert (m, paramId, paramSigTy), env')
           val (_, bodyDecs, bodyExp, bodyTy) = strExpToFExp (ctx, env', bodyStr)
-          val funexp = F.FnExp (paramId, paramSigTy, List.foldr F.LetExp bodyExp bodyDecs)
+          val funexp = F.FnExp (paramId, paramSigTy, F.LetExp (bodyDecs, bodyExp))
           val funTy = F.FnType (paramSigTy, bodyTy)
           val funexp = List.foldr (fn ((tyname, arity, vid), funexp) => F.FnExp (vid, F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funexp)) funexp equalityVars (* equalities *)
           val funTy = List.foldr (fn ((tyname, arity, _), funTy) => F.FnType (F.EqualityType (F.TyVar (F.tyNameToTyVar tyname)), funTy)) funTy equalityVars (* equalities *)

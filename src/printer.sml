@@ -19,4 +19,5 @@ fun sepBy sep [] = []
 val commaSep = sepBy [Fragment ", "]
 fun commaSepV xs = commaSep (Vector.foldr (op ::) [] xs)
 val spaceSep = sepBy [Fragment " "]
+val semicolonSep = sepBy [Fragment "; "]
 end

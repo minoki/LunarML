@@ -421,7 +421,7 @@ fun checkRedundancy (ctx, matches, mtype)
 fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.VarExp _) = ()
   | goExp (ctx, F.RecordExp fields) = List.app (fn (_, exp) => goExp (ctx, exp)) fields
-  | goExp (ctx, F.LetExp (dec, exp)) = (goDec (ctx, dec); goExp (ctx, exp))
+  | goExp (ctx, F.LetExp (decs, exp)) = (List.app (fn dec => goDec (ctx, dec)) decs; goExp (ctx, exp))
   | goExp (ctx, F.AppExp (x, y)) = (goExp (ctx, x); goExp (ctx, y))
   | goExp (ctx, F.HandleExp { body, exnName, handler }) = (goExp (ctx, body); goExp (ctx, handler))
   | goExp (ctx, F.IfThenElseExp (x, y, z)) = (goExp (ctx, x); goExp (ctx, y); goExp (ctx, z))
@@ -460,5 +460,4 @@ and goDec (ctx, F.ValDec (_, _, exp)) = goExp (ctx, exp)
   | goDec (ctx, F.ExceptionDec _) = ()
   | goDec (ctx, F.ExportValue exp) = goExp (ctx, exp)
   | goDec (ctx, F.ExportModule fields) = Vector.app (fn (_, exp) => goExp (ctx, exp)) fields
-  | goDec (ctx, F.GroupDec (_, decs)) = List.app (fn dec => goDec (ctx, dec)) decs
 end; (* structure CheckPatternMatch *)
