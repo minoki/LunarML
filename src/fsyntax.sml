@@ -653,8 +653,8 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                                 )
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_int32) then
-                                         let val lower = ~0x80000000 <= value
-                                             val upper = value <= 0x7fffffff
+                                         let val lower = TargetInfo.minInt32 <= value
+                                             val upper = value <= TargetInfo.maxInt32
                                          in if lower andalso upper then
                                                 F.IntConstExp (value, toFTy (ctx, env, ty))
                                             else
@@ -663,8 +663,8 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                                 )
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_int54) then
-                                         let val lower = ~0x20000000000000 <= value
-                                             val upper = value <= 0x1fffffffffffff
+                                         let val lower = TargetInfo.minInt54 <= value
+                                             val upper = value <= TargetInfo.maxInt54
                                          in if lower andalso upper then
                                                 F.IntConstExp (value, toFTy (ctx, env, ty))
                                             else
@@ -673,8 +673,8 @@ fun cookIntegerConstant (ctx : Context, env : Env, span, value : IntInf.int, ty)
                                                 )
                                          end
                                      else if T.eqTyName (tycon, Typing.primTyName_int64) then
-                                         let val lower = ~0x8000000000000000 <= value
-                                             val upper = value <= 0x7fffffffffffffff
+                                         let val lower = TargetInfo.minInt64 <= value
+                                             val upper = value <= TargetInfo.maxInt64
                                          in if lower andalso upper then
                                                 F.IntConstExp (value, toFTy (ctx, env, ty))
                                             else

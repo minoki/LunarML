@@ -129,9 +129,9 @@ structure Int : INTEGER where type int = int = struct
 open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
-val precision : int option = SOME 32
-val minInt : int option = SOME ~0x80000000
-val maxInt : int option = SOME 0x7fffffff
+val precision : int option = SOME 54
+val minInt : int option = SOME ~0x20000000000000
+val maxInt : int option = SOME 0x1fffffffffffff
 fun quot (x, y) = _primCall "Int.quot" (x, y)
 fun rem (x, y) = if y = 0 then
                      raise Div
@@ -944,5 +944,5 @@ structure Vector : sig
               (* val collate : ('a * 'a -> order) -> 'a vector * 'a vector -> order; defined later *)
           end = struct
 open Vector
-val maxLen = 0x7fffffff
+val maxLen = 0xffffffff
 end;

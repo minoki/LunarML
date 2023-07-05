@@ -26,6 +26,6 @@ _overload "Int" [int] { + = Int.+
                       , > = Int.>
                       , >= = Int.>=
                       , fromInt = Int.fromInt
-                      , minInt = ~0x8000_0000
-                      , maxInt = 0x7fff_ffff
+                      , minInt = ~0x20_0000_0000_0000
+                      , maxInt = 0x1f_ffff_ffff_ffff
                       };

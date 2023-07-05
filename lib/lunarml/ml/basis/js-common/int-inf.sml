@@ -53,8 +53,8 @@ structure IntInfImpl : sig
           end = struct
 type int = _Prim.IntInf.int
 _equality int = fn (x, y) => _primCall "IntInf.=" (x, y);
-val maxSmallInt : int = 0x7fffffff
-val minSmallInt : int = ~0x80000000
+val maxSmallInt : int = 0x1fffffffffffff
+val minSmallInt : int = ~0x20000000000000
 val maxSmallWord : int = 0xffffffff
 fun LT (x, y) = _primCall "IntInf.<" (x, y)
 fun LE (x, y) = _primCall "IntInf.<=" (x, y)

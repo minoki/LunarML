@@ -65,22 +65,22 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
            BACKEND_LUA _ => { defaultInt = Primitives.INT
                             , defaultWord = Primitives.WORD
                             , datatypeTag = TargetInfo.STRING8
-                            , minInt = SOME ~0x8000000000000000
-                            , maxInt = SOME 0x7fffffffffffffff
+                            , minInt = SOME TargetInfo.minInt64
+                            , maxInt = SOME TargetInfo.maxInt64
                             , wordSize = 64
                             }
          | BACKEND_LUAJIT => { defaultInt = Primitives.I32 (* TODO: Use I54? *)
                              , defaultWord = Primitives.W32
                              , datatypeTag = TargetInfo.STRING8
-                             , minInt = SOME ~0x80000000
-                             , maxInt = SOME 0x7fffffff
+                             , minInt = SOME TargetInfo.minInt32
+                             , maxInt = SOME TargetInfo.maxInt32
                              , wordSize = 32
                              }
-         | BACKEND_JS _ => { defaultInt = Primitives.I32 (* TODO: Use I54? *)
+         | BACKEND_JS _ => { defaultInt = Primitives.I54
                            , defaultWord = Primitives.W32
                            , datatypeTag = TargetInfo.STRING16
-                           , minInt = SOME ~0x80000000
-                           , maxInt = SOME 0x7fffffff
+                           , minInt = SOME TargetInfo.minInt54
+                           , maxInt = SOME TargetInfo.maxInt54
                            , wordSize = 32
                            }
       )

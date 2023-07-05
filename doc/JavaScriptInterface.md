@@ -64,7 +64,7 @@ Primitives
 
 * `unit` (empty record): `undefined`
 * `bool`: JavaScript's boolean; `true` or `false`
-* `int`: 32-bit signed integer, as a subset of Number. The sign of zero must be positive. Overflows are always checked.
+* `int`: 54-bit signed integer, as a subset of Number. Overflows are always checked.
 * `word`: 32-bit unsigned integer, as a subset of Number. The sign of zero must be positive.
 * `real`: 64-bit floating-point number (JavaScript's native Number).
 * `char`: 8-bit unsigned integer. The sign of zero must be positive.
