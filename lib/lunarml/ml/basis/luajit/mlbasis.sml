@@ -76,306 +76,6 @@ _overload "Char" [char] { < = Char.<
                         , maxOrd = 255
                         };
 
-structure String = struct
-type string = string
-fun x < y = _primCall "String.<" (x, y)
-fun x <= y = _primCall "String.<=" (x, y)
-fun x > y = _primCall "String.>" (x, y)
-fun x >= y = _primCall "String.>=" (x, y)
-fun x ^ y = _primCall "String.^" (x, y)
-fun size x = _primCall "String.size" (x)
-fun str (x : char) : string = _primCall "String.str" (x)
-end
-_equality string = fn (x, y) => _primCall "String.=" (x, y);
-_overload "String" [string] { < = String.<
-                            , <= = String.<=
-                            , > = String.>
-                            , >= = String.>=
-                            , maxOrd = 255
-                            };
-
-structure LunarML : sig
-              val assumeDiscardable : ('a -> 'b) -> 'a -> 'b
-          end = struct
-fun assumeDiscardable f x = _primCall "assumeDiscardable" (f, x)
-end
-
-structure Lua : sig
-              type value
-              exception LuaError of value
-              exception TypeError of string
-              val sub : value * value -> value  (* t[k] *)
-              val field : value * string -> value  (* t[k] *)
-              val set : value * value * value -> unit  (* t[k] = v *)
-              val setField : value * string * value -> unit  (* t[k] = v *)
-              val global : string -> value  (* _G[name] *)
-              val setGlobal : string * value -> unit  (* _G[name] = v *)
-              val call : value -> value vector -> value vector  (* f(args) *)
-              val call0 : value -> value vector -> unit  (* f(args) *)
-              val call1 : value -> value vector -> value  (* f(args) *)
-              val call2 : value -> value vector -> value * value  (* f(args) *)
-              val call3 : value -> value vector -> value * value * value  (* f(args) *)
-              val method : value * string -> value vector -> value vector  (* f:name(args) *)
-              val NIL : value  (* Lua nil *)
-              val isNil : value -> bool  (* x == nil *)
-              val isFalsy : value -> bool  (* not x *)
-              val fromBool : bool -> value
-              val fromInt : int -> value
-              val fromWord : word -> value
-              val fromReal : real -> value
-              val fromString : string -> value
-              val unsafeToValue : 'a -> value
-              val unsafeFromValue : value -> 'a
-              val newTable : unit -> value  (* {} *)
-              val function : (value vector -> value vector) -> value
-              val + : value * value -> value
-              val - : value * value -> value
-              val * : value * value -> value
-              val / : value * value -> value
-              (* val // : value * value -> value *)
-              val % : value * value -> value
-              val pow : value * value -> value  (* x ^ y *)
-              val unm : value -> value  (* unary minus *)
-              val andb : value * value -> value  (* bit.band(x, y) *)
-              val orb : value * value -> value  (* bit.bor(x, y) *)
-              val xorb : value * value -> value  (* bit.bxor(x, y) *)
-              val notb : value -> value  (* bit.bnot(x) *)
-              val << : value * value -> value  (* bit.lshift(x, y) *)
-              val >> : value * value -> value  (* bit.rshift(x, y) *)
-              val == : value * value -> bool
-              val ~= : value * value -> bool
-              val < : value * value -> bool
-              val > : value * value -> bool
-              val <= : value * value -> bool
-              val >= : value * value -> bool
-              val concat : value * value -> value  (* x .. y *)
-              val length : value -> value  (* #x *)
-              val typeof : value -> string (* type *)
-              val checkString : value -> string
-              val checkBoolean : value -> bool
-              val checkInt : value -> int
-              val checkWord : value -> word
-              val checkReal : value -> real
-              val optString : value -> string option
-              structure Lib : sig
-                            val assert : value
-                            val error : value
-                            val getmetatable : value
-                            val math : value
-                            val pairs : value
-                            val pcall : value
-                            val require : value
-                            val setmetatable : value
-                            val string : value
-                            val table : value
-                            val tonumber : value
-                            val tostring : value
-                            val type' : value
-                            structure math : sig
-                                          val abs : value
-                                          val atan : value
-                                          val ceil : value
-                                          val floor : value
-                                          val fmod : value
-                                          val huge : value
-                                          val log : value
-                                          val modf : value
-                                      end
-                            structure string : sig
-                                          val byte : value
-                                          val char : value
-                                          val find : value
-                                          val format : value
-                                          val gsub : value
-                                          val match : value
-                                          val sub : value
-                                      end
-                            structure table : sig
-                                          val concat : value
-                                          val pack : value
-                                          val unpack : value
-                                      end
-                            structure bit : sig
-                                          val tobit : value
-                                          val tohex : value
-                                          val bnot : value
-                                          val band : value
-                                          val bor : value
-                                          val bxor : value
-                                          val lshift : value
-                                          val rshift : value
-                                          val arshift : value
-                                          val rol : value
-                                          val ror : value
-                                          val bswap : value
-                                      end
-                            val bit : value (* Lua BitOp *)
-                            val lfs : value option (* LuaFileSystem *)
-                        end
-          end = struct
-type value = _Prim.Lua.value
-exception LuaError = _Prim.Lua.LuaError
-fun global name = _primCall "Lua.global" (name)
-fun setGlobal (name, value) = _primCall "Lua.setGlobal" (name, value)
-fun call f args = _primCall "Lua.call" (f, args)
-fun call0 f args = (_primCall "Lua.call" (f, args); ())
-fun call1 f args = _primCall "Lua.call1" (f, args)
-fun call2 f args = _primCall "Lua.call2" (f, args)
-fun call3 f args = _primCall "Lua.call3" (f, args)
-fun method (obj, name) args = _primCall "Lua.method" (obj, name, args)
-val NIL = _Prim.Lua.NIL
-fun newTable () = _primCall "Lua.newTable" ()
-val function = _Prim.Lua.function
-fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
-fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
-val fromBool : bool -> value = unsafeToValue
-val fromInt : int -> value = unsafeToValue
-val fromWord : word -> value = unsafeToValue
-val fromReal : real -> value = unsafeToValue
-val fromString : string -> value = unsafeToValue
-fun sub (t, k) = _primCall "Lua.sub" (t, k)
-fun field (t : value, name : string) = sub (t, fromString name)
-fun set (t, k, v) = _primCall "Lua.set" (t, k, v)
-fun setField (t, name, v) = _primCall "Lua.set" (t, fromString name, v)
-fun isNil x = _primCall "Lua.isNil" (x)
-fun isFalsy x = _primCall "Lua.isFalsy" (x)
-fun x + y = _primCall "Lua.+" (x, y)
-fun x - y = _primCall "Lua.-" (x, y)
-fun x * y = _primCall "Lua.*" (x, y)
-fun x / y = _primCall "Lua./" (x, y)
-(* fun // (x, y) = _primCall "Lua.//" (x, y) *)
-fun % (x, y) = _primCall "Lua.%" (x, y)
-fun pow (x, y) = _primCall "Lua.pow" (x, y)
-fun unm x = _primCall "Lua.unm" (x)
-val require = LunarML.assumeDiscardable global "require"
-val bit = _Prim.Lua.Lib.bit
-val band = LunarML.assumeDiscardable field (bit, "band")
-val bor = LunarML.assumeDiscardable field (bit, "bor")
-val bxor = LunarML.assumeDiscardable field (bit, "bxor")
-val bnot = LunarML.assumeDiscardable field (bit, "bnot")
-val lshift = _Prim.Lua.Lib.bit.lshift
-val rshift = _Prim.Lua.Lib.bit.rshift
-fun andb (x, y) = call1 band #[x, y]
-fun orb (x, y) = call1 bor #[x, y]
-fun xorb (x, y) = call1 bxor #[x, y]
-fun notb x = call1 bnot #[x]
-fun << (x, y) = call1 lshift #[x, y]
-fun >> (x, y) = call1 rshift #[x, y]
-fun == (x, y) = _primCall "Lua.==" (x, y)
-fun ~= (x, y) = _primCall "Lua.~=" (x, y)
-fun x < y = _primCall "Lua.<" (x, y)
-fun x > y = _primCall "Lua.>" (x, y)
-fun x <= y = _primCall "Lua.<=" (x, y)
-fun x >= y = _primCall "Lua.>=" (x, y)
-fun concat (x, y) = _primCall "Lua.concat" (x, y)
-fun length x = _primCall "Lua.length" (x)
-structure Lib = struct
-val assert = _Prim.Lua.Lib.assert
-val error = _Prim.Lua.Lib.error
-val getmetatable = _Prim.Lua.Lib.getmetatable
-val pairs = _Prim.Lua.Lib.pairs
-val pcall = _Prim.Lua.Lib.pcall
-val setmetatable = _Prim.Lua.Lib.setmetatable
-val math = _Prim.Lua.Lib.math
-val string = _Prim.Lua.Lib.string
-val table = _Prim.Lua.Lib.table
-val require = require
-val tonumber = LunarML.assumeDiscardable global "tonumber"
-val tostring = LunarML.assumeDiscardable global "tostring"
-val type' = LunarML.assumeDiscardable global "type"
-structure math = struct
-val abs = _Prim.Lua.Lib.math.abs
-val atan = LunarML.assumeDiscardable field (math, "atan")
-val ceil = LunarML.assumeDiscardable field (math, "ceil")
-val floor = LunarML.assumeDiscardable field (math, "floor")
-val fmod = LunarML.assumeDiscardable field (math, "fmod")
-val huge = LunarML.assumeDiscardable field (math, "huge")
-val log = LunarML.assumeDiscardable field (math, "log")
-val modf = LunarML.assumeDiscardable field (math, "modf")
-end
-structure string = struct
-val format = _Prim.Lua.Lib.string.format
-val byte = LunarML.assumeDiscardable field (string, "byte")
-val char = _Prim.Lua.Lib.string.char
-val find = LunarML.assumeDiscardable field (string, "find")
-val gsub = LunarML.assumeDiscardable field (string, "gsub")
-val match = LunarML.assumeDiscardable field (string, "match")
-val sub = LunarML.assumeDiscardable field (string, "sub")
-end
-structure table = struct
-val pack = _Prim.Lua.Lib.table.pack
-val unpack = _Prim.Lua.Lib.table.unpack
-val concat = LunarML.assumeDiscardable field (table, "concat")
-end
-val bit = _Prim.Lua.Lib.bit
-structure bit = struct
-val tobit = LunarML.assumeDiscardable field (bit, "tobit")
-val tohex = LunarML.assumeDiscardable field (bit, "tohex")
-val bnot = bnot
-val band = band
-val bor = bor
-val bxor = bxor
-val lshift = _Prim.Lua.Lib.bit.lshift
-val rshift = _Prim.Lua.Lib.bit.rshift
-val arshift = LunarML.assumeDiscardable field (bit, "arshift")
-val rol = LunarML.assumeDiscardable field (bit, "rol")
-val ror = LunarML.assumeDiscardable field (bit, "ror")
-val bswap = LunarML.assumeDiscardable field (bit, "bswap")
-end
-val lfs = LunarML.assumeDiscardable
-              (fn () => let val (ok, module) = call2 pcall #[require, fromString "lfs"]
-                            val ok = unsafeFromValue ok : bool
-                        in if ok then
-                               SOME module
-                           else
-                               NONE
-                        end
-              ) ()
-end
-fun typeof x : string = let val result = call1 Lib.type' #[x]
-                        in unsafeFromValue result
-                        end
-exception TypeError of string
-fun checkString x : string = let val t = typeof x
-                             in if t = "string" then
-                                    unsafeFromValue x
-                                else
-                                    raise TypeError (String.^ ("expected a string, but got ", t))
-                             end
-fun checkBoolean x : bool = let val t = typeof x
-                            in if t = "boolean" then
-                                   unsafeFromValue x
-                               else
-                                   raise TypeError (String.^ ("expected a boolean, but got ", t))
-                            end
-fun checkInt x : int = let val t = typeof x
-                       in if t = "number" andalso == (call1 Lib.bit.tobit #[x], x) then
-                              unsafeFromValue x
-                          else
-                              raise TypeError (String.^ ("expected an integer, but got ", typeof x))
-                       end
-fun checkWord x : word = let val t = typeof x
-                         in if t = "number" andalso == (x, % (x, fromReal 0x100000000.0)) then
-                                unsafeFromValue x
-                            else
-                                raise TypeError (String.^ ("expected an integer, but got ", typeof x))
-                         end
-fun checkReal x : real = let val t = typeof x
-                         in if t = "number" then
-                                unsafeFromValue x
-                            else
-                                raise TypeError (String.^ ("expected a real number, but got ", typeof x))
-                         end
-fun optString x : string option = let val t = typeof x
-                                  in if t = "string" then
-                                         SOME (unsafeFromValue x)
-                                     else if t = "nil" then
-                                         NONE
-                                     else
-                                         raise TypeError (String.^ ("expected a string, but got ", t))
-                                  end
-end;
-
 structure StringCvt : sig
               datatype radix = BIN | OCT | DEC | HEX
               datatype realfmt = SCI of int option
@@ -426,12 +126,12 @@ signature INTEGER = sig
 end;
 
 structure Int : INTEGER where type int = int = struct
-open Int (* +, -, *, div, mod, ~, abs, <, <=, >, >=, fromInt *)
+open Int (* +, -, *, div, ~, abs, <, <=, >, >=, fromInt *)
 (* toLarge, fromLarge *)
 val toInt : int -> int = fn x => x
-val precision : int option = SOME 32
-val minInt : int option = SOME ~0x80000000
-val maxInt : int option = SOME 0x7fffffff
+val precision : int option = SOME 54
+val minInt : int option = SOME ~0x20_0000_0000_0000 (* -2^53 *)
+val maxInt : int option = SOME 0x1F_FFFF_FFFF_FFFF (* 2^53-1 *)
 fun quot (x, y) = _primCall "Int.quot" (x, y)
 fun rem (x, y) = if y = ~1 then
                      0
@@ -458,50 +158,30 @@ val sign : int -> int = fn x => if x > 0 then
                                 else
                                     0
 val sameSign : int * int -> bool = fn (x, y) => sign x = sign y
-fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
-  | fmt StringCvt.OCT x = if x >= 0 then
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
-                              in Lua.unsafeFromValue result
-                              end
-                          else
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
-                              in Lua.unsafeFromValue result
-                              end
-  | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
+fun toOctString x : string = if x >= 0 then
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%o", Lua.fromInt x]
+                                 in Lua.unsafeFromValue result
+                                 end
+                             else
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
+                                 in Lua.unsafeFromValue result
+                                 end
+fun toString x : string = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
                               val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
                           in Lua.unsafeFromValue result
                           end
-  | fmt StringCvt.HEX x = if x >= 0 then
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
-                              in Lua.unsafeFromValue result
-                              end
-                          else
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
-                              in Lua.unsafeFromValue result
-                              end
-fun toString (x : int) : string = if x = 0 then
-                                      "0" (* x might be negative zero *)
-                                  else
-                                      let val result = Lua.call1 Lua.Lib.tostring #[Lua.fromInt x]
-                                          val result = Lua.call1 Lua.Lib.string.gsub #[result, Lua.fromString "-", Lua.fromString "~"]
-                                      in Lua.unsafeFromValue result
-                                      end
-(* scan *)
-(*
-fun fromString (s : string) : int option = let val (r0, r1) = Lua.call2 Lua.Lib.string.match #[Lua.fromString s, Lua.fromString "^%s*([%+~%-]?)([0-9]+)"]
-                                           in if Lua.isNil r0 then
-                                                  NONE
-                                              else
-                                                  let val sign = Lua.unsafeFromValue r0 : string
-                                                      val digits = Lua.unsafeFromValue r1 : string
-                                                      val result' = if sign = "~" orelse sign = "-" then
-                                                                        Lua.call1 Lua.Lib.tonumber #[Lua.fromString (String.^ ("-", digits))]
-                                                                    else
-                                                                        Lua.call1 Lua.Lib.tonumber #[Lua.fromString digits]
-                                                  in SOME (Lua.unsafeFromValue result')
-                                                  end
-                                           end
-*)
+fun toHexString x : string = if x >= 0 then
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%X", Lua.fromInt x]
+                                 in Lua.unsafeFromValue result
+                                 end
+                             else
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
+                                 in Lua.unsafeFromValue result
+                                 end
+fun fmt StringCvt.BIN = (fn _ => raise Fail "StringCvt.BIN: not implemented yet")
+  | fmt StringCvt.OCT = toOctString
+  | fmt StringCvt.DEC = toString
+  | fmt StringCvt.HEX = toHexString
 end; (* structure Int *)
 
 signature WORD = sig
@@ -549,10 +229,7 @@ structure Word :> WORD where type word = word = struct
 open Word (* +, -, *, div, mod, ~, <, <=, >, >= *)
 val wordSize : int = 32
 (* toLarge, toLargeX, toLargeWord, toLargeWordX, fromLarge, fromLargeWord, toLargeInt, toLargeIntX, fromLargeInt *)
-val toInt : word -> int = fn x => if x >= 0wx80000000 then
-                                      raise Overflow
-                                  else
-                                      Lua.unsafeFromValue (Lua.fromWord x)
+val toInt : word -> int = fn x => Lua.unsafeFromValue (Lua.fromWord x) (* int is 54-bit *)
 val toIntX : word -> int = fn x => Lua.unsafeFromValue (Lua.fromWord x)
 fun coerceWord (x : Lua.value) : word = Lua.unsafeFromValue (Lua.% (x, Lua.fromReal 0x1p32))
 val fromInt : int -> word = fn x => coerceWord (Lua.fromInt x)

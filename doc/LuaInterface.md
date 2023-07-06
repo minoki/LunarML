@@ -110,7 +110,7 @@ Primitives
 * `bool`: Lua's boolean; `true` or `false`.
 * `int`:
     * Lua 5.3 or later: Lua's native integer (typically 64-bit). Overflows are always checked.
-    * LuaJIT: 32-bit signed integer, using Lua's native number. Overflows are always checked.
+    * LuaJIT: 54-bit signed integer, using Lua's native number. Overflows are always checked.
 * `word`:
     * Lua 5.3 or later: Lua's native integer (typically 64-bit), using negative values for large values.
     * LuaJIT: 32-bit unsigned integer, using Lua's native number.

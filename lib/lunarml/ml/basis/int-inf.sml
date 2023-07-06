@@ -1,4 +1,4 @@
-(* assumption: Int.precision = Word.wordSize, Word.wordSize is even *)
+(* assumption: Word.wordSize is even, pow (2, Word.wordSize div 2) must be expressible by int *)
 
 signature INT_INF = sig
     (* INTEGER *)
@@ -96,28 +96,33 @@ fun mkNonPositive words = if Vector.length words = 0 then
 
 fun toLarge x = x
 fun fromLarge x = x
+val sqrtBaseW : Word.word = LunarML.assumeDiscardable (fn () => UncheckedWord.<< (0w1, Word.fromInt (Word.wordSize div 2))) ()
+val sqrtBase : Int.int = LunarML.assumeDiscardable (fn () => Word.toInt sqrtBaseW) ()
 fun toInt ZERO = 0
-  | toInt (POSITIVE words) = if Vector.length words > 1 then
-                                 raise Overflow
-                             else
-                                 Word.toInt (Vector.sub (words, 0)) (* may raise Overflow *)
-  | toInt (NEGATIVE words) = if Vector.length words > 1 then
-                                 raise Overflow
-                             else
-                                 let val w = Vector.sub (words, 0)
-                                 in 2 * (~ (Word.toInt (UncheckedWord.>> (w, 0w1)))) - Word.toInt (Word.andb (w, 0w1)) (* may raise Overflow *)
-                                 end
+  | toInt (POSITIVE words) = Vector.foldr (fn (lo, hi) => hi * sqrtBase * sqrtBase + Word.toInt lo) 0 words (* may raise Overflow *)
+  | toInt (NEGATIVE words) = Vector.foldr (fn (lo, hi) => hi * sqrtBase * sqrtBase + 2 * (~ (Word.toInt (UncheckedWord.>> (lo, 0w1)))) - Word.toInt (Word.andb (lo, 0w1))) 0 words (* may raise Overflow *)
 
 fun fromInt 0 = ZERO
   | fromInt x = if x > 0 then
-                    POSITIVE #[Word.fromInt x]
+                    let fun go 0 = []
+                          | go x = let val q1 = x div sqrtBase
+                                       val r1 = x mod sqrtBase
+                                       val q2 = q1 div sqrtBase
+                                       val r2 = q1 mod sqrtBase
+                                   in (Word.fromInt r1 + Word.fromInt r2 * sqrtBaseW) :: go q2
+                                   end
+                    in POSITIVE (Vector.fromList (go x))
+                    end
                 else (* x < 0 *)
-                    case Int.minInt of
-                        SOME minInt => if x <> minInt then
-                                           NEGATIVE #[Word.fromInt (abs x)]
-                                       else
-                                           NEGATIVE #[Word.fromInt (abs (x + 1)) + 0w1]
-                      | NONE => NEGATIVE #[Word.fromInt (abs x)]
+                    let fun go 0 = []
+                          | go x = let val q1 = x .Int.quot. sqrtBase
+                                       val r1 = x .Int.rem. sqrtBase
+                                       val q2 = q1 .Int.quot. sqrtBase
+                                       val r2 = q1 .Int.rem. sqrtBase
+                                   in (Word.fromInt (~ r1) + Word.fromInt (~ r2) * sqrtBaseW) :: go q2
+                                   end
+                    in NEGATIVE (Vector.fromList (go x))
+                    end
 
 fun fromWord 0w0 = ZERO
   | fromWord w = POSITIVE #[w]

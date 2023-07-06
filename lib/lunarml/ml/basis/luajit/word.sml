@@ -229,7 +229,7 @@ local
     val toLargeWord = toLarge
     val toLargeWordX = toLargeX
     val fromLargeWord = fromLarge
-    fun toInt x = if UncheckedWord64.>= (x, 0wx80000000) then
+    fun toInt x = if UncheckedWord64.>= (x, 0wx20_0000_0000_0000) then
                       raise Overflow
                   else
                       Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[UncheckedWord64.toValue x]) : int

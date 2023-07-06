@@ -69,11 +69,11 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
                             , maxInt = SOME TargetInfo.maxInt64
                             , wordSize = 64
                             }
-         | BACKEND_LUAJIT => { defaultInt = Primitives.I32 (* TODO: Use I54? *)
+         | BACKEND_LUAJIT => { defaultInt = Primitives.I54
                              , defaultWord = Primitives.W32
                              , datatypeTag = TargetInfo.STRING8
-                             , minInt = SOME TargetInfo.minInt32
-                             , maxInt = SOME TargetInfo.maxInt32
+                             , minInt = SOME TargetInfo.minInt54
+                             , maxInt = SOME TargetInfo.maxInt54
                              , wordSize = 32
                              }
          | BACKEND_JS _ => { defaultInt = Primitives.I54

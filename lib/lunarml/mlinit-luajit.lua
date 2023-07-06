@@ -8,6 +8,7 @@ local setmetatable = setmetatable
 local math = math
 local math_abs = math.abs
 local math_floor = math.floor
+local math_fmod = math.fmod
 local math_modf = math.modf
 local string = string
 local string_char = string.char
@@ -88,76 +89,82 @@ local function _raise(x, location)
   error(e, 1)
 end
 
-local MIN_INT32 = -0x80000000
-local MAX_INT32 = 0x7fffffff
+local MIN_INT54 = -0x20000000000000
+local MAX_INT54 = 0x1fffffffffffff
 
 -- Int
-local function _Int_add(x, y)
+local function _Int54_add(x, y)
   local z = x + y
-  if z < MIN_INT32 or MAX_INT32 < z then
+  if (MIN_INT54 < z and z <= MAX_INT54) or (z == MIN_INT54 and x % 2 == y % 2) then
+    return z
+  else
     _raise(_Overflow, "Int.+")
-  else
-    return z
   end
 end
-local function _Int_sub(x, y)
+local function _Int54_sub(x, y)
   local z = x - y
-  if z < MIN_INT32 or MAX_INT32 < z then
+  if (MIN_INT54 < z and z <= MAX_INT54) or (z == MIN_INT54 and x % 2 == y % 2) then
+    return z
+  else
     _raise(_Overflow, "Int.-")
-  else
-    return z
   end
 end
-local function _Int_mul(x, y)
-  local z = x * y
-  if z < MIN_INT32 or MAX_INT32 < z then
+local function _Int54_mul(x, y)
+  local z = 0 + x * y
+  if (MIN_INT54 < z and z <= MAX_INT54) or (z == MIN_INT54 and (x % 2 == 0 or y % 2 == 0)) then
+    return z
+  else
     _raise(_Overflow, "Int.*")
-  else
-    return z
   end
 end
-local function _Int_div(x, y)
+local function _Int54_div(x, y)
   if y == 0 then
     _raise(_Div, "Int.div")
-  elseif x == MIN_INT32 and y == -1 then
+  elseif x == MIN_INT54 and y == -1 then
     _raise(_Overflow, "Int.div")
   end
-  return math_floor(x / y)
+  return 0 + math_floor(x / y)
 end
-local function _Int_quot(x, y)
+local function _Int54_quot(x, y)
   if y == 0 then
     _raise(_Div, "Int.quot")
-  elseif x == MIN_INT32 and y == -1 then
+  elseif x == MIN_INT54 and y == -1 then
     _raise(_Overflow, "Int.quot")
   end
   return (math_modf(x / y))
 end
-local function _Int_mod(x, y)
+local function _Int54_mod(x, y)
   if y == 0 then
     _raise(_Div, "Int.mod")
   end
-  return x % y
+  -- For floating-point numbers, x % y is defined as x - math.floor(x/y)*y, which may not be mathematically correct (e.g. (-9007199254740992) % 3 should be 1, but yields 0 on Lua 5.1/5.2/LuaJIT)
+  local r = math_fmod(x, y)
+  if r == 0 or x * y >= 0 then
+    return r
+  else
+    return r + y
+  end
 end
-local function _Int_negate(x)
-  if x == MIN_INT32 then
+local function _Int54_negate(x)
+  if x == MIN_INT54 then
     _raise(_Overflow, "Int.~")
   end
   return - x
 end
-local function _Int_abs(x)
-  if x == MIN_INT32 then
+local function _Int54_abs(x)
+  if x == MIN_INT54 then
     _raise(_Overflow, "Int.abs")
   end
   return math_abs(x)
 end
 
 -- Word
-local _Word_mul
+local _Word32_mul
 do
   local tobit = bit.tobit
   local ffi = require "ffi"
   local uint32_t = ffi.typeof("uint32_t")
-  function _Word_mul(x, y)
+  function _Word32_mul(x, y)
     return tobit(uint32_t(x) * uint32_t(y)) % 0x100000000
     --[[
     local x_lo = bit_band(x, 0xffff)
