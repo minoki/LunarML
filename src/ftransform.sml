@@ -111,13 +111,13 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                      let val elemTy = case ty of
                                           F.AppType { applied, arg } => arg
                                         | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
-                         val hdExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeHead, [elemTy], [exp])
-                         val tlExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeTail, [elemTy], [exp])
+                         val hdExp = F.PrimExp (F.PrimCall Primitives.List_unsafeHead, [elemTy], [exp])
+                         val tlExp = F.PrimExp (F.PrimCall Primitives.List_unsafeTail, [elemTy], [exp])
                          val payload = genMatcher (F.TupleExp [hdExp, tlExp]) payloadTy payloadPat
-                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])]), payload)
+                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimCall Primitives.Bool_not, [], [F.PrimExp (F.PrimCall Primitives.List_null, [elemTy], [exp])]), payload)
                      end
                    | { representation = Syntax.REP_REF, tag = "ref", ... } =>
-                     genMatcher (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
+                     genMatcher (F.PrimExp (F.PrimCall Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
                    | { representation = Syntax.REP_ALIAS, ... } =>
                      genMatcher (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
                    | { tag, ... } => (* REP_BOXED *)
@@ -125,43 +125,43 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                          val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
                                                          TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
                                                        | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
-                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
+                     in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimCall equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)]), payload)
                      end
                 )
             | genMatcher exp ty (F.ValConPat { sourceSpan, info, payload = NONE })
               = (case info of
                      { representation = Syntax.REP_BOOL, tag = "true", ... } => exp
-                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimFnOp Primitives.Bool_not, [], [exp])
+                   | { representation = Syntax.REP_BOOL, tag = "false", ... } => F.PrimExp (F.PrimCall Primitives.Bool_not, [], [exp])
                    | { representation = Syntax.REP_LIST, tag = "nil", ... } =>
                      let val elemTy = case ty of
                                           F.AppType { applied, arg } => arg
                                         | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
-                     in F.PrimExp (F.PrimFnOp Primitives.List_null, [elemTy], [exp])
+                     in F.PrimExp (F.PrimCall Primitives.List_null, [elemTy], [exp])
                      end
                    | { representation = Syntax.REP_UNIT, ... } => F.VarExp InitialEnv.VId_true
                    | { representation = _, tag, ... } => (* REP_BOXED or REP_ENUM *)
                      let val (dataTagOp, equalTag) = case #datatypeTag (#targetInfo ctx) of
                                                          TargetInfo.STRING8 => (F.DataTagAsStringOp, Primitives.String_EQUAL)
                                                        | TargetInfo.STRING16 => (F.DataTagAsString16Op, Primitives.String16_EQUAL)
-                     in F.PrimExp (F.PrimFnOp equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
+                     in F.PrimExp (F.PrimCall equalTag, [], [F.PrimExp (dataTagOp info, [], [exp]), F.AsciiStringAsDatatypeTag (#targetInfo ctx, tag)])
                      end
                 )
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = SOME (payloadTy, payloadPat) })
               = let val payload = genMatcher (F.PrimExp (F.ExnPayloadOp, [payloadTy], [exp])) payloadTy payloadPat
-                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, [], [exp, tag]), payload)
+                in F.SimplifyingAndalsoExp (F.PrimExp (F.PrimCall Primitives.Exception_instanceof, [], [exp, tag]), payload)
                 end
             | genMatcher exp ty (F.ExnConPat { sourceSpan = _, tagPath = tag, payload = NONE })
-              = F.PrimExp (F.PrimFnOp Primitives.Exception_instanceof, [], [exp, tag])
+              = F.PrimExp (F.PrimCall Primitives.Exception_instanceof, [], [exp, tag])
             | genMatcher exp ty0 (F.LayeredPat (span, vid, ty1, innerPat)) = genMatcher exp ty0 innerPat
             | genMatcher exp ty0 (F.VectorPat (span, pats, ellipsis, elemTy))
-              = let val vectorLengthExp = F.PrimExp (F.PrimFnOp (Primitives.Vector_length Primitives.INT), [elemTy], [exp])
+              = let val vectorLengthExp = F.PrimExp (F.PrimCall (Primitives.Vector_length Primitives.INT), [elemTy], [exp])
                     val intTy = F.TyCon ([], Typing.primTyName_int)
                     val expectedLengthExp = F.IntConstExp (Int.toLarge (Vector.length pats), intTy)
                     val e0 = if ellipsis then
-                                 F.PrimExp (F.PrimFnOp (Primitives.Int_GE Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
+                                 F.PrimExp (F.PrimCall (Primitives.Int_GE Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
                              else
-                                 F.PrimExp (F.PrimFnOp (Primitives.Int_EQUAL Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
-                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimFnOp (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
+                                 F.PrimExp (F.PrimCall (Primitives.Int_EQUAL Primitives.INT), [], [vectorLengthExp, expectedLengthExp])
+                in Vector.foldri (fn (i, pat, e) => let val exp = genMatcher (F.PrimExp (F.PrimCall (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat
                                                     in F.SimplifyingAndalsoExp (e, exp)
                                                     end
                                  ) e0 pats
@@ -178,13 +178,13 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp _ (F.RecordPat { sourceSpan, fields, ellipsis, allFields }) = raise DesugarError ([sourceSpan], "internal error: record pattern against non-record type")
             | genBinders exp ty (F.ValConPat { sourceSpan, info, payload = SOME (payloadTy, payloadPat) })
               = (case info of
-                     { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimFnOp Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
+                     { representation = Syntax.REP_REF, tag = "ref", ... } => genBinders (F.PrimExp (F.PrimCall Primitives.Ref_read, [payloadTy], [exp])) payloadTy payloadPat
                    | { representation = Syntax.REP_LIST, tag = "::", ... } =>
                      let val elemTy = case ty of
                                           F.AppType { applied, arg } => arg
                                         | _ => raise DesugarError ([sourceSpan], "internal error: nil pattern with invalid type")
-                         val hdExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeHead, [elemTy], [exp])
-                         val tlExp = F.PrimExp (F.PrimFnOp Primitives.List_unsafeTail, [elemTy], [exp])
+                         val hdExp = F.PrimExp (F.PrimCall Primitives.List_unsafeHead, [elemTy], [exp])
+                         val tlExp = F.PrimExp (F.PrimCall Primitives.List_unsafeTail, [elemTy], [exp])
                      in genBinders (F.TupleExp [hdExp, tlExp]) payloadTy payloadPat
                      end
                    | _ => genBinders (F.PrimExp (F.DataPayloadOp info, [payloadTy], [exp])) payloadTy payloadPat
@@ -194,7 +194,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | genBinders exp ty (F.ExnConPat { sourceSpan = _, tagPath, payload = NONE }) = []
             | genBinders exp _ (F.LayeredPat (span, vid, ty, pat)) = (vid, SOME ty, exp) :: genBinders exp ty pat
             | genBinders exp ty (F.VectorPat (span, pats, ellipsis, elemTy)) = let val intTy = F.TyCon ([], Typing.primTyName_int)
-                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimFnOp (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
+                                                                               in Vector.foldri (fn (i, pat, acc) => genBinders (F.PrimExp (F.PrimCall (Primitives.Unsafe_Vector_sub Primitives.INT), [elemTy], [exp, F.IntConstExp (Int.toLarge i, intTy)])) elemTy pat @ acc) [] pats
                                                                                end
           and isExhaustive (F.WildcardPat _) = true
             | isExhaustive (F.SConPat _) = false
@@ -283,7 +283,7 @@ fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp (F.ConstructValWithPayloadOp _) = true
   | isDiscardablePrimOp F.ConstructExnOp = true
   | isDiscardablePrimOp F.ConstructExnWithPayloadOp = true
-  | isDiscardablePrimOp (F.PrimFnOp p) = Primitives.isDiscardable p
+  | isDiscardablePrimOp (F.PrimCall p) = Primitives.isDiscardable p
   | isDiscardablePrimOp F.JsCallOp = false
   | isDiscardablePrimOp F.JsMethodOp = false
   | isDiscardablePrimOp F.JsNewOp = false

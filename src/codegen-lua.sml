@@ -321,7 +321,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                              L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
                   in List.rev (L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo]) :: revStats) (* discard continuation *)
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs, args }, result } =>
                   let fun doUnary f = case args of
                                           [a] => f (doValue ctx a)
                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")

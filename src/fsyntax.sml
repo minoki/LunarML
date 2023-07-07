@@ -33,7 +33,7 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | ConstructValWithPayloadOp of Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: payload *)
                 | ConstructExnOp (* value argument: exception tag *)
                 | ConstructExnWithPayloadOp (* type argument: payload, value argument: exception tag, value argument: payload *)
-                | PrimFnOp of Primitives.PrimOp
+                | PrimCall of Primitives.PrimOp
                 | JsCallOp (* value argument: function, arguments *)
                 | JsMethodOp (* value argument: object, name, arguments *)
                 | JsNewOp (* value argument: constructor, arguments *)
@@ -426,7 +426,7 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp (ConstructValWithPayloadOp _) = "ConstructValWithPayloadOp"
   | print_PrimOp ConstructExnOp = "ConstructExnOp"
   | print_PrimOp ConstructExnWithPayloadOp = "ConstructExnWithPayloadOp"
-  | print_PrimOp (PrimFnOp x) = Primitives.toString x
+  | print_PrimOp (PrimCall x) = Primitives.toString x
   | print_PrimOp JsCallOp = "JsCallOp"
   | print_PrimOp JsMethodOp = "JsMethodOp"
   | print_PrimOp JsNewOp = "JsNewOp"
@@ -1095,7 +1095,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                                                                               end
                                                                           else
                                                                               emitFatalError (ctx, [span], "invalid arguments to primop '=' (" ^ Int.toString (Vector.length tyargs) ^ ", " ^ Int.toString (Vector.length args) ^ ")")
-  | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimFnOp primOp, Vector.foldr (fn (ty, xs) => toFTy (ctx, env, ty) :: xs) [] tyargs, Vector.foldr (fn (x, xs) => toFExp (ctx, env, x) :: xs) [] args)
+  | toFExp (ctx, env, T.PrimExp (span, primOp, tyargs, args)) = F.PrimExp (F.PrimCall primOp, Vector.foldr (fn (ty, xs) => toFTy (ctx, env, ty) :: xs) [] tyargs, Vector.foldr (fn (x, xs) => toFExp (ctx, env, x) :: xs) [] args)
 and doValBind ctx env (T.TupleBind (span, vars, exp))
     = let val tupleVId = freshVId (ctx, "tmp")
           val exp = toFExp (ctx, env, exp)

@@ -293,7 +293,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result } =>
                   List.rev (J.ThrowStat (doValue ctx exp) :: revStats) (* TODO: location information *)
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimFnOp prim, tyargs, args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs, args }, result } =>
                   let fun ConstStatOrExpStat e = case result of
                                                      SOME result => ConstStat (result, e)
                                                    | NONE => J.ExpStat e
