@@ -1043,19 +1043,21 @@ fun fromIntegralReal (x : real) = if x == 0.0 then
                                          else
                                              POSITIVE (adjust (go y))
                                       end
-val realBase : real = (* case Word.wordSize of
-                          32 => 0x1p32
-                        | 64 => 0x1p64
-                        | _ => *) let fun pow (a, 0, acc) = acc
-                                     | pow (a, 1, acc) = acc * a
-                                     | pow (a, n, acc) = let val q = n div 2
-                                                         in if n mod 2 = 0 then
-                                                                pow (a * a, q, acc)
-                                                            else
-                                                                pow (a * a, q, acc * a)
-                                                         end
-                               in pow (2.0, Word.wordSize, 1.0)
-                               end
+val realBase : real = LunarML.assumeDiscardable (fn () =>
+                                                    (* case Word.wordSize of
+                                                        32 => 0x1p32
+                                                      | 64 => 0x1p64
+                                                      | _ => *) let fun pow (a, 0, acc) = acc
+                                                                   | pow (a, 1, acc) = acc * a
+                                                                   | pow (a, n, acc) = let val q = n div 2
+                                                                                       in if n mod 2 = 0 then
+                                                                                              pow (a * a, q, acc)
+                                                                                          else
+                                                                                              pow (a * a, q, acc * a)
+                                                                                       end
+                                                             in pow (2.0, Word.wordSize, 1.0)
+                                                             end
+                                                ) ()
 fun wordToReal 0w0 = 0.0
   | wordToReal w = wordToReal (UncheckedWord.>> (w, 0w31)) * 0x1p31 + Real.fromInt (Word.toInt (Word.andb (w, 0wx7fffffff)))
 fun simpleNatToReal words = Vector.foldr (fn (w, acc) => acc * realBase + wordToReal w) 0.0 words
