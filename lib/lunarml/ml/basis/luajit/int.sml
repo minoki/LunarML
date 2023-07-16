@@ -1,4 +1,4 @@
-structure Int8 :> INTEGER = struct
+structure Int8Impl :> sig include INTEGER; val fromIntUnchecked : Int.int -> int end = struct
 type int = int
 val MAX = 127
 val MIN = ~128
@@ -10,6 +10,7 @@ fun fromInt (x : Int.int) = if MIN <= x andalso x <= MAX then
                                 x
                             else
                                 raise Overflow
+fun fromIntUnchecked (x : Int.int) = x
 fun toLarge x = Int.toLarge (toInt x)
 fun fromLarge x = fromInt (Int.fromLarge x)
 val op + = fn (x, y) => fromInt (x + y)
@@ -37,6 +38,7 @@ fun scan radix getc strm = case Int.scan radix getc strm of
                              | NONE => NONE
 fun fromString s = Option.map fromInt (Int.fromString s)
 end;
+structure Int8 : INTEGER = Int8Impl;
 _overload "Int" [Int8.int] { + = Int8.+
                            , - = Int8.-
                            , * = Int8.*
@@ -48,12 +50,12 @@ _overload "Int" [Int8.int] { + = Int8.+
                            , <= = Int8.<=
                            , > = Int8.>
                            , >= = Int8.>=
-                           , fromInt = Int8.fromInt
+                           , fromInt = Int8Impl.fromIntUnchecked
                            , minInt = ~0x80
                            , maxInt = 0x7f
                            };
 
-structure Int16 :> INTEGER = struct
+structure Int16Impl :> sig include INTEGER; val fromIntUnchecked : Int.int -> int end = struct
 type int = int
 val MAX = 0x7fff
 val MIN = ~0x8000
@@ -65,6 +67,7 @@ fun fromInt (x : Int.int) = if MIN <= x andalso x <= MAX then
                                 x
                             else
                                 raise Overflow
+fun fromIntUnchecked (x : Int.int) = x
 fun toLarge x = Int.toLarge (toInt x)
 fun fromLarge x = fromInt (Int.fromLarge x)
 val op + = fn (x, y) => fromInt (x + y)
@@ -92,6 +95,7 @@ fun scan radix getc strm = case Int.scan radix getc strm of
                              | NONE => NONE
 fun fromString s = Option.map fromInt (Int.fromString s)
 end;
+structure Int16 : INTEGER = Int16Impl
 _overload "Int" [Int16.int] { + = Int16.+
                             , - = Int16.-
                             , * = Int16.*
@@ -103,12 +107,12 @@ _overload "Int" [Int16.int] { + = Int16.+
                             , <= = Int16.<=
                             , > = Int16.>
                             , >= = Int16.>=
-                            , fromInt = Int16.fromInt
+                            , fromInt = Int16Impl.fromIntUnchecked
                             , minInt = ~0x8000
                             , maxInt = 0x7fff
                             };
 
-structure Int32 :> INTEGER = struct
+structure Int32Impl :> sig include INTEGER; val fromIntUnchecked : Int.int -> int end = struct
 type int = int
 val MAX = 0x7fffffff
 val MIN = ~0x80000000
@@ -120,6 +124,7 @@ fun fromInt (x : Int.int) = if MIN <= x andalso x <= MAX then
                                 x
                             else
                                 raise Overflow
+fun fromIntUnchecked (x : Int.int) = x
 fun toLarge x = Int.toLarge (toInt x)
 fun fromLarge x = fromInt (Int.fromLarge x)
 val op + = fn (x, y) => fromInt (x + y)
@@ -147,6 +152,7 @@ fun scan radix getc strm = case Int.scan radix getc strm of
                              | NONE => NONE
 fun fromString s = Option.map fromInt (Int.fromString s)
 end;
+structure Int32 : INTEGER = Int32Impl;
 _overload "Int" [Int32.int] { + = Int32.+
                             , - = Int32.-
                             , * = Int32.*
@@ -158,7 +164,7 @@ _overload "Int" [Int32.int] { + = Int32.+
                             , <= = Int32.<=
                             , > = Int32.>
                             , >= = Int32.>=
-                            , fromInt = Int32.fromInt
+                            , fromInt = Int32Impl.fromIntUnchecked
                             , minInt = ~0x8000_0000
                             , maxInt = 0x7fff_ffff
                             };
