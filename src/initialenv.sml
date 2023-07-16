@@ -10,7 +10,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                         val refConMap = mkValConMap ["ref"]
                                         val listConMap = mkValConMap ["nil", "::"]
                                     in { fixityMap = Syntax.VIdMap.empty
-                                       , idStatusMap = { valMap = List.foldl (Syntax.VIdMap.unionWith #2) (mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail", "_Prim.Lua.LuaError"]) [boolConMap, refConMap, listConMap]
+                                       , idStatusMap = { valMap = List.foldl (Syntax.VIdMap.unionWith #2) (mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail", "_Prim.Lua.Error"]) [boolConMap, refConMap, listConMap]
                                                        , tyConMap = mkTyConMap [("bool", boolConMap)
                                                                                ,("ref", refConMap)
                                                                                ,("list", listConMap)
@@ -113,8 +113,8 @@ val VId_Lua_Lib_bit_bor = newVId "_Prim.Lua.Lib.bit.bor" (* LuaJIT *)
 val VId_Lua_Lib_bit_bxor = newVId "_Prim.Lua.Lib.bit.bxor" (* LuaJIT *)
 val VId_Lua_Lib_bit_lshift = newVId "_Prim.Lua.Lib.bit.lshift" (* LuaJIT *)
 val VId_Lua_Lib_bit_rshift = newVId "_Prim.Lua.Lib.bit.rshift" (* LuaJIT *)
-val VId_Lua_LuaError = newVId "_Prim.Lua.LuaError"
-val VId_Lua_LuaError_tag = newVId "_Prim.Lua.LuaError.tag"
+val VId_Lua_Error = newVId "_Prim.Lua.Error"
+val VId_Lua_Error_tag = newVId "_Prim.Lua.Error.tag"
 
 (* JavaScript interface *)
 val VId_JavaScript_undefined = newVId "_Prim.JavaScript.undefined"
@@ -198,7 +198,7 @@ val initialEnv : Typing.Env
                                            ,("Size", VId_Size, TypeScheme ([], primTy_exn))
                                            ,("Subscript", VId_Subscript, TypeScheme ([], primTy_exn))
                                            ,("Fail", VId_Fail, TypeScheme ([], primTy_string --> primTy_exn))
-                                           ,("_Prim.Lua.LuaError", VId_Lua_LuaError, TypeScheme ([], primTy_Lua_value --> primTy_exn))
+                                           ,("_Prim.Lua.Error", VId_Lua_Error, TypeScheme ([], primTy_Lua_value --> primTy_exn))
                                            ]
                                ,List.foldl (fn ((name, vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId name, (tysc, Syntax.ValueVariable, TypedSyntax.MkShortVId vid)))
                                            Syntax.VIdMap.empty

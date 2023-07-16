@@ -55,15 +55,15 @@ local _Fail_tag = { "Fail" }
 local function _Fail(message)
   return setmetatable({ tag = _Fail_tag, payload = message }, _exn_meta)
 end
-local _LuaError_tag = { "LuaError" }
-local function _LuaError(x)
-  return setmetatable({ tag = _LuaError_tag, payload = x }, _exn_meta)
+local _Error_tag = { "Error" }
+local function _Error(x)
+  return setmetatable({ tag = _Error_tag, payload = x }, _exn_meta)
 end
 
 local function _handle(f)
   local success, result = pcall(f)
   if not success and getmetatable(result) ~= _exn_meta then
-    result = _LuaError(result)
+    result = _Error(result)
   end
   return success, result
 end
@@ -78,7 +78,7 @@ end
 
 local function _raise(x, location)
   local e
-  if x.tag == _LuaError_tag then
+  if x.tag == _Error_tag then
     e = x.payload
   elseif location ~= nil then
     local traceback = debug.traceback(nil, 2)

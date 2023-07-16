@@ -96,7 +96,7 @@ end
 
 structure Lua : sig
               type value
-              exception LuaError of value
+              exception Error of value
               exception TypeError of string
               val sub : value * value -> value  (* t[k] *)
               val field : value * string -> value  (* t[k] *)
@@ -196,7 +196,7 @@ structure Lua : sig
                         end
           end = struct
 type value = _Prim.Lua.value
-exception LuaError = _Prim.Lua.LuaError
+exception Error = _Prim.Lua.Error
 fun global name = _primCall "Lua.global" (name)
 fun setGlobal (name, value) = _primCall "Lua.setGlobal" (name, value)
 fun call f args = _primCall "Lua.call" (f, args)

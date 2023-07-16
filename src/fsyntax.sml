@@ -1626,7 +1626,7 @@ val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                                                    ,(VId_Size, VId_Size_tag)
                                                    ,(VId_Subscript, VId_Subscript_tag)
                                                    ,(VId_Fail, VId_Fail_tag)
-                                                   ,(VId_Lua_LuaError, VId_Lua_LuaError_tag)
+                                                   ,(VId_Lua_Error, VId_Lua_Error_tag)
                                                    ]
                                      end
                        , overloadMap = TypedSyntax.TyNameMap.empty
@@ -1657,7 +1657,7 @@ val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                                                 ,(VId_Size_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
                                                 ,(VId_Subscript_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
                                                 ,(VId_Fail_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
-                                                ,(VId_Lua_LuaError_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
+                                                ,(VId_Lua_Error_tag, FSyntax.TyCon ([], Typing.primTyName_exntag))
                                                 ]
                                   end
                        }

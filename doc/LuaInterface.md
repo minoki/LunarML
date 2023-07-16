@@ -7,6 +7,8 @@ Lua features are accessible via `Lua` structure.
 ```sml
 structure Lua : sig
   type value
+  exception Error of value
+  exception TypeError of string
   val sub : value * value -> value  (* t[k] *)
   val field : value * string -> value  (* t[k] *)
   val set : value * value * value -> unit  (* t[k] = v *)
