@@ -1287,6 +1287,41 @@ end
 structure Time :> TIME
 ```
 
+## structure Date - partial
+
+```sml
+signature DATE = sig
+  datatype weekday = Mon | Tue | Wed | Thu | Fri | Sat | Sun
+  datatype month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+  type date
+  exception Date
+  val date : { year : int, month : month, day : int, hour : int, minute : int, second : int, offset : Time.time option } -> date
+  val year : date -> int
+  val month : date -> month
+  val day : date -> int
+  val hour : date -> int
+  val minute : date -> int
+  val second : date -> int
+  val weekDay : date -> weekday
+  val offset : date -> Time.time option
+  val isDst : date -> bool option
+  val localOffset : unit -> Time.time
+  val fromTimeLocal : Time.time -> date
+  val fromTimeUniv : Time.time -> date
+  val toTime : date -> Time.time
+  val compare : date * date -> order
+  val fmt : string -> date -> string
+  val toString : date -> string
+  (* val scan : (char, 'a) StringCvt.reader -> (date, 'a) StringCvt.reader *)
+  (* val fromString : string -> date option *)
+end
+structure Date :> DATE
+```
+
+On Lua backend, `Date.fmt` is a thin wrapper of `os.date`. Therefore, LunarML's `Date.fmt` may accept or reject invalid specifiers.
+
+On JavaScript backend, `Date.fmt` tries to mimick C locale.
+
 ## structure Timer - complete
 
 ```sml
@@ -1314,8 +1349,6 @@ The GC time returned by this structure is always zero.
 ```sml
 signature BIN_IO
 structure BinIO :> BIN_IO
-signature DATE
-structure Date :> DATE
 signature IMPERATIVE_IO
 structure Position :> INTEGER
 signature PRIM_IO

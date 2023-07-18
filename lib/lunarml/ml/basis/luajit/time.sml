@@ -29,6 +29,7 @@ signature TIME = sig
 end;
 local
     val oslib = LunarML.assumeDiscardable Lua.global "os"
+    val os_date = LunarML.assumeDiscardable Lua.field (oslib, "date")
     val os_time = LunarML.assumeDiscardable Lua.field (oslib, "time")
     val os_difftime = LunarML.assumeDiscardable Lua.field (oslib, "difftime")
     val epoch = LunarML.assumeDiscardable (fn () =>
@@ -43,6 +44,34 @@ local
 in
 structure TimeImpl :> sig
               structure Time : TIME
+              structure Date : sig
+                            datatype weekday = Mon | Tue | Wed | Thu | Fri | Sat | Sun
+                            datatype month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+                            type date
+                            exception Date
+                            val date : { year : int, month : month, day : int, hour : int, minute : int, second : int, offset : Time.time option } -> date
+                            val year : date -> int
+                            val month : date -> month
+                            val day : date -> int
+                            val hour : date -> int
+                            val minute : date -> int
+                            val second : date -> int
+                            val weekDay : date -> weekday
+                            val yearDay : date -> int
+                            val offset : date -> Time.time option
+                            val isDst : date -> bool option
+                            val localOffset : unit -> Time.time
+                            val fromTimeLocal : Time.time -> date
+                            val fromTimeUniv : Time.time -> date
+                            val toTime : date -> Time.time
+                            val compare : date * date -> order
+                            val fmt : string -> date -> string
+                            val toString : date -> string
+                            (*
+                            val scan : (char, 'a) StringCvt.reader -> (date, 'a) StringCvt.reader
+                            val fromString : string -> date option
+                            *)
+                        end
           end = struct
 structure Time = struct
 type time = Int54.int (* in microseconds *)
@@ -110,6 +139,139 @@ val op <= = Int54.<=
 val op > = Int54.>
 val op >= = Int54.>=
 end (* structure Time *)
+structure Date = struct
+datatype weekday = Mon | Tue | Wed | Thu | Fri | Sat | Sun
+datatype month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+type date = Lua.value
+exception Date
+fun monthToInt Jan = 1
+  | monthToInt Feb = 2
+  | monthToInt Mar = 3
+  | monthToInt Apr = 4
+  | monthToInt May = 5
+  | monthToInt Jun = 6
+  | monthToInt Jul = 7
+  | monthToInt Aug = 8
+  | monthToInt Sep = 9
+  | monthToInt Oct = 10
+  | monthToInt Nov = 11
+  | monthToInt Dec = 12
+fun date { year : int, month : month, day : int, hour : int, minute : int, second : int, offset : Time.time option }
+    = let val t = Lua.newTable ()
+          val () = Lua.setField (t, "year", Lua.fromInt year)
+          val () = Lua.setField (t, "month", Lua.fromInt (monthToInt month))
+          val () = Lua.setField (t, "day", Lua.fromInt day)
+          val () = Lua.setField (t, "hour", Lua.fromInt hour)
+          val () = Lua.setField (t, "min", Lua.fromInt minute)
+          val () = Lua.setField (t, "sec", Lua.fromInt second)
+          val u = Lua.call1 os_date #[Lua.fromString "*t", Lua.call1 os_time #[t]] (* TODO: error handling *)
+          val () = Lua.setField (u, "offset", Lua.unsafeToValue offset)
+      in u
+      end
+fun year t : int = Lua.unsafeFromValue (Lua.field (t, "year"))
+fun monthAsInt t : int = Lua.unsafeFromValue (Lua.field (t, "month"))
+fun month t : month = case monthAsInt t of
+                          1 => Jan
+                        | 2 => Feb
+                        | 3 => Mar
+                        | 4 => Apr
+                        | 5 => May
+                        | 6 => Jun
+                        | 7 => Jul
+                        | 8 => Aug
+                        | 9 => Sep
+                        | 10 => Oct
+                        | 11 => Nov
+                        | _ => Dec
+fun day t : int = Lua.unsafeFromValue (Lua.field (t, "day"))
+fun hour t : int = Lua.unsafeFromValue (Lua.field (t, "hour"))
+fun minute t : int = Lua.unsafeFromValue (Lua.field (t, "min"))
+fun second t : int = Lua.unsafeFromValue (Lua.field (t, "sec"))
+fun weekDay t : weekday = case Lua.unsafeFromValue (Lua.field (t, "wday")) : int of
+                              1 => Sun
+                            | 2 => Mon
+                            | 3 => Tue
+                            | 4 => Wed
+                            | 5 => Thu
+                            | 6 => Fri
+                            | _ => Sat
+fun yearDay t : int = Lua.unsafeFromValue (Lua.field (t, "yday")) - 1
+fun offset t : Time.time option = Lua.unsafeFromValue (Lua.field (t, "offset"))
+fun isDst t : bool option = let val x = Lua.unsafeFromValue (Lua.field (t, "isdst"))
+                            in if Lua.isNil x then
+                                   NONE
+                               else
+                                   SOME (Lua.unsafeFromValue x) (* boolean *)
+                            end
+fun localOffset () : Time.time = let val now = Lua.call1 os_time #[]
+                                     val t_utc = Lua.call1 os_time #[Lua.call1 os_date #[Lua.fromString "!*t", now]]
+                                 in Time.fromReal (Lua.unsafeFromValue (Lua.call1 os_difftime #[t_utc, now]))
+                                 end
+fun fromTimeLocal t = let val u = Lua.call1 os_date #[Lua.fromString "*t", toLuaTime t]
+                          val () = Lua.setField (u, "offset", Lua.unsafeToValue (NONE : Time.time option))
+                      in u
+                      end
+fun fromTimeUniv t = let val u = Lua.call1 os_date #[Lua.fromString "!*t", toLuaTime t]
+                         val () = Lua.setField (u, "offset", Lua.unsafeToValue (SOME Time.zeroTime : Time.time option))
+                     in u
+                     end
+fun toTime date = let val t = fromLuaTime (Lua.call1 os_time #[date]) (* local time *)
+                  in case offset date of
+                         NONE => t
+                       | SOME u => t + u
+                  end
+fun compare (date1, date2) = case Int.compare (year date1, year date2) of
+                                 EQUAL => (case Int.compare (monthAsInt date1, monthAsInt date2) of
+                                               EQUAL => (case Int.compare (day date1, day date2) of
+                                                             EQUAL => (case Int.compare (hour date1, hour date2) of
+                                                                           EQUAL => (case Int.compare (minute date1, minute date2) of
+                                                                                         EQUAL => Int.compare (second date1, second date2)
+                                                                                       | r => r
+                                                                                    )
+                                                                         | r => r
+                                                                      )
+                                                           | r => r
+                                                        )
+                                             | r => r
+                                          )
+                               | r => r
+fun doFmt ("*t", date) = "*t"
+  | doFmt (s, date) = Lua.unsafeFromValue (Lua.call1 os_date #[Lua.fromString s, toLuaTime (toTime date)]) : string
+fun fmt s date = if String.sub (s, 0) = #"!" then
+                     "!" ^ doFmt (String.extract (s, 1, NONE), date)
+                 else
+                     doFmt (s, date)
+fun toString date = doFmt ("%a %b %d %H:%M:%S %Y", date)
+end (* structure Date *)
 end (* structure TimeImpl *)
 end; (* local *)
 structure Time = TimeImpl.Time;
+signature DATE = sig
+    datatype weekday = Mon | Tue | Wed | Thu | Fri | Sat | Sun
+    datatype month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+    type date
+    exception Date
+    val date : { year : int, month : month, day : int, hour : int, minute : int, second : int, offset : Time.time option } -> date
+    val year : date -> int
+    val month : date -> month
+    val day : date -> int
+    val hour : date -> int
+    val minute : date -> int
+    val second : date -> int
+    val weekDay : date -> weekday
+    val yearDay : date -> int
+    val offset : date -> Time.time option
+    val isDst : date -> bool option
+    val localOffset : unit -> Time.time
+    val fromTimeLocal : Time.time -> date
+    val fromTimeUniv : Time.time -> date
+    val toTime : date -> Time.time
+    val compare : date * date -> order
+    val fmt : string -> date -> string
+    val toString : date -> string
+    (*
+    val scan : (char, 'a) StringCvt.reader -> (date, 'a) StringCvt.reader
+    val fromString : string -> date option
+    *)
+end;
+structure Date : DATE = TimeImpl.Date;

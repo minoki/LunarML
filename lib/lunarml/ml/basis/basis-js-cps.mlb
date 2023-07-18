@@ -14,6 +14,7 @@ signature ARRAY_SLICE
 signature BOOL
 signature BYTE
 signature CHAR
+signature DATE
 signature INTEGER
 signature INT_INF
 signature LIST
@@ -53,6 +54,7 @@ structure CharArray
 structure CharArraySlice
 structure CharVector
 structure CommandLine
+structure Date
 structure General
 structure IEEEReal
 structure IO
