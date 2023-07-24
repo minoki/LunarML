@@ -90,7 +90,7 @@ fun toLuaTime (x : Int54.int) : Lua.value
           val min' = x div 60
           val min = min' mod 60
           val hour' = min' div 60
-          val hour = hour' mod 60
+          val hour = hour' mod 24
           val day' = hour' div 24
           val t = Lua.newTable ()
       in Lua.setField (t, "year", Lua.fromInt 1970)
