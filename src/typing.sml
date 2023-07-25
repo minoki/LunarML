@@ -1137,8 +1137,14 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
            Found (longvid, tysc, ids) => let val (ty, tyargs) = instantiate(ctx, span, tysc)
                                          in (ty, T.VarExp (span, longvid, ids, tyargs))
                                          end
-         | ValueNotFound notfound => emitFatalTypeError (ctx, [span], "unknown value name " ^ Syntax.print_LongVId notfound)
-         | StructureNotFound notfound => emitFatalTypeError (ctx, [span], "unknown structure name " ^ Syntax.print_LongStrId notfound)
+         | ValueNotFound notfound => let val () = emitTypeError (ctx, [span], "unknown value name " ^ Syntax.print_LongVId notfound)
+                                         val ty = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                                     in (ty, T.BogusExp (span, ty))
+                                     end
+         | StructureNotFound notfound => let val () = emitTypeError (ctx, [span], "unknown structure name " ^ Syntax.print_LongStrId notfound)
+                                             val ty = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                                         in (ty, T.BogusExp (span, ty))
+                                         end
       )
   | typeCheckExp (ctx, env, S.RecordExp (span, fields, NONE), typeHint)
     = let fun oneField (label, exp) = let val typeHint' = case typeHint of
@@ -2205,6 +2211,7 @@ local
       | checkExp (ctx, env, T.ListExp (span, elems, ty)) = Vector.app (fn e => checkExp (ctx, env, e)) elems
       | checkExp (ctx, env, T.VectorExp (span, elems, ty)) = Vector.app (fn e => checkExp (ctx, env, e)) elems
       | checkExp (ctx, env, T.PrimExp (span, _, _, args)) = Vector.app (fn e => checkExp (ctx, env, e)) args
+      | checkExp (ctx, env, T.BogusExp _) = ()
     and checkDec (ctx, env, T.ValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
       | checkDec (ctx, env, T.RecValDec (span, valbinds)) = List.app (fn valbind => checkValBind (ctx, env, valbind)) valbinds
       | checkDec (ctx, env, T.IgnoreDec (span, exp, ty)) = checkExp (ctx, env, exp)
@@ -2290,6 +2297,7 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
             | goExp (T.ListExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
             | goExp (T.VectorExp (span, xs, ty)) = ( Vector.app goExp xs ; goTy ty )
             | goExp (T.PrimExp (span, primOp, tyargs, args)) = ( Vector.app goTy tyargs ; Vector.app goExp args )
+            | goExp (T.BogusExp (span, ty)) = goTy ty
           and goDec (T.ValDec (span, valbinds)) = ( List.app goValBind valbinds
                                                   ; tynameset
                                                   )

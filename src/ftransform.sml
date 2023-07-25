@@ -68,6 +68,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                     in F.LetExp ([F.ValDec (examinedVId, SOME subjectTy, doExp subjectExp)], go matches)
                                     end
                      end
+                   | F.BogusExp _ => exp0
                 )
           and doDec (F.ValDec (vid, optTy, exp)) = F.ValDec (vid, optTy, doExp exp)
             | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp exp)) valbinds)
@@ -232,6 +233,7 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.m
   | doExp (F.TyAbsExp (tv, kind, exp)) = F.TyAbsExp (tv, kind, doExp exp)
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
+  | doExp (e as F.BogusExp _) = e
 and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.RecValDec valbinds)
     = let val bound = List.foldl (fn ((vid, ty, exp), set) => TypedSyntax.VIdSet.add (set, vid)) TypedSyntax.VIdSet.empty valbinds
@@ -303,6 +305,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.TyAbsExp (tyvar, kind, exp)) = isDiscardable exp
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
+  | isDiscardable (F.BogusExp _) = false
 (*!
 val doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set
 and doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp
@@ -371,6 +374,7 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
   | doExp (F.PackExp { payloadTy, exp, packageTy }) acc = let val (used, exp) = doExp exp acc
                                                           in (used, F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy })
                                                           end
+  | doExp (exp as F.BogusExp _) acc = (acc, exp)
 and doIgnoredExpAsExp exp acc = let val (used, exps) = doIgnoredExp exp acc
                                 in (used, F.LetExp (List.map F.IgnoreDec exps, F.RecordExp []))
                                 end
@@ -436,6 +440,7 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                                         F.RecordExp [] => (used, [])
                                                                       | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
                                                                  end
+  | doIgnoredExp (exp as F.BogusExp _) acc = (acc, [exp])
 and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyntax.VIdSet.set * F.Dec list
     = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then

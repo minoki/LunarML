@@ -201,6 +201,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | ListExp of SourcePos.span * Exp vector * Ty
              | VectorExp of SourcePos.span * Exp vector * Ty
              | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+             | BogusExp of SourcePos.span * Ty (* undefined identifier *)
      and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
              | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
              | IgnoreDec of SourcePos.span * Exp * Ty (* val _ = ... *)
@@ -261,6 +262,7 @@ fun getSourceSpanOfExp(SConExp(span, _, _)) = span
   | getSourceSpanOfExp(ListExp(span, _, _)) = span
   | getSourceSpanOfExp(VectorExp(span, _, _)) = span
   | getSourceSpanOfExp(PrimExp(span, _, _, _)) = span
+  | getSourceSpanOfExp (BogusExp (span, _)) = span
 
 (* pretty printing *)
 structure PrettyPrint = struct
@@ -334,6 +336,7 @@ fun print_Exp (SConExp(_, x, ty)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
   | print_Exp (ListExp _) = "ListExp"
   | print_Exp (VectorExp _) = "VectorExp"
   | print_Exp (PrimExp _) = "PrimExp"
+  | print_Exp (BogusExp _) = "BogusExp"
 and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (RecValDec(_,valbinds)) = "RecValDec(" ^ Syntax.print_list print_ValBind valbinds ^ ")"
   | print_Dec (IgnoreDec _) = "IgnoreDec"
@@ -462,6 +465,7 @@ fun applySubstTyInExpOrDec subst
             | doExp (ListExp (span, elems, elemTy)) = ListExp (span, Vector.map doExp elems, doTy elemTy)
             | doExp (VectorExp (span, elems, elemTy)) = VectorExp (span, Vector.map doExp elems, doTy elemTy)
             | doExp (PrimExp (span, primOp, tyargs, args)) = PrimExp (span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
+            | doExp (BogusExp (span, ty)) = BogusExp (span, doTy ty)
           and doDec (ValDec (span, valbinds)) = ValDec (span, List.map doValBind valbinds)
             | doDec (RecValDec (span, valbinds)) = RecValDec (span, List.map doValBind valbinds)
             | doDec (IgnoreDec (span, exp, ty)) = IgnoreDec (span, doExp exp, doTy ty)
@@ -541,6 +545,7 @@ fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdSta
             | doExp (ListExp (span, elems, elemTy)) = ListExp (span, Vector.map doExp elems, elemTy)
             | doExp (VectorExp (span, elems, elemTy)) = VectorExp (span, Vector.map doExp elems, elemTy)
             | doExp (PrimExp (span, primOp, tyargs, args)) = PrimExp (span, primOp, tyargs, Vector.map doExp args)
+            | doExp (e as BogusExp (span, ty)) = e
           and doMatches matches = List.map (fn (pat, exp) => let val subst' = removeKeys (subst, boundVIdsInPat pat)
                                                              in (pat, #doExp (substVId subst') exp)
                                                              end) matches
@@ -608,6 +613,7 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
             | doExp(ListExp(span, xs, ty)) = ListExp(span, Vector.map doExp xs, doTy ty)
             | doExp(VectorExp(span, xs, ty)) = VectorExp(span, Vector.map doExp xs, doTy ty)
             | doExp(PrimExp(span, primOp, tyargs, args)) = PrimExp(span, primOp, Vector.map doTy tyargs, Vector.map doExp args)
+            | doExp (BogusExp (span, ty)) = BogusExp (span, doTy ty)
           and doDec(ValDec(span, valbind)) = ValDec(span, List.map doValBind valbind)
             | doDec(RecValDec(span, valbind)) = RecValDec(span, List.map doValBind valbind)
             | doDec (IgnoreDec (span, exp, ty)) = IgnoreDec (span, doExp exp, doTy ty)
@@ -709,6 +715,7 @@ fun freeTyVarsInExp (bound, exp)
          | PrimExp (_, _, tyargs, args) => let val set = Vector.foldl (fn (ty, set) => set @ freeAnonymousTyVarsInTy ty) [] tyargs
                                            in Vector.foldl (fn (x, set) => set @ freeTyVarsInExp (bound, x)) set args
                                            end
+         | BogusExp (_, ty) => freeAnonymousTyVarsInTy ty
       )
 and freeTyVarsInMatches (bound, nil, acc) = acc
   | freeTyVarsInMatches (bound, (pat, exp) :: rest, acc) = freeTyVarsInMatches (bound, rest, acc @ freeTyVarsInPat (bound, pat) @ freeTyVarsInExp (bound, exp))

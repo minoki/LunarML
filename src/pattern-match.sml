@@ -452,6 +452,7 @@ fun goExp (ctx, F.PrimExp (_, _, exps)) = List.app (fn x => goExp (ctx, x)) exps
   | goExp (ctx, F.TyAbsExp (_, _, exp)) = goExp (ctx, exp)
   | goExp (ctx, F.TyAppExp (exp, _)) = goExp (ctx, exp)
   | goExp (ctx, F.PackExp { payloadTy, exp, packageTy }) = goExp (ctx, exp)
+  | goExp (ctx, F.BogusExp _) = ()
 and goDec (ctx, F.ValDec (_, _, exp)) = goExp (ctx, exp)
   | goDec (ctx, F.RecValDec decs) = List.app (fn (_, _, exp) => goExp (ctx, exp)) decs
   | goDec (ctx, F.UnpackDec (_, _, _, _, exp)) = goExp (ctx, exp)

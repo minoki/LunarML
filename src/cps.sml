@@ -511,6 +511,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
          | F.TyAbsExp (_, _, exp) => transformX (ctx, env) exp (revDecs, k)
          | F.TyAppExp (exp, _) => transformX (ctx, env) exp (revDecs, k)
          | F.PackExp { payloadTy, exp, packageTy } => transformX (ctx, env) exp (revDecs, k)
+         | F.BogusExp _ => raise Message.Abort
 fun transformDecs (ctx : Context, env) ([] : F.Dec list) (revDecs : C.Dec list, k : C.CVar) : C.CExp
     = prependRevDecs (revDecs, C.AppCont { applied = k, args = [] }) (* apply continuation *)
   | transformDecs (ctx, env) [F.ExportValue exp] (revDecs, k)
