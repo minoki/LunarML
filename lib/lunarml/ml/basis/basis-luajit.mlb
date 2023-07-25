@@ -10,7 +10,7 @@ ann "allowPrim true" "allowOverload true" "allowInfixingDot true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
 lunarml.sml
-luajit/string-prim.sml
+string-prim.sml
 luajit/lua.sml
 luajit/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
@@ -18,11 +18,23 @@ unsafe.sml
 lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
-$(TARGET_LANG)/array-prim.sml
+luajit/array-prim.sml
 math-sig.sml
 string-cvt-sig.sml
 ieee-real.sml
-luajit/mlbasis.sml
+luajit/word-prim.sml
+lua/real-prim.sml
+char-prim.sml
+string-cvt-0.sml
+luajit/int-1.sml
+luajit/word-1.sml
+luajit/real-1.sml
+luajit/math.sml
+luajit/string-1.sml
+luajit/char-1.sml
+string-cvt-1.sml
+luajit/string-2.sml
+luajit/vector-1.sml
 vector-sig.sml
 array.sml
 luajit/word.sml

@@ -9,17 +9,32 @@ local
 ann "allowPrim true" "allowOverload true" "allowInfixingDot true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
-$(TARGET_LANG)/int-prim.sml
+lua/int-prim.sml
 list.sml (* depends on int (-, +), option, General.Subscript, General.order *)
 unsafe.sml
-$(TARGET_LANG)/vector-prim.sml (* depends on int, Unsafe, Subscript *)
+lua/vector-prim.sml (* depends on int, Unsafe, Subscript *)
 vector.sml (* depends on vector-prim, option *)
 bool.sml
-$(TARGET_LANG)/array-prim.sml
+lua/array-prim.sml
 math-sig.sml
 string-cvt-sig.sml
 ieee-real.sml
-lua/mlbasis.sml
+lua/word-prim.sml
+lua/real-prim.sml
+char-prim.sml
+string-prim.sml
+lunarml.sml
+lua/lua.sml
+string-cvt-0.sml
+lua/int-1.sml
+lua/word-1.sml
+lua/real-1.sml
+lua/math.sml
+lua/string-1.sml
+lua/char-1.sml
+string-cvt-1.sml
+lua/string-2.sml
+lua/vector-1.sml
 vector-sig.sml
 array.sml
 lua/word.sml
