@@ -270,7 +270,7 @@ structure LargeWord = Word64
 ## structure IEEEReal - partial
 
 ```sml
-structure IEEEReal : sig
+signature IEEE_REAL = sig
   exception Unordered
   datatype real_order = LESS | EQUAL | GREATER | UNORDERED
   datatype float_class = NAN | INF | ZERO | NORMAL | SUBNORMAL
@@ -282,6 +282,7 @@ structure IEEEReal : sig
   (* val scan : (char, 'a) StringCvt.reader -> (decimal_approx, 'a) StringCvt.reader *)
   (* val fromString : string -> decimal_approx option *)
 end
+structure IEEEReal : IEEE_REAL
 ```
 
 ## signature REAL (structure Real, structure LargeReal) - partial

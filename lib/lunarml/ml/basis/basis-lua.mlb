@@ -18,6 +18,7 @@ bool.sml
 $(TARGET_LANG)/array-prim.sml
 math-sig.sml
 string-cvt-sig.sml
+ieee-real.sml
 lua/mlbasis.sml
 vector-sig.sml
 array.sml
@@ -57,6 +58,7 @@ signature BOOL
 signature BYTE
 signature CHAR
 signature DATE
+signature IEEE_REAL
 signature INTEGER
 signature INT_INF
 signature LIST
