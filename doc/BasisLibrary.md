@@ -278,7 +278,7 @@ signature IEEE_REAL = sig
   (* val setRoundingMode : rounding_mode -> unit *)
   (* val getRoundingMode : unit -> rounding_mode *)
   type decimal_approx = { class : float_class, sign : bool, digits : int list, exp : int }
-  (* val toString : decimal_approx -> string *)
+  val toString : decimal_approx -> string
   (* val scan : (char, 'a) StringCvt.reader -> (decimal_approx, 'a) StringCvt.reader *)
   (* val fromString : string -> decimal_approx option *)
 end

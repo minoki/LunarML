@@ -21,7 +21,7 @@ bool.sml
 luajit/array-prim.sml
 math-sig.sml
 string-cvt-sig.sml
-ieee-real.sml
+ieee-real-0.sml
 luajit/word-prim.sml
 lua/real-prim.sml
 char-prim.sml
@@ -35,6 +35,7 @@ luajit/char-1.sml
 string-cvt-1.sml
 luajit/string-2.sml
 luajit/vector-1.sml
+ieee-real-1.sml
 vector-sig.sml
 array.sml
 luajit/word.sml

@@ -23,7 +23,7 @@ $(TARGET_LANG)/string-prim.sml
 $(TARGET_LANG)/array-prim.sml (* depends on int, Unsafe, Subscript, List.tabulate *)
 math-sig.sml
 string-cvt-sig.sml
-ieee-real.sml
+ieee-real-0.sml
 js-common/word-prim.sml
 js-common/real-prim.sml
 char-prim.sml
@@ -37,6 +37,7 @@ js-common/char-1.sml
 string-cvt-1.sml
 js-common/string-2.sml
 js-common/vector-1.sml
+ieee-real-1.sml
 vector-sig.sml
 array.sml
 scan-num-utils.sml
