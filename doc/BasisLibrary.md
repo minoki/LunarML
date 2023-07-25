@@ -1045,7 +1045,7 @@ structure RealArraySlice : MONO_ARRAY_SLICE where type vector = RealVector.vecto
                                             where type elem = real
 ```
 
-## structure Byte - partial
+## structure Byte - complete
 
 ```sml
 signature BYTE = sig
@@ -1053,9 +1053,9 @@ signature BYTE = sig
   val charToByte : char -> Word8.word
   val bytesToString : Word8Vector.vector -> string
   val stringToBytes : string -> Word8Vector.vector
-  (* val unpackStringVec : Word8VectorSlice.slice -> string *)
-  (* val unpackString : Word8ArraySlice.slice -> string *)
-  (* val packString : Word8Array.array * int * substring -> unit *)
+  val unpackStringVec : Word8VectorSlice.slice -> string
+  val unpackString : Word8ArraySlice.slice -> string
+  val packString : Word8Array.array * int * substring -> unit
 end
 structure Byte :> BYTE
 ```

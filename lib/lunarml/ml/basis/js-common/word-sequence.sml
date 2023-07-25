@@ -1,19 +1,19 @@
-signature WORD8_VECTOR_EXTRA = sig
-    include MONO_VECTOR where type elem = Word8.word
-    val bytesToString : vector -> string
-    val stringToBytes : string -> vector
-end
-
 local
     structure Word8Sequence :> sig
-                  structure Word8VectorExtra : WORD8_VECTOR_EXTRA
                   structure Word8Vector : MONO_VECTOR where type elem = Word8.word
                   structure Word8VectorSlice : MONO_VECTOR_SLICE where type elem = Word8.word where type vector = Word8Vector.vector
                   structure Word8Array : MONO_ARRAY where type elem = Word8.word
                   structure Word8ArraySlice : MONO_ARRAY_SLICE where type elem = Word8.word
+                  structure ByteImpl : sig
+                                val bytesToString : Word8Vector.vector -> string
+                                val stringToBytes : string -> Word8Vector.vector
+                                val unpackStringVec : Word8VectorSlice.slice -> string
+                                val unpackString : Word8ArraySlice.slice -> string
+                                val packString : Word8Array.array * int * Substring.substring -> unit
+                            end
                   structure UnsafeWord8Vector : UNSAFE_MONO_VECTOR where type elem = Word8.word
                   structure UnsafeWord8Array : UNSAFE_MONO_ARRAY where type elem = Word8.word
-                  sharing type Word8VectorExtra.vector = Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector = UnsafeWord8Vector.vector
+                  sharing type Word8Vector.vector = Word8Array.vector = Word8ArraySlice.vector = UnsafeWord8Vector.vector
                   sharing type Word8Array.array = Word8ArraySlice.array = UnsafeWord8Array.array
                   sharing type Word8VectorSlice.slice = Word8ArraySlice.vector_slice
               end = struct
@@ -53,10 +53,22 @@ local
     structure Word8ArraySlice = Base.MonoArraySlice
     structure UnsafeWord8Vector = Base.UnsafeMonoVector
     structure UnsafeWord8Array = Base.UnsafeMonoArray
-    structure Word8VectorExtra = struct
+    structure ByteImpl = struct
     fun bytesToString x = x
     fun stringToBytes x = x
-    open Word8Vector
+    fun unpackStringVec { base, start, length } = String.substring (base, start, length)
+    fun unpackString { base, start, length } = CharVector.tabulate (length, fn i => Char.chr (Word8.toInt (Unsafe.Array.sub (base, start + i))))
+    fun packString (arr, i, s) = let val length = Substring.size s
+                                 in if i < 0 orelse length + i > Array.length arr then
+                                        raise Subscript
+                                    else
+                                        let fun go j = if j < length then
+                                                           ( Unsafe.Array.update (arr, i + j, Word8.fromInt (Char.ord (Substring.sub (s, i)))); go (j + 1) )
+                                                       else
+                                                           ()
+                                        in go 0
+                                        end
+                                 end
     end (* structure Word8VectorExtra *)
     end (* local *)
     end (* structure Word8Sequence *)
