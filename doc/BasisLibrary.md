@@ -213,6 +213,7 @@ structure Int54 :> INTEGER
 structure Int64 :> INTEGER
 structure IntInf :> INT_INF
 structure LargeInt : INTEGER = IntInf
+structure Position :> INTEGER
 ```
 
 ## signature WORD (structure Word, Word8, Word16, Word32, Word64, LargeWord) - complete
@@ -1350,7 +1351,6 @@ The GC time returned by this structure is always zero.
 signature BIN_IO
 structure BinIO :> BIN_IO
 signature IMPERATIVE_IO
-structure Position :> INTEGER
 signature PRIM_IO
 structure BinPrimIO :> PRIM_IO where ...
 structure TextPrimIO :> PRIM_IO where ...

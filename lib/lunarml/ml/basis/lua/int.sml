@@ -245,6 +245,23 @@ _overload "Int" [Int64.int] { + = Int64.+
                             , maxInt = 0x7fff_ffff_ffff_ffff
                             };
 
+structure Position :> INTEGER = Int;
+_overload "Int" [Position.int] { + = Position.+
+                               , - = Position.-
+                               , * = Position.*
+                               , div = Position.div
+                               , mod = Position.mod
+                               , ~ = Position.~
+                               , abs = Position.abs
+                               , < = Position.<
+                               , <= = Position.<=
+                               , > = Position.>
+                               , >= = Position.>=
+                               , fromInt = Position.fromInt
+                               , minInt = ~0x8000_0000_0000_0000
+                               , maxInt = 0x7fff_ffff_ffff_ffff
+                               };
+
 structure Lua = struct
 open Lua
 val fromInt54 : Int54.int -> value = unsafeToValue

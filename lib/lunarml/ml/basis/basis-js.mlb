@@ -96,6 +96,7 @@ structure PackWord64Big
 structure PackWord64Little
 structure PackWord8Big
 structure PackWord8Little
+structure Position
 structure Real
 structure RealArray
 structure RealArraySlice
