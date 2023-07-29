@@ -45,9 +45,16 @@ structure OS :> sig
           end = struct
 type syserror = string
 exception SysErr of string * syserror option
-local val fs = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "fs"]) ()
-      val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
-      val child_process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "child_process"]) ()
+local
+    structure fs = struct
+    _esImport [pure] { mkdirSync, rmdirSync, statSync, lstatSync, readlinkSync, rmSync, renameSync } from "node:fs";
+    end
+    structure process = struct
+    _esImport [pure] { chdir, cwd, exit, env } from "node:process";
+    end
+    structure child_process = struct
+    _esImport [pure] { execSync } from "node:child_process";
+    end
 in
 structure FileSys = struct
 (*
@@ -66,32 +73,32 @@ val fileId : string -> file_id
 val hash : file_id -> word
 val compare : file_id * file_id -> order
 *)
-fun chDir (dir : string) = ( JavaScript.method (process, "chdir") #[JavaScript.fromWideString (JavaScript.decodeUtf8 dir)]
+fun chDir (dir : string) = ( JavaScript.call process.chdir #[JavaScript.fromWideString (JavaScript.decodeUtf8 dir)]
                            ; () (* TODO: raise SysErr *)
                            )
-fun getDir () : string = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.method (process, "cwd") #[]))
+fun getDir () : string = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.call process.cwd #[]))
 fun mkDir (path : string) = let val options = JavaScript.newObject ()
                             in JavaScript.set (options, JavaScript.fromWideString "recursive", JavaScript.fromBool true)
-                             ; JavaScript.method (fs, "mkdirSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path), options]
+                             ; JavaScript.call fs.mkdirSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path), options]
                              ; ()
                             end
-fun rmDir (path : string) = ( JavaScript.method (fs, "rmdirSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
+fun rmDir (path : string) = ( JavaScript.call fs.rmdirSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
                             ; ()
                             )
-fun isDir (path : string) = let val stat = JavaScript.method (fs, "statSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
+fun isDir (path : string) = let val stat = JavaScript.call fs.statSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
                             in JavaScript.unsafeFromValue (JavaScript.method (stat, "isDirectory") #[])
                             end
-fun isLink (path : string) = let val stat = JavaScript.method (fs, "lstatSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
+fun isLink (path : string) = let val stat = JavaScript.call fs.lstatSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
                              in JavaScript.unsafeFromValue (JavaScript.method (stat, "isSymbolicLink") #[])
                              end
-fun readLink (path : string) : string = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.method (fs, "readlinkSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]))
+fun readLink (path : string) : string = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.call fs.readlinkSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]))
 (* fullPath, realPath, modTime, fileSize, setTime *)
-fun remove (path : string) = ( JavaScript.method (fs, "rmSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
+fun remove (path : string) = ( JavaScript.call fs.rmSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
                              ; ()
                              )
-fun rename {old : string, new : string} = ( JavaScript.method (fs, "renameSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 old), JavaScript.fromWideString (JavaScript.decodeUtf8 new)]
-                                          ; ()
-                                          )
+fun rename { old : string, new : string } = ( JavaScript.call fs.renameSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 old), JavaScript.fromWideString (JavaScript.decodeUtf8 new)]
+                                            ; ()
+                                            )
 end (* structure FileSys *)
 structure IO = struct end
 structure Path = struct
@@ -193,18 +200,17 @@ type status = int
 val success : status = 0
 val failure : status = 1
 val isSuccess : status -> bool = fn 0 => true | _ => false
-fun system (command : string) = ( JavaScript.method (child_process, "execSync") #[JavaScript.fromWideString (JavaScript.decodeUtf8 command)]
+fun system (command : string) = ( JavaScript.call child_process.execSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 command)]
                                 ; success (* TODO: catch failures *)
                                 )
 (* val atExit : (unit -> unit) -> unit *)
-fun exit (status : status) : 'a = ( JavaScript.method (process, "exit") #[JavaScript.fromInt status]
+fun exit (status : status) : 'a = ( JavaScript.call process.exit #[JavaScript.fromInt status]
                                   ; _primCall "unreachable" ()
                                   )
-fun terminate (status : status) : 'a = ( JavaScript.method (process, "exit") #[JavaScript.fromInt status]
+fun terminate (status : status) : 'a = ( JavaScript.call process.exit #[JavaScript.fromInt status]
                                        ; _primCall "unreachable" ()
                                        )
-fun getEnv (name : string) : string option = let val env = JavaScript.field (process, "env")
-                                                 val value = JavaScript.field (env, JavaScript.decodeUtf8 name)
+fun getEnv (name : string) : string option = let val value = JavaScript.field (process.env, JavaScript.decodeUtf8 name)
                                              in if JavaScript.typeof value = "string" then
                                                     SOME (JavaScript.encodeUtf8 (JavaScript.unsafeFromValue value))
                                                 else

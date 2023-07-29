@@ -38,3 +38,5 @@ jobs:
           luajit -bl lunarml-luajit.lua > /dev/null
       - name: Compile myself and validate (JavaScript)
         run: make validate-js
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"

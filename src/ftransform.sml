@@ -78,6 +78,7 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | doDec (dec as F.ExceptionDec { name, tagName, payloadTy }) = dec
             | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
             | doDec (F.ExportModule fields) = F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
+            | doDec (dec as F.ESImportDec _) = dec
           and genMatcher exp _ (F.WildcardPat _) : F.Exp = F.VarExp InitialEnv.VId_true (* always match *)
             | genMatcher exp ty (F.SConPat { sourceSpan, scon, equality, cookedValue }) = F.AppExp (equality, F.TupleExp [exp, cookedValue])
             | genMatcher exp ty (F.VarPat (_, vid, _)) = F.VarExp InitialEnv.VId_true (* always match *)
@@ -262,6 +263,7 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
   | doDec (F.ExportValue exp) = [F.ExportValue (doExp exp)]
   | doDec (F.ExportModule fields) = [F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)]
+  | doDec (dec as F.ESImportDec _) = [dec]
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
 
@@ -491,6 +493,10 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
   | doDec (used, F.ExportModule fields) = let val (acc, fields') = Vector.foldr (fn ((label, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (label, exp) :: xs) end) (used, []) fields
                                           in (acc, [F.ExportModule (Vector.fromList fields')])
                                           end
+  | doDec (used, F.ESImportDec { pure, specs, moduleName })
+    = let val specs = List.filter (fn (name, vid, ty) => TypedSyntax.VIdSet.member (used, vid)) specs
+      in (used, if pure andalso List.null specs then [] else [F.ESImportDec { pure = pure, specs = specs, moduleName = moduleName }])
+      end
 and doDecs (used, decs) = List.foldr (fn (dec, (used, decs)) => let val (used, dec) = doDec (used, dec)
                                                                 in (used, dec @ decs)
                                                                 end) (used, []) decs
@@ -503,4 +509,5 @@ and definedInDec (F.ValDec (vid, _, _)) acc = TypedSyntax.VIdSet.add (acc, vid)
   | definedInDec (F.ExceptionDec { name = _, tagName, payloadTy = _ }) acc = TypedSyntax.VIdSet.add (acc, tagName)
   | definedInDec (F.ExportValue _) acc = acc (* should not occur *)
   | definedInDec (F.ExportModule _) acc = acc (* should not occur *)
+  | definedInDec (F.ESImportDec { pure, specs, moduleName }) acc = List.foldl (fn ((_, vid, _), acc) => TypedSyntax.VIdSet.add (acc, vid)) acc specs
 end; (* structure DeadCodeElimination *)

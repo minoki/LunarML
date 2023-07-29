@@ -97,5 +97,6 @@ and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (Type
   | doDec (F.ExceptionDec { name, tagName, payloadTy = SOME payloadTy }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: P.Fragment " of " :: doTy 0 payloadTy
   | doDec (F.ExportValue exp) = P.Fragment "_export " :: doExp 0 exp
   | doDec (F.ExportModule fields) = P.Fragment "_export {" :: P.commaSepV (Vector.map (fn (name, exp) => P.Fragment name :: P.Fragment " = " :: doExp 0 exp) fields) @ [P.Fragment "}"]
+  | doDec (F.ESImportDec _) = [P.Fragment "_esImport"]
 fun doDecs decs = List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs)
 end

@@ -171,16 +171,18 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                               CodeGenJs.DIRECT_STYLE => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
                             | CodeGenJs.CPS => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
-          val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap, style = style }
+          val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap, style = style, imports = ref [] }
           val js = case style of
                        CodeGenJs.DIRECT_STYLE => CodeGenJs.doProgramDirect jsctx cont cexp
                      | CodeGenJs.CPS => CodeGenJs.doProgramCPS jsctx cont cexp
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram { nextVId = nextId } js
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val imports = JsWriter.doImports (!(#imports jsctx))
           val js = JsWriter.doProgram js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".js")) (* may raise Io *)
+          val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".mjs")) (* may raise Io *)
+          val () = TextIO.output (outs, imports)
           val () = TextIO.output (outs, mlinit)
           val () = TextIO.output (outs, js)
           val () = TextIO.closeOut outs

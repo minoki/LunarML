@@ -5,8 +5,8 @@ src/syntax.grm.sig
 src/syntax.grm.sml
 test/*/*.lua
 test/*/*/*.lua
-test/*/*.js
-test/*/*/*.js
+test/*/*.mjs
+test/*/*/*.mjs
 test/**/*.output
 bin/lunarml
 thirdparty/smlnj-lib/

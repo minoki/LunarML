@@ -461,4 +461,5 @@ and goDec (ctx, F.ValDec (_, _, exp)) = goExp (ctx, exp)
   | goDec (ctx, F.ExceptionDec _) = ()
   | goDec (ctx, F.ExportValue exp) = goExp (ctx, exp)
   | goDec (ctx, F.ExportModule fields) = Vector.app (fn (_, exp) => goExp (ctx, exp)) fields
+  | goDec (ctx, F.ESImportDec _) = ()
 end; (* structure CheckPatternMatch *)

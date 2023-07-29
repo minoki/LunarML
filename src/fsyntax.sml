@@ -87,6 +87,7 @@ datatype Pat = WildcardPat of SourcePos.span
              | ExceptionDec of { name : string, tagName : TypedSyntax.VId, payloadTy : Ty option } (* does not define value-level constructors *)
              | ExportValue of Exp
              | ExportModule of (string * Exp) vector
+             | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * TypedSyntax.VId * Ty) list, moduleName : string }
 fun ValueLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid)
 fun StructLabel (Syntax.MkStrId name) = Syntax.IdentifierLabel ("_" ^ name)
 fun ExnTagLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid ^ ".tag")
@@ -254,6 +255,7 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doDec (ExceptionDec { name, tagName, payloadTy }) = ExceptionDec { name = name, tagName = tagName, payloadTy = Option.map doTy payloadTy }
           | doDec (ExportValue exp) = ExportValue (doExp exp)
           | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
+          | doDec (ESImportDec { pure, specs, moduleName }) = ESImportDec { pure = pure, specs = List.map (fn (name, vid, ty) => (name, vid, doTy ty)) specs, moduleName = moduleName }
     in { doTy = doTy
        , doConBind = doConBind
        , doPat = doPat
@@ -333,6 +335,7 @@ and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) acc = (bound, (case optTy 
                                                                              )
   | freeTyVarsInDec (bound, ExportValue exp) acc = (bound, freeTyVarsInExp (bound, exp) acc)
   | freeTyVarsInDec (bound, ExportModule exports) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc exports)
+  | freeTyVarsInDec (bound, ESImportDec { pure, specs, moduleName }) acc = (bound, List.foldl (fn ((_, _, ty), acc) => freeTyVarsInTy (bound, ty) acc) acc specs)
 and freeTyVarsInDecs (bound, decs) acc = List.foldl (fn (dec, (bound, acc)) => freeTyVarsInDec (bound, dec) acc) (bound, acc) decs
 
 fun varsInPat (WildcardPat _) acc = acc
@@ -387,6 +390,9 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (
   | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) acc = (TypedSyntax.VIdSet.add (bound, tagName), acc)
   | freeVarsInDec (bound, ExportValue exp) acc = (bound, freeVarsInExp (bound, exp) acc)
   | freeVarsInDec (bound, ExportModule exps) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc exps)
+  | freeVarsInDec (bound, ESImportDec { pure, specs, moduleName }) acc = let val bound = List.foldl (fn ((_, vid, _), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound specs
+                                                                         in (bound, acc)
+                                                                         end
 
 fun getSourceSpanOfPat (WildcardPat span) = span
   | getSourceSpanOfPat (SConPat { sourceSpan, ... }) = sourceSpan
@@ -483,6 +489,7 @@ and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
   | print_Dec (ExceptionDec _) = "ExceptionDec"
   | print_Dec (ExportValue _) = "ExportValue"
   | print_Dec (ExportModule _) = "ExportModule"
+  | print_Dec (ESImportDec _) = "ESImportDec"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
@@ -1331,6 +1338,19 @@ and toFDecs (ctx, env, []) = (env, [])
                                                                             in (env, dec :: decs)
                                                                             end
   | toFDecs (ctx, env, T.ValDescDec _ :: decs) = toFDecs (ctx, env, decs)
+  | toFDecs (ctx, env, T.ESImportDec { sourceSpan, pure, specs, moduleName } :: decs)
+    = let val specs = List.map (fn (name, vid, ty) => (name, vid, toFTy (ctx, env, ty))) specs
+          val valMap = List.foldl (fn ((_, vid, ty), valMap) => TypedSyntax.VIdMap.insert (valMap, vid, ty)) (#valMap env) specs
+          val dec = F.ESImportDec { pure = pure, specs = specs, moduleName = moduleName }
+          val env = { equalityForTyVarMap = #equalityForTyVarMap env
+                    , equalityForTyNameMap = #equalityForTyNameMap env
+                    , exnTagMap = #exnTagMap env
+                    , overloadMap = #overloadMap env
+                    , valMap = valMap
+                    }
+          val (env, decs) = toFDecs (ctx, env, decs)
+      in (env, dec :: decs)
+      end
 and genEqualitiesForDatatypes (ctx, env, datbinds) : Env * (TypedSyntax.VId * F.Ty * F.Exp) list
     = let val nameMap = List.foldl (fn (T.DatBind (span, tyvars, tycon as TypedSyntax.MkTyName (name, _), conbinds, true), map) => TypedSyntax.TyNameMap.insert (map, tycon, freshVId (ctx, "EQUAL" ^ name))
                                    | (_, map) => map) TypedSyntax.TyNameMap.empty datbinds

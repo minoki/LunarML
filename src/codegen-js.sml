@@ -68,7 +68,6 @@ val builtinsDirect
                     ,(VId_JavaScript_function, "_function")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
-                    ,(VId_JavaScript_require, "require")
                     ]
       end
 val builtinsCPS
@@ -107,7 +106,6 @@ val builtinsCPS
                     ,(VId_JavaScript_function, "_function")
                     ,(VId_JavaScript_encodeUtf8, "_encodeUtf8")
                     ,(VId_JavaScript_decodeUtf8, "_decodeUtf8")
-                    ,(VId_JavaScript_require, "require")
                     (* extra *)
                     ,(VId_DelimCont_pushPrompt, "_pushPrompt")
                     ,(VId_DelimCont_withSubCont, "_withSubCont")
@@ -120,6 +118,7 @@ datatype code_style = DIRECT_STYLE | CPS
 type Context = { nextJsId : int ref
                , style : code_style
                , contEscapeMap : CpsAnalyze.cont_map
+               , imports : ({ specs : (string * J.Id) list, moduleName : string } list) ref
                }
 
 fun VIdToJs (ctx : Context) (vid as TypedSyntax.MkVId (name, n))
@@ -134,12 +133,23 @@ fun VIdToJs (ctx : Context) (vid as TypedSyntax.MkVId (name, n))
       else
           JsSyntax.UserDefinedId vid
 
-fun doValue ctx (C.Var vid) = (case VIdToJs ctx vid of
-                                   J.PredefinedId "null" => J.ConstExp J.Null
-                                 | J.PredefinedId "false" => J.ConstExp J.False
-                                 | J.PredefinedId "true" => J.ConstExp J.True
-                                 | id => J.VarExp id
-                              )
+datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
+                   | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
+                   | TAILCALL of C.CVar (* continuation passing style *)
+                   | RETURN_TRAMPOLINE (* direct style *)
+                   | RETURN_SIMPLE (* direct style *)
+type Env = { continuations : cont_type C.CVarMap.map
+           , subst : J.Exp TypedSyntax.VIdMap.map
+           }
+
+fun doValue (ctx, env : Env) (C.Var vid) = (case TypedSyntax.VIdMap.find (#subst env, vid) of
+                                                SOME e => e
+                                              | NONE => case VIdToJs ctx vid of
+                                                            J.PredefinedId "null" => J.ConstExp J.Null
+                                                          | J.PredefinedId "false" => J.ConstExp J.False
+                                                          | J.PredefinedId "true" => J.ConstExp J.True
+                                                          | id => J.VarExp id
+                                           )
   | doValue _ C.Unit = J.UndefinedExp
   | doValue _ C.Nil = J.ConstExp J.Null (* empty list *)
   | doValue _ (C.BoolConst false) = J.ConstExp J.False
@@ -175,14 +185,6 @@ fun doCVar v = J.VarExp (CVarToJs v)
 
 fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
   | LabelToObjectKey (Syntax.IdentifierLabel s) = JsSyntax.StringKey s
-
-datatype cont_type = BREAK_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
-                   | CONTINUE_TO of { label : J.Id, which : (J.Id * J.JsConst) option, params : (J.Id option) list }
-                   | TAILCALL of C.CVar (* continuation passing style *)
-                   | RETURN_TRAMPOLINE (* direct style *)
-                   | RETURN_SIMPLE (* direct style *)
-type Env = { continuations : cont_type C.CVarMap.map
-           }
 
 datatype purity = PURE | DISCARDABLE | IMPURE
 
@@ -220,7 +222,7 @@ fun applyCont (ctx : Context, env : Env, cont, args)
                                    | _ => raise CodeGenError "invalid return arity"
                                 )
         | NONE => raise CodeGenError "undefined continuation"
-(* doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
+(*! val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
 fun doDecs (ctx, env, decs, finalExp, revStats)
     = (case VectorSlice.getItem decs of
            NONE => List.revAppend (revStats, doCExp ctx env finalExp)
@@ -249,23 +251,23 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                 | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result } =>
                   pure (result, J.ConstExp J.Null)
                 | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result } =>
-                  pure (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map (doValue ctx) (vector xs))]))
+                  pure (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map (doValue (ctx, env)) (vector xs))]))
                 | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result } =>
-                  pure (result, J.ArrayExp (Vector.map (doValue ctx) (vector xs)))
+                  pure (result, J.ArrayExp (Vector.map (doValue (ctx, env)) (vector xs)))
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsString16Op info, tyargs = _, args = [exp] }, result } =>
                   (case #representation info of
-                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "tag")))
-                     | Syntax.REP_ENUM => pure (result, doValue ctx exp)
+                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "tag")))
+                     | Syntax.REP_ENUM => pure (result, doValue (ctx, env) exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataTagAsString16Op"
                   )
                 | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result } =>
                   (case #representation info of
-                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "payload")))
-                     | Syntax.REP_ALIAS => pure (result, doValue ctx exp)
+                       Syntax.REP_BOXED => pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "payload")))
+                     | Syntax.REP_ALIAS => pure (result, doValue (ctx, env) exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataPayloadOp"
                   )
                 | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result } =>
-                  pure (result, J.IndexExp (doValue ctx exp, J.ConstExp (J.asciiStringAsWide "payload")))
+                  pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "payload")))
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result } =>
                   let val tag = #tag info
                   in case #representation info of
@@ -276,23 +278,23 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result } =>
                   let val tag = #tag info
-                      val payload = doValue ctx payload
+                      val payload = doValue (ctx, env) payload
                   in case #representation info of
                          Syntax.REP_BOXED => pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag)), (J.StringKey "payload", payload)]))
                        | Syntax.REP_ALIAS => pure (result, payload)
                        | _ => raise CodeGenError "unexpected datatype representation for ConstructValWithPayloadOp"
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result } =>
-                  let val tag = doValue ctx tag
+                  let val tag = doValue (ctx, env) tag
                   in pure (result, J.NewExp (tag, vector []))
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, result } =>
-                  let val tag = doValue ctx tag
-                      val payload = doValue ctx payload
+                  let val tag = doValue (ctx, env) tag
+                      val payload = doValue (ctx, env) payload
                   in pure (result, J.NewExp (tag, vector [payload]))
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result } =>
-                  List.rev (J.ThrowStat (doValue ctx exp) :: revStats) (* TODO: location information *)
+                  List.rev (J.ThrowStat (doValue (ctx, env) exp) :: revStats) (* TODO: location information *)
                 | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs, args }, result } =>
                   let fun ConstStatOrExpStat e = case result of
                                                      SOME result => ConstStat (result, e)
@@ -307,7 +309,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                      | IMPURE => impure (result, f ())
                                                                )
                       fun doUnary f = case args of
-                                          [a] => f (doValue ctx a)
+                                          [a] => f (doValue (ctx, env) a)
                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doUnaryExp (f, purity) = doUnary (fn a =>
                                                                case purity of
@@ -316,7 +318,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                  | IMPURE => impure (result, f a)
                                                            )
                       fun doBinary f = case args of
-                                           [a, b] => f (doValue ctx a, doValue ctx b)
+                                           [a, b] => f (doValue (ctx, env) a, doValue (ctx, env) b)
                                          | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doBinaryExp (f, purity) = doBinary (fn (a, b) =>
                                                                  case purity of
@@ -326,7 +328,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                              )
                       fun doBinaryOp (binop, pure) = doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
                       fun doTernary f = case args of
-                                            [a, b, c] => f (doValue ctx a, doValue ctx b, doValue ctx c)
+                                            [a, b, c] => f (doValue (ctx, env) a, doValue (ctx, env) b, doValue (ctx, env) c)
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                   in case prim of
                          Primitives.call2 => doTernary (fn (f, a0, a1) =>
@@ -492,15 +494,15 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript backend")
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, result } =>
-                  impure (result, J.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args)))
+                  impure (result, J.CallExp (doValue (ctx, env) f, Vector.map (doValue (ctx, env)) (vector args)))
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = obj :: name :: args }, result } =>
-                  impure (result, J.CallExp (J.IndexExp (doValue ctx obj, doValue ctx name), Vector.map (doValue ctx) (vector args)))
+                  impure (result, J.CallExp (J.IndexExp (doValue (ctx, env) obj, doValue (ctx, env) name), Vector.map (doValue (ctx, env)) (vector args)))
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, result } =>
-                  impure (result, J.NewExp (doValue ctx ctor, Vector.map (doValue ctx) (vector args)))
+                  impure (result, J.NewExp (doValue (ctx, env) ctor, Vector.map (doValue (ctx, env)) (vector args)))
                 | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result } =>
                   raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " is not supported on JavaScript backend")
                 | C.ValDec { exp = C.Record fields, result } =>
-                  let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (label, doValue ctx v) :: acc) [] fields
+                  let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (label, doValue (ctx, env) v) :: acc) [] fields
                       fun isTuple (_, []) = true
                         | isTuple (i, (Syntax.NumericLabel n, x) :: xs) = i = n andalso isTuple (i + 1, xs)
                         | isTuple _ = false
@@ -528,19 +530,20 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   let val label = case label of
                                       Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
                                     | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
-                  in pure (result, J.IndexExp (doValue ctx record, label))
+                  in pure (result, J.IndexExp (doValue (ctx, env) record, label))
                   end
                 | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
                   (case #style ctx of
                        DIRECT_STYLE => if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
-                                            let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE) }
+                                            let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE), subst = #subst env }
                                             in pure (result, J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))]))
                                             end
                                        else
-                                           let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE) }
+                                           let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE), subst = #subst env }
                                            in pure (result, J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body)))
                                            end
                      | CPS => let val env' = { continuations = C.CVarMap.singleton (contParam, TAILCALL contParam)
+                                             , subst = #subst env
                                              }
                               in pure (result, J.FunctionExp (vector (CVarToJs contParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body)))
                               end
@@ -550,11 +553,11 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        DIRECT_STYLE =>
                        let val (decs', assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
                                                                      if CpsAnalyze.escapes (#contEscapeMap ctx, k) then
-                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_TRAMPOLINE) }
+                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_TRAMPOLINE), subst = #subst env }
                                                                          in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
                                                                          end
                                                                      else
-                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE) }
+                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE), subst = #subst env }
                                                                          in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
                                                                          end
                                                                  ) ([], []) defs
@@ -563,6 +566,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                      | CPS =>
                        let val (decs', assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
                                                                      let val env' = { continuations = C.CVarMap.singleton (k, TAILCALL k)
+                                                                                    , subst = #subst env
                                                                                     }
                                                                      in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
                                                                      end
@@ -577,6 +581,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   in if escape then
                          let val dec = ConstStat (CVarToId name, J.FunctionExp (vector (List.map (fn SOME p => VIdToJs ctx p | NONE => VIdToJs ctx (genSym ctx)) params), vector (doCExp ctx env body)))
                              val env' = { continuations = C.CVarMap.insert (#continuations env, name, TAILCALL name)
+                                        , subst = #subst env
                                         }
                          in doDecs (ctx, env', decs, finalExp, dec :: revStats)
                          end
@@ -584,7 +589,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                          case (VectorSlice.isEmpty decs, finalExp, params) of
                              (true, C.App { applied, cont, args }, [SOME result]) =>
                              if cont = name then
-                                 List.revAppend (revStats, ConstStat (result, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))) :: doCExp ctx env body)
+                                 List.revAppend (revStats, ConstStat (result, J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args))) :: doCExp ctx env body)
                              else
                                  List.revAppend (revStats, doCExp ctx env finalExp) (* dead continuation elimination *)
                            | _ => let val dec = let val params' = List.mapPartial (Option.map (fn p => (p, NONE))) params
@@ -594,6 +599,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                        [J.LetStat (vector params')]
                                                 end
                                       val newEnv = { continuations = C.CVarMap.insert (#continuations env, name, BREAK_TO { label = CVarToJs name, which = NONE, params = List.map (Option.map (VIdToJs ctx)) params })
+                                                   , subst = #subst env
                                                    }
                                   in List.revAppend (revStats, dec @ J.BlockStat (SOME (CVarToJs name), vector (doDecs (ctx, newEnv, decs, finalExp, [])))
                                                                :: doCExp ctx env body)
@@ -605,6 +611,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                      | CPS => List.exists (fn (name, _, _) => CpsAnalyze.escapesTransitively (#contEscapeMap ctx, name)) defs
                   in if escape then
                          let val env' = { continuations = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
+                                        , subst = #subst env
                                         }
                              val (decs', assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
                                                                        (J.LetStat (vector [(CVarToId name, NONE)]) :: decs, J.AssignStat (doCVar name, J.FunctionExp (vector (List.map (fn SOME p => VIdToJs ctx p | NONE => VIdToJs ctx (genSym ctx)) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
@@ -647,15 +654,15 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                                           }
                                                                in (i + 1, C.CVarMap.insert (e, name, cont))
                                                                end) (0, #continuations env) defs
-                             val recEnv = { continuations = recEnvC }
+                             val recEnv = { continuations = recEnvC, subst = #subst env }
                              val initAndRest = case init of
                                                    INIT_WITH_VALUES (initialWhich, params, args) =>
                                                    let val args = ListPair.foldrEq (fn (SOME _, a, acc) => a :: acc
                                                                                    | (NONE, _, acc) => acc
                                                                                    ) [] (params, args)
                                                        val args' = case optWhich of
-                                                                       NO_WHICH _ => List.map (doValue ctx) args
-                                                                     | NEED_WHICH _ => J.ConstExp (J.Numeral (Int.toString initialWhich)) :: List.map (doValue ctx) args
+                                                                       NO_WHICH _ => List.map (doValue (ctx, env)) args
+                                                                     | NEED_WHICH _ => J.ConstExp (J.Numeral (Int.toString initialWhich)) :: List.map (doValue (ctx, env)) args
                                                    in if List.null args' then
                                                           []
                                                       else
@@ -672,7 +679,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                                                                   }
                                                                                           in (i + 1, C.CVarMap.insert (e, name, cont))
                                                                                           end) (0, #continuations env) defs
-                                                       val contEnv = { continuations = contEnvC }
+                                                       val contEnv = { continuations = contEnvC, subst = #subst env }
                                                    in [ J.LetStat (vector (List.map (fn p => (p, NONE)) vars))
                                                       , J.BlockStat (SOME blockLabel, vector (doDecs (ctx, contEnv, decs, finalExp, [])))
                                                       ]
@@ -710,41 +717,63 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                            )
                          end
                   end
+                | C.ESImportDec { pure = _, specs, moduleName } =>
+                  let val imports = !(#imports ctx)
+                      fun go ([], env, acc) = (env, List.revAppend (acc, [{ specs = List.map (fn (name, vid) => (name, VIdToJs ctx vid)) specs, moduleName = moduleName }]))
+                        | go ((i as { specs = specs', moduleName = moduleName' }) :: imports', env, acc)
+                          = if moduleName' = moduleName then
+                                let fun loop ([], env, acc) = (env, acc)
+                                      | loop ((name, vid) :: ss, env, acc)
+                                        = case List.find (fn (name', _) => name = name') specs' of
+                                              SOME (_, vid') => loop (ss, TypedSyntax.VIdMap.insert (env, vid, J.VarExp vid'), acc)
+                                            | NONE => loop (ss, env, (name, VIdToJs ctx vid) :: acc)
+                                    val (env', specs'') = loop (specs, env, [])
+                                    val i' = { specs = specs' @ specs'', moduleName = moduleName' }
+                                in (env', List.revAppend (acc, i' :: imports'))
+                                end
+                            else
+                                go (imports', env, i :: acc)
+                      val (subst', imports') = go (imports, #subst env, [])
+                      val () = #imports ctx := imports'
+                      val env' = { continuations = #continuations env, subst = subst' }
+                  in doDecs (ctx, env', decs, finalExp, revStats)
+                  end
            end
       )
 and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
     = doDecs (ctx, env, VectorSlice.full decs, cont, [])
   | doCExp ctx env (C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
-           SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (vector (doCVar k :: List.map (doValue ctx) args))]))) ] (* continuation passing style *)
+           SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue (ctx, env) applied, J.ArrayExp (vector (doCVar k :: List.map (doValue (ctx, env)) args))]))) ] (* continuation passing style *)
          | SOME (BREAK_TO { label, which, params = [p] }) => let val setWhich = case which of
                                                                                     NONE => []
                                                                                   | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
                                                                  val call = case p of
-                                                                                SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
-                                                                              | NONE => J.ExpStat (J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                                                SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args)))
+                                                                              | NONE => J.ExpStat (J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args)))
                                                              in call :: setWhich @ [ J.BreakStat (SOME label) ] (* direct style *)
                                                              end
          | SOME (CONTINUE_TO { label, which, params = [p] }) => let val setWhich = case which of
                                                                                        NONE => []
                                                                                      | SOME (whichVar, whichVal) => [J.AssignStat (J.VarExp whichVar, J.ConstExp whichVal)]
                                                                     val call = case p of
-                                                                                   SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
-                                                                                 | NONE => J.ExpStat (J.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args)))
+                                                                                   SOME p => J.AssignStat (J.VarExp p, J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args)))
+                                                                                 | NONE => J.ExpStat (J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args)))
                                                                 in call :: setWhich @ [ J.ContinueStat (SOME label) ] (* direct style *)
                                                                 end
-         | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue ctx applied, J.ArrayExp (Vector.map (doValue ctx) (vector args))]))) ] (* direct style, tail call *)
+         | SOME RETURN_TRAMPOLINE => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue (ctx, env) applied, J.ArrayExp (Vector.map (doValue (ctx, env)) (vector args))]))) ] (* direct style, tail call *)
          | SOME RETURN_SIMPLE => raise CodeGenError "invalid RETURN_SIMPLE continuation"
          | _ => raise CodeGenError "invalid continuation"
       )
   | doCExp ctx env (C.AppCont { applied, args })
-    = applyCont (ctx, env, applied, List.map (doValue ctx) args)
+    = applyCont (ctx, env, applied, List.map (doValue (ctx, env)) args)
   | doCExp ctx env (C.If { cond, thenCont, elseCont })
-    = [ J.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector (doCExp ctx env elseCont)) ]
+    = [ J.IfStat (doValue (ctx, env) cond, vector (doCExp ctx env thenCont), vector (doCExp ctx env elseCont)) ]
   | doCExp ctx env (C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
     = (case #style ctx of
            DIRECT_STYLE =>
            let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, C.CVarMap.lookup (#continuations env, successfulExitOut))
+                          , subst = #subst env
                           }
            in [J.TryCatchStat (vector (doCExp ctx env' body), e, vector (doCExp ctx env h))]
            end
@@ -756,7 +785,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
                val handler = J.FunctionExp (vector [VIdToJs ctx e], vector (restore :: doCExp ctx env h))
                val install = J.AssignStat (J.VarExp (J.PredefinedId "_exh"), handler)
            in if escape then
-                  let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, TAILCALL successfulExitIn) }
+                  let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, TAILCALL successfulExitIn), subst = #subst env }
                       val result = genSym ctx
                       val dec = ConstStat (CVarToId successfulExitIn, J.FunctionExp (vector [VIdToJs ctx result], vector (restore :: applyCont (ctx, env, successfulExitOut, [J.VarExp (VIdToJs ctx result)]))))
                   in save :: install :: dec :: doCExp ctx env' body
@@ -764,7 +793,9 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
               else
                   let val result = genSym ctx
                       val dec = J.LetStat (vector [(result, NONE)])
-                      val env' = { continuations = C.CVarMap.singleton (successfulExitIn, BREAK_TO { label = CVarToJs successfulExitIn, which = NONE, params = [SOME (VIdToJs ctx result)] }) }
+                      val env' = { continuations = C.CVarMap.singleton (successfulExitIn, BREAK_TO { label = CVarToJs successfulExitIn, which = NONE, params = [SOME (VIdToJs ctx result)] })
+                                 , subst = #subst env
+                                 }
                   in save :: install :: dec
                      :: J.BlockStat (SOME (CVarToJs successfulExitIn), vector (doCExp ctx env' body))
                      :: restore
@@ -777,11 +808,13 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
 fun doProgramDirect ctx cont cexp
     = let val label = CVarToJs cont
           val env = { continuations = C.CVarMap.singleton (cont, BREAK_TO { label = label, which = NONE, params = [] })
+                    , subst = TypedSyntax.VIdMap.empty
                     }
       in vector [J.BlockStat (SOME label, vector (doCExp ctx env cexp))]
       end
 fun doProgramCPS ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
+                    , subst = TypedSyntax.VIdMap.empty
                     }
       in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp))]))]
       end

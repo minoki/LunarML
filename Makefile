@@ -63,7 +63,7 @@ bin/lunarml.gen2.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --luajit -o $@ $<
 
-bin/lunarml.gen2.js: src/lunarml-lunarml.mlb bin/lunarml $(sources)
+bin/lunarml.gen2.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --js-cps -o $@ $<
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
@@ -106,9 +106,9 @@ validate-luajit: bin/lunarml
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.js --js-cps --print-timings src/lunarml-lunarml.mlb
-	$(NODE) lunarml.gen2.js -Blib/lunarml compile -o lunarml.gen3.js --js-cps --print-timings src/lunarml-lunarml.mlb
-	diff --report-identical-files lunarml.gen2.js lunarml.gen3.js
+	bin/lunarml compile -o lunarml.gen2.mjs --js-cps --print-timings src/lunarml-lunarml.mlb
+	$(NODE) lunarml.gen2.mjs -Blib/lunarml compile -o lunarml.gen3.mjs --js-cps --print-timings src/lunarml-lunarml.mlb
+	diff --report-identical-files lunarml.gen2.mjs lunarml.gen3.mjs
 
 verify-lua: bin/lunarml bin/lunarml.gen2.lua
 	$(MAKE) -C test verify-lua VARIANT=lua LUA=$(LUA) LUNARML_GEN2="$(LUA) ../bin/lunarml.gen2.lua" VARIANT_GEN2=gen2
@@ -116,7 +116,7 @@ verify-lua: bin/lunarml bin/lunarml.gen2.lua
 verify-luajit: bin/lunarml bin/lunarml.gen2-luajit.lua
 	$(MAKE) -C test verify-luajit VARIANT=luajit LUAJIT=$(LUAJIT) LUNARML_GEN2="$(LUAJIT) ../bin/lunarml.gen2-luajit.lua" VARIANT_GEN2=gen2-luajit
 
-verify-js: bin/lunarml bin/lunarml.gen2.js
-	$(MAKE) -C test verify-nodejs-cps VARIANT=nodejs-cps NODE=$(NODE) LUNARML_GEN2="$(NODE) ../bin/lunarml.gen2.js" VARIANT_GEN2=gen2
+verify-js: bin/lunarml bin/lunarml.gen2.mjs
+	$(MAKE) -C test verify-nodejs-cps VARIANT=nodejs-cps NODE=$(NODE) LUNARML_GEN2="$(NODE) ../bin/lunarml.gen2.mjs" VARIANT_GEN2=gen2
 
 .PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js verify-lua verify-luajit verify-js

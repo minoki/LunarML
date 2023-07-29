@@ -54,9 +54,41 @@ structure JavaScript : sig
   val decodeUtf8 : string -> WideString.string
   val toInt32 : value -> int
   val toUint32 : value -> word
-  val require : value (* Node.js *)
 end
 ```
+
+## Using ES modules
+
+You can use `_esImport` declaration to import ECMAScript modules.
+
+```sml
+_esImport <attrs> "module-name"; (* side-effect only *)
+_esImport <attrs> <vid> from "module-name"; (* default import *)
+_esImport <attrs> { <spec>, <spec>... } from "module-name"; (* named imports *)
+_esImport <attrs> <vid>, { <spec>, <spec>... } from "module-name"; (* default and named imports *)
+(*
+<attrs> ::=        (* default; the module may have side-effects *)
+          | [pure] (* allow dead-code elimination *)
+<spec> ::= <vid>
+         | <vid> as <vid>
+         | <string> as <vid>
+         | <vid> : <ty>
+         | <vid> as <vid> : <ty>
+         | <string> as <vid> : <ty>
+ *)
+```
+
+Examples:
+
+```sml
+_esImport "module-name"; (* -> import "module-name"; *)
+_esImport defaultItem from "module-name"; (* -> import defaultItem from "module-name"; *)
+_esImport [pure] defaultItem from "module-name"; (* -> import defaultItem from "module-name"; with dead-code elimination enabled *)
+_esImport [pure] { foo, bar as barr, "fun" as fun' } from "module-name"; (* -> import { foo, bar as barr, fun as fun$PRIME } from "module-name"; with dead-code elimination enabled *)
+_esImport defaultItem, { foo, bar as barr, "fun" as fun' } from "module-name"; (* -> import defaultItem, { foo, bar as barr, fun as fun$PRIME } from "module-name"; *)
+```
+
+Namespace imports are not supported yet.
 
 ## Internal representation
 

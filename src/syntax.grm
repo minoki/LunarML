@@ -71,7 +71,9 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SHARING | SIG | SIGNATURE | STRUCT | STRUCTURE | THEN | TYPE | VAL | WITH
     | WITHTYPE | WHERE | WHILE
     (* reserved words (extension) *)
-    | PRIMNS | PRIMCALL | OVERLOAD | EQUALITY
+    | PRIMNS | PRIMCALL | OVERLOAD | EQUALITY | ESIMPORT
+    (* contextual keyword *)
+    | FROM | PURE
     (* special comment (extension) *)
     | START_VAL_DESC_COMMENT | END_SPECIAL_COMMENT
     (* other *)
@@ -87,9 +89,11 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | FunId of Syntax.FunId
        | Lab of Syntax.Label
        | TyCon of Syntax.TyCon
+       | TyCon_NoFROM of Syntax.TyCon
        | LongVId of Syntax.LongVId
        | LongBoundVId of Syntax.LongVId
        | LongTyCon of Syntax.LongTyCon
+       | LongTyCon_NoFROM of Syntax.LongTyCon
        | LongStrId of Syntax.LongStrId
        | Opt_OP of bool
        | AtPat of UnfixedSyntax.Pat
@@ -108,6 +112,9 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | TupTy of Syntax.Ty list
        | Ty_NoARROW of Syntax.Ty
        | Ty of Syntax.Ty
+       | ConTy_NoFROM of Syntax.Ty
+       | TupTy_NoFROM of Syntax.Ty list
+       | Ty_NoFROM of Syntax.Ty
        | TySeqRest of Syntax.Ty list
        | TyVarSeq of Syntax.TyVar list
        | TyVarSeqRest of Syntax.TyVar list
@@ -139,6 +146,10 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | Dec_NoLocal of UnfixedSyntax.Dec
        | OverloadSpec of string * UnfixedSyntax.Exp
        | OverloadSpecs of (string * UnfixedSyntax.Exp) list
+       | ESImportAttrs of { pure : bool }
+       | ESImportSpec of Syntax.ESImportName * Syntax.VId * Syntax.Ty option
+       | ESImportSpecs of (Syntax.ESImportName * Syntax.VId * Syntax.Ty option) list
+       | ESImportSpecsRest of (Syntax.ESImportName * Syntax.VId * Syntax.Ty option) list
        | Dec of UnfixedSyntax.Dec
        | Decs of UnfixedSyntax.Dec list
        | LongStrIds of Syntax.LongStrId list
@@ -224,27 +235,44 @@ VId : BoundVId (BoundVId)
 
 (* value identifiers, excluding '=' *)
 BoundVId : AlnumIdent (Syntax.MkVId AlnumIdent)
+         | FROM (Syntax.MkVId "from")
+         | PURE (Syntax.MkVId "pure")
          | SymbolicIdent (Syntax.MkVId SymbolicIdent)
          | ASTERISK (Syntax.MkVId "*")
 
 (* structure identifier *)
 StrId : AlnumIdent (Syntax.MkStrId AlnumIdent)
+      | FROM (Syntax.MkStrId "from")
+      | PURE (Syntax.MkStrId "pure")
 
 (* signature identifier *)
 SigId : AlnumIdent (Syntax.MkSigId AlnumIdent)
+      | FROM (Syntax.MkSigId "from")
+      | PURE (Syntax.MkSigId "pure")
 
 (* functor identifier *)
 FunId : AlnumIdent (Syntax.MkFunId AlnumIdent)
+      | FROM (Syntax.MkFunId "from")
+      | PURE (Syntax.MkFunId "pure")
 
 (* record labels *)
 Lab : AlnumIdent (Syntax.IdentifierLabel AlnumIdent)
+    | FROM (Syntax.IdentifierLabel "from")
+    | PURE (Syntax.IdentifierLabel "pure")
     | SymbolicIdent (Syntax.IdentifierLabel SymbolicIdent)
     | ASTERISK (Syntax.IdentifierLabel "*")
     | PosInt (Syntax.NumericLabel (Int.fromLarge PosInt)) (* numeric labels *)
 
 (* type constructors; "*" is not included *)
 TyCon : AlnumIdent (Syntax.MkTyCon AlnumIdent)
+      | FROM (Syntax.MkTyCon "from")
+      | PURE (Syntax.MkTyCon "pure")
       | SymbolicIdent (Syntax.MkTyCon SymbolicIdent)
+
+(* type constructors; neither "*" nor "from" is included *)
+TyCon_NoFROM : AlnumIdent (Syntax.MkTyCon AlnumIdent)
+             | PURE (Syntax.MkTyCon "pure")
+             | SymbolicIdent (Syntax.MkTyCon SymbolicIdent)
 
 (* long value identifiers, including '=' *)
 LongVId : VId (Syntax.MkLongVId (nil, VId))
@@ -263,6 +291,12 @@ LongTyCon : TyCon (Syntax.MkLongTyCon (nil, TyCon))
           | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkTyCon (#2 QualifiedAlnumIdent)))
           | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkTyCon (#2 QualifiedSymbolicIdent)))
           | PrimIdent (Syntax.MkQualified ([], Syntax.MkTyCon PrimIdent))
+
+(* long type constructors, excluding unqualified 'from' *)
+LongTyCon_NoFROM : TyCon_NoFROM (Syntax.MkLongTyCon (nil, TyCon_NoFROM))
+                 | QualifiedAlnumIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedAlnumIdent), Syntax.MkTyCon (#2 QualifiedAlnumIdent)))
+                 | QualifiedSymbolicIdent (Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedSymbolicIdent), Syntax.MkTyCon (#2 QualifiedSymbolicIdent)))
+                 | PrimIdent (Syntax.MkQualified ([], Syntax.MkTyCon PrimIdent))
 
 (* long structure identifiers *)
 LongStrId : StrId (Syntax.MkLongStrId (nil, StrId))
@@ -343,13 +377,26 @@ ConTy : AtTy (AtTy)
       | LongTyCon (Syntax.TyCon (span (LongTyConleft, LongTyConright), nil, LongTyCon)) (* type construction *)
       | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon (Syntax.TyCon (span (LPARENleft, LongTyConright), Ty1 :: Ty2 :: TySeqRest, LongTyCon)) (* type construction *)
 
+(* tuple type *)
 TupTy : ConTy ([ConTy])
       | ConTy ASTERISK TupTy (ConTy :: TupTy)
 
 (* type expressions *)
 Ty : TupTy (MkTupleTy(span(TupTyleft, TupTyright), TupTy))
    | TupTy ARROW Ty (Syntax.FnType (span(TupTyleft, Tyright), MkTupleTy(span(TupTyleft, TupTyright), TupTy), Ty)) (* function type expression (R) *)
-   (* tuple type *)
+
+ConTy_NoFROM : AtTy (AtTy)
+             | ConTy_NoFROM LongTyCon_NoFROM (Syntax.TyCon (span (ConTy_NoFROMleft, LongTyCon_NoFROMright), [ConTy_NoFROM], LongTyCon_NoFROM)) (* type construction *)
+             | LongTyCon_NoFROM (Syntax.TyCon (span (LongTyCon_NoFROMleft, LongTyCon_NoFROMright), nil, LongTyCon_NoFROM)) (* type construction *)
+             | LPAREN Ty COMMA Ty TySeqRest RPAREN LongTyCon_NoFROM (Syntax.TyCon (span (LPARENleft, LongTyCon_NoFROMright), Ty1 :: Ty2 :: TySeqRest, LongTyCon_NoFROM)) (* type construction *)
+
+(* tuple type, excluding unqualified 'from' *)
+TupTy_NoFROM : ConTy_NoFROM ([ConTy_NoFROM])
+             | ConTy_NoFROM ASTERISK TupTy_NoFROM (ConTy_NoFROM :: TupTy_NoFROM)
+
+(* type expressions, excluding unqualified 'from' *)
+Ty_NoFROM : TupTy_NoFROM (MkTupleTy (span (TupTy_NoFROMleft, TupTy_NoFROMright), TupTy_NoFROM))
+          | TupTy_NoFROM ARROW Ty_NoFROM (Syntax.FnType (span (TupTy_NoFROMleft, Ty_NoFROMright), MkTupleTy (span (TupTy_NoFROMleft, TupTy_NoFROMright), TupTy_NoFROM), Ty_NoFROM)) (* function type expression (R) *)
 
 TySeqRest : COMMA Ty TySeqRest (Ty :: TySeqRest) (* *)
           | (nil) (* empty *)
@@ -515,13 +562,37 @@ Dec_NoLocal : ValDescInComment VAL ValBind (UnfixedSyntax.ValDec (span (VALleft,
             | EQUALITY LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [], LongTyCon, Exp)) (* [extension] _equality longtycon = exp *)
             | EQUALITY TyVar LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [TyVar], LongTyCon, Exp)) (* [extension] _equality 'tyvar longtycon = exp *)
             | EQUALITY LPAREN TyVar TyVarSeqRest RPAREN LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), TyVar :: TyVarSeqRest, LongTyCon, Exp)) (* [extension] _equality ('tyvars...) longtycon = exp *)
+            | ESIMPORT ESImportAttrs AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = [], moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] "module-name" *)
+            | ESIMPORT ESImportAttrs VId FROM AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = [("default", VId, NONE)], moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] <vid> from "module-name" *)
+            | ESIMPORT ESImportAttrs VId COLON Ty_NoFROM FROM AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = [("default", VId, SOME Ty_NoFROM)], moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] <vid> from "module-name" *)
+            | ESIMPORT ESImportAttrs LBRACE ESImportSpecs RBRACE FROM AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = ESImportSpecs, moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] {spec...} from "module-name" *)
+            | ESIMPORT ESImportAttrs VId COMMA LBRACE ESImportSpecs RBRACE FROM AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = ("default", VId, NONE) :: ESImportSpecs, moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] <vid>, {spec...} from "module-name" *)
+            | ESIMPORT ESImportAttrs VId COLON Ty_NoFROM COMMA LBRACE ESImportSpecs RBRACE FROM AsciiStringConst (UnfixedSyntax.ESImportDec { sourceSpan = span (ESIMPORTleft, AsciiStringConstright), pure = #pure ESImportAttrs, specs = ("default", VId, SOME Ty_NoFROM) :: ESImportSpecs, moduleName = #1 AsciiStringConst }) (* [extension] _esImport [attr...] <vid>, {spec...} from "module-name" *)
 
 OverloadSpec : AlnumIdent EQUALS Exp ((AlnumIdent, Exp))
+             | FROM EQUALS Exp (("from", Exp))
+             | PURE EQUALS Exp (("pure", Exp))
              | SymbolicIdent EQUALS Exp ((SymbolicIdent, Exp))
              | ASTERISK EQUALS Exp (("*", Exp))
 
 OverloadSpecs : OverloadSpec COMMA OverloadSpecs (OverloadSpec :: OverloadSpecs)
               | OverloadSpec ([OverloadSpec])
+
+ESImportAttrs : LBRACK PURE RBRACK ({ pure = true })
+              | ({ pure = false })
+
+ESImportSpec : VId ((Syntax.getVIdName VId, VId, NONE))
+             | VId AS VId ((Syntax.getVIdName VId1, VId2, NONE))
+             | AsciiStringConst AS VId ((#1 AsciiStringConst, VId, NONE))
+             | VId COLON Ty ((Syntax.getVIdName VId, VId, SOME Ty))
+             | VId AS VId COLON Ty ((Syntax.getVIdName VId1, VId2, SOME Ty))
+             | AsciiStringConst AS VId COLON Ty ((#1 AsciiStringConst, VId, SOME Ty))
+
+ESImportSpecs : ([])
+              | ESImportSpec ESImportSpecsRest (ESImportSpec :: ESImportSpecsRest)
+
+ESImportSpecsRest : ([])
+                  | COMMA ESImportSpecs (ESImportSpecs)
 
 Dec : Dec_NoLocal (Dec_NoLocal)
     | LOCAL Decs IN Decs END (UnfixedSyntax.LocalDec (span(LOCALleft, ENDright), Decs1, Decs2)) (* local declaration *)

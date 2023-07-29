@@ -13,8 +13,7 @@ signature TIMER = sig
     val totalRealTimer : unit -> real_timer
 end;
 local
-    val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
-    val cpuUsage = LunarML.assumeDiscardable (fn () => JavaScript.field (process, "cpuUsage")) ()
+    _esImport [pure] { cpuUsage } from "node:process";
 in
 structure Timer :> TIMER = struct
 type cpu_timer = JavaScript.value

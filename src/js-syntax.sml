@@ -396,4 +396,17 @@ and doStat (S.LetStat variables) = (fn rest => Indent :: Fragment "let " :: comm
 and doBlock stats = (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
 
 fun doProgram stats = buildProgram (doBlock stats [])
+
+(*! val doImports : { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string *)
+fun doImports imports = let fun importOne ({ specs, moduleName }, rest)
+                                = let val (default, named) = List.partition (fn (name, _) => name = "default") specs
+                                      (* length default must be <= 1 *)
+                                  in case (default, named) of
+                                         ([], []) => Fragment "import " :: Fragment (toStringLit moduleName) :: Fragment ";" :: LineTerminator :: rest
+                                       | ((_, defaultId) :: _, []) => Fragment "import " :: Fragment (idToJs defaultId) :: Fragment " from " :: Fragment (toStringLit moduleName) :: Fragment ";" :: LineTerminator :: rest
+                                       | ([], _ :: _) => Fragment "import {" :: commaSep (List.map (fn (name, vid) => fn rest => (if isIdentifierName name then Fragment name else Fragment (toStringLit name)) :: Fragment " as " :: Fragment (idToJs vid) :: rest) named) (Fragment "} from " :: Fragment (toStringLit moduleName) :: Fragment ";" :: LineTerminator :: rest)
+                                       | ((_, defaultId) :: _, _ :: _) => Fragment "import " :: Fragment (idToJs defaultId) :: Fragment ", {" :: commaSep (List.map (fn (name, vid) => fn rest => (if isIdentifierName name then Fragment name else Fragment (toStringLit name)) :: Fragment " as " :: Fragment (idToJs vid) :: rest) named) (Fragment "} from " :: Fragment (toStringLit moduleName) :: Fragment ";" :: LineTerminator :: rest)
+                                  end
+                        in buildProgram (List.foldr importOne [] imports)
+                        end
 end;

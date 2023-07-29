@@ -211,6 +211,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant 
              | OverloadDec of SourcePos.span * Syntax.OverloadClass * TyName * Exp Syntax.OverloadKeyMap.map
              | EqualityDec of SourcePos.span * TyVar list * TyName * Exp
              | ValDescDec of { sourceSpan : SourcePos.span, expected : TypeScheme, actual : TypeScheme, origin : valdesc_origin }
+             | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (Syntax.ESImportName * VId * Ty) list, moduleName : string }
      and ValBind = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
                  | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
 
@@ -346,6 +347,7 @@ and print_Dec (ValDec(_,valbinds)) = "ValDec(" ^ Syntax.print_list print_ValBind
   | print_Dec (OverloadDec _) = "OverloadDec"
   | print_Dec (EqualityDec _) = "EqualityDec"
   | print_Dec (ValDescDec _) = "ValDescDec"
+  | print_Dec (ESImportDec _) = "ESImportDec"
 and print_TypBind (TypBind(_, tyvars, tycon, ty)) = "TypBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ Syntax.print_TyCon tycon ^ "," ^ print_Ty ty ^ ")"
 and print_DatBind (DatBind(_, tyvars, tycon, conbinds, _)) = "DatBind(" ^ Syntax.print_list print_TyVar tyvars ^ "," ^ print_TyName tycon ^ "," ^ Syntax.print_list print_ConBind conbinds ^ ")"
 and print_ConBind (ConBind(_, vid, NONE, _)) = "ConBind(" ^ print_VId vid ^ ",NONE)"
@@ -494,6 +496,7 @@ fun applySubstTyInExpOrDec subst
                     val subst'' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars'
                 in ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, applySubstTy subst' ty), actual = TypeScheme (tyvars, applySubstTy subst'' ty'), origin = origin }
                 end
+            | doDec (ESImportDec { sourceSpan, pure, specs, moduleName }) = ESImportDec { sourceSpan = sourceSpan, pure = pure, specs = List.map (fn (name, vid, ty) => (name, vid, doTy ty)) specs, moduleName = moduleName }
           and doValBind (TupleBind (span, binds, exp)) = TupleBind (span, List.map (fn (vid, ty) => (vid, doTy ty)) binds, doExp exp)
             | doValBind (PolyVarBind (span, vid, TypeScheme (tyvars, ty), exp)) = let val subst' = List.foldl (fn ((tv, _), s) => if TyVarMap.inDomain (s, tv) then #1 (TyVarMap.remove (s, tv)) else s) subst tyvars
                                                                                   in PolyVarBind (span, vid, TypeScheme (tyvars, applySubstTy subst' ty), #doExp (applySubstTyInExpOrDec subst') exp)
@@ -568,6 +571,9 @@ fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdSta
             | doDec (OverloadDec (span, class, tyname, map)) = (VIdSet.empty, OverloadDec (span, class, tyname, Syntax.OverloadKeyMap.map doExp map))
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = (VIdSet.empty, EqualityDec (span, tyvars, tyname, doExp exp))
             | doDec (e as ValDescDec _) = (VIdSet.empty, e)
+            | doDec (d as ESImportDec { sourceSpan, pure, specs, moduleName }) = let val bound = List.foldl (fn ((_, vid, _), bound) => VIdSet.add (bound, vid)) VIdSet.empty specs
+                                                                                 in (bound, d)
+                                                                                 end
           and doDecs decs = let val (env, decs) = List.foldl (fn (dec, (env, decs)) => let val subst' = removeKeys (subst, env)
                                                                                            val (env', dec) = #doDec (substVId subst') dec
                                                                                        in (VIdSet.union (env', env), dec :: decs)
@@ -623,6 +629,7 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
             | doDec(OverloadDec(span, class, tyname, map)) = OverloadDec(span, class, tyname, Syntax.OverloadKeyMap.map doExp map)
             | doDec (EqualityDec (span, tyvars, tyname, exp)) = EqualityDec (span, tyvars, tyname, doExp exp)
             | doDec (ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin }) = ValDescDec { sourceSpan = sourceSpan, expected = TypeScheme (tyvars, doTy ty) (* should not be needed *), actual = TypeScheme (tyvars', doTy ty'), origin = origin }
+            | doDec (ESImportDec { sourceSpan, pure, specs, moduleName }) = ESImportDec { sourceSpan = sourceSpan, pure = pure, specs = List.map (fn (name, vid, ty) => (name, vid, doTy ty)) specs, moduleName = moduleName }
           and doValBind(TupleBind(span, xs, exp)) = TupleBind(span, List.map (fn (vid, ty) => (vid, doTy ty)) xs, doExp exp)
             | doValBind (PolyVarBind (span, vid, tysc as TypeScheme (tyvarsWithConstraints, ty), exp)) = PolyVarBind (span, vid, TypeScheme (tyvarsWithConstraints, doTy ty), doExp exp)
           and doMatch(pat, exp) = (doPat pat, doExp exp)
@@ -731,6 +738,7 @@ and freeTyVarsInDec (bound, dec)
          | OverloadDec (_, class, tyname, map) => Syntax.OverloadKeyMap.foldl (fn (exp, acc) => acc @ freeTyVarsInExp (bound, exp)) [] map
          | EqualityDec (_, typarams, tyname, exp) => freeTyVarsInExp (bound, exp)
          | ValDescDec { sourceSpan, expected = TypeScheme (tyvars, ty), actual = TypeScheme (tyvars', ty'), origin } => freeAnonymousTyVarsInTy ty (* should be empty *) @ freeAnonymousTyVarsInTy ty'
+         | ESImportDec { sourceSpan, pure, specs, moduleName } => List.foldl (fn ((_, _, ty), acc) => acc @ freeAnonymousTyVarsInTy ty) [] specs
       )
 and freeTyVarsInValBind (bound, TupleBind(_, xs, exp)) = List.foldl (fn ((_, ty), acc) => acc @ freeAnonymousTyVarsInTy ty) (freeTyVarsInExp (bound, exp)) xs
   | freeTyVarsInValBind (bound, PolyVarBind(_, vid, TypeScheme(tyvars, ty), exp)) = freeAnonymousTyVarsInTy ty @ freeTyVarsInExp (bound, exp)

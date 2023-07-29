@@ -46,7 +46,6 @@ structure JavaScript : sig
               val decodeUtf8 : string -> WideString.string
               val toInt32 : value -> int
               val toUint32 : value -> word
-              val require : value (* Node.js *)
               structure Lib : sig
                             val parseFloat : value
                             val Number : value
@@ -129,7 +128,6 @@ fun method (obj, name) args = _primCall "JavaScript.method" (obj, name, args)
 val function = _Prim.JavaScript.function
 val encodeUtf8 = _Prim.JavaScript.encodeUtf8
 val decodeUtf8 = _Prim.JavaScript.decodeUtf8
-val require = _Prim.JavaScript.require
 fun unsafeToValue x : value = _primCall "Unsafe.cast" (x)
 fun unsafeFromValue (x : value) = _primCall "Unsafe.cast" (x)
 val fromBool : bool -> value = unsafeToValue

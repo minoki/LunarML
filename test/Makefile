@@ -23,11 +23,11 @@ OUTEXT= .lua
 INTERPRETER= $(LUAJIT) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
 else ifeq ($(VARIANT), nodejs)
 LUNARML_OPTION= --js
-OUTEXT= .js
+OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else ifeq ($(VARIANT), nodejs-cps)
 LUNARML_OPTION= --js-cps
-OUTEXT= .js
+OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else
 $(error VARIANT must be one of lua, lua-continuations, luajit, nodejs or nodejs-cps)

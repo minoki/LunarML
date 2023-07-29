@@ -275,6 +275,8 @@ fun compare (OVERLOAD_abs, OVERLOAD_abs) = EQUAL
 end
 structure OverloadKeyMap = RedBlackMapFn (OverloadKey)
 
+type ESImportName = string
+
 datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)
              | RecordExp of SourcePos.span * (Label * Exp) list * Exp option (* record *)
@@ -302,6 +304,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
              | OpenDec of SourcePos.span * LongStrId list
              | OverloadDec of SourcePos.span * OverloadClass * LongTyCon * Exp OverloadKeyMap.map
              | EqualityDec of SourcePos.span * TyVar list * LongTyCon * Exp
+             | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (ESImportName * VId * Ty option) list, moduleName : string }
      and ValBind = PatBind of SourcePos.span * Pat * Exp
 
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
@@ -524,6 +527,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.VId list
              | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
              | EqualityDec of SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Exp
+             | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (Syntax.ESImportName * Syntax.VId * Syntax.Ty option) list, moduleName : string }
      and ValBind = PatBind of SourcePos.span * Pat * Exp
      and FValBind = FValBind of SourcePos.span * FMRule list
      and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp

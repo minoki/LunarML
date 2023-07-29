@@ -538,6 +538,7 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
       in (emptyEnv, [Syntax.OverloadDec(span, class, longtycon, map)])
       end
     | doDec (ctx, env, UnfixedSyntax.EqualityDec (span, typarams, longtycon, exp)) = (emptyEnv, [Syntax.EqualityDec (span, typarams, longtycon, doExp (ctx, env, exp))])
+    | doDec (ctx, env, UnfixedSyntax.ESImportDec x) = (emptyEnv, [Syntax.ESImportDec x])
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
 and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
     = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
@@ -839,6 +840,8 @@ local
       | collectDec(bound, OpenDec _) = TyVarSet.empty
       | collectDec(bound, OverloadDec(_, _, _, map)) = OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, collectExp(bound, exp))) TyVarSet.empty map
       | collectDec (bound, EqualityDec (_, typarams, longtycon, exp)) = collectExp (TyVarSet.addList (bound, typarams), exp)
+      | collectDec (bound, ESImportDec { sourceSpan = _, pure = _, specs, moduleName = _ })
+        = List.foldl (fn ((_, _, SOME ty), acc) => TyVarSet.union (freeTyVarsInTy (bound, ty), acc) | ((_, _, NONE), acc) => acc) TyVarSet.empty specs
     and collectDatBind(bound, DatBind (_, tyvars, _, conbinds)) = let val bound = TyVarSet.addList(bound, tyvars)
                                                                       fun doConBind(ConBind(_, _, NONE)) = TyVarSet.empty
                                                                         | doConBind(ConBind(_, _, SOME ty)) = freeTyVarsInTy(bound, ty)
@@ -873,6 +876,7 @@ local
       | doDec(bound, dec as OpenDec _) = dec
       | doDec(bound, dec as OverloadDec _) = dec
       | doDec (bound, EqualityDec (span, typarams, longtycon, exp)) = EqualityDec (span, typarams, longtycon, doExp (TyVarSet.addList (bound, typarams), exp))
+      | doDec (bound, dec as ESImportDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
     and doExp(bound, exp as SConExp _) = exp
@@ -1176,6 +1180,13 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
   | doDec (ctx, env) (S.OpenDec (span, longstrids)) = ()
   | doDec (ctx, env) (S.OverloadDec _) = ()
   | doDec (ctx, env) (S.EqualityDec (span, typarams, longtycon, exp)) = doExp (ctx, env) exp
+  | doDec (ctx, env) (S.ESImportDec { sourceSpan, pure = _, specs, moduleName = _ })
+    = let fun checkVId vid = if S.VIdSet.member (invalidBoundNames ctx, vid) then
+                                 emitError (ctx, [sourceSpan], "invalid bound name")
+                             else
+                                 ()
+      in List.app (fn (_, vid, optTy) => (checkVId vid; Option.app (doTy ctx) optTy)) specs (* duplicate identifiers are not checked here *)
+      end
 and doValBinds (ctx, env) valbinds = List.app (fn (S.PatBind (_, pat, exp)) => ( doPat ctx pat ; doExp (ctx, env) exp) ) valbinds (* duplicate identifiers are not checked here *)
 
 (*! val doSpec : context -> Syntax.Spec -> unit *)

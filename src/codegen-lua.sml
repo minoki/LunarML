@@ -862,6 +862,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                            ) defs
                   in List.revAppend (revStats, initAndRest @ List.concat conts)
                   end
+                | C.ESImportDec _ => raise CodeGenError "_esImport is not supported by Lua backend"
            end
       )
 and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })

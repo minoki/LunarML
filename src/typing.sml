@@ -1942,6 +1942,27 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
           val () = addConstraint (ctx, env, T.EqConstr (span, eqTy, T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
       in (env', [T.EqualityDec (span, List.map #2 typarams', tyname, exp)])
       end
+  | typeCheckDec (ctx, env, S.ESImportDec { sourceSpan, pure, specs, moduleName })
+    = let val specs' = List.map (fn (name, vid, NONE) => (name, vid, newVId (#context ctx, vid), primTy_JavaScript_value)
+                                | (name, vid, SOME ty) => (name, vid, newVId (#context ctx, vid), evalTy (#context ctx, env, ty))
+                                ) specs
+          val valMap = List.foldl (fn ((_, vid, vid', ty), valMap) => ( if Syntax.VIdMap.inDomain (valMap, vid) then
+                                                                            emitTypeError (ctx, [sourceSpan], "duplicate identifier in a binding")
+                                                                        else
+                                                                            ()
+                                                                      ; Syntax.VIdMap.insert (valMap, vid, (T.TypeScheme ([], ty) (* for now, monomorphic type only *), Syntax.ValueVariable, T.MkShortVId vid'))
+                                                                      )
+                                  ) Syntax.VIdMap.empty specs'
+          val env' = { valMap = valMap
+                     , tyConMap = Syntax.TyConMap.empty
+                     , tyNameMap = TypedSyntax.TyNameMap.empty
+                     , strMap = Syntax.StrIdMap.empty
+                     , sigMap = Syntax.SigIdMap.empty
+                     , funMap = Syntax.FunIdMap.empty
+                     , boundTyVars = Syntax.TyVarMap.empty
+                     }
+      in (env', [T.ESImportDec { sourceSpan = sourceSpan, pure = pure, specs = List.map (fn (name, _, vid, ty) => (name, vid, ty)) specs', moduleName = moduleName }])
+      end
 and typeCheckDecs (ctx, env, []) : Env * T.Dec list = (emptyEnv, [])
   | typeCheckDecs(ctx, env, dec :: decs) = let val (env', dec) = typeCheckDec(ctx, env, dec)
                                                val (env'', decs) = typeCheckDecs(ctx, mergeEnv(env, env'), decs)
@@ -2221,6 +2242,7 @@ local
       | checkDec (ctx, env, T.OverloadDec (span, class, name, map)) = Syntax.OverloadKeyMap.app (fn exp => checkExp (ctx, env, exp)) map
       | checkDec (ctx, env, T.EqualityDec (span, tyvars, tyname, exp)) = checkExp (ctx, T.TyVarSet.addList (env, tyvars), exp)
       | checkDec (ctx, env, T.ValDescDec { sourceSpan, expected, actual, origin }) = checkValDesc (ctx, env, sourceSpan, expected, actual, origin)
+      | checkDec (ctx, env, T.ESImportDec { sourceSpan, pure, specs, moduleName }) = ()
     and checkDecs (ctx, env, decs) = List.app (fn dec => checkDec (ctx, env, dec)) decs
     and checkMatch (ctx, env, matches) = List.app (fn (pat, exp) => checkExp (ctx, env, exp)) matches
     and checkValBind (ctx, env, T.TupleBind (_, _, exp)) = checkExp (ctx, env, exp)
@@ -2342,6 +2364,10 @@ fun checkTyScope (ctx, tvset : T.TyVarSet.set, tynameset : T.TyNameSet.set)
             | goDec (T.ValDescDec { sourceSpan, expected = T.TypeScheme (tyvars, ty), actual = T.TypeScheme (tyvars', ty'), origin })
               = ( #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars), tynameset)) ty
                 ; #goTy (checkTyScope (ctx, T.TyVarSet.addList (tvset, List.map #1 tyvars'), tynameset)) ty'
+                ; tynameset
+                )
+            | goDec (T.ESImportDec { sourceSpan, pure, specs, moduleName })
+              = ( List.app (fn (_, _, ty) => goTy ty) specs
                 ; tynameset
                 )
           and goDecs decs = List.foldl (fn (dec, tynameset) => let val { goDec, ... } = checkTyScope (ctx, tvset, tynameset)

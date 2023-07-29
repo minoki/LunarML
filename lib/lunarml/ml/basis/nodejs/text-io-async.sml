@@ -190,13 +190,8 @@ structure TextIO :> sig
               val print : string -> unit
           end = struct
 local
-    val process = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "process"]) ()
-    val fs = LunarML.assumeDiscardable (fn () => JavaScript.call JavaScript.require #[JavaScript.fromWideString "fs"]) ()
-    val createReadStream = LunarML.assumeDiscardable JavaScript.field (fs, "createReadStream")
-    val createWriteStream = LunarML.assumeDiscardable JavaScript.field (fs, "createWriteStream")
-    val stdin = LunarML.assumeDiscardable JavaScript.field (process, "stdin")
-    val stdout = LunarML.assumeDiscardable JavaScript.field (process, "stdout")
-    val stderr = LunarML.assumeDiscardable JavaScript.field (process, "stderr")
+    _esImport [pure] { stdin, stdout, stderr } from "node:process";
+    _esImport [pure] { createReadStream, createWriteStream } from "node:fs";
     structure Instream :> sig
                   type instream
                   type vector = string

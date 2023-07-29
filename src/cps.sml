@@ -57,6 +57,7 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
              | RecDec of (Var * CVar * Var list * CExp) list (* recursive function *)
              | ContDec of { name : CVar, params : (Var option) list, body : CExp }
              | RecContDec of (CVar * (Var option) list * CExp) list
+             | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
      and CExp = Let of { decs : Dec vector, cont : CExp }
               | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
               | AppCont of { applied : CVar, args : Value list }
@@ -132,6 +133,7 @@ fun containsAppDec (ValDec _) = false
   | containsAppDec (RecDec _) = false
   | containsAppDec (ContDec { name, params, body }) = containsApp body
   | containsAppDec (RecContDec defs) = List.exists (fn (_, _, body) => containsApp body) defs
+  | containsAppDec (ESImportDec _) = false
 and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists containsAppDec decs
   | containsApp (App _) = true
   | containsApp (AppCont _) = false
@@ -196,6 +198,7 @@ and freeVarsInDec (ValDec { exp, result }, (bound, acc))
                                ) acc defs
       in (bound, acc)
       end
+  | freeVarsInDec (ESImportDec { pure = _, specs, moduleName = _ }, (bound, acc)) = (List.foldl (fn ((_, v), bound) => TypedSyntax.VIdSet.add (bound, v)) bound specs, acc)
 and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = Vector.foldl freeVarsInDec (bound, acc) decs
                                                      in freeVarsInExp (bound, cont, acc)
                                                      end
@@ -215,6 +218,7 @@ fun recurseCExp f
             | goDec (RecDec defs) = RecDec (List.map (fn (g, k, params, body) => (g, k, params, goExp body)) defs)
             | goDec (ContDec { name, params, body }) = ContDec { name = name, params = params, body = goExp body }
             | goDec (RecContDec defs) = RecContDec (List.map (fn (name, params, body) => (name, params, goExp body)) defs)
+            | goDec (dec as ESImportDec _) = dec
           and goExp e = f (case e of
                                Let { decs, cont } => Let { decs = Vector.map goDec decs, cont = goExp cont }
                              | App _ => e
@@ -439,14 +443,17 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                  | doDecs (env, F.DatatypeDec _ :: decs, revDecs) = doDecs (env, decs, revDecs)
                  | doDecs (env, F.ExceptionDec { name, tagName, payloadTy } :: decs, revDecs)
                    = let val dec = C.ValDec { exp = C.ExnTag { name = name
-                                                   , payloadTy = payloadTy
-                                                   }
-                                  , result = SOME tagName
+                                                             , payloadTy = payloadTy
+                                                             }
+                                            , result = SOME tagName
                                             }
                      in doDecs (env, decs, dec :: revDecs)
                      end
                  | doDecs (env, F.ExportValue _ :: decs, revDecs) = raise Fail "ExportValue must be the last declaration"
                  | doDecs (env, F.ExportModule _ :: decs, revDecs) = raise Fail "ExportModule must be the last declaration"
+                 | doDecs (env, F.ESImportDec { pure, specs, moduleName } :: decs, revDecs) = let val dec = C.ESImportDec { pure = pure, specs = List.map (fn (name, vid, _) => (name, vid)) specs, moduleName = moduleName }
+                                                                                              in doDecs (env, decs, dec :: revDecs)
+                                                                                              end
            in doDecs (env, decs, revDecs)
            end
          | F.AppExp (applied, arg) =>
@@ -557,6 +564,9 @@ fun transformDecs (ctx : Context, env) ([] : F.Dec list) (revDecs : C.Dec list, 
                                                           end
          | F.ExportValue exp => raise Fail "ExportValue must be the last declaration"
          | F.ExportModule _ => raise Fail "ExportModule must be the last declaration"
+         | F.ESImportDec { pure, specs, moduleName } => let val dec = C.ESImportDec { pure = pure, specs = List.map (fn (name, vid, _) => (name, vid)) specs, moduleName = moduleName }
+                                                        in transformDecs (ctx, env) decs (dec :: revDecs, k)
+                                                        end
       )
 end
 end;
@@ -607,6 +617,9 @@ and goDec g (C.ValDec { exp, result }, acc) = let val s = goSimpleExp (g, exp)
                                    end
   | goDec g (C.ContDec { name, params, body }, acc) = goExp (g, body, acc)
   | goDec g (C.RecContDec defs, acc) = List.foldl (fn ((_, _, body), acc) => goExp (g, body, acc)) acc defs
+  | goDec g (C.ESImportDec { pure, specs, moduleName }, acc) = ( List.app (fn (_, vid) => TypedSyntax.VIdTable.insert g (vid, TypedSyntax.VIdSet.empty)) specs
+                                                               ; acc
+                                                               )
 and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, Vector.foldl (goDec g) acc decs)
   | goExp (g, C.App { applied, cont, args }, acc) = List.foldl addValue (addValue (applied, acc)) args
   | goExp (g, C.AppCont { applied, args }, acc) = List.foldl addValue acc args
@@ -817,6 +830,7 @@ and goDec (env, renv, cenv, crenv)
           ; C.CVarMap.appi (fn (f, v) => C.CVarTable.insert crenv (f, v)) recursiveCEnv
           ; List.app (fn (f, _, _) => C.CVarTable.insert cenv (f, ref neverUsedCont)) defs
          end
+       | C.ESImportDec { pure, specs, moduleName } => List.app (fn (_, vid) => add (env, vid)) specs
 and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (cont_usage ref) C.CVarTable.hash_table, crenv, cexp)
     = case cexp of
           C.Let { decs, cont } =>
@@ -899,6 +913,7 @@ and sizeOfDec (dec, threshold)
             | C.RecDec defs => List.foldl (fn ((_, _, _, body), t) => sizeOfCExp (body, t)) threshold defs
             | C.ContDec { name, params, body } => sizeOfCExp (body, threshold)
             | C.RecContDec defs => List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold defs
+            | C.ESImportDec _ => 0
 and sizeOfCExp (e, threshold)
     = if threshold < 0 then
           threshold
@@ -927,6 +942,7 @@ and substDec (subst, csubst) = fn C.ValDec { exp, result } => C.ValDec { exp = s
                                 | C.RecDec defs => C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, substCExp (subst, csubst, body))) defs)
                                 | C.ContDec { name, params, body } => C.ContDec { name = name, params = params, body = substCExp (subst, csubst, body) }
                                 | C.RecContDec defs => C.RecContDec (List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs)
+                                | dec as C.ESImportDec { pure, specs, moduleName } => dec
 and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont }) = C.Let { decs = Vector.map (substDec (subst, csubst)) decs, cont = substCExp (subst, csubst, cont) }
   | substCExp (subst, csubst, C.App { applied, cont, args }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
@@ -1024,6 +1040,12 @@ and alphaConvertDec (ctx : Context) (dec, (subst, csubst, acc))
                                       )
           in (subst, csubst, dec' :: acc)
           end
+        | C.ESImportDec { pure, specs, moduleName } =>
+          let val specs' = List.map (fn (name, vid) => (name, vid, renewVId (ctx, vid))) specs
+              val subst' = List.foldl (fn ((_, vid, vid'), subst) => TypedSyntax.VIdMap.insert (subst, vid, C.Var vid')) subst specs'
+              val dec' = C.ESImportDec { pure = pure, specs = List.map (fn (name, _, vid) => (name, vid)) specs', moduleName = moduleName }
+          in (subst', csubst, dec' :: acc)
+          end
 and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont })
     = let val (subst', csubst', revDecs) = Vector.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
       in C.Let { decs = Vector.fromList (List.rev revDecs), cont = alphaConvert (ctx, subst', csubst', cont) }
@@ -1072,6 +1094,7 @@ fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
                                               else
                                                   NONE
         | C.RecContDec _ => NONE
+        | C.ESImportDec { pure, specs, moduleName } => SOME env
 and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, cont })
     = (case VectorUtil.foldlOption isDiscardableDec env decs of
            SOME env => isDiscardableExp (env, cont)
@@ -1800,6 +1823,15 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                   val dec = C.RecContDec (List.map (fn { newName, newParams, env, body, ... } => (newName, newParams, simplifyCExp (ctx, env, cenv, subst, csubst, usage, body))) defs')
               in (env, cenv, subst, csubst, dec :: acc)
               end
+        | C.ESImportDec { pure, specs, moduleName } =>
+          let val specs = List.filter (fn (_, vid) => CpsDeadCodeAnalysis.isUsed (#dead_code_analysis usage, vid)) specs
+          in if pure andalso List.null specs then
+                 (env, cenv, subst, csubst, acc)
+             else
+                 let val dec = C.ESImportDec { pure = pure, specs = specs, moduleName = moduleName }
+                 in (env, cenv, subst, csubst, dec :: acc)
+                 end
+          end
 and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv : ((C.Var option) list * C.CExp option) C.CVarMap.map, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, usage, e)
     = case e of
           C.Let { decs, cont } =>
@@ -1916,6 +1948,7 @@ fun finalizeDec ctx (dec, (decs, cont))
           let val dec = C.RecContDec (List.map (fn (name, params, body) => (name, params, finalizeCExp (ctx, body))) defs)
           in (dec :: decs, cont)
           end
+        | C.ESImportDec _ => (dec :: decs, cont)
 and finalizeCExp (ctx, C.Let { decs, cont })
     = prependDecs (Vector.foldr (finalizeDec ctx) ([], finalizeCExp (ctx, cont)) decs)
   | finalizeCExp (ctx, e as C.App _) = e
@@ -1987,6 +2020,7 @@ fun goDec (table, level) (dec, acc)
                          end
                      ) acc defs
           )
+        | C.ESImportDec _ => acc
 and go (table, level, C.Let { decs, cont }, acc)
     = go (table, level, cont, Vector.foldl (goDec (table, level)) acc decs)
   | go (table, level, C.App { applied, cont, args }, acc) = escape (table, level, cont, acc)

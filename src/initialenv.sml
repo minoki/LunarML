@@ -122,7 +122,6 @@ val VId_JavaScript_null = newVId "_Prim.JavaScript.null"
 val VId_JavaScript_function = newVId "_Prim.JavaScript.function"
 val VId_JavaScript_encodeUtf8 = newVId "_Prim.JavaScript.encodeUtf8"
 val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
-val VId_JavaScript_require = newVId "_Prim.JavaScript.require" (* Node.js *)
 
 (* Other primitives *)
 val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
@@ -247,7 +246,6 @@ val initialEnv : Typing.Env
                                            ,("_Prim.JavaScript.function", VId_JavaScript_function, TypeScheme ([], (vectorOf primTy_JavaScript_value --> primTy_JavaScript_value) --> primTy_JavaScript_value))
                                            ,("_Prim.JavaScript.encodeUtf8", VId_JavaScript_encodeUtf8, TypeScheme ([], primTy_string16 --> primTy_string))
                                            ,("_Prim.JavaScript.decodeUtf8", VId_JavaScript_decodeUtf8, TypeScheme ([], primTy_string --> primTy_string16))
-                                           ,("_Prim.JavaScript.require", VId_JavaScript_require, TypeScheme ([], primTy_JavaScript_value))
                                            ,("_Prim.DelimCont.topLevel", VId_DelimCont_topLevel, TypeScheme ([], mkTyCon ([primTy_unit], primTyName_prompt_tag)))
                                            ]
                           ]
