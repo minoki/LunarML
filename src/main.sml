@@ -244,20 +244,20 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                                val messageHandler = Message.newHandler (errorCounter, printMessage)
                            in { nextVId = #nextVId (#driverContext ctx), nextTyVar = #nextTyVar (#driverContext ctx), targetInfo = targetInfo, messageHandler = messageHandler }
                            end
-          val fdecs = case Option.getOpt (#outputMode opts, ExecutableMode) of
-                          ExecutableMode => fdecs
+          val fexp = case Option.getOpt (#outputMode opts, ExecutableMode) of
+                          ExecutableMode => FSyntax.LetExp (fdecs, FSyntax.ExitProgram)
                         | LibraryMode => ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
           val frontTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_INITIAL then
-                       print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
+                       print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
                    else
                        ()
-          val fdecs = #doDecs (DesugarPatternMatches.desugarPatternMatches toFContext) fdecs
-          val fdecs = DecomposeValRec.doDecs fdecs
-          val (_, fdecs) = DeadCodeElimination.doDecs (TypedSyntax.VIdSet.empty, fdecs)
+          val fexp = #doExp (DesugarPatternMatches.desugarPatternMatches toFContext) fexp
+          val fexp = DecomposeValRec.doExp fexp
+          val (_, fdecs) = DeadCodeElimination.doExp fexp TypedSyntax.VIdSet.empty
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_FINAL then
-                       print (Printer.build (FPrinter.doDecs fdecs) ^ "\n")
+                       print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
                    else
                        ()
           val () = if #printTimings opts then
@@ -270,7 +270,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                          val _ = nextId := n + 1
                      in CSyntax.CVar.fromInt n
                      end
-          val cexp = CpsTransform.transformDecs ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) fdecs ([], cont)
+          val cexp = CpsTransform.transformT ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) fexp ([], cont)
           val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
                        print ("[TIME] CPS: " ^ LargeInt.toString (cpsTime - optTime) ^ " us\n")

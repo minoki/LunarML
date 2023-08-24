@@ -85,6 +85,9 @@ and doExp prec (F.PrimExp (primOp, types, exps)) = P.Fragment "_prim." :: doPrim
   | doExp prec (F.TyAppExp (exp, ty)) = showParen (prec >= 2) (doExp 1 exp @ P.Fragment " [" :: doTy 0 ty @ [P.Fragment "]"])
   | doExp prec (F.PackExp { payloadTy, exp, packageTy }) = showParen (prec >= 1) (P.Fragment "_pack (type " :: doTy 0 payloadTy @ P.Fragment ", " :: doExp 0 exp @ P.Fragment ") : " :: doTy 0 packageTy)
   | doExp prec (F.BogusExp _) = [P.Fragment "<bogus>"]
+  | doExp prec F.ExitProgram = [P.Fragment "<exit program>"]
+  | doExp prec (F.ExportValue exp) = P.Fragment "_export " :: doExp 2 exp
+  | doExp prec (F.ExportModule fields) = P.Fragment "_export {" :: P.commaSepV (Vector.map (fn (name, exp) => P.Fragment name :: P.Fragment " = " :: doExp 0 exp) fields) @ [P.Fragment "}"]
 and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty @ P.Fragment " = " :: doExp 0 exp
   | doDec (F.ValDec (vid, NONE, exp)) = P.Fragment "val " :: P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : _ = " :: doExp 0 exp
   | doDec (F.RecValDec binds) = P.Fragment "val rec " :: P.IncreaseIndent 4 :: P.sepBy [P.LineTerminator, P.Indent, P.Fragment "and "] (List.map (fn (vid, ty, exp) => P.Fragment (TypedSyntax.print_VId vid) :: P.Fragment " : " :: doTy 0 ty @ P.Fragment " = " :: doExp 0 exp) binds) @ [P.DecreaseIndent 4]
@@ -95,8 +98,6 @@ and doDec (F.ValDec (vid, SOME ty, exp)) = P.Fragment "val " :: P.Fragment (Type
                                                                                                                                                                                                                                                                                                                             ) conbinds)) datbinds) @ [P.DecreaseIndent 5]
   | doDec (F.ExceptionDec { name, tagName, payloadTy = NONE }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: []
   | doDec (F.ExceptionDec { name, tagName, payloadTy = SOME payloadTy }) = P.Fragment "exception " :: P.Fragment (TypedSyntax.print_VId tagName) :: P.Fragment " of " :: doTy 0 payloadTy
-  | doDec (F.ExportValue exp) = P.Fragment "_export " :: doExp 0 exp
-  | doDec (F.ExportModule fields) = P.Fragment "_export {" :: P.commaSepV (Vector.map (fn (name, exp) => P.Fragment name :: P.Fragment " = " :: doExp 0 exp) fields) @ [P.Fragment "}"]
   | doDec (F.ESImportDec _) = [P.Fragment "_esImport"]
 fun doDecs decs = List.concat (List.map (fn dec => P.Indent :: doDec dec @ [P.LineTerminator]) decs)
 end

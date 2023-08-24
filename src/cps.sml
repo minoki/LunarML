@@ -449,8 +449,6 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                             }
                      in doDecs (env, decs, dec :: revDecs)
                      end
-                 | doDecs (env, F.ExportValue _ :: decs, revDecs) = raise Fail "ExportValue must be the last declaration"
-                 | doDecs (env, F.ExportModule _ :: decs, revDecs) = raise Fail "ExportModule must be the last declaration"
                  | doDecs (env, F.ESImportDec { pure, specs, moduleName } :: decs, revDecs) = let val dec = C.ESImportDec { pure = pure, specs = List.map (fn (name, vid, _) => (name, vid)) specs, moduleName = moduleName }
                                                                                               in doDecs (env, decs, dec :: revDecs)
                                                                                               end
@@ -519,55 +517,29 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
          | F.TyAppExp (exp, _) => transformX (ctx, env) exp (revDecs, k)
          | F.PackExp { payloadTy, exp, packageTy } => transformX (ctx, env) exp (revDecs, k)
          | F.BogusExp _ => raise Message.Abort
-fun transformDecs (ctx : Context, env) ([] : F.Dec list) (revDecs : C.Dec list, k : C.CVar) : C.CExp
-    = prependRevDecs (revDecs, C.AppCont { applied = k, args = [] }) (* apply continuation *)
-  | transformDecs (ctx, env) [F.ExportValue exp] (revDecs, k)
-    = transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE (* "export"? *) }
-                (fn (revDecs, v) => prependRevDecs (revDecs, C.AppCont { applied = k, args = [v] }))
-  | transformDecs (ctx, env) [F.ExportModule items] (revDecs, k)
-    = foldlCont (fn ((name, exp), (revDecs, acc), cont) => transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE (* name? *) } (fn (revDecs, v) => cont (revDecs, (name, v) :: acc)))
-                (revDecs, [])
-                (Vector.foldr (op ::) [] items)
-                (fn (revDecs, items) =>
-                    let val result = genSym ctx (* "export"? *)
-                        val dec = C.ValDec { exp = C.Record (List.foldl (fn ((name, v), m) => Syntax.LabelMap.insert (m, Syntax.IdentifierLabel name, v)) Syntax.LabelMap.empty items)
-                                           , result = SOME result
-                                           }
-                    in prependRevDecs (dec :: revDecs, C.AppCont { applied = k, args = [C.Var result] })
-                    end
-                )
-  | transformDecs (ctx, env) (dec :: decs) (revDecs, k)
-    = (case dec of
-           F.ValDec (vid, _, exp) => transform (ctx, env) exp { revDecs = revDecs, resultHint = SOME vid }
-                                               (fn (revDecs, v) => transformDecs (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) decs (revDecs, k))
-         | F.RecValDec decs' => let val dec = C.RecDec (List.map (fn (vid, _, exp) =>
-                                                                     let val contParam = genContSym ctx
-                                                                     in case stripTyAbs exp of
-                                                                            F.FnExp (param, _, body) => (vid, contParam, [param], transformT (ctx, env) body ([], contParam))
-                                                                          | _ => raise Fail "RecValDec"
-                                                                     end
-                                                                 ) decs'
-                                                       )
-                                in transformDecs (ctx, env) decs (dec :: revDecs, k)
-                                end
-         | F.UnpackDec (_, _, vid, _, exp) => transform (ctx, env) exp { revDecs = revDecs, resultHint = SOME vid }
-                                                        (fn (revDecs, v) => transformDecs (ctx, TypedSyntax.VIdMap.insert (env, vid, v)) decs (revDecs, k))
-         | F.IgnoreDec exp => transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE }
-                                        (fn (revDecs, v) => transformDecs (ctx, env) decs (revDecs, k))
-         | F.DatatypeDec _ => transformDecs (ctx, env) decs (revDecs, k)
-         | F.ExceptionDec { name, tagName, payloadTy } => let val dec = C.ValDec { exp = C.ExnTag { name = name
-                                                                                                  , payloadTy = payloadTy
-                                                                                                  }
-                                                                                 , result = SOME tagName
-                                                                                 }
-                                                          in transformDecs (ctx, env) decs (dec :: revDecs, k)
-                                                          end
-         | F.ExportValue exp => raise Fail "ExportValue must be the last declaration"
-         | F.ExportModule _ => raise Fail "ExportModule must be the last declaration"
-         | F.ESImportDec { pure, specs, moduleName } => let val dec = C.ESImportDec { pure = pure, specs = List.map (fn (name, vid, _) => (name, vid)) specs, moduleName = moduleName }
-                                                        in transformDecs (ctx, env) decs (dec :: revDecs, k)
-                                                        end
-      )
+         | F.ExitProgram => (case k of
+                                 REIFIED k => prependRevDecs (revDecs, C.AppCont { applied = k, args = [] })
+                               | META _ => raise Fail "unexpected META"
+                            )
+         | F.ExportValue exp => (case k of
+                                     REIFIED k => transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE }
+                                                            (fn (revDecs, v) => prependRevDecs (revDecs, C.AppCont { applied = k, args = [v] }))
+                                   | META _ => raise Fail "unexpected META"
+                                )
+         | F.ExportModule entities => (case k of
+                                           REIFIED k => foldlCont (fn ((name, exp), (revDecs, acc), cont) => transform (ctx, env) exp { revDecs = revDecs, resultHint = NONE (* name? *) } (fn (revDecs, v) => cont (revDecs, (name, v) :: acc)))
+                                                                  (revDecs, [])
+                                                                  (Vector.foldr (op ::) [] entities)
+                                                                  (fn (revDecs, items) =>
+                                                                      let val result = genSym ctx (* "export"? *)
+                                                                          val dec = C.ValDec { exp = C.Record (List.foldl (fn ((name, v), m) => Syntax.LabelMap.insert (m, Syntax.IdentifierLabel name, v)) Syntax.LabelMap.empty items)
+                                                                                             , result = SOME result
+                                                                                             }
+                                                                      in prependRevDecs (dec :: revDecs, C.AppCont { applied = k, args = [C.Var result] })
+                                                                      end
+                                                                  )
+                                         | META _ => raise Fail "unexpected META"
+                                      )
 end
 end;
 

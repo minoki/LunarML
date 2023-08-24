@@ -79,14 +79,15 @@ datatype Pat = WildcardPat of SourcePos.span
              | TyAppExp of Exp * Ty
              | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
              | BogusExp of Ty
+             | ExitProgram
+             | ExportValue of Exp
+             | ExportModule of (string * Exp) vector
      and Dec = ValDec of TypedSyntax.VId * Ty option * Exp
              | RecValDec of (TypedSyntax.VId * Ty * Exp) list
              | UnpackDec of TyVar * Kind * TypedSyntax.VId * (* the type of the new identifier *) Ty * Exp
              | IgnoreDec of Exp (* val _ = ... *)
              | DatatypeDec of DatBind list (* does not define value-level constructors *)
              | ExceptionDec of { name : string, tagName : TypedSyntax.VId, payloadTy : Ty option } (* does not define value-level constructors *)
-             | ExportValue of Exp
-             | ExportModule of (string * Exp) vector
              | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * TypedSyntax.VId * Ty) list, moduleName : string }
 fun ValueLabel vid = Syntax.IdentifierLabel (Syntax.getVIdName vid)
 fun StructLabel (Syntax.MkStrId name) = Syntax.IdentifierLabel ("_" ^ name)
@@ -244,6 +245,9 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doExp (PackExp { payloadTy, exp, packageTy }) = PackExp { payloadTy = doTy payloadTy, exp = doExp exp, packageTy = doTy packageTy }
           | doExp (TyAppExp (exp, ty)) = TyAppExp (doExp exp, doTy ty)
           | doExp (BogusExp ty) = BogusExp (doTy ty)
+          | doExp (exp as ExitProgram) = exp
+          | doExp (ExportValue x) = ExportValue (doExp x)
+          | doExp (ExportModule entities) = ExportModule (Vector.map (fn (name, x) => (name, doExp x)) entities)
         and doDec (ValDec (vid, optTy, exp)) = ValDec (vid, Option.map doTy optTy, doExp exp)
           | doDec (RecValDec valbinds) = RecValDec (List.map (fn (vid, ty, exp) => (vid, doTy ty, doExp exp)) valbinds)
           | doDec (UnpackDec (tv, kind, vid, ty, exp)) = UnpackDec (tv, kind, vid, if TypedSyntax.TyVarMap.inDomain (subst, tv) then (* TODO: use fresh tyvar if necessary *)
@@ -253,8 +257,6 @@ fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
           | doDec (IgnoreDec exp) = IgnoreDec (doExp exp)
           | doDec (DatatypeDec datbinds) = DatatypeDec (List.map doDatBind datbinds)
           | doDec (ExceptionDec { name, tagName, payloadTy }) = ExceptionDec { name = name, tagName = tagName, payloadTy = Option.map doTy payloadTy }
-          | doDec (ExportValue exp) = ExportValue (doExp exp)
-          | doDec (ExportModule fields) = ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
           | doDec (ESImportDec { pure, specs, moduleName }) = ESImportDec { pure = pure, specs = List.map (fn (name, vid, ty) => (name, vid, doTy ty)) specs, moduleName = moduleName }
     in { doTy = doTy
        , doConBind = doConBind
@@ -309,6 +311,9 @@ and freeTyVarsInExp (bound : TypedSyntax.TyVarSet.set, PrimExp (primOp, tyargs, 
   | freeTyVarsInExp (bound, TyAppExp (exp, ty)) acc = freeTyVarsInExp (bound, exp) (freeTyVarsInTy (bound, ty) acc)
   | freeTyVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeTyVarsInTy (bound, payloadTy) (freeTyVarsInTy (bound, packageTy) (freeTyVarsInExp (bound, exp) acc))
   | freeTyVarsInExp (bound, BogusExp ty) acc = freeTyVarsInTy (bound, ty) acc
+  | freeTyVarsInExp (bound, ExitProgram) acc = acc
+  | freeTyVarsInExp (bound, ExportValue x) acc = freeTyVarsInExp (bound, x) acc
+  | freeTyVarsInExp (bound, ExportModule entities) acc = Vector.foldl (fn ((name, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc entities
 and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) acc = (bound, (case optTy of
                                                                          NONE => freeTyVarsInExp (bound, exp) acc
                                                                        | SOME ty => freeTyVarsInTy (bound, ty) (freeTyVarsInExp (bound, exp) acc)
@@ -333,8 +338,6 @@ and freeTyVarsInDec (bound, ValDec (vid, optTy, exp)) acc = (bound, (case optTy 
                                                                                          NONE => acc
                                                                                        | SOME payloadTy => freeTyVarsInTy (bound, payloadTy) acc
                                                                              )
-  | freeTyVarsInDec (bound, ExportValue exp) acc = (bound, freeTyVarsInExp (bound, exp) acc)
-  | freeTyVarsInDec (bound, ExportModule exports) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeTyVarsInExp (bound, exp) acc) acc exports)
   | freeTyVarsInDec (bound, ESImportDec { pure, specs, moduleName }) acc = (bound, List.foldl (fn ((_, _, ty), acc) => freeTyVarsInTy (bound, ty) acc) acc specs)
 and freeTyVarsInDecs (bound, decs) acc = List.foldl (fn (dec, (bound, acc)) => freeTyVarsInDec (bound, dec) acc) (bound, acc) decs
 
@@ -380,6 +383,9 @@ and freeVarsInExp (bound : TypedSyntax.VIdSet.set, PrimExp (primOp, tyargs, args
   | freeVarsInExp (bound, TyAppExp (exp, ty)) acc = freeVarsInExp (bound, exp) acc
   | freeVarsInExp (bound, PackExp { payloadTy, exp, packageTy }) acc = freeVarsInExp (bound, exp) acc
   | freeVarsInExp (bound, BogusExp ty) acc = acc
+  | freeVarsInExp (bound, ExitProgram) acc = acc
+  | freeVarsInExp (bound, ExportValue x) acc = freeVarsInExp (bound, x) acc
+  | freeVarsInExp (bound, ExportModule entities) acc = Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc entities
 and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (bound, vid), freeVarsInExp (bound, exp) acc)
   | freeVarsInDec (bound, RecValDec valbinds) acc = let val bound = List.foldl (fn ((vid, _, _), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound valbinds
                                                     in (bound, List.foldl (fn ((_, _, exp), acc) => freeVarsInExp (bound, exp) acc) acc valbinds)
@@ -388,8 +394,6 @@ and freeVarsInDec (bound, ValDec (vid, ty, exp)) acc = (TypedSyntax.VIdSet.add (
   | freeVarsInDec (bound, IgnoreDec exp) acc = (bound, freeVarsInExp (bound, exp) acc)
   | freeVarsInDec (bound, DatatypeDec datbinds) acc = (List.foldl (fn (DatBind (tyvars, tyname, conbinds), bound) => List.foldl (fn (ConBind (vid, optTy), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound conbinds) bound datbinds, acc)
   | freeVarsInDec (bound, ExceptionDec { name, tagName, payloadTy }) acc = (TypedSyntax.VIdSet.add (bound, tagName), acc)
-  | freeVarsInDec (bound, ExportValue exp) acc = (bound, freeVarsInExp (bound, exp) acc)
-  | freeVarsInDec (bound, ExportModule exps) acc = (bound, Vector.foldl (fn ((name, exp), acc) => freeVarsInExp (bound, exp) acc) acc exps)
   | freeVarsInDec (bound, ESImportDec { pure, specs, moduleName }) acc = let val bound = List.foldl (fn ((_, vid, _), bound) => TypedSyntax.VIdSet.add (bound, vid)) bound specs
                                                                          in (bound, acc)
                                                                          end
@@ -478,6 +482,9 @@ and print_Exp (PrimExp (primOp, tyargs, args)) = "PrimExp(" ^ print_PrimOp primO
   | print_Exp (TyAppExp(exp, ty)) = "TyAppExp(" ^ print_Exp exp ^ "," ^ print_Ty ty ^ ")"
   | print_Exp (PackExp { payloadTy, exp, packageTy }) = "PackExp{payloadTy=" ^ print_Ty payloadTy ^ ",exp=" ^ print_Exp exp ^ ",packageTy=" ^ print_Ty packageTy ^ "}"
   | print_Exp (BogusExp _) = "BogusExp"
+  | print_Exp ExitProgram = "ExitProgram"
+  | print_Exp (ExportValue _) = "ExportValue"
+  | print_Exp (ExportModule _) = "ExportModule"
 and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
                                                 SOME ty => "ValDec(" ^ print_VId vid ^ ",SOME " ^ print_Ty ty ^ "," ^ print_Exp exp ^ ")"
                                               | NONE => "ValDec(" ^ print_VId vid ^ ",NONE," ^ print_Exp exp ^ ")"
@@ -487,8 +494,6 @@ and print_Dec (ValDec (vid, optTy, exp)) = (case optTy of
   | print_Dec (IgnoreDec exp) = "IgnoreDec(" ^ print_Exp exp ^ ")"
   | print_Dec (DatatypeDec datbinds) = "DatatypeDec"
   | print_Dec (ExceptionDec _) = "ExceptionDec"
-  | print_Dec (ExportValue _) = "ExportValue"
-  | print_Dec (ExportModule _) = "ExportModule"
   | print_Dec (ESImportDec _) = "ESImportDec"
 val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
@@ -1620,8 +1625,8 @@ fun programToFDecs(ctx, env : Env, []) = (env, [])
 fun isAlphaNumName name = List.all (fn c => Char.isAlphaNum c orelse c = #"_") (String.explode name)
 fun addExport (ctx, tenv : Typing.Env, toFEnv : Env, decs)
     = case (Syntax.VIdMap.find (#valMap tenv, Syntax.MkVId "export"), Syntax.StrIdMap.find (#strMap tenv, Syntax.MkStrId "export")) of
-          (NONE, NONE) => (emitError (ctx, [], "No value to export was found."); decs)
-        | (SOME (_, _, longvid), NONE) => decs @ [ F.ExportValue (#1 (LongVarExp (ctx, toFEnv, [], longvid))) ]
+          (NONE, NONE) => (emitError (ctx, [], "No value to export was found."); F.LetExp (decs, F.ExitProgram))
+        | (SOME (_, _, longvid), NONE) => F.LetExp (decs, F.ExportValue (#1 (LongVarExp (ctx, toFEnv, [], longvid))))
         | (NONE, SOME ({ valMap, ... }, T.MkLongStrId (strid0, strids))) =>
           let val fields = Syntax.VIdMap.listItems (Syntax.VIdMap.mapPartiali (fn (vid, _) => let val name = Syntax.getVIdName vid
                                                                                               in if isAlphaNumName name then
@@ -1637,9 +1642,9 @@ fun addExport (ctx, tenv : Typing.Env, toFEnv : Env, decs)
                                                                                                      NONE
                                                                                               end
                                                                               ) valMap)
-          in decs @ [ F.ExportModule (Vector.fromList fields) ]
+          in F.LetExp (decs, F.ExportModule (Vector.fromList fields))
           end
-        | (SOME _, SOME _) => (emitError (ctx, [], "The value to export is ambiguous."); decs)
+        | (SOME _, SOME _) => (emitError (ctx, [], "The value to export is ambiguous."); F.LetExp (decs, F.ExitProgram))
 
 val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                        , equalityForTyNameMap = TypedSyntax.TyNameMap.empty

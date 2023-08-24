@@ -69,6 +69,9 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
                                     end
                      end
                    | F.BogusExp _ => exp0
+                   | F.ExitProgram => exp0
+                   | F.ExportValue exp => F.ExportValue (doExp exp)
+                   | F.ExportModule entities => F.ExportModule (Vector.map (fn (name, exp) => (name, doExp exp)) entities)
                 )
           and doDec (F.ValDec (vid, optTy, exp)) = F.ValDec (vid, optTy, doExp exp)
             | doDec (F.RecValDec valbinds) = F.RecValDec (List.map (fn (v, ty, exp) => (v, ty, doExp exp)) valbinds)
@@ -76,8 +79,6 @@ fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec
             | doDec (F.IgnoreDec exp) = F.IgnoreDec (doExp exp)
             | doDec (dec as F.DatatypeDec datbinds) = dec
             | doDec (dec as F.ExceptionDec { name, tagName, payloadTy }) = dec
-            | doDec (F.ExportValue exp) = F.ExportValue (doExp exp)
-            | doDec (F.ExportModule fields) = F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)
             | doDec (dec as F.ESImportDec _) = dec
           and genMatcher exp _ (F.WildcardPat _) : F.Exp = F.VarExp InitialEnv.VId_true (* always match *)
             | genMatcher exp ty (F.SConPat { sourceSpan, scon, equality, cookedValue }) = F.AppExp (equality, F.TupleExp [exp, cookedValue])
@@ -235,6 +236,9 @@ fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.m
   | doExp (F.TyAppExp (exp, ty)) = F.TyAppExp (doExp exp, ty)
   | doExp (F.PackExp { payloadTy, exp, packageTy }) = F.PackExp { payloadTy = payloadTy, exp = doExp exp, packageTy = packageTy }
   | doExp (e as F.BogusExp _) = e
+  | doExp (e as F.ExitProgram) = e
+  | doExp (F.ExportValue exp) = F.ExportValue (doExp exp)
+  | doExp (F.ExportModule entities) = F.ExportModule (Vector.map (fn (name, exp) => (name, doExp exp)) entities)
 and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.RecValDec valbinds)
     = let val bound = List.foldl (fn ((vid, ty, exp), set) => TypedSyntax.VIdSet.add (set, vid)) TypedSyntax.VIdSet.empty valbinds
@@ -261,8 +265,6 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
   | doDec (F.IgnoreDec exp) = [F.IgnoreDec (doExp exp)]
   | doDec (F.DatatypeDec datbinds) = [F.DatatypeDec datbinds]
   | doDec (F.ExceptionDec names) = [F.ExceptionDec names]
-  | doDec (F.ExportValue exp) = [F.ExportValue (doExp exp)]
-  | doDec (F.ExportModule fields) = [F.ExportModule (Vector.map (fn (label, exp) => (label, doExp exp)) fields)]
   | doDec (dec as F.ESImportDec _) = [dec]
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
@@ -308,6 +310,9 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable (F.TyAppExp (exp, ty)) = isDiscardable exp
   | isDiscardable (F.PackExp { payloadTy, exp, packageTy }) = isDiscardable exp
   | isDiscardable (F.BogusExp _) = false
+  | isDiscardable F.ExitProgram = false
+  | isDiscardable (F.ExportValue _) = false
+  | isDiscardable (F.ExportModule _) = false
 (*!
 val doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set
 and doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp
@@ -377,6 +382,13 @@ and doExp (F.PrimExp (primOp, tyargs, args) : F.Exp) acc : TypedSyntax.VIdSet.se
                                                           in (used, F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy })
                                                           end
   | doExp (exp as F.BogusExp _) acc = (acc, exp)
+  | doExp (exp as F.ExitProgram) acc = (acc, exp)
+  | doExp (F.ExportValue exp) acc = let val (used, exp) = doExp exp acc
+                                    in (used, F.ExportValue exp)
+                                    end
+  | doExp (F.ExportModule entities) acc = let val (acc, entities') = Vector.foldr (fn ((name, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (name, exp) :: xs) end) (acc, []) entities
+                                          in (acc, F.ExportModule (Vector.fromList entities'))
+                                          end
 and doIgnoredExpAsExp exp acc = let val (used, exps) = doIgnoredExp exp acc
                                 in (used, F.LetExp (List.map F.IgnoreDec exps, F.RecordExp []))
                                 end
@@ -443,6 +455,13 @@ and doIgnoredExp (exp as F.PrimExp (primOp, tyargs, args)) acc
                                                                       | exp => (used, [F.PackExp { payloadTy = payloadTy, exp = exp, packageTy = packageTy }])
                                                                  end
   | doIgnoredExp (exp as F.BogusExp _) acc = (acc, [exp])
+  | doIgnoredExp (exp as F.ExitProgram) acc = (acc, [exp])
+  | doIgnoredExp (F.ExportValue exp) acc = let val (used, exp) = doExp exp acc
+                                           in (used, [F.ExportValue exp])
+                                           end
+  | doIgnoredExp (F.ExportModule entities) acc = let val (acc, entities') = Vector.foldr (fn ((name, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (name, exp) :: xs) end) (acc, []) entities
+                                                 in (acc, [F.ExportModule (Vector.fromList entities')])
+                                                 end
 and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyntax.VIdSet.set * F.Dec list
     = if not (TypedSyntax.VIdSet.member (used, vid)) then
           if isDiscardable exp then
@@ -487,12 +506,6 @@ and doDec (used : TypedSyntax.VIdSet.set, F.ValDec (vid, optTy, exp)) : TypedSyn
                                                                            (used, [dec])
                                                                        else
                                                                            (used, [])
-  | doDec (used, F.ExportValue exp) = let val (used', exp) = doExp exp used
-                                      in (used', [F.ExportValue exp])
-                                      end
-  | doDec (used, F.ExportModule fields) = let val (acc, fields') = Vector.foldr (fn ((label, exp), (acc, xs)) => let val (acc, exp) = doExp exp acc in (acc, (label, exp) :: xs) end) (used, []) fields
-                                          in (acc, [F.ExportModule (Vector.fromList fields')])
-                                          end
   | doDec (used, F.ESImportDec { pure, specs, moduleName })
     = let val specs = List.filter (fn (name, vid, ty) => TypedSyntax.VIdSet.member (used, vid)) specs
       in (used, if pure andalso List.null specs then [] else [F.ESImportDec { pure = pure, specs = specs, moduleName = moduleName }])
@@ -507,7 +520,5 @@ and definedInDec (F.ValDec (vid, _, _)) acc = TypedSyntax.VIdSet.add (acc, vid)
   | definedInDec (F.IgnoreDec _) acc = acc
   | definedInDec (F.DatatypeDec datbinds) acc = List.foldl (fn (F.DatBind (tyvars, tycon, conbinds), s) => List.foldl (fn (F.ConBind (vid, _), s) => TypedSyntax.VIdSet.add (s, vid)) s conbinds) acc datbinds
   | definedInDec (F.ExceptionDec { name = _, tagName, payloadTy = _ }) acc = TypedSyntax.VIdSet.add (acc, tagName)
-  | definedInDec (F.ExportValue _) acc = acc (* should not occur *)
-  | definedInDec (F.ExportModule _) acc = acc (* should not occur *)
   | definedInDec (F.ESImportDec { pure, specs, moduleName }) acc = List.foldl (fn ((_, vid, _), acc) => TypedSyntax.VIdSet.add (acc, vid)) acc specs
 end; (* structure DeadCodeElimination *)
