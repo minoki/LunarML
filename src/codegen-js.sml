@@ -188,10 +188,11 @@ fun LabelToObjectKey (Syntax.NumericLabel n) = JsSyntax.IntKey (n - 1)
 
 datatype purity = PURE | DISCARDABLE | IMPURE
 
-fun genSym (ctx : Context) = let val n = !(#nextJsId ctx)
-                                 val _ = #nextJsId ctx := n + 1
-                             in TypedSyntax.MkVId ("tmp", n)
-                             end
+fun genSymNamed (ctx : Context, name) = let val n = !(#nextJsId ctx)
+                                            val _ = #nextJsId ctx := n + 1
+                                        in TypedSyntax.MkVId (name, n)
+                                        end
+fun genSym ctx = genSymNamed (ctx, "tmp")
 fun genExnContSym (ctx : Context) = let val n = !(#nextJsId ctx)
                                         val _ = #nextJsId ctx := n + 1
                                     in CSyntax.CVar.fromInt n
@@ -811,6 +812,27 @@ fun doProgramDirect ctx cont cexp
                     , subst = TypedSyntax.VIdMap.empty
                     }
       in vector [J.BlockStat (SOME label, vector (doCExp ctx env cexp))]
+      end
+fun doProgramDirectDefaultExport ctx cont cexp
+    = let val label = CVarToJs cont
+          val varName = genSymNamed (ctx, "export")
+          val item = J.UserDefinedId varName
+          val env = { continuations = C.CVarMap.singleton (cont, BREAK_TO { label = label, which = NONE, params = [SOME item] })
+                    , subst = TypedSyntax.VIdMap.empty
+                    }
+      in vector [J.LetStat (vector [(varName, NONE)]), J.BlockStat (SOME label, vector (doCExp ctx env cexp)), J.DefaultExportStat (J.VarExp item)]
+      end
+fun doProgramDirectNamedExport ctx cont cexp entities
+    = let val label = CVarToJs cont
+          val entities' = Vector.map (fn name => (genSymNamed (ctx, name), name)) entities
+          val letStat = if Vector.length entities' = 0 then
+                            []
+                        else
+                            [J.LetStat (Vector.map (fn (v, _) => (v, NONE)) entities')]
+          val env = { continuations = C.CVarMap.singleton (cont, BREAK_TO { label = label, which = NONE, params = Vector.foldr (op ::) [] (Vector.map (fn (v, _) => SOME (J.UserDefinedId v)) entities') })
+                    , subst = TypedSyntax.VIdMap.empty
+                    }
+      in vector (letStat @ [J.BlockStat (SOME label, vector (doCExp ctx env cexp)), J.NamedExportStat (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')])
       end
 fun doProgramCPS ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)

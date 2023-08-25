@@ -102,7 +102,7 @@ fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                 else
                                     cexp
                              end
-fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName cont nextId cexp
+fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName cont nextId cexp _
     = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -134,7 +134,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName cont nextId cexp
+  | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName cont nextId cexp _
     = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -163,7 +163,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp
+  | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp export
     = let val timer = Timer.startCPUTimer ()
           val contEscapeMap = CpsAnalyze.contEscape (cont, cexp)
           val base = OS.Path.base fileName
@@ -172,9 +172,12 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                             | CodeGenJs.CPS => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
           val mlinit = readFile mlinit_js
           val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap, style = style, imports = ref [] }
-          val js = case style of
-                       CodeGenJs.DIRECT_STYLE => CodeGenJs.doProgramDirect jsctx cont cexp
-                     | CodeGenJs.CPS => CodeGenJs.doProgramCPS jsctx cont cexp
+          val js = case (style, export) of
+                       (CodeGenJs.DIRECT_STYLE, ToFSyntax.NO_EXPORT) => CodeGenJs.doProgramDirect jsctx cont cexp
+                     | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_VALUE) => CodeGenJs.doProgramDirectDefaultExport jsctx cont cexp
+                     | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_NAMED names) => CodeGenJs.doProgramDirectNamedExport jsctx cont cexp names
+                     | (CodeGenJs.CPS, ToFSyntax.NO_EXPORT) => CodeGenJs.doProgramCPS jsctx cont cexp
+                     | (CodeGenJs.CPS, _) => raise Fail "CPS mode does not currently support export"
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram { nextVId = nextId } js
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
@@ -244,9 +247,9 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                                val messageHandler = Message.newHandler (errorCounter, printMessage)
                            in { nextVId = #nextVId (#driverContext ctx), nextTyVar = #nextTyVar (#driverContext ctx), targetInfo = targetInfo, messageHandler = messageHandler }
                            end
-          val fexp = case Option.getOpt (#outputMode opts, ExecutableMode) of
-                          ExecutableMode => FSyntax.LetExp (fdecs, FSyntax.ExitProgram)
-                        | LibraryMode => ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
+          val (fexp, export) = case Option.getOpt (#outputMode opts, ExecutableMode) of
+                                   ExecutableMode => (FSyntax.LetExp (fdecs, FSyntax.ExitProgram), ToFSyntax.NO_EXPORT)
+                                 | LibraryMode => ToFSyntax.addExport (toFContext, #typing env, toFEnv, fdecs)
           val frontTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_INITIAL then
                        print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
@@ -270,7 +273,12 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                          val _ = nextId := n + 1
                      in CSyntax.CVar.fromInt n
                      end
-          val cexp = CpsTransform.transformT ({ targetInfo = targetInfo, nextVId = nextId }, CpsTransform.initialEnv) fexp ([], cont)
+          val exportAsRecord = case #backend opts of
+                                   BACKEND_LUA _ => true
+                                 | BACKEND_LUAJIT => true
+                                 | BACKEND_JS CodeGenJs.DIRECT_STYLE => false
+                                 | BACKEND_JS CodeGenJs.CPS => true
+          val cexp = CpsTransform.transformT ({ targetInfo = targetInfo, nextVId = nextId, exportAsRecord = exportAsRecord }, CpsTransform.initialEnv) fexp ([], cont)
           val cpsTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
                        print ("[TIME] CPS: " ^ LargeInt.toString (cpsTime - optTime) ^ " us\n")
@@ -288,7 +296,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                        raise Message.Abort
                    else
                        ()
-      in emit opts targetInfo fileName cont nextId cexp
+      in emit opts targetInfo fileName cont nextId cexp export
       end handle Message.Abort => OS.Process.exit OS.Process.failure
                | DesugarPatternMatches.DesugarError ([], message) =>
                  ( print ("internal error: " ^ message ^ "\n")

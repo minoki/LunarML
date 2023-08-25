@@ -240,6 +240,7 @@ in
 
 type Context = { targetInfo : TargetInfo.target_info
                , nextVId : int ref
+               , exportAsRecord : bool
                }
 
 fun genContSym (ctx : Context) : CSyntax.CVar
@@ -531,12 +532,15 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                   (revDecs, [])
                                                                   (Vector.foldr (op ::) [] entities)
                                                                   (fn (revDecs, items) =>
-                                                                      let val result = genSym ctx (* "export"? *)
-                                                                          val dec = C.ValDec { exp = C.Record (List.foldl (fn ((name, v), m) => Syntax.LabelMap.insert (m, Syntax.IdentifierLabel name, v)) Syntax.LabelMap.empty items)
-                                                                                             , result = SOME result
-                                                                                             }
-                                                                      in prependRevDecs (dec :: revDecs, C.AppCont { applied = k, args = [C.Var result] })
-                                                                      end
+                                                                      if #exportAsRecord ctx then
+                                                                          let val result = genSym ctx (* "export"? *)
+                                                                              val dec = C.ValDec { exp = C.Record (List.foldl (fn ((name, v), m) => Syntax.LabelMap.insert (m, Syntax.IdentifierLabel name, v)) Syntax.LabelMap.empty items)
+                                                                                                 , result = SOME result
+                                                                                                 }
+                                                                          in prependRevDecs (dec :: revDecs, C.AppCont { applied = k, args = [C.Var result] })
+                                                                          end
+                                                                      else
+                                                                          prependRevDecs (revDecs, C.AppCont { applied = k, args = List.foldl (fn ((name, v), acc) => v :: acc) [] items })
                                                                   )
                                          | META _ => raise Fail "unexpected META"
                                       )

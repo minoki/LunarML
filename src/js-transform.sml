@@ -13,6 +13,8 @@ fun collectLetConstStat (J.LetStat vars) acc = Vector.foldl (fn ((vid, _), acc) 
   | collectLetConstStat (J.SwitchStat (_, cases)) acc = acc
   | collectLetConstStat (J.BreakStat _) acc = acc
   | collectLetConstStat (J.ContinueStat _) acc = acc
+  | collectLetConstStat (J.DefaultExportStat _) acc = acc
+  | collectLetConstStat (J.NamedExportStat _) acc = acc
 and collectLetConstBlock stats acc = Vector.foldl (fn (stat, acc) => collectLetConstStat stat acc) acc stats
 
 fun freeVarsExp (_, J.ConstExp _) acc = acc
@@ -49,6 +51,12 @@ and freeVarsStat (bound, J.LetStat vars) acc = Vector.foldl (fn ((vid, NONE), ac
   | freeVarsStat (bound, J.SwitchStat (exp, cases)) acc = List.foldl (fn ((c, block), acc) => freeVarsBlock (bound, block) acc) (freeVarsExp (bound, exp) acc) cases
   | freeVarsStat (bound, J.BreakStat _) acc = acc
   | freeVarsStat (bound, J.ContinueStat _) acc = acc
+  | freeVarsStat (bound, J.DefaultExportStat exp) acc = freeVarsExp (bound, exp) acc
+  | freeVarsStat (bound, J.NamedExportStat entities) acc = Vector.foldl (fn ((x, _), acc) => if J.IdSet.member (bound, x) then
+                                                                                                 acc
+                                                                                             else
+                                                                                                 J.IdSet.add (acc, x)
+                                                                        ) acc entities
 and freeVarsBlock (bound, stats) acc = let val bound' = collectLetConstBlock stats bound
                                        in Vector.foldl (fn (stat, acc) => freeVarsStat (bound', stat) acc) acc stats
                                        end
@@ -174,6 +182,10 @@ and goStat (ctx, bound, depth, J.LetStat vars) = let val (decs, vars) = Vector.f
                                                             end
   | goStat (ctx, bound, depth, s as J.BreakStat _) = ([], s)
   | goStat (ctx, bound, depth, s as J.ContinueStat _) = ([], s)
+  | goStat (ctx, bound, depth, J.DefaultExportStat exp) = let val (decs, exp) = goExp (ctx, bound, depth, exp)
+                                                          in (decs, J.DefaultExportStat exp)
+                                                          end
+  | goStat (ctx, bound, depth, s as J.NamedExportStat _) = ([], s)
 and goBlock (ctx, bound, depth, stats) = let val bound' = collectLetConstBlock stats bound
                                              val (decs, ys) = Vector.foldr (fn (stat, (decs, ys)) =>
                                                                                let val (decs', stat') = goStat (ctx, bound', depth, stat)

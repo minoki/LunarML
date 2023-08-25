@@ -81,6 +81,8 @@ datatype Exp = ConstExp of JsConst
               | SwitchStat of Exp * (JsConst * Block) list (* switch (e) { case c0: { ... } case c1: { ... } } *)
               | BreakStat of Id option
               | ContinueStat of Id option
+              | DefaultExportStat of Exp (* export default <expression> *)
+              | NamedExportStat of (Id * string) vector (* export { x1 as name1, x2 as name2, ... } *)
 withtype Block = Stat vector
 
 val UndefinedExp = VarExp (PredefinedId "undefined")
@@ -393,6 +395,17 @@ and doStat (S.LetStat variables) = (fn rest => Indent :: Fragment "let " :: comm
   | doStat (S.BreakStat (SOME label)) = (fn rest => Indent :: Fragment "break " :: Fragment (idToJs label) :: Fragment ";" :: LineTerminator :: rest)
   | doStat (S.ContinueStat NONE) = (fn rest => Indent :: Fragment "continue;" :: LineTerminator :: rest)
   | doStat (S.ContinueStat (SOME label)) = (fn rest => Indent :: Fragment "continue " :: Fragment (idToJs label) :: Fragment ";" :: LineTerminator :: rest)
+  | doStat (S.DefaultExportStat exp) = (fn rest => let val rest' = Fragment ";" :: LineTerminator :: rest
+                                                       val fragments = doExp (Precedence.AssignmentExpression, exp) rest'
+                                                       val needParen = case fragments of
+                                                                           Fragment "function" :: _ => true
+                                                                         | Fragment "async function" :: _ => true
+                                                                         | Fragment "class" :: _ => true
+                                                                         | _ => false
+                                                   in Indent :: Fragment "export default " :: (if needParen then paren true (doExp (Precedence.AssignmentExpression, exp)) rest' else fragments)
+                                                   end
+                                       )
+  | doStat (S.NamedExportStat entities) = (fn rest => Indent :: Fragment "export {" :: commaSepV (Vector.map (fn (v, name) => fn rest => Fragment (idToJs v) :: Fragment " as " :: Fragment name :: rest) entities) (Fragment "};" :: LineTerminator :: rest))
 and doBlock stats = (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc) rest stats)
 
 fun doProgram stats = buildProgram (doBlock stats [])

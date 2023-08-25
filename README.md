@@ -43,7 +43,7 @@ Targets:
 Output type:
 
 * `--exe` (default): Produces Lua/JavaScript program.
-* `--lib`: Produces a Lua module.
+* `--lib`: Produces a Lua/JavaScript module.
 
 ## Features
 
