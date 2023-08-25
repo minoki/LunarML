@@ -177,7 +177,8 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                      | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_VALUE) => CodeGenJs.doProgramDirectDefaultExport jsctx cont cexp
                      | (CodeGenJs.DIRECT_STYLE, ToFSyntax.EXPORT_NAMED names) => CodeGenJs.doProgramDirectNamedExport jsctx cont cexp names
                      | (CodeGenJs.CPS, ToFSyntax.NO_EXPORT) => CodeGenJs.doProgramCPS jsctx cont cexp
-                     | (CodeGenJs.CPS, _) => raise Fail "CPS mode does not currently support export"
+                     | (CodeGenJs.CPS, ToFSyntax.EXPORT_VALUE) => CodeGenJs.doProgramCPSDefaultExport jsctx cont cexp
+                     | (CodeGenJs.CPS, ToFSyntax.EXPORT_NAMED names) => CodeGenJs.doProgramCPSNamedExport jsctx cont cexp names
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram { nextVId = nextId } js
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))

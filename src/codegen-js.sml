@@ -838,6 +838,24 @@ fun doProgramCPS ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
                     , subst = TypedSyntax.VIdMap.empty
                     }
-      in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp))]))]
+      in vector [J.ExpStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp)), J.ConstExp J.True]))]
+      end
+fun doProgramCPSDefaultExport ctx cont cexp
+    = let val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
+                    , subst = TypedSyntax.VIdMap.empty
+                    }
+      in vector [J.DefaultExportStat (J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp)), J.ConstExp J.False]))]
+      end
+fun doProgramCPSNamedExport ctx cont cexp entities
+    = let val varName = genSymNamed (ctx, "export")
+          val entities' = Vector.map (fn name => (genSymNamed (ctx, name), name)) entities
+          val env = { continuations = C.CVarMap.singleton (cont, TAILCALL cont)
+                    , subst = TypedSyntax.VIdMap.empty
+                    }
+          val unpack = if Vector.length entities' > 0 then
+                           [J.ConstStat (Vector.map (fn (v, name) => (v, J.IndexExp (J.VarExp (J.UserDefinedId varName), J.ConstExp (J.asciiStringAsWide name)))) entities')]
+                       else
+                           []
+      in vector (J.ConstStat (vector [(varName, J.CallExp (J.VarExp (J.PredefinedId "_run"), vector [J.FunctionExp (vector [CVarToJs cont], vector (doCExp ctx env cexp)), J.ConstExp J.False]))]) :: unpack @ [J.NamedExportStat (Vector.map (fn (v, name) => (J.UserDefinedId v, name)) entities')])
       end
 end;

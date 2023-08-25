@@ -33,3 +33,5 @@ The interface is based on the following paper:
 JS-CPS backend specific: `topLevel` is a prompt that is implicitly pushed by the runtime. Some runtime functions, including `TextIO.print`, need it to work.
 
 `JavaScript.callback` implicitly pushes `topLevel`, but `JavaScript.function` does not.
+
+Library mode (`--lib`) does not push `topLevel`.
