@@ -177,15 +177,24 @@ type Env = { continuations : cont_type C.CVarMap.map
 
 datatype purity = PURE | DISCARDABLE | IMPURE
 
-fun applyCont (ctx : Context, env : Env, cont : C.CVar, args : L.Exp list)
+fun applyCont (ctx : Context, env : Env, defaultCont : C.CVar option, cont : C.CVar, args : L.Exp list)
     = case C.CVarMap.find (#continuations env, cont) of
-          SOME (GOTO { label, params = [] }) => [L.GotoStat label]
+          SOME (GOTO { label, params = [] }) => if defaultCont = SOME cont then
+                                                    []
+                                                else
+                                                    [L.GotoStat label]
         | SOME (GOTO { label, params }) => let val (params', args') = ListPair.foldrEq (fn (SOME p, a, (pp, aa)) => (p :: pp, a :: aa)
                                                                                        | (NONE, _, acc) => acc
                                                                                        ) ([], []) (params, args)
-                                           in L.MultiAssignStat (params', args') @ [L.GotoStat label]
+                                           in if defaultCont = SOME cont then
+                                                  L.MultiAssignStat (params', args')
+                                              else
+                                                  L.MultiAssignStat (params', args') @ [L.GotoStat label]
                                            end
-        | SOME RETURN => [L.ReturnStat (vector args)]
+        | SOME RETURN => if List.null args andalso defaultCont = SOME cont then
+                             []
+                         else
+                             [L.ReturnStat (vector args)]
         | NONE => raise CodeGenError "undefined continuation"
 
 fun doLabel cname = L.UserDefinedId (TypedSyntax.MkVId ("cont", C.CVar.toInt cname))
@@ -239,19 +248,22 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
   | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
-(*! val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list *)
-fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
+(*!
+val doDecs : Context * Env * C.CVar option * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list
+and doCExp : Context * Env * C.CVar option * C.CExp -> L.Stat list
+ *)
+fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
     = (case VectorSlice.getItem decs of
-           NONE => List.revAppend (revStats, doCExp ctx env finalExp)
+           NONE => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))
          | SOME (dec, decs) =>
-           let fun pure (NONE, exp) = doDecs (ctx, env, decs, finalExp, revStats)
-                 | pure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, L.ConstStat (result, exp) :: revStats)
-               fun discardable (NONE, exp) = doDecs (ctx, env, decs, finalExp, revStats)
-                 | discardable (SOME result, exp) = doDecs (ctx, env, decs, finalExp, L.ConstStat (result, exp) :: revStats)
-               fun impure (NONE, exp) = doDecs (ctx, env, decs, finalExp, List.revAppend (ExpStat exp, revStats))
-                 | impure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, L.ConstStat (result, exp) :: revStats)
-               fun action (NONE, stmt) = doDecs (ctx, env, decs, finalExp, stmt :: revStats)
-                 | action (SOME result, stmt) = doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.ConstExp L.Nil) :: stmt :: revStats)
+           let fun pure (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
+                 | pure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
+               fun discardable (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
+                 | discardable (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
+               fun impure (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (ExpStat exp, revStats))
+                 | impure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
+               fun action (NONE, stmt) = doDecs (ctx, env, defaultCont, decs, finalExp, stmt :: revStats)
+                 | action (SOME result, stmt) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.ConstExp L.Nil) :: stmt :: revStats)
            in case dec of
                   C.ValDec { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result } =>
                   let val exp = if Numeric.Notation.isNegative x then
@@ -666,8 +678,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Lua_call => doBinary (fn (f, args) =>
                                                              let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
                                                              in case result of
-                                                                    SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, arg)])) :: revStats)
-                                                                  | NONE => doDecs (ctx, env, decs, finalExp, L.CallStat (f, arg) :: revStats)
+                                                                    SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, arg)])) :: revStats)
+                                                                  | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (f, arg) :: revStats)
                                                              end
                                                          )
                        | Primitives.Lua_call1 => doBinary (fn (f, args) =>
@@ -685,7 +697,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                                                     , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
                                                                                                     ]
                                                                                                  end
-                                                              in doDecs (ctx, env, decs, finalExp, List.revAppend (stmts, revStats))
+                                                              in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                               end
                                                           )
                        | Primitives.Lua_call3 => doBinary (fn (f, args) =>
@@ -699,7 +711,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                                                     , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
                                                                                                     ]
                                                                                                  end
-                                                              in doDecs (ctx, env, decs, finalExp, List.revAppend (stmts, revStats))
+                                                              in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                               end
                                                           )
                        | Primitives.Lua_method => doTernary (fn (obj, rawName, args) =>
@@ -713,13 +725,13 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                 in case name' of
                                                                        SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
                                                                                     in case result of
-                                                                                           SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (obj, name, arg)])) :: revStats)
-                                                                                         | NONE => doDecs (ctx, env, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
+                                                                                           SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (obj, name, arg)])) :: revStats)
+                                                                                         | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
                                                                                     end
                                                                      | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
                                                                                in case result of
-                                                                                      SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (L.IndexExp (obj, rawName), arg)])) :: revStats)
-                                                                                    | NONE => doDecs (ctx, env, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
+                                                                                      SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (L.IndexExp (obj, rawName), arg)])) :: revStats)
+                                                                                    | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
                                                                                end
                                                                 end
                                                             )
@@ -743,18 +755,18 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.LuaCallOp, tyargs = _, args = f :: args }, result } =>
                   (case result of
-                       NONE => doDecs (ctx, env, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
-                     | SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])) :: revStats)
+                       NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
+                     | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])) :: revStats)
                   )
                 | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall1Op, tyargs = _, args = f :: args }, result } =>
                   (case result of
-                       NONE => doDecs (ctx, env, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
-                     | SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: revStats)
+                       NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
+                     | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: revStats)
                   )
                 | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethodOp name, tyargs = _, args = obj :: args }, result } =>
                   (case result of
-                       NONE => doDecs (ctx, env, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
-                     | SOME result => doDecs (ctx, env, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])) :: revStats)
+                       NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
+                     | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])) :: revStats)
                   )
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result } =>
                   raise CodeGenError "JsCallOp is not supported on Lua backend"
@@ -778,25 +790,25 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                   end
                 | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
                   let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
-                  in pure (result, L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp ctx env' body)))
+                  in pure (result, L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp (ctx, env', SOME contParam, body))))
                   end
                 | C.RecDec defs =>
                   let val (decs', assignments) = List.foldr (fn ((name, contParam, params, body), (decs, assignments)) =>
                                                                 let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
                                                                     val dec = (name, L.LATE_INIT)
-                                                                    val assignment = L.AssignStat ([L.VarExp (VIdToLua (ctx, name))], [L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp ctx env' body))])
+                                                                    val assignment = L.AssignStat ([L.VarExp (VIdToLua (ctx, name))], [L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp (ctx, env', SOME contParam, body)))])
                                                                 in (dec :: decs, assignment :: assignments)
                                                                 end
                                                             ) ([], []) defs
-                  in doDecs (ctx, env, decs, finalExp, List.revAppend (assignments, L.LocalStat (decs', []) :: revStats))
+                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (assignments, L.LocalStat (decs', []) :: revStats))
                   end
                 | C.ContDec { name, params, body } =>
                   (case (VectorSlice.isEmpty decs, finalExp) of
                        (true, C.App { applied, cont, args }) => if cont = name then
                                                                     List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
-                                                                                              :: doCExp ctx env body)
+                                                                                              :: doCExp (ctx, env, defaultCont, body))
                                                                 else
-                                                                    List.revAppend (revStats, doCExp ctx env finalExp) (* dead continuation elimination *)
+                                                                    List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp)) (* dead continuation elimination *)
                      | _ => let val label = doLabel name
                                 val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (Option.map (fn p => VIdToLua (ctx, p))) params })
                                            }
@@ -806,7 +818,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                else
                                                    [L.LocalStat (params', [])]
                                             end
-                            in List.revAppend (revStats, decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', decs, finalExp, []) } @ L.LabelStat label :: doCExp ctx env body) (* enclose with do statement? *)
+                            in List.revAppend (revStats, decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', SOME name, decs, finalExp, []) } @ L.LabelStat label :: doCExp (ctx, env, defaultCont, body)) (* enclose with do statement? *)
                             end
                   )
                 | C.RecContDec defs =>
@@ -848,7 +860,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                 [L.LocalStat (List.map (fn v => (v, L.MUTABLE)) commonParams, [])]
                                                             else
                                                                 []
-                                            in decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', decs, finalExp, []) }
+                                            in decs' @ L.makeDoStat { loopLike = false, body = doDecs (ctx, env', NONE, decs, finalExp, []) }
                                             end
                       val conts = List.map (fn (name, params, body) =>
                                                let val dec = let val params' = List.mapPartial (Option.map (fn v => (v, L.CONST))) params
@@ -857,7 +869,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                                                                 else
                                                                     [L.LocalStat (params', List.mapPartial (Option.map (L.VarExp o L.UserDefinedId)) (mapCommonParams params))]
                                                              end
-                                               in L.LabelStat (doLabel name) :: L.makeDoStat { loopLike = true, body = dec @ doCExp ctx env' body }
+                                               in L.LabelStat (doLabel name) :: L.makeDoStat { loopLike = true, body = dec @ doCExp (ctx, env', NONE, body) }
                                                end
                                            ) defs
                   in List.revAppend (revStats, initAndRest @ List.concat conts)
@@ -865,9 +877,9 @@ fun doDecs (ctx, env, decs, finalExp, revStats : L.Stat list)
                 | C.ESImportDec _ => raise CodeGenError "_esImport is not supported by Lua backend"
            end
       )
-and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
-    = doDecs (ctx, env, VectorSlice.full decs, cont, [])
-  | doCExp ctx env (C.App { applied, cont, args })
+and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs, cont })
+    = doDecs (ctx, env, defaultCont, VectorSlice.full decs, cont, [])
+  | doCExp (ctx, env, defaultCont, C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO { label, params }) =>
            let val callAndAssign = if List.exists Option.isSome params then
@@ -884,8 +896,8 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
          | SOME RETURN => [L.ReturnStat (vector [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])] (* tail call *)
          | NONE => raise CodeGenError "undefined continuation"
       )
-  | doCExp ctx env (C.AppCont { applied, args }) = applyCont (ctx, env, applied, List.map (doValue ctx) args)
-  | doCExp ctx env (C.If { cond, thenCont, elseCont })
+  | doCExp (ctx, env, defaultCont, C.AppCont { applied, args }) = applyCont (ctx, env, defaultCont, applied, List.map (doValue ctx) args)
+  | doCExp (ctx, env, defaultCont, C.If { cond, thenCont, elseCont })
     = let fun containsNestedBlock (C.Let { decs, cont }) = Vector.exists containsNestedBlockDec decs orelse containsNestedBlock cont
             | containsNestedBlock (C.App _) = false
             | containsNestedBlock (C.AppCont _) = false
@@ -901,37 +913,37 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
              let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
              in if containsNestedBlock elseCont then
                     let val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
-                    in L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont } @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+                    in L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp (ctx, env, NONE, thenCont) } @ L.LabelStat elseLabel :: doCExp (ctx, env, defaultCont, elseCont)
                     end
                 else
-                    L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector (doCExp ctx env elseCont)) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont }
+                    L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector (doCExp (ctx, env, NONE, elseCont))) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp (ctx, env, defaultCont, thenCont) }
              end
          else if containsNestedBlock elseCont then
-             L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont
+             L.IfStat (doValue ctx cond, vector (doCExp (ctx, env, NONE, thenCont)), vector []) :: doCExp (ctx, env, defaultCont, elseCont)
          else
-             [L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector (doCExp ctx env elseCont))]
+             [L.IfStat (doValue ctx cond, vector (doCExp (ctx, env, defaultCont, thenCont)), vector (doCExp (ctx, env, defaultCont, elseCont)))]
       end
-  | doCExp ctx env (C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
+  | doCExp (ctx, env, defaultCont, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
     = let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, RETURN) }
           val status = genSymWithName (ctx, "status")
           val resultOrError = e
-          val functionExp = L.FunctionExp (vector [], vector (doCExp ctx env' body))
+          val functionExp = L.FunctionExp (vector [], vector (doCExp (ctx, env', NONE, body)))
       in [ L.LocalStat ([(status, L.CONST), (resultOrError, L.CONST)], [L.CallExp (L.VarExp (L.PredefinedId "_handle"), vector [functionExp])])
          , L.IfStat ( L.UnaryExp (L.NOT, L.VarExp (L.UserDefinedId status))
-                    , vector (doCExp ctx env h)
-                    , vector (applyCont (ctx, env, successfulExitOut, [L.VarExp (L.UserDefinedId e)]))
+                    , vector (doCExp (ctx, env, defaultCont, h))
+                    , vector (applyCont (ctx, env, defaultCont, successfulExitOut, [L.VarExp (L.UserDefinedId e)]))
                     )
          ]
       end
-  | doCExp ctx env C.Unreachable = []
+  | doCExp (ctx, env, defaultCont, C.Unreachable) = []
 
 fun doProgram ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }
-      in vector (doCExp ctx env cexp)
+      in vector (doCExp (ctx, env, SOME cont, cexp))
       end
 fun doProgramWithContinuations ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }
-          val func = L.FunctionExp (vector [], vector (doCExp ctx env cexp))
+          val func = L.FunctionExp (vector [], vector (doCExp (ctx, env, SOME cont, cexp)))
       in vector [L.ReturnStat (vector [L.CallExp (L.VarExp (L.PredefinedId "_run"), vector [func])])]
       end
 end;
