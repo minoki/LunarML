@@ -886,12 +886,30 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont })
       )
   | doCExp ctx env (C.AppCont { applied, args }) = applyCont (ctx, env, applied, List.map (doValue ctx) args)
   | doCExp ctx env (C.If { cond, thenCont, elseCont })
-    = let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
-          val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
+    = let fun containsNestedBlock (C.Let { decs, cont }) = Vector.exists containsNestedBlockDec decs orelse containsNestedBlock cont
+            | containsNestedBlock (C.App _) = false
+            | containsNestedBlock (C.AppCont _) = false
+            | containsNestedBlock (C.If _) = true
+            | containsNestedBlock (C.Handle _) = true
+            | containsNestedBlock C.Unreachable = false
+          and containsNestedBlockDec (C.ValDec _) = false
+            | containsNestedBlockDec (C.RecDec _) = true
+            | containsNestedBlockDec (C.ContDec _) = true
+            | containsNestedBlockDec (C.RecContDec _) = true
+            | containsNestedBlockDec (C.ESImportDec _) = false (* cannot occur *)
       in if C.containsApp thenCont then
-             L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont } @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+             let val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
+             in if containsNestedBlock elseCont then
+                    let val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
+                    in L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector [L.GotoStat elseLabel]) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont } @ L.LabelStat elseLabel :: doCExp ctx env elseCont
+                    end
+                else
+                    L.IfStat (doValue ctx cond, vector [L.GotoStat thenLabel], vector (doCExp ctx env elseCont)) :: L.LabelStat thenLabel :: L.makeDoStat { loopLike = false, body = doCExp ctx env thenCont }
+             end
+         else if containsNestedBlock elseCont then
+             L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont
          else
-             L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector []) :: doCExp ctx env elseCont (* ad hoc *)
+             [L.IfStat (doValue ctx cond, vector (doCExp ctx env thenCont), vector (doCExp ctx env elseCont))]
       end
   | doCExp ctx env (C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
     = let val env' = { continuations = C.CVarMap.singleton (successfulExitIn, RETURN) }
