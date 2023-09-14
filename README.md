@@ -37,8 +37,8 @@ Targets:
     * `--lua-continuations`: Targets Lua 5.3+. Supports one-shot delimited continuations. Also, supports deeply nested `handle`.
     * `--luajit`: Targets LuaJIT.
 * JavaScript (ES2020+)
-    * `--js`: Produces a JavaScript program. The default extension is `.mjs`.
-    * `--js-cps`: Produces a JavaScript program (CPS mode; supports delimited continuations). The default extension is `.mjs`.
+    * `--nodejs`: Produces a JavaScript program for Node.js. The default extension is `.mjs`.
+    * `--nodejs-cps`: Produces a JavaScript program for Node.js (CPS mode; supports delimited continuations). The default extension is `.mjs`.
 
 Output type:
 

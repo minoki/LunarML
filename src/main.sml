@@ -29,8 +29,8 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  --lua                 Produce Lua code (targets Lua 5.3+).\n\
                                                 \  --lua-continuations   Produce Lua code (targets Lua 5.3+ / supports one-shot delimited continuations).\n\
                                                 \  --luajit              Produce Lua code (targets LuaJIT).\n\
-                                                \  --js                  Produce JavaScript code.\n\
-                                                \  --js-cps              Produce JavaScript code (CPS mode).\n\
+                                                \  --nodejs              Produce JavaScript code for Node.js.\n\
+                                                \  --nodejs-cps          Produce JavaScript code for Node.js (CPS mode).\n\
                                                 \  -h,--help             Show this message.\n\
                                                 \  -v,--version          Show version information.\n\
                                                 \  --dump                Dump intermediate code.\n\
@@ -376,8 +376,8 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_TARGET_LUA (* --lua *)
                 | OPT_TARGET_LUA_CONTINUATIONS (* --lua-continuations *)
                 | OPT_TARGET_LUAJIT (* --luajit *)
-                | OPT_TARGET_JS (* --js *)
-                | OPT_TARGET_JS_CPS (* --js-cps *)
+                | OPT_TARGET_NODEJS (* --nodejs *)
+                | OPT_TARGET_NODEJS_CPS (* --nodejs-cps *)
                 | OPT_HELP (* -h,--help *)
                 | OPT_VERSION (* -v,--version *)
                 | OPT_STOP (* -- *)
@@ -393,8 +393,10 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--lua", SIMPLE OPT_TARGET_LUA)
                   ,(LONG "--lua-continuations", SIMPLE OPT_TARGET_LUA_CONTINUATIONS)
                   ,(LONG "--luajit", SIMPLE OPT_TARGET_LUAJIT)
-                  ,(LONG "--js", SIMPLE OPT_TARGET_JS)
-                  ,(LONG "--js-cps", SIMPLE OPT_TARGET_JS_CPS)
+                  ,(LONG "--nodejs", SIMPLE OPT_TARGET_NODEJS)
+                  ,(LONG "--nodejs-cps", SIMPLE OPT_TARGET_NODEJS_CPS)
+                  ,(LONG "--js", SIMPLE OPT_TARGET_NODEJS) (* for compatibility *)
+                  ,(LONG "--js-cps", SIMPLE OPT_TARGET_NODEJS_CPS) (* for compatibility *)
                   ,(SHORT "-h", SIMPLE OPT_HELP)
                   ,(LONG "--help", SIMPLE OPT_HELP)
                   ,(SHORT "-v", SIMPLE OPT_VERSION)
@@ -426,8 +428,8 @@ fun parseArgs (opts : options) args
         | SOME (OPT_TARGET_LUA, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_PLAIN) opts) args
         | SOME (OPT_TARGET_LUA_CONTINUATIONS, args) => parseArgs (S.set.backend (BACKEND_LUA LUA_CONTINUATIONS) opts) args
         | SOME (OPT_TARGET_LUAJIT, args) => parseArgs (S.set.backend BACKEND_LUAJIT opts) args
-        | SOME (OPT_TARGET_JS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.DIRECT_STYLE) opts) args
-        | SOME (OPT_TARGET_JS_CPS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.CPS) opts) args
+        | SOME (OPT_TARGET_NODEJS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.DIRECT_STYLE) opts) args
+        | SOME (OPT_TARGET_NODEJS_CPS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.CPS) opts) args
         | SOME (OPT_HELP, args) => ( showHelp (); OS.Process.exit OS.Process.success )
         | SOME (OPT_VERSION, args) => ( showVersion (); OS.Process.exit OS.Process.success )
         | SOME (OPT_STOP, args) => handleInputFile opts args

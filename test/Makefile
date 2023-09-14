@@ -22,11 +22,11 @@ LUNARML_OPTION= --luajit
 OUTEXT= .lua
 INTERPRETER= $(LUAJIT) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
 else ifeq ($(VARIANT), nodejs)
-LUNARML_OPTION= --js
+LUNARML_OPTION= --nodejs
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else ifeq ($(VARIANT), nodejs-cps)
-LUNARML_OPTION= --js-cps
+LUNARML_OPTION= --nodejs-cps
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else

@@ -64,7 +64,7 @@ bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --luajit -o $@ $<
 
 bin/lunarml.gen2.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
-	bin/lunarml compile --js-cps -o $@ $<
+	bin/lunarml compile --nodejs-cps -o $@ $<
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
@@ -106,8 +106,8 @@ validate-luajit: bin/lunarml
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.mjs --js-cps --print-timings src/lunarml-lunarml.mlb
-	$(NODE) lunarml.gen2.mjs -Blib/lunarml compile -o lunarml.gen3.mjs --js-cps --print-timings src/lunarml-lunarml.mlb
+	bin/lunarml compile -o lunarml.gen2.mjs --nodejs-cps --print-timings src/lunarml-lunarml.mlb
+	$(NODE) lunarml.gen2.mjs -Blib/lunarml compile -o lunarml.gen3.mjs --nodejs-cps --print-timings src/lunarml-lunarml.mlb
 	diff --report-identical-files lunarml.gen2.mjs lunarml.gen3.mjs
 
 verify-lua: bin/lunarml bin/lunarml.gen2.lua
