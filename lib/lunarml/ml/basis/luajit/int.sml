@@ -210,11 +210,11 @@ local
     val op * = fn (x, y) => unsafeFromValue (Lua.* (toValue x, toValue y))
     val quot = fn (x, y) => unsafeFromValue (Lua./ (toValue x, toValue y))
     val rem = fn (x, y) => unsafeFromValue (Lua.% (toValue x, toValue y))
-    val ~ = fn x => unsafeFromValue (Lua.unm (toValue x))
-    val op < = fn (x, y) => Lua.< (toValue x, toValue y)
-    val op <= = fn (x, y) => Lua.<= (toValue x, toValue y)
-    val op > = fn (x, y) => Lua.> (toValue x, toValue y)
-    val op >= = fn (x, y) => Lua.>= (toValue x, toValue y)
+    val ~ = fn x => unsafeFromValue (Lua.negate (toValue x))
+    val op < = fn (x, y) => _primCall "Int64.<" (x, y)
+    val op <= = fn (x, y) => _primCall "Int64.<=" (x, y)
+    val op > = fn (x, y) => _primCall "Int64.>" (x, y)
+    val op >= = fn (x, y) => _primCall "Int64.>=" (x, y)
     end
     fun Int64_EQUAL (x, y) = Lua.== (toValue x, toValue y);
 in

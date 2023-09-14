@@ -124,7 +124,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Lua_INTDIV (* Lua.// *)
                 | Lua_MOD (* Lua.% *)
                 | Lua_pow (* Lua.pow *)
-                | Lua_unm (* Lua.unm *)
+                | Lua_negate (* Lua.negate *)
                 | Lua_andb (* Lua.andb *)
                 | Lua_orb (* Lua.orb *)
                 | Lua_xorb (* Lua.xorb *)
@@ -450,7 +450,7 @@ fun toString EQUAL = "="
   | toString Lua_INTDIV = "Lua.//"
   | toString Lua_MOD = "Lua.%"
   | toString Lua_pow = "Lua.pow"
-  | toString Lua_unm = "Lua.unm"
+  | toString Lua_negate = "Lua.negate"
   | toString Lua_andb = "Lua.andb"
   | toString Lua_orb = "Lua.orb"
   | toString Lua_xorb = "Lua.xorb"
@@ -776,7 +776,7 @@ fun fromString "=" = SOME EQUAL
   | fromString "Lua.//" = SOME Lua_INTDIV
   | fromString "Lua.%" = SOME Lua_MOD
   | fromString "Lua.pow" = SOME Lua_pow
-  | fromString "Lua.unm" = SOME Lua_unm
+  | fromString "Lua.negate" = SOME Lua_negate
   | fromString "Lua.andb" = SOME Lua_andb
   | fromString "Lua.orb" = SOME Lua_orb
   | fromString "Lua.xorb" = SOME Lua_xorb
@@ -950,7 +950,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Lua_INTDIV = true
   | mayRaise Lua_MOD = true
   | mayRaise Lua_pow = true
-  | mayRaise Lua_unm = true
+  | mayRaise Lua_negate = true
   | mayRaise Lua_andb = true
   | mayRaise Lua_orb = true
   | mayRaise Lua_xorb = true
@@ -1123,7 +1123,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Lua_INTDIV = false
   | isDiscardable Lua_MOD = false
   | isDiscardable Lua_pow = false
-  | isDiscardable Lua_unm = false
+  | isDiscardable Lua_negate = false
   | isDiscardable Lua_andb = false
   | isDiscardable Lua_orb = false
   | isDiscardable Lua_xorb = false
@@ -1551,7 +1551,7 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Lua_INTDIV = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_MOD = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_pow = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_unm = { vars = [], args = vector [LuaValue], result = LuaValue }
+  | typeOf Primitives.Lua_negate = { vars = [], args = vector [LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_andb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_orb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_xorb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }

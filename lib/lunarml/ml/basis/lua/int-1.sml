@@ -84,7 +84,7 @@ fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
                               in Lua.unsafeFromValue result
                               end
                           else
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.negate (Lua.fromInt x)]
                               in Lua.unsafeFromValue result
                               end
   | fmt StringCvt.DEC x = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
@@ -96,7 +96,7 @@ fun fmt StringCvt.BIN x = raise Fail "StringCvt.BIN: not implemented yet"
                               in Lua.unsafeFromValue result
                               end
                           else
-                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
+                              let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.negate (Lua.fromInt x)]
                               in Lua.unsafeFromValue result
                               end
 fun toString (x : int) : string = let val result = Lua.call1 Lua.Lib.tostring #[Lua.fromInt x]

@@ -42,7 +42,7 @@ structure Lua : sig
   val // : value * value -> value
   val % : value * value -> value
   val pow : value * value -> value  (* x ^ y *)
-  val unm : value -> value  (* unary minus *)
+  val negate : value -> value  (* unary minus *)
   val andb : value * value -> value  (* x & y *)
   val orb : value * value -> value  (* x | y *)
   val xorb : value * value -> value  (* x ~ y *)

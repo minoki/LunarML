@@ -20,16 +20,16 @@ local
     type word = _Prim.Word64.word
     val unsafeFromValue : Lua.value -> _Prim.Word64.word = Lua.unsafeFromValue
     val toValue : _Prim.Word64.word -> Lua.value = Lua.unsafeToValue
-    val op + = fn (x, y) => unsafeFromValue (Lua.+ (toValue x, toValue y))
-    val op - = fn (x, y) => unsafeFromValue (Lua.- (toValue x, toValue y))
-    val op * = fn (x, y) => unsafeFromValue (Lua.* (toValue x, toValue y))
-    val op div = fn (x, y) => unsafeFromValue (Lua./ (toValue x, toValue y))
-    val op mod = fn (x, y) => unsafeFromValue (Lua.% (toValue x, toValue y))
-    val ~ = fn x => unsafeFromValue (Lua.unm (toValue x))
-    val op < = fn (x, y) => Lua.< (toValue x, toValue y)
-    val op <= = fn (x, y) => Lua.<= (toValue x, toValue y)
-    val op > = fn (x, y) => Lua.> (toValue x, toValue y)
-    val op >= = fn (x, y) => Lua.>= (toValue x, toValue y)
+    val op + = fn (x, y) => _primCall "Word64.+" (x, y)
+    val op - = fn (x, y) => _primCall "Word64.-" (x, y)
+    val op * = fn (x, y) => _primCall "Word64.*" (x, y)
+    val op div = fn (x, y) => _primCall "Word64.div.unchecked" (x, y)
+    val op mod = fn (x, y) => _primCall "Word64.mod.unchecked" (x, y)
+    val ~ = fn x => _primCall "Word64.~" (x)
+    val op < = fn (x, y) => _primCall "Word64.<" (x, y)
+    val op <= = fn (x, y) => _primCall "Word64.<=" (x, y)
+    val op > = fn (x, y) => _primCall "Word64.>" (x, y)
+    val op >= = fn (x, y) => _primCall "Word64.>=" (x, y)
     end
     fun Word64_EQUAL (x, y) = Lua.== (UncheckedWord64.toValue x, UncheckedWord64.toValue y);
     _equality _Prim.Word64.word = Word64_EQUAL;

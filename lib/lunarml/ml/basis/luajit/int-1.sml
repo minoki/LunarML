@@ -69,7 +69,7 @@ fun toOctString x : string = if x >= 0 then
                                  in Lua.unsafeFromValue result
                                  end
                              else
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.unm (Lua.fromInt x)]
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%o", Lua.negate (Lua.fromInt x)]
                                  in Lua.unsafeFromValue result
                                  end
 fun toString x : string = let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "%d", Lua.fromInt x]
@@ -81,7 +81,7 @@ fun toHexString x : string = if x >= 0 then
                                  in Lua.unsafeFromValue result
                                  end
                              else
-                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.unm (Lua.fromInt x)]
+                                 let val result = Lua.call1 Lua.Lib.string.format #[Lua.fromString "~%X", Lua.negate (Lua.fromInt x)]
                                  in Lua.unsafeFromValue result
                                  end
 fun fmt StringCvt.BIN = (fn _ => raise Fail "StringCvt.BIN: not implemented yet")

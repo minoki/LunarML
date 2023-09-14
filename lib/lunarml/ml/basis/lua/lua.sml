@@ -33,7 +33,7 @@ structure Lua : sig
               val // : value * value -> value
               val % : value * value -> value
               val pow : value * value -> value  (* x ^ y *)
-              val unm : value -> value  (* unary minus *)
+              val negate : value -> value  (* unary minus *)
               val andb : value * value -> value  (* x & y *)
               val orb : value * value -> value  (* x | y *)
               val xorb : value * value -> value  (* x ~ y *)
@@ -132,7 +132,7 @@ fun x / y = _primCall "Lua./" (x, y)
 fun // (x, y) = _primCall "Lua.//" (x, y)
 fun % (x, y) = _primCall "Lua.%" (x, y)
 fun pow (x, y) = _primCall "Lua.pow" (x, y)
-fun unm x = _primCall "Lua.unm" (x)
+fun negate x = _primCall "Lua.negate" (x)
 fun andb (x, y) = _primCall "Lua.andb" (x, y)
 fun orb (x, y) = _primCall "Lua.orb" (x, y)
 fun xorb (x, y) = _primCall "Lua.xorb" (x, y)

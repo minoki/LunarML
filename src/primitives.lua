@@ -915,8 +915,8 @@ do
       discardable = false,
     },
     {
-      name = "Lua.unm",
-      srcname = "Lua_unm",
+      name = "Lua.negate",
+      srcname = "Lua_negate",
       type = HomoUnary(LuaValue),
       mayraise = true,
       discardable = false,

@@ -33,7 +33,7 @@ structure Lua : sig
               (* val // : value * value -> value *)
               val % : value * value -> value
               val pow : value * value -> value  (* x ^ y *)
-              val unm : value -> value  (* unary minus *)
+              val negate : value -> value  (* unary minus *)
               val andb : value * value -> value  (* bit.band(x, y) *)
               val orb : value * value -> value  (* bit.bor(x, y) *)
               val xorb : value * value -> value  (* bit.bxor(x, y) *)
@@ -144,7 +144,7 @@ fun x / y = _primCall "Lua./" (x, y)
 (* fun // (x, y) = _primCall "Lua.//" (x, y) *)
 fun % (x, y) = _primCall "Lua.%" (x, y)
 fun pow (x, y) = _primCall "Lua.pow" (x, y)
-fun unm x = _primCall "Lua.unm" (x)
+fun negate x = _primCall "Lua.negate" (x)
 val require = LunarML.assumeDiscardable global "require"
 val bit = _Prim.Lua.Lib.bit
 val band = LunarML.assumeDiscardable field (bit, "band")
