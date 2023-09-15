@@ -209,40 +209,40 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue ctx C.Nil = L.ConstExp L.Nil (* empty list *)
   | doValue ctx (C.BoolConst false) = L.ConstExp L.False
   | doValue ctx (C.BoolConst true) = L.ConstExp L.True
-  | doValue ctx (C.NativeIntConst x) = if x < 0 then
-                                           if x = ~0x8000000000000000 then
-                                               L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
-                                           else
-                                               L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
-                                       else
-                                           L.ConstExp (L.Numeral (LargeInt.toString x))
-  | doValue ctx (C.Int32Const x) = if x < 0 then
-                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (Int32.toLarge x)))))
-                                   else
-                                       L.ConstExp (L.Numeral (Int32.toString x))
-  | doValue ctx (C.Int54Const x) = if x < 0 then
-                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x))))
-                                   else
-                                       L.ConstExp (L.Numeral (Int64.toString x))
-  | doValue ctx (C.Int64Const x) = let val suffix = case #targetLuaVersion ctx of
-                                                        LUA5_3 => ""
-                                                      | LUAJIT => "LL"
-                                   in if x < 0 then
-                                          if x = ~0x8000000000000000 then
-                                              L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
-                                          else
-                                              L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (Int64.toString (~ x) ^ suffix)))
-                                      else
-                                          L.ConstExp (L.Numeral (Int64.toString x ^ suffix))
-                                   end
-  | doValue ctx (C.IntInfConst x) = raise CodeGenError "IntInfConst is not supported by Lua backend"
-  | doValue ctx (C.NativeWordConst x) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-  | doValue ctx (C.Word32Const x) = L.ConstExp (L.Numeral ("0x" ^ Word32.toString x))
-  | doValue ctx (C.Word64Const x) = let val suffix = case #targetLuaVersion ctx of
-                                                         LUA5_3 => ""
-                                                       | LUAJIT => "ULL"
-                                    in L.ConstExp (L.Numeral ("0x" ^ Word64.toString x ^ suffix))
-                                    end
+  | doValue ctx (C.IntConst (Primitives.INT, x)) = if x < 0 then
+                                                       if x = ~0x8000000000000000 then
+                                                           L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
+                                                       else
+                                                           L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                   else
+                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue ctx (C.IntConst (Primitives.I32, x)) = if x < 0 then
+                                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                   else
+                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue ctx (C.IntConst (Primitives.I54, x)) = if x < 0 then
+                                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                   else
+                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue ctx (C.IntConst (Primitives.I64, x)) = let val suffix = case #targetLuaVersion ctx of
+                                                                        LUA5_3 => ""
+                                                                      | LUAJIT => "LL"
+                                                   in if x < 0 then
+                                                          if x = ~0x8000000000000000 then
+                                                              L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1)) ^ suffix))), L.ConstExp (L.Numeral ("1" ^ suffix)))
+                                                          else
+                                                              L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x) ^ suffix)))
+                                                      else
+                                                          L.ConstExp (L.Numeral (LargeInt.toString x ^ suffix))
+                                                   end
+  | doValue ctx (C.IntConst (Primitives.INT_INF, x)) = raise CodeGenError "IntInf is not natively supported by Lua backend"
+  | doValue ctx (C.WordConst (Primitives.WORD, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doValue ctx (C.WordConst (Primitives.W32, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doValue ctx (C.WordConst (Primitives.W64, x)) = let val suffix = case #targetLuaVersion ctx of
+                                                                         LUA5_3 => ""
+                                                                       | LUAJIT => "ULL"
+                                                    in L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
+                                                    end
   | doValue ctx (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
   | doValue ctx (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
   | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
@@ -509,21 +509,21 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                          )
                        | Primitives.Word_div_unchecked w =>
                          (case (#targetLuaVersion ctx, w) of
-                              (LUA5_3, Primitives.WORD) => doBinaryExpRaw ( fn (a, b as C.NativeWordConst b') => if b' mod 2 = 0 then
-                                                                                                                     let fun shiftAmount (0, amount) = (0, amount) (* should not occur *)
-                                                                                                                           | shiftAmount (n, amount) = if n mod 2 = 0 then
-                                                                                                                                                           shiftAmount (n div 2, amount + 1)
-                                                                                                                                                       else
-                                                                                                                                                           (n, amount)
-                                                                                                                         val (d, shift) = shiftAmount (b', 0)
-                                                                                                                         val a' = L.BinExp (L.RSHIFT, doValue ctx a, L.ConstExp (L.Numeral (Int.toString shift)))
-                                                                                                                     in if d = 1 then
-                                                                                                                            a'
-                                                                                                                        else
-                                                                                                                            L.BinExp (L.INTDIV, a', L.ConstExp (L.Numeral (IntInf.toString d)))
-                                                                                                                     end
-                                                                                                                 else
-                                                                                                                     L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [doValue ctx a, doValue ctx b])
+                              (LUA5_3, Primitives.WORD) => doBinaryExpRaw ( fn (a, b as C.WordConst (Primitives.WORD, b')) => if b' mod 2 = 0 then
+                                                                                                                                  let fun shiftAmount (0, amount) = (0, amount) (* should not occur *)
+                                                                                                                                        | shiftAmount (n, amount) = if n mod 2 = 0 then
+                                                                                                                                                                        shiftAmount (n div 2, amount + 1)
+                                                                                                                                                                    else
+                                                                                                                                                                        (n, amount)
+                                                                                                                                      val (d, shift) = shiftAmount (b', 0)
+                                                                                                                                      val a' = L.BinExp (L.RSHIFT, doValue ctx a, L.ConstExp (L.Numeral (Int.toString shift)))
+                                                                                                                                  in if d = 1 then
+                                                                                                                                         a'
+                                                                                                                                     else
+                                                                                                                                         L.BinExp (L.INTDIV, a', L.ConstExp (L.Numeral (IntInf.toString d)))
+                                                                                                                                  end
+                                                                                                                              else
+                                                                                                                                  L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [doValue ctx a, doValue ctx b])
                                                                           | (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Word_div"), vector [doValue ctx a, doValue ctx b])
                                                                           , PURE
                                                                           )

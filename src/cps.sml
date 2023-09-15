@@ -33,14 +33,8 @@ datatype Value = Var of Var
                | Unit (* : unit *)
                | Nil (* : 'a list *)
                | BoolConst of bool
-               | NativeIntConst of IntInf.int
-               | Int32Const of Int32.int
-               | Int54Const of Int64.int
-               | Int64Const of Int64.int
-               | IntInfConst of IntInf.int
-               | NativeWordConst of IntInf.int
-               | Word32Const of Word32.word
-               | Word64Const of Word64.word
+               | IntConst of Primitives.int_width * IntInf.int
+               | WordConst of Primitives.word_width * IntInf.int
                | CharConst of char
                | Char16Const of int
                | StringConst of string
@@ -150,14 +144,8 @@ fun freeVarsInValue bound (v, acc)
         | Unit => acc
         | Nil => acc
         | BoolConst _ => acc
-        | NativeIntConst _ => acc
-        | Int32Const _ => acc
-        | Int54Const _ => acc
-        | Int64Const _ => acc
-        | IntInfConst _ => acc
-        | NativeWordConst _ => acc
-        | Word32Const _ => acc
-        | Word64Const _ => acc
+        | IntConst _ => acc
+        | WordConst _ => acc
         | CharConst _ => acc
         | Char16Const _ => acc
         | StringConst _ => acc
@@ -340,34 +328,26 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                          case primOp of
                              F.IntConstOp x => (case tyargs of
                                                     [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int) then
-                                                                        case #defaultInt (#targetInfo ctx) of
-                                                                            Primitives.INT => apply revDecs k (C.NativeIntConst x)
-                                                                          | Primitives.I32 => apply revDecs k (C.Int32Const (Int32.fromLarge x))
-                                                                          | Primitives.I54 => apply revDecs k (C.Int54Const (Int64.fromLarge x))
-                                                                          | Primitives.I64 => apply revDecs k (C.Int64Const (Int64.fromLarge x))
-                                                                          | Primitives.INT_INF => apply revDecs k (C.IntInfConst x)
+                                                                        apply revDecs k (C.IntConst (#defaultInt (#targetInfo ctx), x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int32) then
-                                                                        apply revDecs k (C.Int32Const (Int32.fromLarge x))
+                                                                        apply revDecs k (C.IntConst (Primitives.I32, x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int54) then
-                                                                        apply revDecs k (C.Int54Const (Int64.fromLarge x))
+                                                                        apply revDecs k (C.IntConst (Primitives.I54, x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_int64) then
-                                                                        apply revDecs k (C.Int64Const (Int64.fromLarge x))
+                                                                        apply revDecs k (C.IntConst (Primitives.I64, x))
                                                                     else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_intInf) then
-                                                                        apply revDecs k (C.IntInfConst x)
+                                                                        apply revDecs k (C.IntConst (Primitives.INT_INF, x))
                                                                     else
                                                                         raise Fail "IntConstOp: invalid type"
                                                   | _ => raise Fail "IntConstOp: invalid type"
                                                )
                            | F.WordConstOp x => (case tyargs of
                                                      [F.TyVar tv] => if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word) then
-                                                                         case #defaultWord (#targetInfo ctx) of
-                                                                             Primitives.WORD => apply revDecs k (C.NativeWordConst x)
-                                                                           | Primitives.W32 => apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
-                                                                           | Primitives.W64 => apply revDecs k (C.Word64Const (Word64.fromLargeInt x))
+                                                                         apply revDecs k (C.WordConst (#defaultWord (#targetInfo ctx), x))
                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word32) then
-                                                                         apply revDecs k (C.Word32Const (Word32.fromLargeInt x))
+                                                                         apply revDecs k (C.WordConst (Primitives.W32, x))
                                                                      else if TypedSyntax.eqUTyVar (tv, F.tyNameToTyVar Typing.primTyName_word64) then
-                                                                         apply revDecs k (C.Word64Const (Word64.fromLargeInt x))
+                                                                         apply revDecs k (C.WordConst (Primitives.W64, x))
                                                                      else
                                                                          raise Fail "WordConstOp: invalid type"
                                                    | _ => raise Fail "WordConstOp: invalid type"
@@ -561,14 +541,8 @@ fun addValue (C.Var v, set) = TypedSyntax.VIdSet.add (set, v)
   | addValue (C.Unit, set) = set
   | addValue (C.Nil, set) = set
   | addValue (C.BoolConst _, set) = set
-  | addValue (C.NativeIntConst _, set) = set
-  | addValue (C.Int32Const _, set) = set
-  | addValue (C.Int54Const _, set) = set
-  | addValue (C.Int64Const _, set) = set
-  | addValue (C.IntInfConst _, set) = set
-  | addValue (C.NativeWordConst _, set) = set
-  | addValue (C.Word32Const _, set) = set
-  | addValue (C.Word64Const _, set) = set
+  | addValue (C.IntConst _, set) = set
+  | addValue (C.WordConst _, set) = set
   | addValue (C.CharConst _, set) = set
   | addValue (C.Char16Const _, set) = set
   | addValue (C.StringConst _, set) = set
@@ -681,14 +655,8 @@ fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
   | useValue env C.Unit = ()
   | useValue env C.Nil = ()
   | useValue env (C.BoolConst _) = ()
-  | useValue env (C.NativeIntConst _) = ()
-  | useValue env (C.Int32Const _) = ()
-  | useValue env (C.Int54Const _) = ()
-  | useValue env (C.Int64Const _) = ()
-  | useValue env (C.IntInfConst _) = ()
-  | useValue env (C.NativeWordConst _) = ()
-  | useValue env (C.Word32Const _) = ()
-  | useValue env (C.Word64Const _) = ()
+  | useValue env (C.IntConst _) = ()
+  | useValue env (C.WordConst _) = ()
   | useValue env (C.CharConst _) = ()
   | useValue env (C.Char16Const _) = ()
   | useValue env (C.StringConst _) = ()
@@ -703,14 +671,8 @@ fun useValueAsCallee (env, cont, C.Var v)
   | useValueAsCallee (env, cont, C.Unit) = ()
   | useValueAsCallee (env, cont, C.Nil) = ()
   | useValueAsCallee (env, cont, C.BoolConst _) = ()
-  | useValueAsCallee (env, cont, C.NativeIntConst _) = ()
-  | useValueAsCallee (env, cont, C.Int32Const _) = ()
-  | useValueAsCallee (env, cont, C.Int54Const _) = ()
-  | useValueAsCallee (env, cont, C.Int64Const _) = ()
-  | useValueAsCallee (env, cont, C.IntInfConst _) = ()
-  | useValueAsCallee (env, cont, C.NativeWordConst _) = ()
-  | useValueAsCallee (env, cont, C.Word32Const _) = ()
-  | useValueAsCallee (env, cont, C.Word64Const _) = ()
+  | useValueAsCallee (env, cont, C.IntConst _) = ()
+  | useValueAsCallee (env, cont, C.WordConst _) = ()
   | useValueAsCallee (env, cont, C.CharConst _) = ()
   | useValueAsCallee (env, cont, C.Char16Const _) = ()
   | useValueAsCallee (env, cont, C.StringConst _) = ()
@@ -730,14 +692,8 @@ fun useValueAsRecord (env, label, result, C.Var v)
   | useValueAsRecord (env, label, result, C.Unit) = ()
   | useValueAsRecord (env, label, result, C.Nil) = ()
   | useValueAsRecord (env, label, result, C.BoolConst _) = ()
-  | useValueAsRecord (env, label, result, C.NativeIntConst _) = ()
-  | useValueAsRecord (env, label, result, C.Int32Const _) = ()
-  | useValueAsRecord (env, label, result, C.Int54Const _) = ()
-  | useValueAsRecord (env, label, result, C.Int64Const _) = ()
-  | useValueAsRecord (env, label, result, C.IntInfConst _) = ()
-  | useValueAsRecord (env, label, result, C.NativeWordConst _) = ()
-  | useValueAsRecord (env, label, result, C.Word32Const _) = ()
-  | useValueAsRecord (env, label, result, C.Word64Const _) = ()
+  | useValueAsRecord (env, label, result, C.IntConst _) = ()
+  | useValueAsRecord (env, label, result, C.WordConst _) = ()
   | useValueAsRecord (env, label, result, C.CharConst _) = ()
   | useValueAsRecord (env, label, result, C.Char16Const _) = ()
   | useValueAsRecord (env, label, result, C.StringConst _) = ()
@@ -1117,6 +1073,16 @@ fun tryUnpackContParam (ctx, usage) (SOME param)
          | _ => KEEP
       )
   | tryUnpackContParam (ctx, usage) NONE = ELIMINATE
+fun isInt32 (x : IntInf.int) = ~0x80000000 <= x andalso x <= 0x7fffffff
+fun isInt54 (x : IntInf.int) = ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff
+fun isInt64 (x : IntInf.int) = ~0x8000000000000000 <= x andalso x <= 0x7fffffffffffffff
+fun isInt (P.INT, x) = false
+  | isInt (P.I32, x) = isInt32 x
+  | isInt (P.I54, x) = isInt54 x
+  | isInt (P.I64, x) = isInt64 x
+  | isInt (P.INT_INF, x) = true
+fun min3 (x, y, z) = IntInf.min (x, IntInf.min (y, z))
+fun max3 (x, y, z) = IntInf.max (x, IntInf.max (y, z))
 fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields) = NOT_SIMPLIFIED
   | simplifySimpleExp (env, C.PrimOp { primOp, tyargs, args })
     = (case (primOp, args) of
@@ -1177,347 +1143,157 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
            )
          | (F.PrimCall P.String_EQUAL, [C.StringConst x, C.StringConst y]) => VALUE (C.BoolConst (x = y))
          | (F.PrimCall P.String16_EQUAL, [C.String16Const x, C.String16Const y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_EQUAL P.INT), [C.NativeIntConst x, C.NativeIntConst y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_EQUAL P.I32), [C.Int32Const x, C.Int32Const y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_EQUAL P.I54), [C.Int54Const x, C.Int54Const y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_EQUAL P.I64), [C.Int64Const x, C.Int64Const y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_EQUAL P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.BoolConst (x = y))
-         | (F.PrimCall (P.Int_LT P.INT), [C.NativeIntConst x, C.NativeIntConst y]) => VALUE (C.BoolConst (x < y))
-         | (F.PrimCall (P.Int_LT P.I32), [C.Int32Const x, C.Int32Const y]) => VALUE (C.BoolConst (x < y))
-         | (F.PrimCall (P.Int_LT P.I54), [C.Int54Const x, C.Int54Const y]) => VALUE (C.BoolConst (x < y))
-         | (F.PrimCall (P.Int_LT P.I64), [C.Int64Const x, C.Int64Const y]) => VALUE (C.BoolConst (x < y))
-         | (F.PrimCall (P.Int_LT P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.BoolConst (x < y))
-         | (F.PrimCall (P.Int_LE P.INT), [C.NativeIntConst x, C.NativeIntConst y]) => VALUE (C.BoolConst (x <= y))
-         | (F.PrimCall (P.Int_LE P.I32), [C.Int32Const x, C.Int32Const y]) => VALUE (C.BoolConst (x <= y))
-         | (F.PrimCall (P.Int_LE P.I54), [C.Int54Const x, C.Int54Const y]) => VALUE (C.BoolConst (x <= y))
-         | (F.PrimCall (P.Int_LE P.I64), [C.Int64Const x, C.Int64Const y]) => VALUE (C.BoolConst (x <= y))
-         | (F.PrimCall (P.Int_LE P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.BoolConst (x <= y))
-         | (F.PrimCall (P.Int_GT P.INT), [C.NativeIntConst x, C.NativeIntConst y]) => VALUE (C.BoolConst (x > y))
-         | (F.PrimCall (P.Int_GT P.I32), [C.Int32Const x, C.Int32Const y]) => VALUE (C.BoolConst (x > y))
-         | (F.PrimCall (P.Int_GT P.I54), [C.Int54Const x, C.Int54Const y]) => VALUE (C.BoolConst (x > y))
-         | (F.PrimCall (P.Int_GT P.I64), [C.Int64Const x, C.Int64Const y]) => VALUE (C.BoolConst (x > y))
-         | (F.PrimCall (P.Int_GT P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.BoolConst (x > y))
-         | (F.PrimCall (P.Int_GE P.INT), [C.NativeIntConst x, C.NativeIntConst y]) => VALUE (C.BoolConst (x >= y))
-         | (F.PrimCall (P.Int_GE P.I32), [C.Int32Const x, C.Int32Const y]) => VALUE (C.BoolConst (x >= y))
-         | (F.PrimCall (P.Int_GE P.I54), [C.Int54Const x, C.Int54Const y]) => VALUE (C.BoolConst (x >= y))
-         | (F.PrimCall (P.Int_GE P.I64), [C.Int64Const x, C.Int64Const y]) => VALUE (C.BoolConst (x >= y))
-         | (F.PrimCall (P.Int_GE P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.BoolConst (x >= y))
-         | (F.PrimCall (P.Int_PLUS P.INT), [C.NativeIntConst 0, y]) => VALUE y
-         | (F.PrimCall (P.Int_PLUS P.INT), [x, C.NativeIntConst 0]) => VALUE x
-         | (F.PrimCall (P.Int_PLUS P.I32), [C.Int32Const x, C.Int32Const y]) => (VALUE (C.Int32Const (x + y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_PLUS P.I32), [C.Int32Const 0, y]) => VALUE y
-         | (F.PrimCall (P.Int_PLUS P.I32), [x, C.Int32Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_PLUS P.I54), [C.Int54Const x, C.Int54Const y]) =>
-           (let val z = x + y
-            in if ~0x20000000000000 <= z andalso z <= 0x1fffffffffffff then
-                   VALUE (C.Int54Const z)
+         | (F.PrimCall (P.Int_EQUAL w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                          VALUE (C.BoolConst (x = y))
+                                                                                      else
+                                                                                          NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_LT w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                       VALUE (C.BoolConst (x < y))
+                                                                                   else
+                                                                                       NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_LE w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                       VALUE (C.BoolConst (x <= y))
+                                                                                   else
+                                                                                       NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_GT w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                       VALUE (C.BoolConst (x > y))
+                                                                                   else
+                                                                                       NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_GE w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                       VALUE (C.BoolConst (x >= y))
+                                                                                   else
+                                                                                       NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                         let val z = x + y
+                                                                                         in if isInt (w, z) orelse (min3 (x, y, 0) <= z andalso z <= max3 (x, y, 0)) then
+                                                                                                VALUE (C.IntConst (w, z))
+                                                                                            else
+                                                                                                NOT_SIMPLIFIED
+                                                                                         end
+                                                                                     else
+                                                                                         NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS w), [C.IntConst (w', 0), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                         let val z = x - y
+                                                                                         in if isInt (w, z) orelse (min3 (x, y, 0) <= z andalso z <= max3 (x, y, 0)) then
+                                                                                                VALUE (C.IntConst (w, z))
+                                                                                            else
+                                                                                                NOT_SIMPLIFIED
+                                                                                         end
+                                                                                      else
+                                                                                          NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS w), [C.IntConst (w', 0), y]) => if w = w' then
+                                                                        SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [y] })
+                                                                    else
+                                                                        NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [zero as C.IntConst (w', 0), _]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [_, zero as C.IntConst (w', 0)]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [C.IntConst (w', 1), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [x, C.IntConst (w', 1)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [x as C.IntConst (w', x'), y as C.IntConst (w'', y')]) =>
+           if w = w' andalso w = w'' then
+               let val z = x' * y'
+               in if isInt (w, z) orelse (min3 (x', y', 0) <= z andalso z <= max3 (x', y', 0)) then
+                      VALUE (C.IntConst (w, z))
+                  else
+                      if x' = ~1 then
+                          SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [y] })
+                      else if y' = ~1 then
+                          SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [x] })
+                      else
+                          NOT_SIMPLIFIED
+               end
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [C.IntConst (w', ~1), y]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [y] }) else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES w), [x, C.IntConst (w', ~1)]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [x] }) else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_div w), [x, y as C.IntConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 then
+                   VALUE x
+               else if y' = ~1 then
+                   SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [x] })
+               else if y' <> 0 then
+                   case x of
+                       C.IntConst (w'', x') => if w = w'' then VALUE (C.IntConst (w, x' div y')) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_div_unchecked w), tyargs = [], args = [x, y] })
                else
                    NOT_SIMPLIFIED
-            end handle Overflow => NOT_SIMPLIFIED
-           )
-         | (F.PrimCall (P.Int_PLUS P.I54), [C.Int54Const 0, y]) => VALUE y
-         | (F.PrimCall (P.Int_PLUS P.I54), [x, C.Int54Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_PLUS P.I64), [C.Int64Const x, C.Int64Const y]) => (VALUE (C.Int64Const (x + y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_PLUS P.I64), [C.Int64Const 0, y]) => VALUE y
-         | (F.PrimCall (P.Int_PLUS P.I64), [x, C.Int64Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_PLUS P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.IntInfConst (x + y))
-         | (F.PrimCall (P.Int_PLUS P.INT_INF), [C.IntInfConst 0, y]) => VALUE y
-         | (F.PrimCall (P.Int_PLUS P.INT_INF), [x, C.IntInfConst 0]) => VALUE x
-         | (F.PrimCall (P.Int_MINUS P.INT), [C.NativeIntConst 0, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_MINUS P.INT), [x, C.NativeIntConst 0]) => VALUE x
-         | (F.PrimCall (P.Int_MINUS P.I32), [C.Int32Const x, C.Int32Const y]) => (VALUE (C.Int32Const (x - y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_MINUS P.I32), [C.Int32Const 0, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I32), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_MINUS P.I32), [x, C.Int32Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_MINUS P.I54), [C.Int54Const x, C.Int54Const y]) =>
-           (let val z = x - y
-            in if ~0x20000000000000 <= z andalso z <= 0x1fffffffffffff then
-                   VALUE (C.Int54Const z)
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_mod w), [x, y as C.IntConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 orelse y' = ~1 then
+                   VALUE (C.IntConst (w, 0))
+               else if y' <> 0 then
+                   case x of
+                       C.IntConst (w'', x') => if w = w'' then VALUE (C.IntConst (w, x' mod y')) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_mod_unchecked w), tyargs = [], args = [x, y] })
                else
                    NOT_SIMPLIFIED
-            end handle Overflow => NOT_SIMPLIFIED
-           )
-         | (F.PrimCall (P.Int_MINUS P.I54), [C.Int54Const 0, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I54), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_MINUS P.I54), [x, C.Int54Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_MINUS P.I64), [C.Int64Const x, C.Int64Const y]) => (VALUE (C.Int64Const (x - y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_MINUS P.I64), [C.Int64Const 0, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I64), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_MINUS P.I64), [x, C.Int64Const 0]) => VALUE x
-         | (F.PrimCall (P.Int_MINUS P.INT_INF), [C.IntInfConst 0, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT_INF), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_MINUS P.INT_INF), [x, C.IntInfConst 0]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.INT), [zero as C.NativeIntConst 0, _]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.INT), [_, zero as C.NativeIntConst 0]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.INT), [C.NativeIntConst 1, y]) => VALUE y
-         | (F.PrimCall (P.Int_TIMES P.INT), [x, C.NativeIntConst 1]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.INT), [C.NativeIntConst ~1, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_TIMES P.INT), [x, C.NativeIntConst ~1]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT), tyargs = [], args = [x] })
-         | (F.PrimCall (P.Int_TIMES P.I32), [C.Int32Const x, C.Int32Const y]) => (VALUE (C.Int32Const (x * y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_TIMES P.I32), [zero as C.Int32Const 0, _]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I32), [_, zero as C.Int32Const 0]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I32), [C.Int32Const 1, y]) => VALUE y
-         | (F.PrimCall (P.Int_TIMES P.I32), [x, C.Int32Const 1]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.I32), [C.Int32Const ~1, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I32), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_TIMES P.I32), [x, C.Int32Const ~1]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I32), tyargs = [], args = [x] })
-         | (F.PrimCall (P.Int_TIMES P.I54), [C.Int54Const x, C.Int54Const y]) =>
-           (let val z = x * y
-            in if ~0x20000000000000 <= z andalso z <= 0x1fffffffffffff then
-                   VALUE (C.Int54Const z)
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_quot w), [x, y as C.IntConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 then
+                   VALUE x
+               else if y' = ~1 then
+                   SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [x] })
+               else if y' <> 0 then
+                   case x of
+                       C.IntConst (w'', x') => if w = w'' then VALUE (C.IntConst (w, IntInf.quot (x', y'))) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_quot_unchecked w), tyargs = [], args = [x, y] })
                else
                    NOT_SIMPLIFIED
-            end handle Overflow => NOT_SIMPLIFIED
-           )
-         | (F.PrimCall (P.Int_TIMES P.I54), [zero as C.Int54Const 0, _]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I54), [_, zero as C.Int54Const 0]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I54), [C.Int54Const 1, y]) => VALUE y
-         | (F.PrimCall (P.Int_TIMES P.I54), [x, C.Int54Const 1]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.I54), [C.Int54Const ~1, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I54), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_TIMES P.I54), [x, C.Int54Const ~1]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I54), tyargs = [], args = [x] })
-         | (F.PrimCall (P.Int_TIMES P.I64), [C.Int64Const x, C.Int64Const y]) => (VALUE (C.Int64Const (x * y)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_TIMES P.I64), [zero as C.Int64Const 0, _]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I64), [_, zero as C.Int64Const 0]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.I64), [C.Int64Const 1, y]) => VALUE y
-         | (F.PrimCall (P.Int_TIMES P.I64), [x, C.Int64Const 1]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.I64), [C.Int64Const ~1, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I64), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_TIMES P.I64), [x, C.Int64Const ~1]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I64), tyargs = [], args = [x] })
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [C.IntInfConst x, C.IntInfConst y]) => VALUE (C.IntInfConst (x * y))
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [zero as C.IntInfConst 0, _]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [_, zero as C.IntInfConst 0]) => VALUE zero
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [C.IntInfConst 1, y]) => VALUE y
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [x, C.IntInfConst 1]) => VALUE x
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [C.IntInfConst ~1, y]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT_INF), tyargs = [], args = [y] })
-         | (F.PrimCall (P.Int_TIMES P.INT_INF), [x, C.IntInfConst ~1]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT_INF), tyargs = [], args = [x] })
-         | (F.PrimCall (P.Int_div P.INT), [x, y as C.NativeIntConst y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.NativeIntConst x' => VALUE (C.NativeIntConst (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_div_unchecked P.INT), tyargs = [], args = [x, y] })
            else
                NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_div P.I32), [x, y as C.Int32Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I32), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int32Const x' => VALUE (C.Int32Const (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_div_unchecked P.I32), tyargs = [], args = [x, y] })
+         | (F.PrimCall (P.Int_rem w), [x, y as C.IntConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 orelse y' = ~1 then
+                   VALUE (C.IntConst (w, 0))
+               else if y' <> 0 then
+                   case x of
+                       C.IntConst (w'', x') => if w = w'' then VALUE (C.IntConst (w, IntInf.rem (x', y'))) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked w), tyargs = [], args = [x, y] })
+               else
+                   NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_div P.I54), [x, y as C.Int54Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I54), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int54Const x' => VALUE (C.Int54Const (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_div_unchecked P.I54), tyargs = [], args = [x, y] })
+         | (F.PrimCall (P.Int_toInt_unchecked (w1, w2)), [x as C.IntConst (w', x')]) => if w1 = w' then
+                                                                                            if w1 = w2 then
+                                                                                                VALUE x (* no op *)
+                                                                                            else
+                                                                                                if isInt (w2, x') then
+                                                                                                    VALUE (C.IntConst (w2, x'))
+                                                                                                else
+                                                                                                    NOT_SIMPLIFIED
+                                                                                        else
+                                                                                            NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_toInt_unchecked (w1, w2)), [x]) => if w1 = w2 then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Word_div w), [x, y as C.WordConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 then
+                   VALUE x
+               else if y' <> 0 then
+                   case x of
+                       C.WordConst (w'', x') => if w = w'' then VALUE (C.WordConst (w, x' div y')) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_div_unchecked w), tyargs = [], args = [x, y] })
+               else
+                   NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_div P.I64), [x, y as C.Int64Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I64), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int64Const x' => VALUE (C.Int64Const (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_div_unchecked P.I64), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_mod P.INT), [x, y as C.NativeIntConst y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.NativeIntConst 0)
-           else if y' <> 0 then
-               case x of
-                   C.NativeIntConst x' => VALUE (C.NativeIntConst (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_mod_unchecked P.INT), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_mod P.I32), [x, y as C.Int32Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int32Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int32Const x' => VALUE (C.Int32Const (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_mod_unchecked P.I32), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_mod P.I54), [x, y as C.Int54Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int54Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int54Const x' => VALUE (C.Int54Const (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_mod_unchecked P.I54), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_mod P.I64), [x, y as C.Int64Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int64Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int64Const x' => VALUE (C.Int64Const (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_mod_unchecked P.I64), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_quot P.INT), [x, y as C.NativeIntConst y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.INT), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.NativeIntConst x' => VALUE (C.NativeIntConst (IntInf.quot (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_quot_unchecked P.INT), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_quot P.I32), [x, y as C.Int32Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I32), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int32Const x' => VALUE (C.Int32Const (Int32.quot (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_quot_unchecked P.I32), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_quot P.I54), [x, y as C.Int54Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I54), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int54Const x' => VALUE (C.Int54Const (Int64.quot (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_quot_unchecked P.I54), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_quot P.I64), [x, y as C.Int64Const y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' = ~1 then
-               SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE P.I64), tyargs = [], args = [x] })
-           else if y' <> 0 then
-               case x of
-                   C.Int64Const x' => VALUE (C.Int64Const (Int64.quot (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_quot_unchecked P.I64), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_rem P.INT), [x, y as C.NativeIntConst y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.NativeIntConst 0)
-           else if y' <> 0 then
-               case x of
-                   C.NativeIntConst x' => VALUE (C.NativeIntConst (IntInf.rem (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked P.INT), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_rem P.I32), [x, y as C.Int32Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int32Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int32Const x' => VALUE (C.Int32Const (Int32.rem (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked P.I32), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_rem P.I54), [x, y as C.Int54Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int54Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int54Const x' => VALUE (C.Int54Const (Int64.rem (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked P.I54), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_rem P.I64), [x, y as C.Int64Const y']) =>
-           if y' = 1 orelse y' = ~1 then
-               VALUE (C.Int64Const 0)
-           else if y' <> 0 then
-               case x of
-                   C.Int64Const x' => VALUE (C.Int64Const (Int64.rem (x', y')))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked P.I64), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I32)), [x as C.Int32Const _]) => VALUE x
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I54)), [C.Int32Const x]) => VALUE (C.Int54Const (Int64.fromLarge (Int32.toLarge x)))
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I64)), [C.Int32Const x]) => VALUE (C.Int64Const (Int64.fromLarge (Int32.toLarge x)))
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.INT_INF)), [C.Int32Const x]) => VALUE (C.IntInfConst (Int32.toLarge x))
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I32)), [C.Int54Const x]) => (VALUE (C.Int32Const (Int32.fromLarge (Int64.toLarge x))) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I54)), [x as C.Int54Const _]) => VALUE x
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I64)), [C.Int54Const x]) => VALUE (C.Int64Const x)
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.INT_INF)), [C.Int54Const x]) => VALUE (C.IntInfConst (Int64.toLarge x))
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I32)), [C.Int64Const x]) => (VALUE (C.Int32Const (Int32.fromLarge (Int64.toLarge x))) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I54)), [C.Int64Const x]) => if ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff then
-                                                                                        VALUE (C.Int54Const x)
-                                                                                    else
-                                                                                        NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I64)), [x as C.Int64Const _]) => VALUE x
-         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.INT_INF)), [C.Int64Const x]) => VALUE (C.IntInfConst (Int64.toLarge x))
-         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I32)), [C.IntInfConst x]) => (VALUE (C.Int32Const (Int32.fromLarge x)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I54)), [C.IntInfConst x]) => if ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff then
-                                                                                             VALUE (C.Int64Const (Int64.fromLarge x))
-                                                                                         else
-                                                                                             NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I64)), [C.IntInfConst x]) => (VALUE (C.Int64Const (Int64.fromLarge x)) handle Overflow => NOT_SIMPLIFIED)
-         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.INT_INF)), [x as C.IntInfConst _]) => VALUE x
-         | (F.PrimCall (P.Word_div P.WORD), [x, y as C.NativeWordConst y']) =>
-           if y' = 1 then
-               VALUE x
-           else if y' <> 0 then
-               case x of
-                   C.NativeWordConst x' => VALUE (C.NativeWordConst (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_div_unchecked P.WORD), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Word_div P.W32), [x, y as C.Word32Const y']) =>
-           if y' = 0w1 then
-               VALUE x
-           else if y' <> 0w0 then
-               case x of
-                   C.Word32Const x' => VALUE (C.Word32Const (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_div_unchecked P.W32), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Word_div P.W64), [x, y as C.Word64Const y']) =>
-           if y' = 0w1 then
-               VALUE x
-           else if y' <> 0w0 then
-               case x of
-                   C.Word64Const x' => VALUE (C.Word64Const (x' div y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_div_unchecked P.W64), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Word_mod P.WORD), [x, y as C.NativeWordConst y']) =>
-           if y' = 1 then
-               VALUE (C.NativeWordConst 0)
-           else if y' <> 0 then
-               case x of
-                   C.NativeWordConst x' => VALUE (C.NativeWordConst (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_mod_unchecked P.WORD), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Word_mod P.W32), [x, y as C.Word32Const y']) =>
-           if y' = 0w1 then
-               VALUE (C.Word32Const 0w0)
-           else if y' <> 0w0 then
-               case x of
-                   C.Word32Const x' => VALUE (C.Word32Const (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_mod_unchecked P.W32), tyargs = [], args = [x, y] })
-           else
-               NOT_SIMPLIFIED
-         | (F.PrimCall (P.Word_mod P.W64), [x, y as C.Word64Const y']) =>
-           if y' = 0w1 then
-               VALUE (C.Word64Const 0w0)
-           else if y' <> 0w0 then
-               case x of
-                   C.Word64Const x' => VALUE (C.Word64Const (x' mod y'))
-                 | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_mod_unchecked P.W64), tyargs = [], args = [x, y] })
+         | (F.PrimCall (P.Word_mod w), [x, y as C.WordConst (w', y')]) =>
+           if w = w' then
+               if y' = 1 then
+                   VALUE (C.WordConst (w, 0))
+               else if y' <> 0 then
+                   case x of
+                       C.WordConst (w'', x') => if w = w'' then VALUE (C.WordConst (w, x' mod y')) else NOT_SIMPLIFIED
+                     | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Word_mod_unchecked w), tyargs = [], args = [x, y] })
+               else
+                   NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED
          | _ => NOT_SIMPLIFIED
