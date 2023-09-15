@@ -1444,6 +1444,28 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                  | _ => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_rem_unchecked P.I64), tyargs = [], args = [x, y] })
            else
                NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I32)), [x as C.Int32Const _]) => VALUE x
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I54)), [C.Int32Const x]) => VALUE (C.Int54Const (Int64.fromLarge (Int32.toLarge x)))
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.I64)), [C.Int32Const x]) => VALUE (C.Int64Const (Int64.fromLarge (Int32.toLarge x)))
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I32, P.INT_INF)), [C.Int32Const x]) => VALUE (C.IntInfConst (Int32.toLarge x))
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I32)), [C.Int54Const x]) => (VALUE (C.Int32Const (Int32.fromLarge (Int64.toLarge x))) handle Overflow => NOT_SIMPLIFIED)
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I54)), [x as C.Int54Const _]) => VALUE x
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.I64)), [C.Int54Const x]) => VALUE (C.Int64Const x)
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I54, P.INT_INF)), [C.Int54Const x]) => VALUE (C.IntInfConst (Int64.toLarge x))
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I32)), [C.Int64Const x]) => (VALUE (C.Int32Const (Int32.fromLarge (Int64.toLarge x))) handle Overflow => NOT_SIMPLIFIED)
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I54)), [C.Int64Const x]) => if ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff then
+                                                                                        VALUE (C.Int54Const x)
+                                                                                    else
+                                                                                        NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.I64)), [x as C.Int64Const _]) => VALUE x
+         | (F.PrimCall (P.Int_toInt_unchecked (P.I64, P.INT_INF)), [C.Int64Const x]) => VALUE (C.IntInfConst (Int64.toLarge x))
+         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I32)), [C.IntInfConst x]) => (VALUE (C.Int32Const (Int32.fromLarge x)) handle Overflow => NOT_SIMPLIFIED)
+         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I54)), [C.IntInfConst x]) => if ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff then
+                                                                                             VALUE (C.Int64Const (Int64.fromLarge x))
+                                                                                         else
+                                                                                             NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.I64)), [C.IntInfConst x]) => (VALUE (C.Int64Const (Int64.fromLarge x)) handle Overflow => NOT_SIMPLIFIED)
+         | (F.PrimCall (P.Int_toInt_unchecked (P.INT_INF, P.INT_INF)), [x as C.IntInfConst _]) => VALUE x
          | (F.PrimCall (P.Word_div P.WORD), [x, y as C.NativeWordConst y']) =>
            if y' = 1 then
                VALUE x

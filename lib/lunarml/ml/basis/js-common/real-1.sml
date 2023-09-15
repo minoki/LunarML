@@ -229,7 +229,7 @@ fun resultToInt x = if isNan x then
                     else if x < ~0x80000000p0 orelse x > 0x7fffffffp0 then
                         raise Overflow
                     else
-                        Unsafe.cast (JavaScript.toInt32 (JavaScript.fromReal x)) : int
+                        _primCall "Int32.toInt.unchecked" (JavaScript.toInt32 (JavaScript.fromReal x))
 fun floor x = resultToInt (realFloor x)
 fun ceil x = resultToInt (realCeil x)
 fun trunc x = resultToInt (realTrunc x)

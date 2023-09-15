@@ -63,14 +63,14 @@ fun GE (x, y) = _primCall "IntInf.>=" (x, y)
 fun toLarge x = x
 fun fromLarge x = x
 fun toInt (x : int) : Int.int = if LE (minSmallInt, x) andalso LE (x, maxSmallInt) then
-                                    JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
+                                    _primCall "IntInf.toInt.unchecked" (x)
                                 else
                                     raise Overflow
-fun fromInt (x : Int.int) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
+fun fromInt (x : Int.int) : int = _primCall "Int.toIntInf.unchecked" (x)
 fun toReal (x : int) : real = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
 fun fromIntegralReal (x : real) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.fromReal x])
-fun unsafeToInt54 (x : int) : _Prim.Int54.int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.Number #[JavaScript.unsafeToValue x])
-fun fromInt54 (x : _Prim.Int54.int) : int = JavaScript.unsafeFromValue (JavaScript.call JavaScript.Lib.BigInt #[JavaScript.unsafeToValue x])
+fun unsafeToInt54 (x : int) : _Prim.Int54.int = _primCall "IntInf.toInt54.unchecked" (x)
+fun fromInt54 (x : _Prim.Int54.int) : int = _primCall "Int54.toIntInf.unchecked" (x)
 val precision : Int.int option = NONE
 val minInt : int option = NONE
 val maxInt : int option = NONE

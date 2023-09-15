@@ -119,12 +119,12 @@ _equality int = Int32_equal;
 val precision = SOME 32
 val minInt : int option = SOME ~0x80000000
 val maxInt : int option = SOME 0x7fffffff
-val toInt : int -> Int.int = Unsafe.cast
+val toInt : int -> Int.int = fn x => _primCall "Int32.toInt.unchecked" (x)
 fun fromInt (x : Int.int) : int = if ~0x80000000 <= x andalso x <= 0x7fffffff then
-                                      Unsafe.cast x
+                                      _primCall "Int.toInt32.unchecked" (x)
                                   else
                                       raise Overflow
-fun fromIntUnchecked (x : Int.int) = Unsafe.cast x
+fun fromIntUnchecked (x : Int.int) = _primCall "Int.toInt32.unchecked" (x)
 fun toLarge x = Int.toLarge (toInt x)
 fun fromLarge x = fromInt (Int.fromLarge x)
 fun x + y = _primCall "Int32.+" (x, y)

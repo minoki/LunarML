@@ -12,6 +12,7 @@ do
   local bool = {"bool"}
   -- local int = {"int"}
   local intA = {"intA"}
+  local intB = {"intB"}
   local int32 = {"int32"}
   local int54 = {"int54"}
   local int64 = {"int64"}
@@ -284,6 +285,13 @@ do
       name = "Int{i}.>=",
       srcname = "Int_GE",
       type = Compare(intA),
+      mayraise = false,
+      discardable = true,
+    },
+    {
+      name = "Int{i}.toInt{i}.unchecked",
+      srcname = "Int_toInt_unchecked",
+      type = { vars = {}, args = {intA}, result = intB },
       mayraise = false,
       discardable = true,
     },
@@ -1561,10 +1569,14 @@ for i, p in ipairs(PRIMITIVES) do
       local resultType = p.type.result[1]
       f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
     else
-      local actualInt, actualWord, actualWordB
+      local actualInt, actualIntB, actualWord, actualWordB
       for _, u in ipairs(pr) do
         if u[1] == "int" then
-          actualInt = u[3]
+          if actualInt == nil then
+            actualInt = u[3]
+          else
+            actualIntB = u[3]
+          end
         elseif u[1] == "word" then
           if actualWord == nil then
             actualWord = u[3]
@@ -1579,6 +1591,8 @@ for i, p in ipairs(PRIMITIVES) do
       for _, t in ipairs(p.type.args) do
         if t[1] == "intA" then
           table.insert(argTypes, actualInt)
+        elseif t[1] == "intB" then
+          table.insert(argTypes, actualIntB)
         elseif t[1] == "wordA" then
           table.insert(argTypes, actualWord)
         elseif t[1] == "wordB" then
@@ -1590,6 +1604,8 @@ for i, p in ipairs(PRIMITIVES) do
       local resultType
       if p.type.result[1] == "intA" then
         resultType = actualInt
+      elseif p.type.result[1] == "intB" then
+        resultType = actualIntB
       elseif p.type.result[1] == "wordA" then
         resultType = actualWord
       elseif p.type.result[1] == "wordB" then

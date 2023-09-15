@@ -35,6 +35,7 @@ datatype PrimOp = EQUAL (* = *)
                 | Int_LE of int_width (* Int{i}.<= *)
                 | Int_GT of int_width (* Int{i}.> *)
                 | Int_GE of int_width (* Int{i}.>= *)
+                | Int_toInt_unchecked of int_width * int_width (* Int{i}.toInt{i}.unchecked *)
                 | Word_EQUAL of word_width (* Word{w}.= *)
                 | Word_PLUS of word_width (* Word{w}.+ *)
                 | Word_MINUS of word_width (* Word{w}.- *)
@@ -279,6 +280,31 @@ fun toString EQUAL = "="
   | toString (Int_GE I54) = "Int54.>="
   | toString (Int_GE I64) = "Int64.>="
   | toString (Int_GE INT_INF) = "IntInf.>="
+  | toString (Int_toInt_unchecked (INT, INT)) = "Int.toInt.unchecked"
+  | toString (Int_toInt_unchecked (INT, I32)) = "Int.toInt32.unchecked"
+  | toString (Int_toInt_unchecked (INT, I54)) = "Int.toInt54.unchecked"
+  | toString (Int_toInt_unchecked (INT, I64)) = "Int.toInt64.unchecked"
+  | toString (Int_toInt_unchecked (INT, INT_INF)) = "Int.toIntInf.unchecked"
+  | toString (Int_toInt_unchecked (I32, INT)) = "Int32.toInt.unchecked"
+  | toString (Int_toInt_unchecked (I32, I32)) = "Int32.toInt32.unchecked"
+  | toString (Int_toInt_unchecked (I32, I54)) = "Int32.toInt54.unchecked"
+  | toString (Int_toInt_unchecked (I32, I64)) = "Int32.toInt64.unchecked"
+  | toString (Int_toInt_unchecked (I32, INT_INF)) = "Int32.toIntInf.unchecked"
+  | toString (Int_toInt_unchecked (I54, INT)) = "Int54.toInt.unchecked"
+  | toString (Int_toInt_unchecked (I54, I32)) = "Int54.toInt32.unchecked"
+  | toString (Int_toInt_unchecked (I54, I54)) = "Int54.toInt54.unchecked"
+  | toString (Int_toInt_unchecked (I54, I64)) = "Int54.toInt64.unchecked"
+  | toString (Int_toInt_unchecked (I54, INT_INF)) = "Int54.toIntInf.unchecked"
+  | toString (Int_toInt_unchecked (I64, INT)) = "Int64.toInt.unchecked"
+  | toString (Int_toInt_unchecked (I64, I32)) = "Int64.toInt32.unchecked"
+  | toString (Int_toInt_unchecked (I64, I54)) = "Int64.toInt54.unchecked"
+  | toString (Int_toInt_unchecked (I64, I64)) = "Int64.toInt64.unchecked"
+  | toString (Int_toInt_unchecked (I64, INT_INF)) = "Int64.toIntInf.unchecked"
+  | toString (Int_toInt_unchecked (INT_INF, INT)) = "IntInf.toInt.unchecked"
+  | toString (Int_toInt_unchecked (INT_INF, I32)) = "IntInf.toInt32.unchecked"
+  | toString (Int_toInt_unchecked (INT_INF, I54)) = "IntInf.toInt54.unchecked"
+  | toString (Int_toInt_unchecked (INT_INF, I64)) = "IntInf.toInt64.unchecked"
+  | toString (Int_toInt_unchecked (INT_INF, INT_INF)) = "IntInf.toIntInf.unchecked"
   | toString (Word_EQUAL WORD) = "Word.="
   | toString (Word_EQUAL W32) = "Word32.="
   | toString (Word_EQUAL W64) = "Word64.="
@@ -605,6 +631,31 @@ fun fromString "=" = SOME EQUAL
   | fromString "Int54.>=" = SOME (Int_GE I54)
   | fromString "Int64.>=" = SOME (Int_GE I64)
   | fromString "IntInf.>=" = SOME (Int_GE INT_INF)
+  | fromString "Int.toInt.unchecked" = SOME (Int_toInt_unchecked (INT, INT))
+  | fromString "Int.toInt32.unchecked" = SOME (Int_toInt_unchecked (INT, I32))
+  | fromString "Int.toInt54.unchecked" = SOME (Int_toInt_unchecked (INT, I54))
+  | fromString "Int.toInt64.unchecked" = SOME (Int_toInt_unchecked (INT, I64))
+  | fromString "Int.toIntInf.unchecked" = SOME (Int_toInt_unchecked (INT, INT_INF))
+  | fromString "Int32.toInt.unchecked" = SOME (Int_toInt_unchecked (I32, INT))
+  | fromString "Int32.toInt32.unchecked" = SOME (Int_toInt_unchecked (I32, I32))
+  | fromString "Int32.toInt54.unchecked" = SOME (Int_toInt_unchecked (I32, I54))
+  | fromString "Int32.toInt64.unchecked" = SOME (Int_toInt_unchecked (I32, I64))
+  | fromString "Int32.toIntInf.unchecked" = SOME (Int_toInt_unchecked (I32, INT_INF))
+  | fromString "Int54.toInt.unchecked" = SOME (Int_toInt_unchecked (I54, INT))
+  | fromString "Int54.toInt32.unchecked" = SOME (Int_toInt_unchecked (I54, I32))
+  | fromString "Int54.toInt54.unchecked" = SOME (Int_toInt_unchecked (I54, I54))
+  | fromString "Int54.toInt64.unchecked" = SOME (Int_toInt_unchecked (I54, I64))
+  | fromString "Int54.toIntInf.unchecked" = SOME (Int_toInt_unchecked (I54, INT_INF))
+  | fromString "Int64.toInt.unchecked" = SOME (Int_toInt_unchecked (I64, INT))
+  | fromString "Int64.toInt32.unchecked" = SOME (Int_toInt_unchecked (I64, I32))
+  | fromString "Int64.toInt54.unchecked" = SOME (Int_toInt_unchecked (I64, I54))
+  | fromString "Int64.toInt64.unchecked" = SOME (Int_toInt_unchecked (I64, I64))
+  | fromString "Int64.toIntInf.unchecked" = SOME (Int_toInt_unchecked (I64, INT_INF))
+  | fromString "IntInf.toInt.unchecked" = SOME (Int_toInt_unchecked (INT_INF, INT))
+  | fromString "IntInf.toInt32.unchecked" = SOME (Int_toInt_unchecked (INT_INF, I32))
+  | fromString "IntInf.toInt54.unchecked" = SOME (Int_toInt_unchecked (INT_INF, I54))
+  | fromString "IntInf.toInt64.unchecked" = SOME (Int_toInt_unchecked (INT_INF, I64))
+  | fromString "IntInf.toIntInf.unchecked" = SOME (Int_toInt_unchecked (INT_INF, INT_INF))
   | fromString "Word.=" = SOME (Word_EQUAL WORD)
   | fromString "Word32.=" = SOME (Word_EQUAL W32)
   | fromString "Word64.=" = SOME (Word_EQUAL W64)
@@ -861,6 +912,7 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise (Int_LE _) = false
   | mayRaise (Int_GT _) = false
   | mayRaise (Int_GE _) = false
+  | mayRaise (Int_toInt_unchecked _) = false
   | mayRaise (Word_EQUAL _) = false
   | mayRaise (Word_PLUS _) = false
   | mayRaise (Word_MINUS _) = false
@@ -1034,6 +1086,7 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable (Int_LE _) = true
   | isDiscardable (Int_GT _) = true
   | isDiscardable (Int_GE _) = true
+  | isDiscardable (Int_toInt_unchecked _) = true
   | isDiscardable (Word_EQUAL _) = true
   | isDiscardable (Word_PLUS _) = true
   | isDiscardable (Word_MINUS _) = true
@@ -1194,6 +1247,7 @@ fun fixIntWord { int, word }
         | Int_LE a1 => Int_LE (fixInt a1)
         | Int_GT a1 => Int_GT (fixInt a1)
         | Int_GE a1 => Int_GE (fixInt a1)
+        | Int_toInt_unchecked (a1, a2) => Int_toInt_unchecked (fixInt a1, fixInt a2)
         | Word_EQUAL a1 => Word_EQUAL (fixWord a1)
         | Word_PLUS a1 => Word_PLUS (fixWord a1)
         | Word_MINUS a1 => Word_MINUS (fixWord a1)
@@ -1380,6 +1434,31 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf (Primitives.Int_GE Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
   | typeOf (Primitives.Int_GE Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
   | typeOf (Primitives.Int_GE Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT)) = { vars = [], args = vector [int], result = int }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I32)) = { vars = [], args = vector [int], result = int32 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I54)) = { vars = [], args = vector [int], result = int54 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I64)) = { vars = [], args = vector [int], result = int64 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT_INF)) = { vars = [], args = vector [int], result = intInf }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT)) = { vars = [], args = vector [int32], result = int }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I32)) = { vars = [], args = vector [int32], result = int32 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I54)) = { vars = [], args = vector [int32], result = int54 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I64)) = { vars = [], args = vector [int32], result = int64 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT_INF)) = { vars = [], args = vector [int32], result = intInf }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT)) = { vars = [], args = vector [int54], result = int }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I32)) = { vars = [], args = vector [int54], result = int32 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I54)) = { vars = [], args = vector [int54], result = int54 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I64)) = { vars = [], args = vector [int54], result = int64 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT_INF)) = { vars = [], args = vector [int54], result = intInf }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT)) = { vars = [], args = vector [int64], result = int }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I32)) = { vars = [], args = vector [int64], result = int32 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I54)) = { vars = [], args = vector [int64], result = int54 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I64)) = { vars = [], args = vector [int64], result = int64 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT_INF)) = { vars = [], args = vector [int64], result = intInf }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT)) = { vars = [], args = vector [intInf], result = int }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I32)) = { vars = [], args = vector [intInf], result = int32 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I54)) = { vars = [], args = vector [intInf], result = int54 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I64)) = { vars = [], args = vector [intInf], result = int64 }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT_INF)) = { vars = [], args = vector [intInf], result = intInf }
   | typeOf (Primitives.Word_EQUAL Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
   | typeOf (Primitives.Word_EQUAL Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
   | typeOf (Primitives.Word_EQUAL Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }

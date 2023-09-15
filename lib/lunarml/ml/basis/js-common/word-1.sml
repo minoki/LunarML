@@ -47,7 +47,7 @@ val toInt : word -> int = fn x => if x >= 0wx80000000 then
                                       raise Overflow
                                   else
                                       Unsafe.cast x
-val toIntX : word -> int = fn x => Unsafe.cast (JavaScript.toInt32 (JavaScript.fromWord x))
+val toIntX : word -> int = fn x => _primCall "Int32.toInt.unchecked" (JavaScript.toInt32 (JavaScript.fromWord x))
 val fromInt : int -> word = fn x => Unsafe.cast (JavaScript.toUint32 (JavaScript.fromInt x))
 val andb : word * word -> word = fn (x, y) => _primCall "Word.andb" (x, y)
 val orb : word * word -> word = fn (x, y) => _primCall "Word.orb" (x, y)
