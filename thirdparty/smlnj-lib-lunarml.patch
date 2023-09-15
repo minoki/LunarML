@@ -66,7 +66,7 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/hash-table-rep.sml smlnj-li
  	  end
 diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
 --- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2023-06-02 21:21:29
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2023-09-15 14:08:09
 @@ -0,0 +1,234 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
@@ -168,10 +168,10 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lun
 +(* target64-prime-sizes.sml *)
 +queue-sig.sml
 +queue.sml
-+(* rand-sig.sml
++rand-sig.sml
 +rand.sml
 +random-sig.sml
-+random.sml *)
++random.sml
 +scan-sig.sml
 +scan.sml
 +uref-sig.sml
@@ -187,8 +187,8 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lun
 +word-redblack-map.sml
 +word-redblack-set.sml
 +end
-+(* real-order-stats.sml
-+univariate-stats.sml *)
++real-order-stats.sml
++univariate-stats.sml
 +utf8-sig.sml
 +utf8.sml
 +in
@@ -226,8 +226,8 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lun
 +signature PRIORITY
 +signature PROP_LIST
 +signature QUEUE
-+(* signature RAND
-+signature RANDOM *)
++signature RAND
++signature RANDOM
 +signature SCAN
 +signature SPLAY_TREE
 +signature UREF
@@ -270,8 +270,8 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lun
 +(* structure PrimeSizes *)
 +structure PropList
 +structure Queue
-+(* structure Rand
-+structure Random *)
++structure Rand
++structure Random
 +structure Scan
 +structure SimpleURef
 +(* structure TimeLimit *)
@@ -279,8 +279,8 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lun
 +structure WordHashTable
 +structure WordRedBlackMap
 +structure WordRedBlackSet
-+(* structure RealOrderStats
-+structure UnivariateStats *)
++structure RealOrderStats
++structure UnivariateStats
 +structure UTF8
 +functor ArrayQSortFn
 +functor BSearchFn
