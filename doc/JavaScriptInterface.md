@@ -52,8 +52,8 @@ structure JavaScript : sig
   val newObject : unit -> value
   val encodeUtf8 : WideString.string -> string
   val decodeUtf8 : string -> WideString.string
-  val toInt32 : value -> int
-  val toUint32 : value -> word
+  val toInt32 : value -> Int32.int
+  val toUint32 : value -> Word32.word
 end
 ```
 

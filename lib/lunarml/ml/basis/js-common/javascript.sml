@@ -44,8 +44,8 @@ structure JavaScript : sig
               val newObject : unit -> value
               val encodeUtf8 : WideString.string -> string
               val decodeUtf8 : string -> WideString.string
-              val toInt32 : value -> int
-              val toUint32 : value -> word
+              val toInt32 : value -> _Prim.Int32.int
+              val toUint32 : value -> _Prim.Word32.word
               structure Lib : sig
                             val parseFloat : value
                             val Number : value
@@ -163,8 +163,8 @@ fun x <= y = _primCall "JavaScript.<=" (x, y)
 fun x >= y = _primCall "JavaScript.>=" (x, y)
 fun ** (x, y) = _primCall "JavaScript.**" (x, y)
 fun typeof x = _primCall "JavaScript.typeof" (x)
-fun toInt32 x = unsafeFromValue (orb (x, fromInt 0)) : int
-fun toUint32 x = unsafeFromValue (>>> (x, fromInt 0)) : word
+fun toInt32 x = unsafeFromValue (orb (x, fromInt 0)) : _Prim.Int32.int
+fun toUint32 x = unsafeFromValue (>>> (x, fromInt 0)) : _Prim.Word32.word
 structure Lib = struct
 val parseFloat = LunarML.assumeDiscardable global "parseFloat"
 val Object = LunarML.assumeDiscardable global "Object"
