@@ -42,11 +42,11 @@ type string = string
 val minChar = #"\000"
 val maxChar = #"\255"
 val maxOrd = 255
-val ord : char -> int = Unsafe.cast
+val ord : char -> int = fn x => _primCall "Char.ord" (x)
 val chr : int -> char = fn x => if x < 0 orelse x > 255 then
                                     raise Chr
                                 else
-                                    Unsafe.cast x : char
+                                    _primCall "Char.chr.unchecked" (x)
 fun succ c = chr (ord c + 1)
 fun pred c = chr (ord c - 1)
 fun compare (x : char, y : char) = if x = y then

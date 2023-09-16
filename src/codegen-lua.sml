@@ -671,6 +671,20 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Char_GT => doBinaryOp (L.GT, PURE)
                        | Primitives.Char_LE => doBinaryOp (L.LE, PURE)
                        | Primitives.Char_GE => doBinaryOp (L.GE, PURE)
+                       | Primitives.Char_ord w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | (LUAJIT, Primitives.I32) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | (LUAJIT, Primitives.I54) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Char_chr_unchecked w =>
+                         (case (#targetLuaVersion ctx, w) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | (LUAJIT, Primitives.I32) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | (LUAJIT, Primitives.I54) => doUnaryExp (fn a => a, PURE) (* no-op *)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.String_EQUAL => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.String_LT => doBinaryOp (L.LT, PURE)
                        | Primitives.String_GT => doBinaryOp (L.GT, PURE)

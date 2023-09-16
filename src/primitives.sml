@@ -73,11 +73,15 @@ datatype PrimOp = EQUAL (* = *)
                 | Char_LE (* Char.<= *)
                 | Char_GT (* Char.> *)
                 | Char_GE (* Char.>= *)
+                | Char_ord of int_width (* Char.ord{.i} *)
+                | Char_chr_unchecked of int_width (* Char.chr.unchecked{.i} *)
                 | Char16_EQUAL (* Char16.= *)
                 | Char16_LT (* Char16.< *)
                 | Char16_LE (* Char16.<= *)
                 | Char16_GT (* Char16.> *)
                 | Char16_GE (* Char16.>= *)
+                | Char16_ord of int_width (* Char16.ord{.i} *)
+                | Char16_chr_unchecked of int_width (* Char16.chr.unchecked{.i} *)
                 | String_EQUAL (* String.= *)
                 | String_LT (* String.< *)
                 | String_LE (* String.<= *)
@@ -412,11 +416,31 @@ fun toString EQUAL = "="
   | toString Char_LE = "Char.<="
   | toString Char_GT = "Char.>"
   | toString Char_GE = "Char.>="
+  | toString (Char_ord INT) = "Char.ord"
+  | toString (Char_ord I32) = "Char.ord.i32"
+  | toString (Char_ord I54) = "Char.ord.i54"
+  | toString (Char_ord I64) = "Char.ord.i64"
+  | toString (Char_ord INT_INF) = "Char.ord.intInf"
+  | toString (Char_chr_unchecked INT) = "Char.chr.unchecked"
+  | toString (Char_chr_unchecked I32) = "Char.chr.unchecked.i32"
+  | toString (Char_chr_unchecked I54) = "Char.chr.unchecked.i54"
+  | toString (Char_chr_unchecked I64) = "Char.chr.unchecked.i64"
+  | toString (Char_chr_unchecked INT_INF) = "Char.chr.unchecked.intInf"
   | toString Char16_EQUAL = "Char16.="
   | toString Char16_LT = "Char16.<"
   | toString Char16_LE = "Char16.<="
   | toString Char16_GT = "Char16.>"
   | toString Char16_GE = "Char16.>="
+  | toString (Char16_ord INT) = "Char16.ord"
+  | toString (Char16_ord I32) = "Char16.ord.i32"
+  | toString (Char16_ord I54) = "Char16.ord.i54"
+  | toString (Char16_ord I64) = "Char16.ord.i64"
+  | toString (Char16_ord INT_INF) = "Char16.ord.intInf"
+  | toString (Char16_chr_unchecked INT) = "Char16.chr.unchecked"
+  | toString (Char16_chr_unchecked I32) = "Char16.chr.unchecked.i32"
+  | toString (Char16_chr_unchecked I54) = "Char16.chr.unchecked.i54"
+  | toString (Char16_chr_unchecked I64) = "Char16.chr.unchecked.i64"
+  | toString (Char16_chr_unchecked INT_INF) = "Char16.chr.unchecked.intInf"
   | toString String_EQUAL = "String.="
   | toString String_LT = "String.<"
   | toString String_LE = "String.<="
@@ -783,11 +807,31 @@ fun fromString "=" = SOME EQUAL
   | fromString "Char.<=" = SOME Char_LE
   | fromString "Char.>" = SOME Char_GT
   | fromString "Char.>=" = SOME Char_GE
+  | fromString "Char.ord" = SOME (Char_ord INT)
+  | fromString "Char.ord.i32" = SOME (Char_ord I32)
+  | fromString "Char.ord.i54" = SOME (Char_ord I54)
+  | fromString "Char.ord.i64" = SOME (Char_ord I64)
+  | fromString "Char.ord.intInf" = SOME (Char_ord INT_INF)
+  | fromString "Char.chr.unchecked" = SOME (Char_chr_unchecked INT)
+  | fromString "Char.chr.unchecked.i32" = SOME (Char_chr_unchecked I32)
+  | fromString "Char.chr.unchecked.i54" = SOME (Char_chr_unchecked I54)
+  | fromString "Char.chr.unchecked.i64" = SOME (Char_chr_unchecked I64)
+  | fromString "Char.chr.unchecked.intInf" = SOME (Char_chr_unchecked INT_INF)
   | fromString "Char16.=" = SOME Char16_EQUAL
   | fromString "Char16.<" = SOME Char16_LT
   | fromString "Char16.<=" = SOME Char16_LE
   | fromString "Char16.>" = SOME Char16_GT
   | fromString "Char16.>=" = SOME Char16_GE
+  | fromString "Char16.ord" = SOME (Char16_ord INT)
+  | fromString "Char16.ord.i32" = SOME (Char16_ord I32)
+  | fromString "Char16.ord.i54" = SOME (Char16_ord I54)
+  | fromString "Char16.ord.i64" = SOME (Char16_ord I64)
+  | fromString "Char16.ord.intInf" = SOME (Char16_ord INT_INF)
+  | fromString "Char16.chr.unchecked" = SOME (Char16_chr_unchecked INT)
+  | fromString "Char16.chr.unchecked.i32" = SOME (Char16_chr_unchecked I32)
+  | fromString "Char16.chr.unchecked.i54" = SOME (Char16_chr_unchecked I54)
+  | fromString "Char16.chr.unchecked.i64" = SOME (Char16_chr_unchecked I64)
+  | fromString "Char16.chr.unchecked.intInf" = SOME (Char16_chr_unchecked INT_INF)
   | fromString "String.=" = SOME String_EQUAL
   | fromString "String.<" = SOME String_LT
   | fromString "String.<=" = SOME String_LE
@@ -994,11 +1038,15 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Char_LE = false
   | mayRaise Char_GT = false
   | mayRaise Char_GE = false
+  | mayRaise (Char_ord _) = false
+  | mayRaise (Char_chr_unchecked _) = false
   | mayRaise Char16_EQUAL = false
   | mayRaise Char16_LT = false
   | mayRaise Char16_LE = false
   | mayRaise Char16_GT = false
   | mayRaise Char16_GE = false
+  | mayRaise (Char16_ord _) = false
+  | mayRaise (Char16_chr_unchecked _) = false
   | mayRaise String_EQUAL = false
   | mayRaise String_LT = false
   | mayRaise String_LE = false
@@ -1172,11 +1220,15 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Char_LE = true
   | isDiscardable Char_GT = true
   | isDiscardable Char_GE = true
+  | isDiscardable (Char_ord _) = true
+  | isDiscardable (Char_chr_unchecked _) = true
   | isDiscardable Char16_EQUAL = true
   | isDiscardable Char16_LT = true
   | isDiscardable Char16_LE = true
   | isDiscardable Char16_GT = true
   | isDiscardable Char16_GE = true
+  | isDiscardable (Char16_ord _) = true
+  | isDiscardable (Char16_chr_unchecked _) = true
   | isDiscardable String_EQUAL = true
   | isDiscardable String_LT = true
   | isDiscardable String_LE = true
@@ -1323,6 +1375,10 @@ fun fixIntWord { int, word }
         | Word_xorb a1 => Word_xorb (fixWord a1)
         | Word_LSHIFT_unchecked (a1, a2) => Word_LSHIFT_unchecked (fixWord a1, fixWord a2)
         | Word_RSHIFT_unchecked (a1, a2) => Word_RSHIFT_unchecked (fixWord a1, fixWord a2)
+        | Char_ord a1 => Char_ord (fixInt a1)
+        | Char_chr_unchecked a1 => Char_chr_unchecked (fixInt a1)
+        | Char16_ord a1 => Char16_ord (fixInt a1)
+        | Char16_chr_unchecked a1 => Char16_chr_unchecked (fixInt a1)
         | String_size a1 => String_size (fixInt a1)
         | String16_size a1 => String16_size (fixInt a1)
         | Vector_length a1 => Vector_length (fixInt a1)
@@ -1618,11 +1674,31 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.Char_LE = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.Char_GT = { vars = [], args = vector [char, char], result = bool }
   | typeOf Primitives.Char_GE = { vars = [], args = vector [char, char], result = bool }
+  | typeOf (Primitives.Char_ord Primitives.INT) = { vars = [], args = vector [char], result = int }
+  | typeOf (Primitives.Char_ord Primitives.I32) = { vars = [], args = vector [char], result = int32 }
+  | typeOf (Primitives.Char_ord Primitives.I54) = { vars = [], args = vector [char], result = int54 }
+  | typeOf (Primitives.Char_ord Primitives.I64) = { vars = [], args = vector [char], result = int64 }
+  | typeOf (Primitives.Char_ord Primitives.INT_INF) = { vars = [], args = vector [char], result = intInf }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], result = char }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = char }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = char }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = char }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = char }
   | typeOf Primitives.Char16_EQUAL = { vars = [], args = vector [char16, char16], result = bool }
   | typeOf Primitives.Char16_LT = { vars = [], args = vector [char16, char16], result = bool }
   | typeOf Primitives.Char16_LE = { vars = [], args = vector [char16, char16], result = bool }
   | typeOf Primitives.Char16_GT = { vars = [], args = vector [char16, char16], result = bool }
   | typeOf Primitives.Char16_GE = { vars = [], args = vector [char16, char16], result = bool }
+  | typeOf (Primitives.Char16_ord Primitives.INT) = { vars = [], args = vector [char16], result = int }
+  | typeOf (Primitives.Char16_ord Primitives.I32) = { vars = [], args = vector [char16], result = int32 }
+  | typeOf (Primitives.Char16_ord Primitives.I54) = { vars = [], args = vector [char16], result = int54 }
+  | typeOf (Primitives.Char16_ord Primitives.I64) = { vars = [], args = vector [char16], result = int64 }
+  | typeOf (Primitives.Char16_ord Primitives.INT_INF) = { vars = [], args = vector [char16], result = intInf }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], result = char16 }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = char16 }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = char16 }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = char16 }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = char16 }
   | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], result = bool }
   | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], result = bool }
