@@ -187,10 +187,6 @@ _overload "Int" [Int54.int] { + = Int54.+
                             };
 
 local
-    val ffi = LunarML.assumeDiscardable (fn () => Lua.call1 Lua.Lib.require #[Lua.fromString "ffi"]) ()
-    val int64_t = LunarML.assumeDiscardable (fn () => Lua.call1 (Lua.field (ffi, "typeof")) #[Lua.fromString "int64_t"]) () (* ffi.typeof("int64_t") *)
-    val unsafeFromValue : Lua.value -> _Prim.Int64.int = Lua.unsafeFromValue
-    val toValue : _Prim.Int64.int -> Lua.value = Lua.unsafeToValue
     structure UncheckedInt64 : sig
                   type int
                   val + : int * int -> int
@@ -205,18 +201,18 @@ local
                   val >= : int * int -> bool
               end = struct
     type int = _Prim.Int64.int
-    val op + = fn (x, y) => unsafeFromValue (Lua.+ (toValue x, toValue y))
-    val op - = fn (x, y) => unsafeFromValue (Lua.- (toValue x, toValue y))
-    val op * = fn (x, y) => unsafeFromValue (Lua.* (toValue x, toValue y))
-    val quot = fn (x, y) => unsafeFromValue (Lua./ (toValue x, toValue y))
-    val rem = fn (x, y) => unsafeFromValue (Lua.% (toValue x, toValue y))
-    val ~ = fn x => unsafeFromValue (Lua.negate (toValue x))
+    val op + = fn (x, y) => _primCall "Int64.+.wrapping" (x, y)
+    val op - = fn (x, y) => _primCall "Int64.-.wrapping" (x, y)
+    val op * = fn (x, y) => _primCall "Int64.*.wrapping" (x, y)
+    val quot = fn (x, y) => _primCall "Int64.quot.unchecked" (x, y)
+    val rem = fn (x, y) => _primCall "Int64.rem.unchecked" (x, y)
+    val ~ = fn x => _primCall "Int64.~.unchecked" (x)
     val op < = fn (x, y) => _primCall "Int64.<" (x, y)
     val op <= = fn (x, y) => _primCall "Int64.<=" (x, y)
     val op > = fn (x, y) => _primCall "Int64.>" (x, y)
     val op >= = fn (x, y) => _primCall "Int64.>=" (x, y)
     end
-    fun Int64_EQUAL (x, y) = Lua.== (toValue x, toValue y);
+    fun Int64_EQUAL (x, y) = _primCall "Int64.=" (x, y);
 in
 _equality _Prim.Int64.int = Int64_EQUAL;
 structure Int64 :> INTEGER where type int = _Prim.Int64.int = struct

@@ -395,16 +395,31 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                             | (LUAJIT, Primitives.I54) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int54_add"), vector [a, b]), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
+                       | Primitives.Int_PLUS_wrapping i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUAJIT, Primitives.I64) => doBinaryOp (L.PLUS, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Int_MINUS i =>
                          (case (#targetLuaVersion ctx, i) of
                               (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_sub"), vector [a, b]), IMPURE)
                             | (LUAJIT, Primitives.I54) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int54_sub"), vector [a, b]), IMPURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
+                       | Primitives.Int_MINUS_wrapping i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUAJIT, Primitives.I64) => doBinaryOp (L.MINUS, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Int_TIMES i =>
                          (case (#targetLuaVersion ctx, i) of
                               (LUA5_3, Primitives.INT) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int_mul"), vector [a, b]), IMPURE)
                             | (LUAJIT, Primitives.I54) => doBinaryExp (fn (a, b) => L.CallExp (L.VarExp (L.PredefinedId "_Int54_mul"), vector [a, b]), IMPURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_TIMES_wrapping i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUAJIT, Primitives.I64) => doBinaryOp (L.TIMES, PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
                        | Primitives.Int_div i =>
@@ -442,8 +457,14 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Int_quot_unchecked i =>
                          (case (#targetLuaVersion ctx, i) of
                               (LUA5_3, Primitives.INT) => raise CodeGenError "primop Int.quot.unchecked is not supported on this target"
-                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), IMPURE)
-                            | (LUAJIT, Primitives.I54) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), IMPURE)
+                            | (LUAJIT, Primitives.I32) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), PURE)
+                            | (LUAJIT, Primitives.I54) => doBinaryExp (fn (a, b) => L.SingleValueExp (L.CallExp (L.VarExp (L.PredefinedId "math_modf"), vector [L.BinExp (L.DIV, a, b)])), PURE)
+                            | (LUAJIT, Primitives.I64) => doBinaryOp (L.DIV, PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_rem_unchecked i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUAJIT, Primitives.I64) => doBinaryOp (L.MOD, PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
                        | Primitives.Int_TILDE i =>
@@ -454,8 +475,15 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                          )
                        | Primitives.Int_TILDE_unchecked i =>
                          (case (#targetLuaVersion ctx, i) of
-                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), IMPURE)
-                            | (LUAJIT, Primitives.I54) => doUnaryExp (fn a => L.BinExp (L.MINUS, L.ConstExp (L.Numeral "0"), a), IMPURE) (* Should we avoid negative zero? *)
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
+                            | (LUAJIT, Primitives.I54) => doUnaryExp (fn a => L.BinExp (L.MINUS, L.ConstExp (L.Numeral "0"), a), PURE) (* Should we avoid negative zero? *)
+                            | (LUAJIT, Primitives.I64) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
+                       | Primitives.Int_TILDE_wrapping i =>
+                         (case (#targetLuaVersion ctx, i) of
+                              (LUA5_3, Primitives.INT) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
+                            | (LUAJIT, Primitives.I64) => doUnaryExp (fn a => L.UnaryExp (L.NEGATE, a), PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
                        | Primitives.Int_abs i =>

@@ -18,18 +18,22 @@ datatype PrimOp = EQUAL (* = *)
                 | Bool_not (* Bool.not *)
                 | Int_EQUAL of int_width (* Int{i}.= *)
                 | Int_PLUS of int_width (* Int{i}.+ *)
+                | Int_PLUS_wrapping of int_width (* Int{i}.+.wrapping *)
                 | Int_MINUS of int_width (* Int{i}.- *)
+                | Int_MINUS_wrapping of int_width (* Int{i}.-.wrapping *)
                 | Int_TIMES of int_width (* Int{i}.* *)
+                | Int_TIMES_wrapping of int_width (* Int{i}.*.wrapping *)
                 | Int_div of int_width (* Int{i}.div *)
-                | Int_mod of int_width (* Int{i}.mod *)
                 | Int_div_unchecked of int_width (* Int{i}.div.unchecked *)
+                | Int_mod of int_width (* Int{i}.mod *)
                 | Int_mod_unchecked of int_width (* Int{i}.mod.unchecked *)
                 | Int_quot of int_width (* Int{i}.quot *)
-                | Int_rem of int_width (* Int{i}.rem *)
                 | Int_quot_unchecked of int_width (* Int{i}.quot.unchecked *)
+                | Int_rem of int_width (* Int{i}.rem *)
                 | Int_rem_unchecked of int_width (* Int{i}.rem.unchecked *)
                 | Int_TILDE of int_width (* Int{i}.~ *)
                 | Int_TILDE_unchecked of int_width (* Int{i}.~.unchecked *)
+                | Int_TILDE_wrapping of int_width (* Int{i}.~.wrapping *)
                 | Int_abs of int_width (* Int{i}.abs *)
                 | Int_LT of int_width (* Int{i}.< *)
                 | Int_LE of int_width (* Int{i}.<= *)
@@ -195,31 +199,46 @@ fun toString EQUAL = "="
   | toString (Int_PLUS I54) = "Int54.+"
   | toString (Int_PLUS I64) = "Int64.+"
   | toString (Int_PLUS INT_INF) = "IntInf.+"
+  | toString (Int_PLUS_wrapping INT) = "Int.+.wrapping"
+  | toString (Int_PLUS_wrapping I32) = "Int32.+.wrapping"
+  | toString (Int_PLUS_wrapping I54) = "Int54.+.wrapping"
+  | toString (Int_PLUS_wrapping I64) = "Int64.+.wrapping"
+  | toString (Int_PLUS_wrapping INT_INF) = "IntInf.+.wrapping"
   | toString (Int_MINUS INT) = "Int.-"
   | toString (Int_MINUS I32) = "Int32.-"
   | toString (Int_MINUS I54) = "Int54.-"
   | toString (Int_MINUS I64) = "Int64.-"
   | toString (Int_MINUS INT_INF) = "IntInf.-"
+  | toString (Int_MINUS_wrapping INT) = "Int.-.wrapping"
+  | toString (Int_MINUS_wrapping I32) = "Int32.-.wrapping"
+  | toString (Int_MINUS_wrapping I54) = "Int54.-.wrapping"
+  | toString (Int_MINUS_wrapping I64) = "Int64.-.wrapping"
+  | toString (Int_MINUS_wrapping INT_INF) = "IntInf.-.wrapping"
   | toString (Int_TIMES INT) = "Int.*"
   | toString (Int_TIMES I32) = "Int32.*"
   | toString (Int_TIMES I54) = "Int54.*"
   | toString (Int_TIMES I64) = "Int64.*"
   | toString (Int_TIMES INT_INF) = "IntInf.*"
+  | toString (Int_TIMES_wrapping INT) = "Int.*.wrapping"
+  | toString (Int_TIMES_wrapping I32) = "Int32.*.wrapping"
+  | toString (Int_TIMES_wrapping I54) = "Int54.*.wrapping"
+  | toString (Int_TIMES_wrapping I64) = "Int64.*.wrapping"
+  | toString (Int_TIMES_wrapping INT_INF) = "IntInf.*.wrapping"
   | toString (Int_div INT) = "Int.div"
   | toString (Int_div I32) = "Int32.div"
   | toString (Int_div I54) = "Int54.div"
   | toString (Int_div I64) = "Int64.div"
   | toString (Int_div INT_INF) = "IntInf.div"
-  | toString (Int_mod INT) = "Int.mod"
-  | toString (Int_mod I32) = "Int32.mod"
-  | toString (Int_mod I54) = "Int54.mod"
-  | toString (Int_mod I64) = "Int64.mod"
-  | toString (Int_mod INT_INF) = "IntInf.mod"
   | toString (Int_div_unchecked INT) = "Int.div.unchecked"
   | toString (Int_div_unchecked I32) = "Int32.div.unchecked"
   | toString (Int_div_unchecked I54) = "Int54.div.unchecked"
   | toString (Int_div_unchecked I64) = "Int64.div.unchecked"
   | toString (Int_div_unchecked INT_INF) = "IntInf.div.unchecked"
+  | toString (Int_mod INT) = "Int.mod"
+  | toString (Int_mod I32) = "Int32.mod"
+  | toString (Int_mod I54) = "Int54.mod"
+  | toString (Int_mod I64) = "Int64.mod"
+  | toString (Int_mod INT_INF) = "IntInf.mod"
   | toString (Int_mod_unchecked INT) = "Int.mod.unchecked"
   | toString (Int_mod_unchecked I32) = "Int32.mod.unchecked"
   | toString (Int_mod_unchecked I54) = "Int54.mod.unchecked"
@@ -230,16 +249,16 @@ fun toString EQUAL = "="
   | toString (Int_quot I54) = "Int54.quot"
   | toString (Int_quot I64) = "Int64.quot"
   | toString (Int_quot INT_INF) = "IntInf.quot"
-  | toString (Int_rem INT) = "Int.rem"
-  | toString (Int_rem I32) = "Int32.rem"
-  | toString (Int_rem I54) = "Int54.rem"
-  | toString (Int_rem I64) = "Int64.rem"
-  | toString (Int_rem INT_INF) = "IntInf.rem"
   | toString (Int_quot_unchecked INT) = "Int.quot.unchecked"
   | toString (Int_quot_unchecked I32) = "Int32.quot.unchecked"
   | toString (Int_quot_unchecked I54) = "Int54.quot.unchecked"
   | toString (Int_quot_unchecked I64) = "Int64.quot.unchecked"
   | toString (Int_quot_unchecked INT_INF) = "IntInf.quot.unchecked"
+  | toString (Int_rem INT) = "Int.rem"
+  | toString (Int_rem I32) = "Int32.rem"
+  | toString (Int_rem I54) = "Int54.rem"
+  | toString (Int_rem I64) = "Int64.rem"
+  | toString (Int_rem INT_INF) = "IntInf.rem"
   | toString (Int_rem_unchecked INT) = "Int.rem.unchecked"
   | toString (Int_rem_unchecked I32) = "Int32.rem.unchecked"
   | toString (Int_rem_unchecked I54) = "Int54.rem.unchecked"
@@ -255,6 +274,11 @@ fun toString EQUAL = "="
   | toString (Int_TILDE_unchecked I54) = "Int54.~.unchecked"
   | toString (Int_TILDE_unchecked I64) = "Int64.~.unchecked"
   | toString (Int_TILDE_unchecked INT_INF) = "IntInf.~.unchecked"
+  | toString (Int_TILDE_wrapping INT) = "Int.~.wrapping"
+  | toString (Int_TILDE_wrapping I32) = "Int32.~.wrapping"
+  | toString (Int_TILDE_wrapping I54) = "Int54.~.wrapping"
+  | toString (Int_TILDE_wrapping I64) = "Int64.~.wrapping"
+  | toString (Int_TILDE_wrapping INT_INF) = "IntInf.~.wrapping"
   | toString (Int_abs INT) = "Int.abs"
   | toString (Int_abs I32) = "Int32.abs"
   | toString (Int_abs I54) = "Int54.abs"
@@ -546,31 +570,46 @@ fun fromString "=" = SOME EQUAL
   | fromString "Int54.+" = SOME (Int_PLUS I54)
   | fromString "Int64.+" = SOME (Int_PLUS I64)
   | fromString "IntInf.+" = SOME (Int_PLUS INT_INF)
+  | fromString "Int.+.wrapping" = SOME (Int_PLUS_wrapping INT)
+  | fromString "Int32.+.wrapping" = SOME (Int_PLUS_wrapping I32)
+  | fromString "Int54.+.wrapping" = SOME (Int_PLUS_wrapping I54)
+  | fromString "Int64.+.wrapping" = SOME (Int_PLUS_wrapping I64)
+  | fromString "IntInf.+.wrapping" = SOME (Int_PLUS_wrapping INT_INF)
   | fromString "Int.-" = SOME (Int_MINUS INT)
   | fromString "Int32.-" = SOME (Int_MINUS I32)
   | fromString "Int54.-" = SOME (Int_MINUS I54)
   | fromString "Int64.-" = SOME (Int_MINUS I64)
   | fromString "IntInf.-" = SOME (Int_MINUS INT_INF)
+  | fromString "Int.-.wrapping" = SOME (Int_MINUS_wrapping INT)
+  | fromString "Int32.-.wrapping" = SOME (Int_MINUS_wrapping I32)
+  | fromString "Int54.-.wrapping" = SOME (Int_MINUS_wrapping I54)
+  | fromString "Int64.-.wrapping" = SOME (Int_MINUS_wrapping I64)
+  | fromString "IntInf.-.wrapping" = SOME (Int_MINUS_wrapping INT_INF)
   | fromString "Int.*" = SOME (Int_TIMES INT)
   | fromString "Int32.*" = SOME (Int_TIMES I32)
   | fromString "Int54.*" = SOME (Int_TIMES I54)
   | fromString "Int64.*" = SOME (Int_TIMES I64)
   | fromString "IntInf.*" = SOME (Int_TIMES INT_INF)
+  | fromString "Int.*.wrapping" = SOME (Int_TIMES_wrapping INT)
+  | fromString "Int32.*.wrapping" = SOME (Int_TIMES_wrapping I32)
+  | fromString "Int54.*.wrapping" = SOME (Int_TIMES_wrapping I54)
+  | fromString "Int64.*.wrapping" = SOME (Int_TIMES_wrapping I64)
+  | fromString "IntInf.*.wrapping" = SOME (Int_TIMES_wrapping INT_INF)
   | fromString "Int.div" = SOME (Int_div INT)
   | fromString "Int32.div" = SOME (Int_div I32)
   | fromString "Int54.div" = SOME (Int_div I54)
   | fromString "Int64.div" = SOME (Int_div I64)
   | fromString "IntInf.div" = SOME (Int_div INT_INF)
-  | fromString "Int.mod" = SOME (Int_mod INT)
-  | fromString "Int32.mod" = SOME (Int_mod I32)
-  | fromString "Int54.mod" = SOME (Int_mod I54)
-  | fromString "Int64.mod" = SOME (Int_mod I64)
-  | fromString "IntInf.mod" = SOME (Int_mod INT_INF)
   | fromString "Int.div.unchecked" = SOME (Int_div_unchecked INT)
   | fromString "Int32.div.unchecked" = SOME (Int_div_unchecked I32)
   | fromString "Int54.div.unchecked" = SOME (Int_div_unchecked I54)
   | fromString "Int64.div.unchecked" = SOME (Int_div_unchecked I64)
   | fromString "IntInf.div.unchecked" = SOME (Int_div_unchecked INT_INF)
+  | fromString "Int.mod" = SOME (Int_mod INT)
+  | fromString "Int32.mod" = SOME (Int_mod I32)
+  | fromString "Int54.mod" = SOME (Int_mod I54)
+  | fromString "Int64.mod" = SOME (Int_mod I64)
+  | fromString "IntInf.mod" = SOME (Int_mod INT_INF)
   | fromString "Int.mod.unchecked" = SOME (Int_mod_unchecked INT)
   | fromString "Int32.mod.unchecked" = SOME (Int_mod_unchecked I32)
   | fromString "Int54.mod.unchecked" = SOME (Int_mod_unchecked I54)
@@ -581,16 +620,16 @@ fun fromString "=" = SOME EQUAL
   | fromString "Int54.quot" = SOME (Int_quot I54)
   | fromString "Int64.quot" = SOME (Int_quot I64)
   | fromString "IntInf.quot" = SOME (Int_quot INT_INF)
-  | fromString "Int.rem" = SOME (Int_rem INT)
-  | fromString "Int32.rem" = SOME (Int_rem I32)
-  | fromString "Int54.rem" = SOME (Int_rem I54)
-  | fromString "Int64.rem" = SOME (Int_rem I64)
-  | fromString "IntInf.rem" = SOME (Int_rem INT_INF)
   | fromString "Int.quot.unchecked" = SOME (Int_quot_unchecked INT)
   | fromString "Int32.quot.unchecked" = SOME (Int_quot_unchecked I32)
   | fromString "Int54.quot.unchecked" = SOME (Int_quot_unchecked I54)
   | fromString "Int64.quot.unchecked" = SOME (Int_quot_unchecked I64)
   | fromString "IntInf.quot.unchecked" = SOME (Int_quot_unchecked INT_INF)
+  | fromString "Int.rem" = SOME (Int_rem INT)
+  | fromString "Int32.rem" = SOME (Int_rem I32)
+  | fromString "Int54.rem" = SOME (Int_rem I54)
+  | fromString "Int64.rem" = SOME (Int_rem I64)
+  | fromString "IntInf.rem" = SOME (Int_rem INT_INF)
   | fromString "Int.rem.unchecked" = SOME (Int_rem_unchecked INT)
   | fromString "Int32.rem.unchecked" = SOME (Int_rem_unchecked I32)
   | fromString "Int54.rem.unchecked" = SOME (Int_rem_unchecked I54)
@@ -606,6 +645,11 @@ fun fromString "=" = SOME EQUAL
   | fromString "Int54.~.unchecked" = SOME (Int_TILDE_unchecked I54)
   | fromString "Int64.~.unchecked" = SOME (Int_TILDE_unchecked I64)
   | fromString "IntInf.~.unchecked" = SOME (Int_TILDE_unchecked INT_INF)
+  | fromString "Int.~.wrapping" = SOME (Int_TILDE_wrapping INT)
+  | fromString "Int32.~.wrapping" = SOME (Int_TILDE_wrapping I32)
+  | fromString "Int54.~.wrapping" = SOME (Int_TILDE_wrapping I54)
+  | fromString "Int64.~.wrapping" = SOME (Int_TILDE_wrapping I64)
+  | fromString "IntInf.~.wrapping" = SOME (Int_TILDE_wrapping INT_INF)
   | fromString "Int.abs" = SOME (Int_abs INT)
   | fromString "Int32.abs" = SOME (Int_abs I32)
   | fromString "Int54.abs" = SOME (Int_abs I54)
@@ -895,18 +939,22 @@ fun mayRaise (Int_PLUS INT_INF) = false
   | mayRaise Bool_not = false
   | mayRaise (Int_EQUAL _) = false
   | mayRaise (Int_PLUS _) = true
+  | mayRaise (Int_PLUS_wrapping _) = false
   | mayRaise (Int_MINUS _) = true
+  | mayRaise (Int_MINUS_wrapping _) = false
   | mayRaise (Int_TIMES _) = true
+  | mayRaise (Int_TIMES_wrapping _) = false
   | mayRaise (Int_div _) = true
-  | mayRaise (Int_mod _) = true
   | mayRaise (Int_div_unchecked _) = false
+  | mayRaise (Int_mod _) = true
   | mayRaise (Int_mod_unchecked _) = false
   | mayRaise (Int_quot _) = true
-  | mayRaise (Int_rem _) = true
   | mayRaise (Int_quot_unchecked _) = false
+  | mayRaise (Int_rem _) = true
   | mayRaise (Int_rem_unchecked _) = false
   | mayRaise (Int_TILDE _) = true
   | mayRaise (Int_TILDE_unchecked _) = false
+  | mayRaise (Int_TILDE_wrapping _) = false
   | mayRaise (Int_abs _) = true
   | mayRaise (Int_LT _) = false
   | mayRaise (Int_LE _) = false
@@ -1069,18 +1117,22 @@ fun isDiscardable (Int_PLUS INT_INF) = true
   | isDiscardable Bool_not = true
   | isDiscardable (Int_EQUAL _) = true
   | isDiscardable (Int_PLUS _) = false
+  | isDiscardable (Int_PLUS_wrapping _) = true
   | isDiscardable (Int_MINUS _) = false
+  | isDiscardable (Int_MINUS_wrapping _) = true
   | isDiscardable (Int_TIMES _) = false
+  | isDiscardable (Int_TIMES_wrapping _) = true
   | isDiscardable (Int_div _) = false
-  | isDiscardable (Int_mod _) = false
   | isDiscardable (Int_div_unchecked _) = true
+  | isDiscardable (Int_mod _) = false
   | isDiscardable (Int_mod_unchecked _) = true
   | isDiscardable (Int_quot _) = false
-  | isDiscardable (Int_rem _) = false
   | isDiscardable (Int_quot_unchecked _) = true
+  | isDiscardable (Int_rem _) = false
   | isDiscardable (Int_rem_unchecked _) = true
   | isDiscardable (Int_TILDE _) = false
   | isDiscardable (Int_TILDE_unchecked _) = true
+  | isDiscardable (Int_TILDE_wrapping _) = true
   | isDiscardable (Int_abs _) = false
   | isDiscardable (Int_LT _) = true
   | isDiscardable (Int_LE _) = true
@@ -1230,18 +1282,22 @@ fun fixIntWord { int, word }
           | fixWord w = w
     in fn Int_EQUAL a1 => Int_EQUAL (fixInt a1)
         | Int_PLUS a1 => Int_PLUS (fixInt a1)
+        | Int_PLUS_wrapping a1 => Int_PLUS_wrapping (fixInt a1)
         | Int_MINUS a1 => Int_MINUS (fixInt a1)
+        | Int_MINUS_wrapping a1 => Int_MINUS_wrapping (fixInt a1)
         | Int_TIMES a1 => Int_TIMES (fixInt a1)
+        | Int_TIMES_wrapping a1 => Int_TIMES_wrapping (fixInt a1)
         | Int_div a1 => Int_div (fixInt a1)
-        | Int_mod a1 => Int_mod (fixInt a1)
         | Int_div_unchecked a1 => Int_div_unchecked (fixInt a1)
+        | Int_mod a1 => Int_mod (fixInt a1)
         | Int_mod_unchecked a1 => Int_mod_unchecked (fixInt a1)
         | Int_quot a1 => Int_quot (fixInt a1)
-        | Int_rem a1 => Int_rem (fixInt a1)
         | Int_quot_unchecked a1 => Int_quot_unchecked (fixInt a1)
+        | Int_rem a1 => Int_rem (fixInt a1)
         | Int_rem_unchecked a1 => Int_rem_unchecked (fixInt a1)
         | Int_TILDE a1 => Int_TILDE (fixInt a1)
         | Int_TILDE_unchecked a1 => Int_TILDE_unchecked (fixInt a1)
+        | Int_TILDE_wrapping a1 => Int_TILDE_wrapping (fixInt a1)
         | Int_abs a1 => Int_abs (fixInt a1)
         | Int_LT a1 => Int_LT (fixInt a1)
         | Int_LE a1 => Int_LE (fixInt a1)
@@ -1349,31 +1405,46 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf (Primitives.Int_PLUS Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_PLUS Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_PLUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_MINUS Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_MINUS Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_MINUS Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_MINUS Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_MINUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_TIMES Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_TIMES Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_TIMES Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_TIMES Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_TIMES Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_div Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_div Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_div Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_div Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_div Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_mod Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_mod Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_mod Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_mod Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_mod Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_div_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_div_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_div_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_div_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_div_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf (Primitives.Int_mod Primitives.INT) = { vars = [], args = vector [int, int], result = int }
+  | typeOf (Primitives.Int_mod Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
+  | typeOf (Primitives.Int_mod Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
+  | typeOf (Primitives.Int_mod Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_mod Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_mod_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_mod_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_mod_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
@@ -1384,16 +1455,16 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf (Primitives.Int_quot Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_quot Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_quot Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_rem Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_rem Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_rem Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_rem Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_rem Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_quot_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_quot_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_quot_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
   | typeOf (Primitives.Int_quot_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
   | typeOf (Primitives.Int_quot_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
+  | typeOf (Primitives.Int_rem Primitives.INT) = { vars = [], args = vector [int, int], result = int }
+  | typeOf (Primitives.Int_rem Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
+  | typeOf (Primitives.Int_rem Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
+  | typeOf (Primitives.Int_rem Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
+  | typeOf (Primitives.Int_rem Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf (Primitives.Int_rem_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
   | typeOf (Primitives.Int_rem_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
   | typeOf (Primitives.Int_rem_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
@@ -1409,6 +1480,11 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf (Primitives.Int_TILDE_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
   | typeOf (Primitives.Int_TILDE_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
   | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT) = { vars = [], args = vector [int], result = int }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
   | typeOf (Primitives.Int_abs Primitives.INT) = { vars = [], args = vector [int], result = int }
   | typeOf (Primitives.Int_abs Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
   | typeOf (Primitives.Int_abs Primitives.I54) = { vars = [], args = vector [int54], result = int54 }

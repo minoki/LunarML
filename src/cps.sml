@@ -1081,6 +1081,11 @@ fun isInt (P.INT, x) = false
   | isInt (P.I54, x) = isInt54 x
   | isInt (P.I64, x) = isInt64 x
   | isInt (P.INT_INF, x) = true
+fun wraparound (P.INT, x : IntInf.int) = x
+  | wraparound (P.I32, x) = (x + 0x80000000) mod 0x100000000 - 0x80000000
+  | wraparound (P.I54, x) = (x + 0x20000000000000) mod 0x40000000000000 - 0x20000000000000
+  | wraparound (P.I64, x) = (x + 0x8000000000000000) mod 0x10000000000000000 - 0x8000000000000000
+  | wraparound (P.INT_INF, x) = x
 fun min3 (x, y, z) = IntInf.min (x, IntInf.min (y, z))
 fun max3 (x, y, z) = IntInf.max (x, IntInf.max (y, z))
 fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields) = NOT_SIMPLIFIED
@@ -1174,6 +1179,12 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                                                                                          NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_PLUS w), [C.IntConst (w', 0), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_PLUS w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS_wrapping w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w <> P.INT andalso w = w' andalso w = w'' then
+                                                                                                  VALUE (C.IntConst (w, wraparound (w, x + y)))
+                                                                                              else
+                                                                                                  NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS_wrapping w), [C.IntConst (w', 0), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_PLUS_wrapping w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_MINUS w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
                                                                                          let val z = x - y
                                                                                          in if isInt (w, z) orelse (min3 (x, y, 0) <= z andalso z <= max3 (x, y, 0)) then
@@ -1188,6 +1199,15 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                                                                     else
                                                                         NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_MINUS w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS_wrapping w), [C.IntConst (w', x), C.IntConst (w'', y)]) => if w = w' andalso w = w'' then
+                                                                                                   VALUE (C.IntConst (w, wraparound (w, x - y)))
+                                                                                               else
+                                                                                                   NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS_wrapping w), [C.IntConst (w', 0), y]) => if w = w' then
+                                                                                 SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE_wrapping w), tyargs = [], args = [y] })
+                                                                             else
+                                                                                 NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_MINUS_wrapping w), [x, C.IntConst (w', 0)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES w), [zero as C.IntConst (w', 0), _]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES w), [_, zero as C.IntConst (w', 0)]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES w), [C.IntConst (w', 1), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
@@ -1209,6 +1229,17 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES w), [C.IntConst (w', ~1), y]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [y] }) else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES w), [x, C.IntConst (w', ~1)]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE w), tyargs = [], args = [x] }) else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [zero as C.IntConst (w', 0), _]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [_, zero as C.IntConst (w', 0)]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [C.IntConst (w', 1), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [x, C.IntConst (w', 1)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [x as C.IntConst (w', x'), y as C.IntConst (w'', y')]) =>
+           if w = w' andalso w = w'' then
+               VALUE (C.IntConst (w, wraparound (w, x' * y')))
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [C.IntConst (w', ~1), y]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE_wrapping w), tyargs = [], args = [y] }) else NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [x, C.IntConst (w', ~1)]) => if w = w' then SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall (P.Int_TILDE_wrapping w), tyargs = [], args = [x] }) else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_div w), [x, y as C.IntConst (w', y')]) =>
            if w = w' then
                if y' = 1 then
@@ -1261,6 +1292,10 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                    NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED
+         | (F.PrimCall (P.Int_TILDE_wrapping w), [C.IntConst (w', x)]) => if w = w' then
+                                                                              VALUE (C.IntConst (w, wraparound (w, ~ x)))
+                                                                          else
+                                                                              NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_toInt_unchecked (w1, w2)), [x as C.IntConst (w', x')]) => if w1 = w' then
                                                                                             if w1 = w2 then
                                                                                                 VALUE x (* no op *)
