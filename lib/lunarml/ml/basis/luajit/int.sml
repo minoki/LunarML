@@ -221,8 +221,8 @@ in
 _equality _Prim.Int64.int = Int64_EQUAL;
 structure Int64 :> INTEGER where type int = _Prim.Int64.int = struct
 type int = _Prim.Int64.int
-fun IntToInt64 (x : Int.int) : int = unsafeFromValue (Lua.call1 int64_t #[Lua.fromInt x])
-fun Int64ToInt (x : int) : Int.int = Lua.unsafeFromValue (Lua.call1 Lua.Lib.tonumber #[toValue x])
+fun IntToInt64 (x : Int.int) : int = _primCall "Int.toInt64.unchecked" (x)
+fun Int64ToInt (x : int) : Int.int = _primCall "Int64.toInt.unchecked" (x)
 val MIN_INT32_AS_INT64 : int = ~0x8000_0000
 val MAX_INT32_AS_INT64 : int = 0x7FFF_FFFF
 val MIN : int = ~0x8000_0000_0000_0000 (* -2^63 *)

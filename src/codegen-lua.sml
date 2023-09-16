@@ -468,6 +468,20 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Int_GT _ => doBinaryOp (L.GT, PURE)
                        | Primitives.Int_LE _ => doBinaryOp (L.LE, PURE)
                        | Primitives.Int_GE _ => doBinaryOp (L.GE, PURE)
+                       | Primitives.Int_toInt_unchecked (i1, i2) =>
+                         (case (#targetLuaVersion ctx, i1, i2) of
+                              (_, Primitives.I32, Primitives.I32) => doUnaryExp (fn a => a, PURE)
+                            | (_, Primitives.I54, Primitives.I54) => doUnaryExp (fn a => a, PURE)
+                            | (_, Primitives.I64, Primitives.I64) => doUnaryExp (fn a => a, PURE)
+                            | (_, Primitives.INT, Primitives.INT) => doUnaryExp (fn a => a, PURE)
+                            | (_, Primitives.I32, Primitives.I54) => doUnaryExp (fn a => a, PURE)
+                            | (_, Primitives.I54, Primitives.I32) => doUnaryExp (fn a => a, PURE)
+                            | (LUAJIT, Primitives.I32, Primitives.I64) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "int64_t"), vector [a]), PURE)
+                            | (LUAJIT, Primitives.I54, Primitives.I64) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "int64_t"), vector [a]), PURE)
+                            | (LUAJIT, Primitives.I64, Primitives.I32) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "tonumber"), vector [a]), PURE)
+                            | (LUAJIT, Primitives.I64, Primitives.I54) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "tonumber"), vector [a]), PURE)
+                            | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
+                         )
                        | Primitives.Word_EQUAL w => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Word_PLUS w =>
                          (case (#targetLuaVersion ctx, w) of

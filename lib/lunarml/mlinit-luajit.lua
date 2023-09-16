@@ -17,6 +17,7 @@ local table = table
 local select = select
 local table_pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local table_unpack = table.unpack or unpack
+local tonumber = tonumber
 local bit = require "bit"
 local bit_bnot = bit.bnot
 local bit_band = bit.band
@@ -24,6 +25,9 @@ local bit_bor = bit.bor
 local bit_bxor = bit.bxor
 local bit_lshift = bit.lshift
 local bit_rshift = bit.rshift
+local ffi = require "ffi"
+local int64_t = ffi.typeof("int64_t")
+local uint64_t = ffi.typeof("uint64_t")
 
 local function _id(x)
   return x
@@ -162,7 +166,6 @@ end
 local _Word32_mul
 do
   local tobit = bit.tobit
-  local ffi = require "ffi"
   local uint32_t = ffi.typeof("uint32_t")
   function _Word32_mul(x, y)
     return tobit(uint32_t(x) * uint32_t(y)) % 0x100000000
