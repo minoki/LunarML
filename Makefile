@@ -66,6 +66,9 @@ bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 bin/lunarml.gen2.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --nodejs-cps -o $@ $<
 
+package/npm/lunarml.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --nodejs-cps -o $@ $<
+
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
 

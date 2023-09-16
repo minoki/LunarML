@@ -1,0 +1,21 @@
+{
+  "name": "lunarml",
+  "version": "0.1.0",
+  "description": "",
+  "main": "lunarml.mjs",
+  "bin": { "lunarml": "bin/lunarml" },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minoki/LunarML.git",
+    "directory": "package/npm"
+  },
+  "author": "ARATA Mizuki <minorinoki@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/minoki/LunarML/issues"
+  },
+  "homepage": "https://github.com/minoki/LunarML#readme"
+}
