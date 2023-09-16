@@ -183,11 +183,11 @@ should_run += $(addprefix mlbasis/should_run/,\
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.sml
+should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 else ifeq ($(VARIANT), lua-continuations)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.sml
+should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 else ifeq ($(VARIANT), luajit)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.sml
+should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 endif
 should_compile += $(addprefix interface/should_compile/,\
   INTEGER.sml \
@@ -234,14 +234,14 @@ should_compile += $(addprefix extension/should_compile/,\
 )
 ifeq ($(VARIANT), lua-continuations)
 should_run += $(addprefix cps/should_run/,\
-  product.sml \
-  exception.sml \
+  product.mlb \
+  exception.mlb \
 )
 else ifeq ($(VARIANT), nodejs-cps)
 should_run += $(addprefix cps/should_run/,\
-  product.sml \
-  nondet.sml \
-  exception.sml \
+  product.mlb \
+  nondet.mlb \
+  exception.mlb \
 )
 endif
 

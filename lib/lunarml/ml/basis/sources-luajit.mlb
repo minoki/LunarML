@@ -1,10 +1,4 @@
-infixes.sml
-_prim
-_primOverloads
-ann "allowPrim true" "allowBindEqual true" "allowOverload true" in
-prim.sml
-equal.sml
-end
+lunarml-prim.mlb
 local
 ann "allowPrim true" "allowOverload true" "allowInfixingDot true" in
 general.sml
@@ -84,6 +78,7 @@ signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
+signature PACK_WORD
 signature REAL
 signature STRING
 signature STRING_CVT
@@ -91,13 +86,13 @@ signature SUBSTRING
 signature TEXT
 signature TIME
 signature TIMER
-signature UNSAFE_MONO_ARRAY (* extension; to be moved... *)
-signature UNSAFE_MONO_VECTOR (* extension; to be moved... *)
+signature UNSAFE_MONO_ARRAY (* extension *)
+signature UNSAFE_MONO_VECTOR (* extension *)
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
-structure Unsafe (* extension; to be moved... *)
-structure Lua (* extension; to be moved... *)
+structure Unsafe (* extension *)
+structure Lua (* extension *)
 structure Array
 structure ArraySlice
 structure Bool

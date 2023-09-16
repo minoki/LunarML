@@ -4,6 +4,8 @@ Availability: JS-CPS backend (multi-shot). Lua-continuations backend (one-shot).
 
 Status: Experimental.
 
+Delimited continuations are accessible via `LunarML.DelimCont` structure in `$(SML_LIB)/basis/lunarml.mlb`.
+
 ```sml
 structure LunarML : sig
   ...

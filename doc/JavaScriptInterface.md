@@ -2,7 +2,7 @@
 
 ## JavaScript API
 
-JavaScript features are accessible via `JavaScript` structure.
+JavaScript features are accessible via `JavaScript` structure in `$(SML_LIB)/basis/javascript.mlb`.
 
 ```sml
 structure JavaScript : sig

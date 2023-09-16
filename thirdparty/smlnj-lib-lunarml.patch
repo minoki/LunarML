@@ -66,10 +66,11 @@ diff --recursive -u -N -x *~ smlnj-lib-original/Util/hash-table-rep.sml smlnj-li
  	  end
 diff --recursive -u -N -x *~ smlnj-lib-original/Util/smlnj-lib.mlb smlnj-lib-lunarml/Util/smlnj-lib.mlb
 --- smlnj-lib-original/Util/smlnj-lib.mlb	1970-01-01 09:00:00
-+++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2023-09-15 14:08:09
-@@ -0,0 +1,234 @@
++++ smlnj-lib-lunarml/Util/smlnj-lib.mlb	2023-09-16 16:37:36
+@@ -0,0 +1,235 @@
 +local
 +$(SML_LIB)/basis/basis.mlb
++$(SML_LIB)/basis/unsafe.mlb
 +ansi-term.sml
 +mono-array-sort-sig.sml
 +array-qsort-fn.sml

@@ -1,4 +1,4 @@
-basis-js-common.mlb
+sources-js-common.mlb
 local
 ann "allowPrim true" "allowOverload true" in
 js/javascript-callback.sml
@@ -32,14 +32,14 @@ signature SUBSTRING
 signature TEXT
 signature TIME
 signature TIMER
-signature UNSAFE_MONO_ARRAY (* extension; to be moved... *)
-signature UNSAFE_MONO_VECTOR (* extension; to be moved... *)
+signature UNSAFE_MONO_ARRAY (* extension *)
+signature UNSAFE_MONO_VECTOR (* extension *)
 signature VECTOR
 signature VECTOR_SLICE
 signature WORD
-structure Unsafe (* extension; to be moved... *)
-structure JavaScript (* extension; to be moved... *)
-structure LunarML (* extension; to be moved... *)
+structure Unsafe (* extension *)
+structure JavaScript (* extension *)
+structure LunarML (* extension *)
 structure Array
 structure ArraySlice
 structure Bool
@@ -52,6 +52,7 @@ structure Char
 structure CharArray
 structure CharArraySlice
 structure CharVector
+structure CharVectorSlice
 structure CommandLine
 structure Date
 structure General

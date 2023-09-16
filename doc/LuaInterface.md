@@ -2,7 +2,7 @@
 
 ## Lua API
 
-Lua features are accessible via `Lua` structure.
+Lua features are accessible via `Lua` structure in `$(SML_LIB)/basis/lua.mlb`.
 
 ```sml
 structure Lua : sig
