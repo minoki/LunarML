@@ -124,50 +124,56 @@ fun freshVId(ctx : Context, name) = let val n = !(#nextVId ctx)
 
 datatype ('op, 'a) InfixList = Leaf of 'a
                              | Tree of 'a * Syntax.InfixAssociativity * SourcePos.span * 'op * ('op, 'a) InfixList
-fun maxPrec(p, Leaf _) = p
-  | maxPrec(p, Tree(_, Syntax.LeftAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
-  | maxPrec(p, Tree(_, Syntax.RightAssoc q, _, _, rest)) = maxPrec(Int.max(p, q), rest)
+fun maxPrec (p, Leaf _) = p
+  | maxPrec (p, Tree (_, Syntax.LeftAssoc q, _, _, rest)) = maxPrec (Int.max (p, q), rest)
+  | maxPrec (p, Tree (_, Syntax.RightAssoc q, _, _, rest)) = maxPrec (Int.max (p, q), rest)
 (*! val resolveFixity : Context * ('a * SourcePos.span * 'op * 'a -> 'a) -> ('op, 'a) InfixList -> 'a *)
-fun resolveFixity (ctx, f)
-    = let fun go(Leaf x) = x
-            | go(t as Tree(_, assoc, span, _, rest)) = let val p0 = case assoc of
-                                                                        Syntax.LeftAssoc p0 => p0
-                                                                      | Syntax.RightAssoc p0 => p0
-                                                           val prec = maxPrec(p0, rest)
-                                                       in go(goPrec(prec, t)) end
-          and goPrec(p, Leaf x) = Leaf x
-            | goPrec(p, Tree(x, assoc as Syntax.LeftAssoc q, span, op_, rest))
+fun ('a, 'op) resolveFixity (ctx, f) : ('op, 'a) InfixList -> 'a
+    = let (*! val go : ('op, 'a) InfixList -> 'a
+              and goPrec : int * ('op, 'a) InfixList -> ('op, 'a) InfixList
+              and goLeftAssoc : int * 'a * SourcePos.span * 'op * ('op, 'a) InfixList -> ('op, 'a) InfixList
+              and goRightAssoc : int * SourcePos.span * ('a * SourcePos.span * 'op) list * ('op, 'a) InfixList -> ('op, 'a) InfixList
+           *)
+          fun go (Leaf x) = x
+            | go (t as Tree (_, assoc, span, _, rest)) = let val p0 = case assoc of
+                                                                          Syntax.LeftAssoc p0 => p0
+                                                                        | Syntax.RightAssoc p0 => p0
+                                                             val prec = maxPrec (p0, rest)
+                                                         in go (goPrec (prec, t))
+                                                         end
+          and goPrec (p, Leaf x) = Leaf x
+            | goPrec (p, Tree (x, assoc as Syntax.LeftAssoc q, span, op_, rest))
               = if p = q then
-                    goLeftAssoc(p, x, span, op_, rest)
+                    goLeftAssoc (p, x, span, op_, rest)
                 else (* p > q *)
-                    Tree(x, assoc, span, op_, goPrec(p, rest))
-            | goPrec(p, Tree(x, assoc as Syntax.RightAssoc q, span, op_, rest))
+                    Tree (x, assoc, span, op_, goPrec (p, rest))
+            | goPrec (p, Tree (x, assoc as Syntax.RightAssoc q, span, op_, rest))
               = if p = q then
-                    goRightAssoc(p, span, fn y => f(x, span, op_, y), rest)
+                    goRightAssoc (p, span, [(x, span, op_)], rest)
                 else (* p > q *)
-                    Tree(x, assoc, span, op_, goPrec(p, rest))
-          and goLeftAssoc(p, x, span, op_, Leaf y) = Leaf(f(x, span, op_, y))
-            | goLeftAssoc(p, x, span1, op_, Tree(y, assoc as Syntax.LeftAssoc q, span2, op', rest))
+                    Tree (x, assoc, span, op_, goPrec (p, rest))
+          and goLeftAssoc (p, x, span, op_, Leaf y) = Leaf (f (x, span, op_, y))
+            | goLeftAssoc (p, x, span1, op_, Tree (y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
-                    goLeftAssoc(p, f(x, span1, op_, y), span2, op', rest)
+                    goLeftAssoc (p, f (x, span1, op_, y), span2, op', rest)
                 else (* p > q *)
-                    Tree(f(x, span1, op_, y), assoc, span2, op', goPrec(p, rest))
-            | goLeftAssoc(p, x, span1, op_, Tree(y, assoc as Syntax.RightAssoc q, span2, op', rest))
+                    Tree (f (x, span1, op_, y), assoc, span2, op', goPrec (p, rest))
+            | goLeftAssoc (p, x, span1, op_, Tree (y, assoc as Syntax.RightAssoc q, span2, op', rest))
               = if p = q then
                     emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
                 else (* p > q *)
-                    Tree(f(x, span1, op_, y), assoc, span2, op', goPrec(p, rest))
-          and goRightAssoc(p, _, g, Leaf y) = Leaf(g y)
-            | goRightAssoc(p, span1, g, Tree(y, assoc as Syntax.LeftAssoc q, span2, op', rest))
+                    Tree (f (x, span1, op_, y), assoc, span2, op', goPrec (p, rest))
+          and goRightAssoc (p, _, zs, Leaf y) = Leaf (List.foldl (fn ((x, span, op'), y) => f (x, span, op', y)) y zs)
+            | goRightAssoc (p, span1, zs, Tree (y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
                     emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
                 else (* p > q *)
-                    Tree(g y, assoc, span2, op', goPrec(p, rest))
-            | goRightAssoc(p, _, g, Tree(y, assoc as Syntax.RightAssoc q, span, op', rest))
+                    Tree (List.foldl (fn ((x, span, op'), y) => f (x, span, op', y)) y zs, assoc, span2, op', goPrec (p, rest))
+            | goRightAssoc (p, _, zs, Tree (y, assoc as Syntax.RightAssoc q, span, op', rest))
               = if p = q then
-                    goRightAssoc(p, span, fn z => g(f(y, span, op', z)), rest)
+                    goRightAssoc (p, span, (y, span, op') :: zs, rest)
                 else (* p > q *)
-                    Tree(g y, assoc, span, op', goPrec(p, rest))
+                    Tree (List.foldl (fn ((x, span, op'), y) => f (x, span, op', y)) y zs, assoc, span, op', goPrec (p, rest))
       in go
       end
 (* let open Fixity in resolveFixity (fn (a,f,b) => f(a,b)) (Tree(3,Syntax.LeftAssoc 5,op +,Tree(2,Syntax.LeftAssoc 6,op *,Leaf 7))) end; should yield 17 *)
