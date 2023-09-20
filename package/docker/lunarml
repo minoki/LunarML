@@ -1,0 +1,2 @@
+#!/bin/sh
+/opt/lunarml/lib/lunarml/bin/lunarml -B /opt/lunarml/lib/lunarml "$@"
