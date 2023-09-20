@@ -21,6 +21,7 @@ smlnj-lib: smlnj-lib/Util/smlnj-lib.mlb
 install-smlnj-lib: smlnj-lib
 	mkdir -p ../lib/lunarml/ml/smlnj-lib/Util/
 	cp smlnj-lib/Util/*.sml smlnj-lib/Util/*.mlb ../lib/lunarml/ml/smlnj-lib/Util/
+	cp smlnj-lib/LICENSE ../lib/lunarml/ml/smlnj-lib/
 
 # For LunarML maintainer
 smlnj-lib-lunarml.patch:
@@ -47,6 +48,6 @@ ml-yacc: ml-yacc/lib/mlyacc-lib.mlb
 
 install-mlyacc-lib: ml-yacc
 	mkdir -p ../lib/lunarml/ml/mlyacc-lib/
-	cp ml-yacc/lib/*.sml ml-yacc/lib/*.sig ml-yacc/lib/*.mlb ../lib/lunarml/ml/mlyacc-lib/
+	cp ml-yacc/COPYRIGHT ml-yacc/lib/*.sml ml-yacc/lib/*.sig ml-yacc/lib/*.mlb ../lib/lunarml/ml/mlyacc-lib/
 
 .PHONY: ml-yacc install-mlyacc-lib
