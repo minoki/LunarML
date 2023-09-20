@@ -2,6 +2,17 @@
 
 A Standard ML compiler that produces Lua/JavaScript.
 
+## Trying pre-built binaries
+
+Docker image is available.
+
+```
+$ docker pull ghcr.io/minoki/lunarml:latest
+$ docker run --rm --platform linux/amd64 -v "$(pwd)":/work -w /work ghcr.io/minoki/lunarml:latest lunarml compile example/hello.sml
+$ lua example/hello.lua
+Hello world!
+```
+
 ## Building
 
 You need a recent version of MLton to build the executable, and Lua 5.3+ or recent Node.js to run the compiled script.
