@@ -1,0 +1,25 @@
+name: Build npm package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package_npm:
+    runs-on: ubuntu-20.04 # 22.04 doesn't contain mlton
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install mlton lua5.3 luajit
+      - name: Build
+        run: make -C thirdparty install && make install-npm
+      - name: Pack
+        run: cd package/npm && npm pack
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: npm-package
+          path: package/npm/lunarml-*.tgz
