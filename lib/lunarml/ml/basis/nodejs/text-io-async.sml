@@ -304,7 +304,7 @@ local
     fun output1 (stream, elem) = output (stream, String.str elem)
     fun outputSubstr (stream, substring) = output (stream, Substring.string substring)
     fun flushOut stream = outputAndFlush (stream, "")
-    fun closeOut stream = ignore (JavaScript.method (stream, "destroy") #[])
+    fun closeOut stream = ignore (JavaScript.method (stream, "end") #[])
     fun openOut path = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
     fun openAppend path = let val options = JavaScript.newObject ()
                               val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
