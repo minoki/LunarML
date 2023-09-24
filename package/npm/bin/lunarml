@@ -1,2 +1,3 @@
 #!/usr/bin/env node
-import("../lunarml.mjs");
+const process = require("process");
+import("../lunarml.mjs").then(({main}) => main(__filename, process.argv.slice(2)));

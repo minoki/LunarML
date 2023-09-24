@@ -456,20 +456,18 @@ fun parseArgs (opts : options) args
                            )
                      | [] => showMessageAndFail "No input given. Try --help.\n"
                   )
-fun main () = let val args = CommandLine.arguments ()
-                  val progDir = OS.Path.dir progName
-                  val initialSettings = { subcommand = NONE
-                                        , output = NONE
-                                        , outputMode = NONE
-                                        , dump = NO_DUMP
-                                        , optimizationLevel = 0
-                                        , backend = BACKEND_LUA LUA_PLAIN
-                                        , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
-                                        , printTimings = false
-                                        }
-              in parseArgs initialSettings args
-                 handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)
-                      | IO.Io { name, function, cause } => (TextIO.output (TextIO.stdErr, "io error: " ^ name ^ ", " ^ function ^ ", " ^ (case cause of Fail msg => msg | _ => exnName cause) ^ "\n"); OS.Process.exit OS.Process.failure)
-              end
+fun main (progName, args) = let val progDir = OS.Path.dir progName
+                                val initialSettings = { subcommand = NONE
+                                                      , output = NONE
+                                                      , outputMode = NONE
+                                                      , dump = NO_DUMP
+                                                      , optimizationLevel = 0
+                                                      , backend = BACKEND_LUA LUA_PLAIN
+                                                      , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
+                                                      , printTimings = false
+                                                      }
+                            in parseArgs initialSettings args
+                               handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)
+                                    | IO.Io { name, function, cause } => (TextIO.output (TextIO.stdErr, "io error: " ^ name ^ ", " ^ function ^ ", " ^ (case cause of Fail msg => msg | _ => exnName cause) ^ "\n"); OS.Process.exit OS.Process.failure)
+                            end
 end;
-val () = Main.main ();

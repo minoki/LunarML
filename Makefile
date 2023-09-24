@@ -49,7 +49,8 @@ sources = \
   src/driver.sml \
   src/mlb-eval.sml \
   src/command-line-settings.sml \
-  src/main.sml
+  src/main.sml \
+  src/main-default.sml
 
 typecheck: src/lunarml.mlb $(sources)
 	mlton -stop tc $<
@@ -64,9 +65,6 @@ bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --luajit -o $@ $<
 
 bin/lunarml.gen2.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
-	bin/lunarml compile --nodejs-cps -o $@ $<
-
-package/npm/lunarml.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --nodejs-cps -o $@ $<
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
@@ -123,3 +121,16 @@ verify-js: bin/lunarml bin/lunarml.gen2.mjs
 	$(MAKE) -C test verify-nodejs-cps VARIANT=nodejs-cps NODE=$(NODE) LUNARML_GEN2="$(NODE) ../bin/lunarml.gen2.mjs" VARIANT_GEN2=gen2
 
 .PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js verify-lua verify-luajit verify-js
+
+#
+# install-npm
+#
+
+package/npm/lunarml.mjs: src/lunarml-esmod.mlb bin/lunarml $(sources) src/main-esmod.sml
+	bin/lunarml compile --nodejs-cps --lib -o $@ $<
+
+install-npm: package/npm/lunarml.mjs
+	make -C thirdparty install
+	cp -R lib/ package/npm/lib
+
+.PHONY: install-npm
