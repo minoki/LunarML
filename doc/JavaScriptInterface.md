@@ -88,7 +88,45 @@ _esImport [pure] { foo, bar as barr, "fun" as fun' } from "module-name"; (* -> i
 _esImport defaultItem, { foo, bar as barr, "fun" as fun' } from "module-name"; (* -> import defaultItem, { foo, bar as barr, fun as fun$PRIME } from "module-name"; *)
 ```
 
-Namespace imports are not supported yet.
+Namespace imports are not supported.
+
+## ES export
+
+To produce an ES module, set `--lib` compiler option and define a variable or structure named `export`.
+
+For example,
+
+```sml
+val export = <some value>;
+```
+
+will compile to
+
+```js
+export default <some value>;
+```
+
+and
+
+```sml
+structure export = struct
+  val foo = "string"
+  val bar = 42
+  val fun' = "fun" (* SML keywords can be escaped by suffixing with a prime *)
+end;
+```
+
+will compile to
+
+```js
+const foo = "string";
+const bar = 42;
+const fun = "fun";
+export { foo, bar, fun };
+```
+.
+
+Note on CPS mode: You cannot call certain functions including `print` at top-level, because they are "async". In future, this limitation may be lifted by using top-level await.
 
 ## Internal representation
 

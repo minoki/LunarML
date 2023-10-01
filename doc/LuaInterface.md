@@ -133,7 +133,6 @@ Primitives
 * `'a array`: Same as `'a vector`, but mutable.
 * `'a ref`: `{ [1] = <the payload> }`.
 * `Lua.value`: any Lua value, including `nil`.
-* `'a list`: nil is `nil` and `x :: xs` is `{ [1] = x, [2] = xs }`.
 
 Non-empty records: `{ [1] = <#1 of the record>, foo = <#foo of the record> }`
 
@@ -159,28 +158,3 @@ Functions:
 SML functions are always converted to one-argument function.
 
 Use `Lua.call` and `Lua.function` to call and define functions that take multiple arguments.
-
-Structures:
-
-```sml
-struct
-  val x = 123
-  structure Sub = struct ... end
-  exception Foo
-  datatype t = T
-end
-```
-
-```lua
-{
-  x = 123,
-  _Sub = { ... }, -- prefixed with '_'
-  Foo = <constructor of Foo>,
-  ["Foo.tag"] = <tag of Foo>, -- suffixed with '.tag'
-  T = <constructor of T>,
-}
-```
-
-Functors:
-
-Implemented as a function that takes a structure and returns a structure.
