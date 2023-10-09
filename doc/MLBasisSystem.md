@@ -53,6 +53,8 @@ An MLB file consists of `<basdec>`.
 * `allowWhereAndType {true|false}`: no effect (not implemented yet)
 * `allowInfixingDot {false|true}`
 
+The default value for an annotation could be specified by `--default-ann` option.
+
 ## Avaliable libraries
 
 * `$(SML_LIB)/basis/basis.mlb`: The [Basis Library](BasisLibrary.md)

@@ -34,6 +34,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  -O,--optimize         Try to optimize hard.\n\
                                                 \  --mlb-path-map=<file> Specify MLB path map.\n\
                                                 \  --mlb-path-var=<var>=<path>  Specify MLB path variable.\n\
+                                                \  --default-ann <annotation>   Specify MLB annotations.\n\
                                                 \  --print-timings       Print compilation times.\n\
                                                 \  -B<libdir>            Library directory (default: <bindir>/../lib/lunarml).\n\
                                                 \")
@@ -52,6 +53,7 @@ type options = { subcommand : subcommand option
                , libDir : string
                , printTimings : bool
                , mlbPathSettings : MLBEval.path_setting list (* --mlb-path-map=file1 ... --mlb-path-map=fileN -> [PATH_MAP fileN, ..., PATH_MAP file1] *)
+               , defaultAnnotations : string list (* --default-ann ann1 ... --default-ann annN -> [annN, ..., ann1] *)
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -232,10 +234,12 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                 end
           val messageHandler = Message.newHandler (errorCounter, printMessage)
           val pathMap = List.foldr (MLBEval.loadPathVar messageHandler) pathMap (#mlbPathSettings opts)
+          val defaultLanguageOptions = List.foldr (MLBEval.applyAnnotation messageHandler) LanguageOptions.default (#defaultAnnotations opts)
           val ctx : MLBEval.Context = { driverContext = Driver.newContext (targetInfo, errorCounter)
                                       , baseDir = OS.FileSys.getDir ()
                                       , pathMap = pathMap
                                       , targetInfo = targetInfo
+                                      , defaultLanguageOptions = defaultLanguageOptions
                                       , messageHandler = messageHandler
                                       }
           val timer = Timer.startCPUTimer ()
@@ -332,7 +336,7 @@ fun handleInputFile opts [file] = if String.isSuffix ".sml" file then
                                                               let val mlbdecs = [MLBSyntax.PathDec "$(SML_LIB)/basis/basis.mlb"
                                                                                 ,MLBSyntax.PathDec file
                                                                                 ]
-                                                              in MLBEval.doDecs ctx LanguageOptions.default MLBEval.emptyEnv mlbdecs MLBEval.initialCode
+                                                              in MLBEval.doDecs ctx (#defaultLanguageOptions ctx) MLBEval.emptyEnv mlbdecs MLBEval.initialCode
                                                               end
                                                           )
                                   else if String.isSuffix ".mlb" file then
@@ -397,6 +401,7 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_OPTIMIZE (* -O,--optimize *)
                 | OPT_MLB_PATH_MAP of string (* --mlb-path-map, -mlb-path-map *)
                 | OPT_MLB_PATH_VAR of string (* --mlb-path-var *)
+                | OPT_DEFAULT_ANN of string (* --default-ann, -default-ann *)
                 | OPT_LIB_DIR of string (* -B *)
                 | OPT_PRINT_TIMINGS
 val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
@@ -420,6 +425,8 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
                   ,(LONG "-mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
                   ,(LONG "--mlb-path-var", WITH_ARG OPT_MLB_PATH_VAR)
+                  ,(LONG "--default-ann", WITH_ARG OPT_DEFAULT_ANN)
+                  ,(LONG "-default-ann", WITH_ARG OPT_DEFAULT_ANN)
                   ,(SHORT "-B", WITH_ARG OPT_LIB_DIR)
                   ,(LONG "--print-timings", SIMPLE OPT_PRINT_TIMINGS)
                   ]
@@ -452,6 +459,7 @@ fun parseArgs (opts : options) args
         | SOME (OPT_OPTIMIZE, args) => parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
         | SOME (OPT_MLB_PATH_MAP file, args) => parseArgs (S.update.mlbPathSettings (fn xs => MLBEval.PATH_MAP file :: xs) opts) args
         | SOME (OPT_MLB_PATH_VAR v, args) => parseArgs (S.update.mlbPathSettings (fn xs => MLBEval.PATH_VAR v :: xs) opts) args
+        | SOME (OPT_DEFAULT_ANN ann, args) => parseArgs (S.update.defaultAnnotations (fn xs => ann :: xs) opts) args
         | SOME (OPT_LIB_DIR libDir, args) => parseArgs (S.set.libDir libDir opts) args
         | SOME (OPT_PRINT_TIMINGS, args) => parseArgs (S.set.printTimings true opts) args
         | NONE => (case args of
@@ -482,6 +490,7 @@ fun main (progName, args) = let val progDir = OS.Path.dir progName
                                                       , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
                                                       , printTimings = false
                                                       , mlbPathSettings = []
+                                                      , defaultAnnotations = []
                                                       }
                             in parseArgs initialSettings args
                                handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)

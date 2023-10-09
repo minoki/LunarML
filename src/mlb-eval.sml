@@ -4,6 +4,7 @@ type Context = { driverContext : Driver.Context
                , baseDir : string
                , pathMap : string M.StringMap.map
                , targetInfo : TargetInfo.target_info
+               , defaultLanguageOptions : LanguageOptions.options
                , messageHandler : Message.handler
                }
 datatype Env' = MkEnv of Env
@@ -68,8 +69,8 @@ fun parseIgnoreWarnError "ignore" = SOME LanguageOptions.IGNORE
   | parseIgnoreWarnError "warn" = SOME LanguageOptions.WARN
   | parseIgnoreWarnError "error" = SOME LanguageOptions.ERROR
   | parseIgnoreWarnError _ = NONE
-fun applyAnnotation (ctx : Context) (ann, langopt)
-    = let fun unrecognized () = ( Message.warning (#messageHandler ctx, [], "MLB", "unrecognized annotation: " ^ ann)
+fun applyAnnotation messageHandler (ann, langopt)
+    = let fun unrecognized () = ( Message.warning (messageHandler, [], "MLB", "unrecognized annotation: " ^ ann)
                                 ; langopt
                                 )
       in case String.tokens Char.isSpace ann of
@@ -190,7 +191,7 @@ fun doDec (ctx : Context) langopt env (M.BasisDec binds) acc = let val (bas, acc
                                                     | SOME "mlb" => doMlbSource ctx env path acc
                                                     | _ => raise Fail ("unrecognized file extension: " ^ path)
                                                  )
-  | doDec ctx langopt env (M.AnnotationDec (anns, decs)) acc = let val langopt = List.foldl (applyAnnotation ctx) langopt anns
+  | doDec ctx langopt env (M.AnnotationDec (anns, decs)) acc = let val langopt = List.foldl (applyAnnotation (#messageHandler ctx)) langopt anns
                                                                in doDecs ctx langopt env decs acc
                                                                end
   | doDec ctx langopt env M.PrimDec acc = ({ bas = M.BasMap.empty, fixity = InitialEnv.initialFixityEnv, typing = InitialEnv.initialEnv }, acc)
@@ -225,8 +226,14 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                                    in TextIO.inputAll ins before TextIO.closeIn ins
                                                                    end
                                                   in case MLBParser.P.runParser MLBParser.basfile () path (StringStream.fromString { file = path, content = content }) of
-                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx, baseDir = OS.Path.dir path, pathMap = #pathMap ctx, targetInfo = #targetInfo ctx, messageHandler = #messageHandler ctx }
-                                                                                          val (env', acc) = doDecs ctx' LanguageOptions.default emptyEnv decs acc
+                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx
+                                                                                                     , baseDir = OS.Path.dir path
+                                                                                                     , pathMap = #pathMap ctx
+                                                                                                     , targetInfo = #targetInfo ctx
+                                                                                                     , defaultLanguageOptions = #defaultLanguageOptions ctx
+                                                                                                     , messageHandler = #messageHandler ctx
+                                                                                                     }
+                                                                                          val (env', acc) = doDecs ctx' (#defaultLanguageOptions ctx) emptyEnv decs acc
                                                                                           val cache = M.StringMap.insert (#cache acc, path, env')
                                                                                       in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
                                                                                       end

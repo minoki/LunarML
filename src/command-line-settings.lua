@@ -8,4 +8,5 @@ return "CommandLineSettings", {
   "libDir",
   "printTimings",
   "mlbPathSettings",
+  "defaultAnnotations",
 }
