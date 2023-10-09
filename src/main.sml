@@ -1,14 +1,10 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-(*
-SML/NJ style main:
-structure LunarML = struct
-fun main (progName : string, args : string list) = (print "Hello world!\n" ; OS.Process.success)
-end
-*)
-structure Main = struct
+structure Main : sig
+              val main : string * string list -> unit
+          end = struct
 structure M = MLBSyntax;
 structure S = CommandLineSettings;
 
