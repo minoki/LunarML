@@ -234,5 +234,24 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                   end
                                         | SOME e => (e, acc)
                                    end
-end
-end
+fun loadPathMap messageHandler (file, pathMap)
+    = let fun loop (ins, n, pathMap) = (case TextIO.inputLine ins of
+                                            NONE => (TextIO.closeIn ins; pathMap)
+                                          | SOME line => (case String.tokens Char.isSpace line of
+                                                              [name, value] => let val path = M.evalPath pathMap value
+                                                                                   val pathMap = M.StringMap.insert (pathMap, name, path)
+                                                                               in loop (ins, n + 1, pathMap)
+                                                                               end
+                                                            | unrecognized => let val pos = { file = file, line = n, column = 1 }
+                                                                                  val span = { start = pos, end_ = pos }
+                                                                              in case unrecognized of
+                                                                                     _ :: _ :: _ => Message.error (messageHandler, [span], "MLB path map", "invalid line: path must not contain spaces")
+                                                                                   | _ => Message.error (messageHandler, [span], "MLB path map", "invalid line: too few fields")
+                                                                               ; loop (ins, n + 1, pathMap)
+                                                                              end
+                                                         )
+                                       )
+      in loop (TextIO.openIn file, 1, pathMap)
+      end
+end (* local *)
+end; (* structure MLBEval *)

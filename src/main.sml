@@ -32,6 +32,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  --dump                Dump intermediate code.\n\
                                                 \  --dump-final          Dump final intermediate code.\n\
                                                 \  -O,--optimize         Try to optimize hard.\n\
+                                                \  --mlb-path-map=<file> Specify MLB path map.\n\
                                                 \  --print-timings       Print compilation times.\n\
                                                 \  -B<libdir>            Library directory (default: <bindir>/../lib/lunarml).\n\
                                                 \")
@@ -49,6 +50,7 @@ type options = { subcommand : subcommand option
                , backend : backend
                , libDir : string
                , printTimings : bool
+               , mlbPathMaps : string list (* --mlb-path-map=file1 ... --mlb-path-map=fileN -> [fileN, ..., file1] *)
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -215,13 +217,25 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
               = let val t = case type_ of
                                 Message.WARNING => "warning: "
                               | Message.ERROR => "error: "
-                in TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                in case spans of
+                       [] => TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                     | { start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 }} :: _ =>
+                       ( if f1 = f2 then
+                             if p1 = p2 then
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ t ^ message ^ "\n")
+                             else
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ t ^ message ^ "\n")
+                         else
+                             TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ t ^ message ^ "\n")
+                       )
                 end
+          val messageHandler = Message.newHandler (errorCounter, printMessage)
+          val pathMap = List.foldr (MLBEval.loadPathMap messageHandler) pathMap (#mlbPathMaps opts)
           val ctx : MLBEval.Context = { driverContext = Driver.newContext (targetInfo, errorCounter)
                                       , baseDir = OS.FileSys.getDir ()
                                       , pathMap = pathMap
                                       , targetInfo = targetInfo
-                                      , messageHandler = Message.newHandler (errorCounter, printMessage)
+                                      , messageHandler = messageHandler
                                       }
           val timer = Timer.startCPUTimer ()
           val (env, { tynameset, toFEnv, fdecs, cache }) = f ctx
@@ -380,6 +394,7 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_DUMP (* --dump *)
                 | OPT_DUMP_FINAL (* --dump-final *)
                 | OPT_OPTIMIZE (* -O,--optimize *)
+                | OPT_MLB_PATH_MAP of string (* --mlb-path-map, -mlb-path-map *)
                 | OPT_LIB_DIR of string (* -B *)
                 | OPT_PRINT_TIMINGS
 val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
@@ -400,6 +415,8 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--dump-final", SIMPLE OPT_DUMP_FINAL)
                   ,(SHORT "-O", SIMPLE OPT_OPTIMIZE)
                   ,(LONG "--optimize", SIMPLE OPT_OPTIMIZE)
+                  ,(LONG "--mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
+                  ,(LONG "-mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
                   ,(SHORT "-B", WITH_ARG OPT_LIB_DIR)
                   ,(LONG "--print-timings", SIMPLE OPT_PRINT_TIMINGS)
                   ]
@@ -430,6 +447,7 @@ fun parseArgs (opts : options) args
         | SOME (OPT_DUMP, args) => parseArgs (S.set.dump DUMP_INITIAL opts) args
         | SOME (OPT_DUMP_FINAL, args) => parseArgs (S.set.dump DUMP_FINAL opts) args
         | SOME (OPT_OPTIMIZE, args) => parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
+        | SOME (OPT_MLB_PATH_MAP file, args) => parseArgs (S.update.mlbPathMaps (fn xs => file :: xs) opts) args
         | SOME (OPT_LIB_DIR libDir, args) => parseArgs (S.set.libDir libDir opts) args
         | SOME (OPT_PRINT_TIMINGS, args) => parseArgs (S.set.printTimings true opts) args
         | NONE => (case args of
@@ -459,6 +477,7 @@ fun main (progName, args) = let val progDir = OS.Path.dir progName
                                                       , backend = BACKEND_LUA LUA_PLAIN
                                                       , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
                                                       , printTimings = false
+                                                      , mlbPathMaps = []
                                                       }
                             in parseArgs initialSettings args
                                handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)
