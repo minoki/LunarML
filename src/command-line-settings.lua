@@ -7,5 +7,5 @@ return "CommandLineSettings", {
   "backend",
   "libDir",
   "printTimings",
-  "mlbPathMaps",
+  "mlbPathSettings",
 }

@@ -33,6 +33,7 @@ fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  --dump-final          Dump final intermediate code.\n\
                                                 \  -O,--optimize         Try to optimize hard.\n\
                                                 \  --mlb-path-map=<file> Specify MLB path map.\n\
+                                                \  --mlb-path-var=<var>=<path>  Specify MLB path variable.\n\
                                                 \  --print-timings       Print compilation times.\n\
                                                 \  -B<libdir>            Library directory (default: <bindir>/../lib/lunarml).\n\
                                                 \")
@@ -50,7 +51,7 @@ type options = { subcommand : subcommand option
                , backend : backend
                , libDir : string
                , printTimings : bool
-               , mlbPathMaps : string list (* --mlb-path-map=file1 ... --mlb-path-map=fileN -> [fileN, ..., file1] *)
+               , mlbPathSettings : MLBEval.path_setting list (* --mlb-path-map=file1 ... --mlb-path-map=fileN -> [PATH_MAP fileN, ..., PATH_MAP file1] *)
                }
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
@@ -230,7 +231,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                        )
                 end
           val messageHandler = Message.newHandler (errorCounter, printMessage)
-          val pathMap = List.foldr (MLBEval.loadPathMap messageHandler) pathMap (#mlbPathMaps opts)
+          val pathMap = List.foldr (MLBEval.loadPathVar messageHandler) pathMap (#mlbPathSettings opts)
           val ctx : MLBEval.Context = { driverContext = Driver.newContext (targetInfo, errorCounter)
                                       , baseDir = OS.FileSys.getDir ()
                                       , pathMap = pathMap
@@ -395,6 +396,7 @@ datatype option = OPT_OUTPUT of string (* -o,--output *)
                 | OPT_DUMP_FINAL (* --dump-final *)
                 | OPT_OPTIMIZE (* -O,--optimize *)
                 | OPT_MLB_PATH_MAP of string (* --mlb-path-map, -mlb-path-map *)
+                | OPT_MLB_PATH_VAR of string (* --mlb-path-var *)
                 | OPT_LIB_DIR of string (* -B *)
                 | OPT_PRINT_TIMINGS
 val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
@@ -417,6 +419,7 @@ val optionDescs = [(SHORT "-o", WITH_ARG OPT_OUTPUT)
                   ,(LONG "--optimize", SIMPLE OPT_OPTIMIZE)
                   ,(LONG "--mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
                   ,(LONG "-mlb-path-map", WITH_ARG OPT_MLB_PATH_MAP)
+                  ,(LONG "--mlb-path-var", WITH_ARG OPT_MLB_PATH_VAR)
                   ,(SHORT "-B", WITH_ARG OPT_LIB_DIR)
                   ,(LONG "--print-timings", SIMPLE OPT_PRINT_TIMINGS)
                   ]
@@ -447,7 +450,8 @@ fun parseArgs (opts : options) args
         | SOME (OPT_DUMP, args) => parseArgs (S.set.dump DUMP_INITIAL opts) args
         | SOME (OPT_DUMP_FINAL, args) => parseArgs (S.set.dump DUMP_FINAL opts) args
         | SOME (OPT_OPTIMIZE, args) => parseArgs (S.update.optimizationLevel (fn level => level + 1) opts) args
-        | SOME (OPT_MLB_PATH_MAP file, args) => parseArgs (S.update.mlbPathMaps (fn xs => file :: xs) opts) args
+        | SOME (OPT_MLB_PATH_MAP file, args) => parseArgs (S.update.mlbPathSettings (fn xs => MLBEval.PATH_MAP file :: xs) opts) args
+        | SOME (OPT_MLB_PATH_VAR v, args) => parseArgs (S.update.mlbPathSettings (fn xs => MLBEval.PATH_VAR v :: xs) opts) args
         | SOME (OPT_LIB_DIR libDir, args) => parseArgs (S.set.libDir libDir opts) args
         | SOME (OPT_PRINT_TIMINGS, args) => parseArgs (S.set.printTimings true opts) args
         | NONE => (case args of
@@ -477,7 +481,7 @@ fun main (progName, args) = let val progDir = OS.Path.dir progName
                                                       , backend = BACKEND_LUA LUA_PLAIN
                                                       , libDir = List.foldl (fn (arc, dir) => OS.Path.joinDirFile { dir = dir, file = arc }) progDir [OS.Path.parentArc, "lib", "lunarml"]
                                                       , printTimings = false
-                                                      , mlbPathMaps = []
+                                                      , mlbPathSettings = []
                                                       }
                             in parseArgs initialSettings args
                                handle Fail msg => (TextIO.output (TextIO.stdErr, "unhandled error: " ^ msg ^ "\n"); OS.Process.exit OS.Process.failure)

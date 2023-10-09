@@ -66,8 +66,8 @@ The following libraries are available if `make -C thirdparty install` is run:
 * `$(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb`
 * `$(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb`
 
-## Path maps
+## Path variables
 
-You can use `--mlb-path-map=<file>` option to configure MLB path variables.
+You can use `--mlb-path-map=<file>` option and `--mlb-path-var=<var>=<path>` option to configure MLB path variables.
 
 Each line of path map file consists of two space-separated tokens: variable name and path.

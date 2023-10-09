@@ -234,7 +234,9 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                                   end
                                         | SOME e => (e, acc)
                                    end
-fun loadPathMap messageHandler (file, pathMap)
+datatype path_setting = PATH_MAP of string
+                      | PATH_VAR of string
+fun loadPathVar messageHandler (PATH_MAP file, pathMap)
     = let fun loop (ins, n, pathMap) = (case TextIO.inputLine ins of
                                             NONE => (TextIO.closeIn ins; pathMap)
                                           | SOME line => (case String.tokens Char.isSpace line of
@@ -253,5 +255,10 @@ fun loadPathMap messageHandler (file, pathMap)
                                        )
       in loop (TextIO.openIn file, 1, pathMap)
       end
+  | loadPathVar messageHandler (PATH_VAR setting, pathMap)
+    = (case String.tokens (fn c => c = #"=") setting of
+           [name, value] => M.StringMap.insert (pathMap, name, M.evalPath pathMap value)
+         | _ => (Message.error (messageHandler, [], "MLB path map", "invalid --mlb-path-var option"); pathMap)
+      )
 end (* local *)
 end; (* structure MLBEval *)
