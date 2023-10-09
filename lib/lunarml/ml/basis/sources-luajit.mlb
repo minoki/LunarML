@@ -1,6 +1,13 @@
 lunarml-prim.mlb
 local
-ann "allowPrim true" "allowOverload true" "allowInfixingDot true" in
+ann "nonexhaustiveRaise ignore"
+    "sequenceNonUnit ignore"
+    "valDescInComments warn"
+    "allowVectorExps true"
+    "allowHexFloatConsts true"
+    "allowInfixingDot true"
+    "allowPrim true"
+    "allowOverload true" in
 general.sml
 option.sml (* depends on unit (general.sml) *)
 lunarml.sml
@@ -93,6 +100,7 @@ signature VECTOR_SLICE
 signature WORD
 structure Unsafe (* extension *)
 structure Lua (* extension *)
+structure LunarML (* extension *)
 structure Array
 structure ArraySlice
 structure Bool

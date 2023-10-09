@@ -1,6 +1,9 @@
 sources-js-common.mlb
 local
-ann "allowPrim true" "allowOverload true" in
+ann "sequenceNonUnit ignore"
+    "allowVectorExps true"
+    "allowPrim true"
+    "allowOverload true" in
 js/javascript-callback.sml
 nodejs/timer.sml
 nodejs/text-io.sml

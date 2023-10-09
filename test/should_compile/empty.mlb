@@ -1,0 +1,7 @@
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/unsafe.mlb
+$(SML_LIB)/basis/lunarml.mlb
+(* $(SML_LIB)/basis/lua.mlb *)
+(* $(SML_LIB)/basis/javascript.mlb *)
+(* $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb *)
+(* $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb *)

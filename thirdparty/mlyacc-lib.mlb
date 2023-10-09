@@ -4,7 +4,9 @@ base.sig
 join.sml
 lrtable.sml
 stream.sml
+ann "nonexhaustiveRaise ignore" in
 parser2.sml
+end
 in
 signature STREAM
 signature LR_TABLE

@@ -9,24 +9,26 @@ NODE= node
 LUNARML_GEN2= false
 VARIANT_GEN2= gen2
 
+DEFAULT_ANN= --default-ann "nonexhaustiveBind ignore"
+
 ifeq ($(VARIANT), lua)
-LUNARML_OPTION= --lua
+LUNARML_OPTION= --lua $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUA) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
 else ifeq ($(VARIANT), lua-continuations)
-LUNARML_OPTION= --lua-continuations
+LUNARML_OPTION= --lua-continuations $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUA) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
 else ifeq ($(VARIANT), luajit)
-LUNARML_OPTION= --luajit
+LUNARML_OPTION= --luajit $(DEFAULT_ANN)
 OUTEXT= .lua
 INTERPRETER= $(LUAJIT) -e 'setmetatable(_G,{__index=function(t,k)error("undefined variable "..k,2)end})'
 else ifeq ($(VARIANT), nodejs)
-LUNARML_OPTION= --nodejs
+LUNARML_OPTION= --nodejs $(DEFAULT_ANN)
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else ifeq ($(VARIANT), nodejs-cps)
-LUNARML_OPTION= --nodejs-cps
+LUNARML_OPTION= --nodejs-cps $(DEFAULT_ANN)
 OUTEXT= .mjs
 INTERPRETER= $(NODE)
 else
@@ -245,7 +247,7 @@ should_run += $(addprefix cps/should_run/,\
 )
 endif
 
-all: test-$(VARIANT)
+all: test-default-ann test-$(VARIANT)
 
 define should_run_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
@@ -285,6 +287,10 @@ INTERMEDIATE_FILES += $(basename $1).$(VARIANT)$(OUTEXT)
 endef
 
 $(foreach file, $(should_compile), $(eval $(call should_compile_template, $(file))))
+
+test-default-ann: should_compile/empty.mlb $(LUNARML)
+	@echo "Compiling $<..."
+	@$(LUNARML) compile $(LUNARML_OPTION) --default-ann "nonexhaustiveBind error" --default-ann "nonexhaustiveMatch error" --default-ann "nonexhaustiveRaise error" --default-ann "redundantBind error" --default-ann "redundantMatch error" --default-ann "redundantRaise error" --default-ann "sequenceNonUnit error" --default-ann "valDescInComments error" --default-ann "allowExtendedNumConsts false" --default-ann "allowExtendedTextConsts false" --default-ann "allowSigWithtype false" --default-ann "allowVectorExps false" --default-ann "allowVectorPats false" --default-ann "allowRecordExtension false" --default-ann "allowRecordUpdate false" --default-ann "allowUtfEscapeSequences false" --default-ann "allowHexFloatConsts false" --default-ann "allowValRecTyVars false" --default-ann "allowValTyVarsRec false" --default-ann "allowFreeTyVarsInDatatypeDec false" --default-ann "allowWhereAndType false" --default-ann "allowInfixingDot false" --output "should_compile/empty.$(VARIANT)$(OUTEXT)" "$<"
 
 define should_not_compile_template
 test-$(VARIANT): $(basename $1).$(VARIANT).ok
