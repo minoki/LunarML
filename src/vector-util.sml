@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure VectorUtil :> sig
               val foldlOption : ('a * 'b -> 'b option) -> 'b -> 'a vector -> 'b option
           end = struct

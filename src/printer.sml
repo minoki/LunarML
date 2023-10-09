@@ -1,4 +1,21 @@
-structure Printer = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure Printer :> sig
+              datatype fragment = Fragment of string
+                                | IncreaseIndent of int
+                                | DecreaseIndent of int
+                                | Indent
+                     | LineTerminator
+              val showParen : bool -> fragment list -> fragment list
+              val build : fragment list -> string
+              val sepBy : fragment list -> fragment list list -> fragment list
+              val commaSep : fragment list list -> fragment list
+              val commaSepV : fragment list vector -> fragment list
+              val spaceSep : fragment list list -> fragment list
+              val semicolonSep : fragment list list -> fragment list
+          end = struct
 datatype fragment = Fragment of string
                   | IncreaseIndent of int
                   | DecreaseIndent of int

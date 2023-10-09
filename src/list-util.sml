@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure ListUtil :> sig
               val splitAt : 'a list * int -> 'a list * 'a list (* splitAt (xs, n) = (List.take (xs, n), List.drop (xs, n)) *)
               val mapCont : ('a * ('b -> 'r) -> 'r) -> 'a list -> ('b list -> 'r) -> 'r

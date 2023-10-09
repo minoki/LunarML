@@ -1,8 +1,28 @@
 (*
- * Copyright (c) 2022 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure LuaTransform = struct
+structure LuaTransform :> sig
+              type Context = { nextId : int ref, maxUpvalue : int }
+              structure InsertDo : sig
+                            val doBlock : int * LuaSyntax.Block -> LuaSyntax.Block
+                        end
+              structure LuaJITFixup : sig
+                            val doBlock : Context -> LuaSyntax.Block -> LuaSyntax.Block
+                        end
+              structure ProcessUpvalue : sig
+                            type Env
+                            val initialEnv : Env
+                            val initialEnvForLuaJIT : Env
+                            val doBlock : Context -> Env -> LuaSyntax.Block -> LuaSyntax.VarAttr LuaSyntax.IdMap.map * LuaSyntax.Block
+                        end
+              structure ProcessLocal : sig
+                            type Env
+                            val initialEnv : Env
+                            val initialEnvForLuaJIT : Env
+                            val doBlock : Context -> Env -> LuaSyntax.Block -> LuaSyntax.Block
+                        end
+          end = struct
 structure L = LuaSyntax
 
 fun hasInnerFunction (L.ConstExp _) = false

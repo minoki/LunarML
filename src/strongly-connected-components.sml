@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 functor StronglyConnectedComponents (type t
                                      structure Map : sig
                                                    type 'a map

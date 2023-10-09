@@ -1,8 +1,17 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure DesugarPatternMatches = struct
+(* Compile pattern match into chain of if-else expressions *)
+structure DesugarPatternMatches :> sig
+              exception DesugarError of SourcePos.span list * string
+              type Context = { nextVId : int ref
+                             , nextTyVar : int ref
+                             , targetInfo : TargetInfo.target_info
+                             , messageHandler : Message.handler
+                             }
+              val desugarPatternMatches : Context -> { doExp : FSyntax.Exp -> FSyntax.Exp, doDec : FSyntax.Dec -> FSyntax.Dec, doDecs : FSyntax.Dec list -> FSyntax.Dec list }
+          end = struct
 exception DesugarError of SourcePos.span list * string
 structure F = FSyntax
 type Context = { nextVId : int ref
@@ -24,7 +33,7 @@ fun isWildcardPat (F.WildcardPat _) = true
   | isWildcardPat (F.ExnConPat _) = false
   | isWildcardPat (F.LayeredPat _) = false
   | isWildcardPat (F.VectorPat (_, pats, ellipsis, _)) = ellipsis andalso Vector.length pats = 0
-fun desugarPatternMatches (ctx: Context): { doExp: F.Exp -> F.Exp, doDec : F.Dec -> F.Dec, doDecs : F.Dec list -> F.Dec list }
+fun desugarPatternMatches (ctx: Context) : { doExp : F.Exp -> F.Exp, doDec : F.Dec -> F.Dec, doDecs : F.Dec list -> F.Dec list }
     = let fun doExp exp0
               = (case exp0 of
                      F.PrimExp (primOp, tyargs, args) => F.PrimExp (primOp, tyargs, List.map doExp args)
@@ -269,7 +278,9 @@ and doDec (F.ValDec (vid, optTy, exp)) = [F.ValDec (vid, optTy, doExp exp)]
 and doDecs decs = List.foldr (fn (dec, rest) => doDec dec @ rest) [] decs
 end
 
-structure DeadCodeElimination = struct
+structure DeadCodeElimination :> sig
+              val doExp : FSyntax.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * FSyntax.Exp
+          end = struct
 structure F = FSyntax
 fun isDiscardablePrimOp (F.IntConstOp _) = true
   | isDiscardablePrimOp (F.WordConstOp _) = true

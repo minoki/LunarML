@@ -1,4 +1,37 @@
-structure MLBEval = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure MLBEval :> sig
+              type Context = { driverContext : Driver.Context
+                             , baseDir : string
+                             , pathMap : string MLBSyntax.StringMap.map
+                             , targetInfo : TargetInfo.target_info
+                             , defaultLanguageOptions : LanguageOptions.options
+                             , messageHandler : Message.handler
+                             }
+              datatype Env' = MkEnv of { bas : Env' MLBSyntax.BasMap.map
+                                       , fixity : Fixity.Env (* fixity & id status *)
+                                       , typing : Typing.Env
+                                       }
+              type Env = { bas : Env' MLBSyntax.BasMap.map
+                         , fixity : Fixity.Env (* fixity & id status *)
+                         , typing : Typing.Env
+                         }
+              val emptyEnv : Env
+              type Code = { tynameset : TypedSyntax.TyNameSet.set
+                          , toFEnv : ToFSyntax.Env
+                          , fdecs : FSyntax.Dec list
+                          , cache : Env MLBSyntax.StringMap.map
+                          }
+              val initialCode : Code
+              val applyAnnotation : Message.handler -> string * LanguageOptions.options -> LanguageOptions.options
+              val doDecs : Context -> LanguageOptions.options -> Env -> MLBSyntax.BasDec list -> Code -> Env * Code
+              val doMlbSource : Context -> Env -> string -> Code -> Env * Code
+              datatype path_setting = PATH_MAP of string
+                                    | PATH_VAR of string
+              val loadPathVar : Message.handler -> path_setting * string MLBSyntax.StringMap.map -> string MLBSyntax.StringMap.map
+          end = struct
 local structure M = MLBSyntax in
 type Context = { driverContext : Driver.Context
                , baseDir : string
@@ -225,18 +258,18 @@ and doMlbSource ctx env path acc = let val baseDir = #baseDir ctx
                                           NONE => let val content = let val ins = TextIO.openIn path (* may raise Io *)
                                                                    in TextIO.inputAll ins before TextIO.closeIn ins
                                                                    end
-                                                  in case MLBParser.P.runParser MLBParser.basfile () path (StringStream.fromString { file = path, content = content }) of
-                                                         MLBParser.P.Ok (decs, ()) => let val ctx' = { driverContext = #driverContext ctx
-                                                                                                     , baseDir = OS.Path.dir path
-                                                                                                     , pathMap = #pathMap ctx
-                                                                                                     , targetInfo = #targetInfo ctx
-                                                                                                     , defaultLanguageOptions = #defaultLanguageOptions ctx
-                                                                                                     , messageHandler = #messageHandler ctx
-                                                                                                     }
-                                                                                          val (env', acc) = doDecs ctx' (#defaultLanguageOptions ctx) emptyEnv decs acc
-                                                                                          val cache = M.StringMap.insert (#cache acc, path, env')
-                                                                                      in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
-                                                                                      end
+                                                  in case MLBParser.P.runParser MLBParser.basfile MLBParser.initialState path (StringStream.fromString { file = path, content = content }) of
+                                                         MLBParser.P.Ok (decs, _) => let val ctx' = { driverContext = #driverContext ctx
+                                                                                                    , baseDir = OS.Path.dir path
+                                                                                                    , pathMap = #pathMap ctx
+                                                                                                    , targetInfo = #targetInfo ctx
+                                                                                                    , defaultLanguageOptions = #defaultLanguageOptions ctx
+                                                                                                    , messageHandler = #messageHandler ctx
+                                                                                                    }
+                                                                                         val (env', acc) = doDecs ctx' (#defaultLanguageOptions ctx) emptyEnv decs acc
+                                                                                         val cache = M.StringMap.insert (#cache acc, path, env')
+                                                                                     in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
+                                                                                     end
                                                        | MLBParser.P.ParseError e => ( TextIO.output (TextIO.stdErr, e ^ "\n") ; raise Message.Abort )
                                                   end
                                         | SOME e => (e, acc)

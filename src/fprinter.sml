@@ -1,4 +1,11 @@
-structure FPrinter = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure FPrinter :> sig
+              val doPrimOp : FSyntax.PrimOp -> Printer.fragment list
+              val doExp : int -> FSyntax.Exp -> Printer.fragment list
+          end = struct
 structure P = Printer
 structure F = FSyntax
 val showParen = P.showParen

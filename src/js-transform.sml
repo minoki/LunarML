@@ -1,4 +1,11 @@
-structure JsTransform = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure JsTransform :> sig
+              type Context = { nextVId : int ref }
+              val doProgram : Context -> JsSyntax.Block -> JsSyntax.Block
+          end = struct
 structure J = JsSyntax
 
 fun collectLetConstStat (J.LetStat vars) acc = Vector.foldl (fn ((vid, _), acc) => J.IdSet.add (acc, J.UserDefinedId vid)) acc vars

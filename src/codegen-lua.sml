@@ -2,7 +2,16 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure CodeGenLua = struct
+structure CodeGenLua :> sig
+              exception CodeGenError of string
+              datatype target_lua_version = LUA5_3 | LUAJIT
+              type Context = { nextLuaId : int ref
+                             , targetLuaVersion : target_lua_version
+                             , hasDelimitedContinuations : bool
+                             }
+              val doProgram : Context -> CSyntax.CVar -> CSyntax.CExp -> LuaSyntax.Block
+              val doProgramWithContinuations : Context -> CSyntax.CVar -> CSyntax.CExp -> LuaSyntax.Block
+          end = struct
 exception CodeGenError of string
 
 datatype target_lua_version = LUA5_3 | LUAJIT

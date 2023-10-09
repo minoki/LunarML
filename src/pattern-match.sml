@@ -9,7 +9,12 @@
  *
  * * MARANGET, LUC. “Warnings for Pattern Matching.” Journal of Functional Programming, vol. 17, no. 3, 2007, pp. 387–421., doi:10.1017/S0956796807006223.
  *)
-structure CheckPatternMatch = struct
+structure CheckPatternMatch :> sig
+              type Context = { options : LanguageOptions.options
+                             , messageHandler : Message.handler
+                             }
+              val goDec : Context * FSyntax.Dec -> unit
+          end = struct
 structure F = FSyntax
 structure Example = struct
 datatype example = ANY

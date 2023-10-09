@@ -1,8 +1,17 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) = struct
+functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
+            structure UserDeclarations : sig
+                          type ('a, 'b) token
+                          type pos
+                          type svalue
+                          type arg
+                      end
+            val makeLexer : (int -> string) -> UserDeclarations.arg -> unit -> (UserDeclarations.svalue, UserDeclarations.pos) UserDeclarations.token
+            val makeInputFromString : string -> int -> string
+        end = struct
         structure UserDeclarations = struct
         type pos = SourcePos.pos (* line, column; both 1-based *)
         type svalue = Tokens.svalue

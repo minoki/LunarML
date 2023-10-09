@@ -2,7 +2,21 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure CodeGenJs = struct
+structure CodeGenJs :> sig
+              exception CodeGenError of string
+              datatype code_style = DIRECT_STYLE | CPS
+              type Context = { nextJsId : int ref
+                             , style : code_style
+                             , contEscapeMap : CpsAnalyze.cont_map
+                             , imports : ({ specs : (string * JsSyntax.Id) list, moduleName : string } list) ref
+                             }
+              val doProgramDirect : Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+              val doProgramDirectDefaultExport : Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+              val doProgramDirectNamedExport : Context -> CSyntax.CVar -> CSyntax.CExp -> string vector -> JsSyntax.Block
+              val doProgramCPS : Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+              val doProgramCPSDefaultExport : Context -> CSyntax.CVar -> CSyntax.CExp -> JsSyntax.Block
+              val doProgramCPSNamedExport : Context -> CSyntax.CVar -> CSyntax.CExp -> string vector -> JsSyntax.Block
+          end = struct
 exception CodeGenError of string
 (* Mapping of types:
  * int -> 54-bit signed integer, as a subset of 64-bit floating-point number

@@ -1,8 +1,31 @@
 (*
- * Copyright (c) 2022 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure Numeric = struct
+structure Numeric :> sig
+              type float_format
+              val binary32 : float_format
+              val binary64 : float_format
+              datatype float_notation = DecimalNotation of { sign : bool (* true if negative *)
+                                                           , intPart : IntInf.int
+                                                           , fracPart : int vector (* 0 <= _ <= 9 *)
+                                                           , exponent : int (* decimal *)
+                                                           }
+                                      | HexadecimalNotation of { sign : bool
+                                                               , intPart : IntInf.int
+                                                               , fracPart : int vector (* 0 <= _ <= 15 *)
+                                                               , exponent : int (* binary *)
+                                                               }
+              val checkExactness : float_format -> float_notation -> bool
+              val toDecimal : { nominal_format : float_format, target_format : float_format } -> float_notation -> float_notation option
+              structure Notation : sig
+                            datatype t = datatype float_notation
+                            val isNegative : float_notation -> bool
+                            val isNegativeZero : float_notation -> bool
+                            val toString : string -> float_notation -> string
+                            val abs : float_notation -> float_notation
+                        end
+          end = struct
 datatype radix = BINARY | DECIMAL
 type float_format = { radix : radix
                     , precision : int (* 53 for Real64 *)
@@ -220,7 +243,7 @@ fun toDecimal { nominal_format : float_format, target_format : float_format } (n
       end
 
 structure Notation = struct
-datatype t = float_notation
+datatype t = datatype float_notation
 fun intToString negativeSign n = if n < 0 then
                                      negativeSign ^ Int.toString (~n)
                                  else

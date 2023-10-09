@@ -1,4 +1,18 @@
-structure MLBParser = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure MLBParser :> sig
+              structure P : sig
+                            type state
+                            type 'a parser
+                            datatype 'a result = ParseError of string
+                                               | Ok of 'a * state
+                            val runParser : 'a parser -> state -> string -> StringStream.stream -> 'a result
+                        end
+              val initialState : P.state
+              val basfile : MLBSyntax.BasDec list P.parser
+          end = struct
 structure P = ParserCombinator (structure Stream = StringStream
                                 fun showToken c = Char.toString c
                                 fun showPos { file, line, column } = file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column
@@ -12,6 +26,7 @@ structure P = ParserCombinator (structure Stream = StringStream
                                                      | EQUAL => Int.compare (#column p, #column q)
                                 type state = unit
                                )
+val initialState : P.state = ()
 structure CP = CharParser (P)
 structure StringSet = RedBlackSetFn (open String
                                      type ord_key = string

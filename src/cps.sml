@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2022 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure CSyntax = struct
@@ -220,7 +220,15 @@ fun recurseCExp f
 end
 end
 
-structure CpsTransform = struct
+structure CpsTransform : sig
+              type Context = { targetInfo : TargetInfo.target_info
+                             , nextVId : int ref
+                             , exportAsRecord : bool
+                             }
+              val initialEnv : CSyntax.Value TypedSyntax.VIdMap.map
+              val prependRevDecs : CSyntax.Dec list * CSyntax.CExp -> CSyntax.CExp
+              val transformT : Context * CSyntax.Value TypedSyntax.VIdMap.map -> FSyntax.Exp -> CSyntax.Dec list * CSyntax.CVar -> CSyntax.CExp
+          end = struct
 local structure F = FSyntax
       structure C = CSyntax
       val foldlCont = ListUtil.foldlCont
@@ -803,7 +811,12 @@ fun analyze exp = let val dca = CpsDeadCodeAnalysis.analyze exp
 end (* local *)
 end (* strucuture CpsUsageAnalysis *)
 
-structure CpsSimplify = struct
+structure CpsSimplify :> sig
+              type Context = { nextVId : int ref, simplificationOccurred : bool ref }
+              type value_info
+              val simplifyCExp : Context * value_info TypedSyntax.VIdMap.map * (CSyntax.Var option list * CSyntax.CExp option) CSyntax.CVarMap.map * CSyntax.Value TypedSyntax.VIdMap.map * CSyntax.CVar CSyntax.CVarMap.map * { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage } * CSyntax.CExp -> CSyntax.CExp
+              val finalizeCExp : Context * CSyntax.CExp -> CSyntax.CExp
+          end = struct
 local structure F = FSyntax
       structure C = CSyntax
       structure P = Primitives

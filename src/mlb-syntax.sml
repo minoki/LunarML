@@ -1,4 +1,27 @@
-structure MLBSyntax = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure MLBSyntax :> sig
+              type Path = string
+              type BasId = string
+              datatype BasDec = BasisDec of (BasId * BasExp) list
+                              | OpenDec of BasId list
+                              | LocalDec of BasDec list * BasDec list
+                              | StructureDec of (Syntax.StrId * Syntax.StrId) list
+                              | SignatureDec of (Syntax.SigId * Syntax.SigId) list
+                              | FunctorDec of (Syntax.FunId * Syntax.FunId) list
+                              | PathDec of Path (* path.sml, path.sig, path.fun, path.mlb *)
+                              | AnnotationDec of string list * BasDec list
+                              | PrimDec
+                              | PrimOverloadDec
+                   and BasExp = BasisExp of BasDec list
+                              | BasIdExp of BasId
+                              | LetExp of BasDec list * BasExp
+              structure StringMap : ORD_MAP where type Key.ord_key = string
+              structure BasMap : ORD_MAP where type Key.ord_key = BasId
+              val evalPath : string StringMap.map -> string -> string
+          end = struct
 type Path = string
 type BasId = string
 datatype BasDec = BasisDec of (BasId * BasExp) list
@@ -43,4 +66,4 @@ fun evalPath pathMap s
                               | SOME (c, s) => go (s, String.str c :: acc)
       in go (Substring.full s, [])
       end
-end
+end;

@@ -1,8 +1,21 @@
 (*
- * Copyright (c) 2021 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure Driver = struct
+structure Driver :> sig
+              type Context = { nextTyVar : int ref
+                             , nextVId : int ref
+                             , targetInfo : TargetInfo.target_info
+                             , errorCounter : Message.counter
+                             }
+              val newContext : TargetInfo.target_info * Message.counter -> Context
+              type Env = { fixity : Fixity.Env
+                         , typingEnv : Typing.Env
+                         , tynameset : TypedSyntax.TyNameSet.set
+                         , toFEnv : ToFSyntax.Env
+                         }
+              val compile : Context * LanguageOptions.options * Env * string * string -> Env * FSyntax.Dec list
+          end = struct
 
 fun rep (c, n) = CharVector.tabulate (n, fn _ => c)
 fun untab s = String.map (fn #"\t" => #" " | c => c) s
@@ -68,11 +81,6 @@ type Env = { fixity : Fixity.Env
            , tynameset : TypedSyntax.TyNameSet.set
            , toFEnv : ToFSyntax.Env
            }
-val initialEnv : Env = { fixity = InitialEnv.initialFixityEnv
-                       , typingEnv = InitialEnv.initialEnv
-                       , tynameset = InitialEnv.initialTyNameSet
-                       , toFEnv = ToFSyntax.initialEnv
-                       }
 
 fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt : LanguageOptions.options, origEnv as { fixity, typingEnv, tynameset, toFEnv } : Env, name, source)
     = let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)

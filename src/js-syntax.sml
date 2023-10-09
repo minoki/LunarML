@@ -1,3 +1,7 @@
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
 structure JsSyntax = struct
 datatype ObjectKey = IntKey of int
                    | StringKey of string
@@ -94,7 +98,10 @@ fun MultiAssignStat ([], []) = []
   | MultiAssignStat (lhs, rhs) = [ ExpStat (BinExp (ASSIGN, ArrayExp (vector lhs), ArrayExp (vector rhs))) ]
 end;
 
-structure JsWriter = struct
+structure JsWriter :> sig
+              val doProgram : JsSyntax.Block -> string
+              val doImports : { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string
+          end = struct
 fun smlNameToJsChar #"_" = "_"
   | smlNameToJsChar #"'" = "$PRIME"
   | smlNameToJsChar #"!" = "$EXCLAM"

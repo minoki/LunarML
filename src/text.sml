@@ -1,4 +1,18 @@
-structure StringElement = struct
+(*
+ * Copyright (c) 2023 ARATA Mizuki
+ * This file is part of LunarML.
+ *)
+structure StringElement :> sig
+              datatype char = CODEUNIT of int (* \ddd, \uXXXX *)
+                            | UNICODE_SCALAR of int (* \u{} *)
+              val charToString : char -> string
+              val isAsciiString : char vector -> bool
+              val toAsciiString : char vector -> string option
+              val fromAsciiString : string -> char vector
+              val encodeAscii : string -> int vector
+              val encode8bit : char vector -> string
+              val encode16bit : char vector -> int vector
+          end = struct
 datatype char = CODEUNIT of int (* \ddd, \uXXXX *)
               | UNICODE_SCALAR of int (* \u{} *)
 fun charToString (CODEUNIT x) = if x < 0 then

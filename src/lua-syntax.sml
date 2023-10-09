@@ -1,5 +1,5 @@
 (*
- * Copyright (c) 2022 ARATA Mizuki
+ * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
 structure LuaSyntax = struct
@@ -142,7 +142,10 @@ fun MultiAssignStat (vars : Id list, values : Exp list)
       end
 end;
 
-structure LuaWriter = struct
+structure LuaWriter :> sig
+              val isLuaIdentifier : string -> bool
+              val doChunk : LuaSyntax.Stat vector -> string
+          end = struct
 fun smlNameToLuaChar #"_" = "__"
   | smlNameToLuaChar #"'" = "_PRIME"
   | smlNameToLuaChar #"!" = "_EXCLAM"
