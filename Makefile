@@ -58,14 +58,14 @@ typecheck: src/lunarml.mlb $(sources)
 bin/lunarml: src/lunarml.mlb $(sources)
 	mlton -output $@ $<
 
-bin/lunarml.gen2.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
-	bin/lunarml compile -o $@ $<
+bin/lunarml.gen2.lua: src/lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --default-ann "valDescInComments error" -o $@ $<
 
-bin/lunarml.gen2-luajit.lua: src/lunarml-lunarml.mlb bin/lunarml $(sources)
-	bin/lunarml compile --luajit -o $@ $<
+bin/lunarml.gen2-luajit.lua: src/lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --default-ann "valDescInComments error" --luajit -o $@ $<
 
-bin/lunarml.gen2.mjs: src/lunarml-lunarml.mlb bin/lunarml $(sources)
-	bin/lunarml compile --nodejs-cps -o $@ $<
+bin/lunarml.gen2.mjs: src/lunarml.mlb bin/lunarml $(sources)
+	bin/lunarml compile --default-ann "valDescInComments error" --nodejs-cps -o $@ $<
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
@@ -97,18 +97,18 @@ test-nodejs-cps: bin/lunarml
 	$(MAKE) -C test VARIANT=nodejs-cps NODE=$(NODE)
 
 validate-lua: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.lua --print-timings src/lunarml-lunarml.mlb
-	$(LUA) lunarml.gen2.lua -Blib/lunarml compile -o lunarml.gen3.lua --print-timings src/lunarml-lunarml.mlb
+	bin/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen2.lua --print-timings src/lunarml.mlb
+	$(LUA) lunarml.gen2.lua -Blib/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen3.lua --print-timings src/lunarml.mlb
 	diff --report-identical-files lunarml.gen2.lua lunarml.gen3.lua
 
 validate-luajit: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2-luajit.lua --luajit --print-timings src/lunarml-lunarml.mlb
-	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile -o lunarml.gen3-luajit.lua --luajit --print-timings src/lunarml-lunarml.mlb
+	bin/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen2-luajit.lua --luajit --print-timings src/lunarml.mlb
+	$(LUAJIT) lunarml.gen2-luajit.lua -Blib/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen3-luajit.lua --luajit --print-timings src/lunarml.mlb
 	diff --report-identical-files lunarml.gen2-luajit.lua lunarml.gen3-luajit.lua
 
 validate-js: bin/lunarml
-	bin/lunarml compile -o lunarml.gen2.mjs --nodejs-cps --print-timings src/lunarml-lunarml.mlb
-	$(NODE) lunarml.gen2.mjs -Blib/lunarml compile -o lunarml.gen3.mjs --nodejs-cps --print-timings src/lunarml-lunarml.mlb
+	bin/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen2.mjs --nodejs-cps --print-timings src/lunarml.mlb
+	$(NODE) lunarml.gen2.mjs -Blib/lunarml compile --default-ann "valDescInComments error" -o lunarml.gen3.mjs --nodejs-cps --print-timings src/lunarml.mlb
 	diff --report-identical-files lunarml.gen2.mjs lunarml.gen3.mjs
 
 verify-lua: bin/lunarml bin/lunarml.gen2.lua
@@ -127,7 +127,7 @@ verify-js: bin/lunarml bin/lunarml.gen2.mjs
 #
 
 package/npm/lunarml.mjs: src/lunarml-esmod.mlb bin/lunarml $(sources) src/main-esmod.sml
-	bin/lunarml compile --nodejs-cps --lib -o $@ $<
+	bin/lunarml compile --nodejs-cps --lib --default-ann "valDescInComments error" -o $@ $<
 
 install-npm: package/npm/lunarml.mjs
 	make -C thirdparty install
