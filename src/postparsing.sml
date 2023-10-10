@@ -1228,7 +1228,10 @@ fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), se
                                                                       )
                                                                   ) Syntax.TyConSet.empty descs)
   | doSpec ctx (S.DatDesc (span, descs, withtypedescs))
-    = let val set = #ty (List.foldl (fn ((tyvarseq, tycon, condescs), { v, ty }) =>
+    = let val () = case (#allowSigWithtype (#languageOptions ctx), withtypedescs) of
+                       (false, _ :: _) => emitError (ctx, [span], "withtype in signature is not allowed")
+                     | _ => ()
+          val set = #ty (List.foldl (fn ((tyvarseq, tycon, condescs), { v, ty }) =>
                                         ( checkTyVarSeq (ctx, span, tyvarseq)
                                         ; if Syntax.TyConSet.member (ty, tycon) then
                                               emitError (ctx, [span], "duplicate type constructor in datatype description")

@@ -40,7 +40,7 @@ An MLB file consists of `<basdec>`.
 * `valDescInComments {ignore|warn|error}`
 * `allowExtendedNumConsts {true|false}`
 * `allowExtendedTextConsts {true|false}`
-* `allowSigWithtype {true|false}`: no effect (not implemented yet)
+* `allowSigWithtype {true|false}`
 * `allowVectorExps {true|false}`
 * `allowVectorPats {true|false}`
 * `allowRecordExtension {true|false}`: no effect (not implemented yet)
