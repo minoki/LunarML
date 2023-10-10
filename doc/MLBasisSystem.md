@@ -47,8 +47,8 @@ An MLB file consists of `<basdec>`.
 * `allowRecordUpdate {true|false}`
 * `allowUtfEscapeSequences {true|false}`
 * `allowHexFloatConsts {true|false}`
-* `allowValRecTyVars {true|false}`: no effect (not implemented yet)
-* `allowValTyVarsRec {true|false}`: no effect (not implemented yet)
+* `allowValRecTyVars {true|false}`
+* `allowValTyVarsRec {true|false}`
 * `allowFreeTyVarsInDatatypeDec {true|false}`: no effect (not implemented yet)
 * `allowWhereAndType {true|false}`
 * `allowInfixingDot {false|true}`

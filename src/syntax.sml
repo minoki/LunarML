@@ -493,6 +493,9 @@ datatype Pat
   | ConjunctivePat of SourcePos.span * Pat * Pat (* layered or [Successor ML] conjunctive *)
   | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
 
+datatype RecValStyle = TYVAR_REC (* 'val' <tyvarseq> 'rec'; SML '97 *)
+                     | REC_TYVAR (* 'val' 'rec' <tyvarseq>; Successor ML *)
+
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
              | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
@@ -515,7 +518,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
              | SequentialExp of SourcePos.span * Exp vector * Exp
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
-             | RecValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
+             | RecValDec of SourcePos.span * Syntax.TyVar list * RecValStyle * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
              | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * FValBind list
              | TypeDec of SourcePos.span * Syntax.TypBind list
              | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
