@@ -81,7 +81,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                      ( emitWarning (l, c + 2, "there should be a space between a numeric literal and an identifier")
                                                                      ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c + 1)), state, l, c + 2, zr)
                                                                      )
-                    | #"~" :: #"0" :: (zr as #"b" :: x :: xs) => if isBinDigit x then
+                    | #"~" :: #"0" :: (zr as #"b" :: x :: xs) => if isBinDigit x andalso #allowExtendedNumConsts opts then
                                                                      readBinaryConstant (state, l, c, c + 4, NLTNegative, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
                                                                  else
                                                                      ( emitWarning (l, c + 2, "there should be a space between a numeric literal and an identifier")
@@ -97,7 +97,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                         ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
                                                                         ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
                                                                         )
-                    | #"0" :: (rest0 as #"w" :: #"b" :: x :: xs) => if isBinDigit x then
+                    | #"0" :: (rest0 as #"w" :: #"b" :: x :: xs) => if isBinDigit x andalso #allowExtendedNumConsts opts then
                                                                         readBinaryConstant (state, l, c, c + 3, NLTWord, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
                                                                     else
                                                                         ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier")
@@ -115,7 +115,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                 ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier ")
                                                                 ; SOME (Tokens.ZNIntConst (0, pos (l, c), pos (l, c)), state, l, c + 1, rest0)
                                                                 )
-                    | #"0" :: (rest0 as #"b" :: x :: xs) => if isBinDigit x then
+                    | #"0" :: (rest0 as #"b" :: x :: xs) => if isBinDigit x andalso #allowExtendedNumConsts opts then
                                                                 readBinaryConstant (state, l, c, c + 3, NLTUnsigned, digitToLargeInt x, xs) (* [Successor ML] extended literal syntax (binary constant) *)
                                                             else
                                                                 ( emitWarning (l, c + 1, "there should be a space between a numeric literal and an identifier ")
@@ -450,13 +450,19 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
               | isSymbolChar #"|" = true
               | isSymbolChar #"*" = true
               | isSymbolChar _ = false
-            and skipUnderscoresAndReadDigit (_, c, #"_" :: xs) = skipUnderscoresAndReadDigit (true, c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
+            and skipUnderscoresAndReadDigit (_, c, #"_" :: xs) = if #allowExtendedNumConsts opts then
+                                                                     skipUnderscoresAndReadDigit (true, c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
+                                                                 else
+                                                                     NONE
               | skipUnderscoresAndReadDigit (anyUnderscores, c, x :: xs) = if Char.isDigit x then
                                                                                SOME (anyUnderscores, c + 1, x, xs)
                                                                            else
                                                                                NONE
               | skipUnderscoresAndReadDigit (_, c, []) = NONE
-            and skipUnderscoresAndReadHexDigit (c, #"_" :: xs) = skipUnderscoresAndReadHexDigit (c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
+            and skipUnderscoresAndReadHexDigit (c, #"_" :: xs) = if #allowExtendedNumConsts opts then
+                                                                     skipUnderscoresAndReadHexDigit (c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
+                                                                 else
+                                                                     NONE
               | skipUnderscoresAndReadHexDigit (c, x :: xs) = if Char.isHexDigit x then
                                                                   SOME (c + 1, x, xs)
                                                               else

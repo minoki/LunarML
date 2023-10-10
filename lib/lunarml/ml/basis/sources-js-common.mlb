@@ -3,6 +3,7 @@ local
 ann "nonexhaustiveRaise ignore"
     "sequenceNonUnit ignore"
     "valDescInComments warn"
+    "allowExtendedNumConsts true"
     "allowVectorExps true"
     "allowHexFloatConsts true"
     "allowInfixingDot true"
