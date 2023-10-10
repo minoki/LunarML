@@ -49,7 +49,7 @@ An MLB file consists of `<basdec>`.
 * `allowHexFloatConsts {true|false}`
 * `allowValRecTyVars {true|false}`
 * `allowValTyVarsRec {true|false}`
-* `allowFreeTyVarsInDatatypeDec {true|false}`: no effect (not implemented yet)
+* `allowFreeTyVarsInTypeDec {true|false}`
 * `allowWhereAndType {true|false}`
 * `allowInfixingDot {false|true}`
 

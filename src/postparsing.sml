@@ -984,6 +984,15 @@ fun doTy ctx (S.TyVar span) = ()
   | doTy ctx (S.TyCon (span, tyargs, longtycon)) = List.app (doTy ctx) tyargs
   | doTy ctx (S.FnType (span, s, t)) = ( doTy ctx s ; doTy ctx t )
 
+(*! val freeTyVarsInTypeDec : S.TyVar list -> S.Ty -> SourcePos.span list *)
+fun freeTyVarsInTypeDec tyvarseq
+    = let fun go (S.TyVar (span, tv), acc) = if List.exists (fn tv' => tv = tv') tyvarseq then acc else span :: acc
+            | go (S.RecordType (_, fields, optBaseTy), acc) = List.foldr (fn ((_, ty), acc) => go (ty, acc)) (case optBaseTy of SOME ty => go (ty, acc) | NONE => acc) fields
+            | go (S.TyCon (_, tyargs, _), acc) = List.foldr go acc tyargs
+            | go (S.FnType (_, ty1, ty2), acc) = go (ty1, go (ty2, acc))
+      in fn ty => go (ty, [])
+      end
+
 val invalidBoundNames0 = List.foldl S.VIdSet.add' S.VIdSet.empty [S.MkVId "true", S.MkVId "false", S.MkVId "nil", S.MkVId "::", S.MkVId "ref"]
 val invalidBoundNames1 = S.VIdSet.add (invalidBoundNames0, S.MkVId "=")
 val invalidConstructorNames0 = S.VIdSet.add (invalidBoundNames0, S.MkVId "it")
@@ -1099,6 +1108,12 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                                    emitError (ctx, [span], "duplicate type constructor in type declaration")
                                else
                                    ()
+                             ; if not (#allowFreeTyVarsInTypeDec (#languageOptions ctx)) then
+                                   case freeTyVarsInTypeDec tyvarseq ty of
+                                       [] => ()
+                                     | spans => emitError (ctx, spans, "free type variable is not allowed in type declaration")
+                               else
+                                   ()
                              ; S.TyConSet.add (set, tycon)
                              )
                          ) S.TyConSet.empty typbinds)
@@ -1113,6 +1128,15 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                                                                      ()
                                                                ; if Syntax.VIdSet.member (set, vid) then
                                                                      emitError (ctx, [span], "duplicate value identifier in datatype declaration")
+                                                                 else
+                                                                     ()
+                                                               ; if not (#allowFreeTyVarsInTypeDec (#languageOptions ctx)) then
+                                                                     case optTy of
+                                                                         SOME ty => (case freeTyVarsInTypeDec tyvarseq ty of
+                                                                                         [] => ()
+                                                                                       | spans => emitError (ctx, spans, "free type variable is not allowed in datatype declaration")
+                                                                                    )
+                                                                       | NONE => ()
                                                                  else
                                                                      ()
                                                                ; Syntax.VIdSet.add (set, vid)
@@ -1132,6 +1156,12 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                                 ; checkTyVarSeq (ctx, span, tyvarseq)
                                 ; if Syntax.TyConSet.member (set, tycon) then
                                       emitError (ctx, [span], "duplicate type constructor in withtype declaration")
+                                  else
+                                      ()
+                                ; if not (#allowFreeTyVarsInTypeDec (#languageOptions ctx)) then
+                                      case freeTyVarsInTypeDec tyvarseq ty of
+                                          [] => ()
+                                        | spans => emitError (ctx, spans, "free type variable is not allowed in type declaration")
                                   else
                                       ()
                                 ; Syntax.TyConSet.add (set, tycon)

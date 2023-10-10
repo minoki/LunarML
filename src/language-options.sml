@@ -15,7 +15,7 @@ structure LanguageOptions :> sig
                              , allowHexFloatConsts : bool
                              , allowValRecTyVars : bool
                              , allowValTyVarsRec : bool
-                             , allowFreeTyVarsInDatatypeDec : bool
+                             , allowFreeTyVarsInTypeDec : bool
                              , allowWhereAndType : bool
                              , allowPrim : bool
                              , allowBindEqual : bool
@@ -45,7 +45,7 @@ structure LanguageOptions :> sig
                             val allowHexFloatConsts : bool -> options -> options
                             val allowValRecTyVars : bool -> options -> options
                             val allowValTyVarsRec : bool -> options -> options
-                            val allowFreeTyVarsInDatatypeDec : bool -> options -> options
+                            val allowFreeTyVarsInTypeDec : bool -> options -> options
                             val allowWhereAndType : bool -> options -> options
                             val allowPrim : bool -> options -> options
                             val allowBindEqual : bool -> options -> options
@@ -74,7 +74,7 @@ type options = { allowExtendedNumConsts : bool
                , allowHexFloatConsts : bool
                , allowValRecTyVars : bool
                , allowValTyVarsRec : bool
-               , allowFreeTyVarsInDatatypeDec : bool
+               , allowFreeTyVarsInTypeDec : bool
                , allowWhereAndType : bool
                , allowPrim : bool
                , allowBindEqual : bool
@@ -100,7 +100,7 @@ fun setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowHexFloatConsts" = SOME set.allowHexFloatConsts
   | setByName "allowValRecTyVars" = SOME set.allowValRecTyVars
   | setByName "allowValTyVarsRec" = SOME set.allowValTyVarsRec
-  | setByName "allowFreeTyVarsInDatatypeDec" = SOME set.allowFreeTyVarsInDatatypeDec
+  | setByName "allowFreeTyVarsInTypeDec" = SOME set.allowFreeTyVarsInTypeDec
   | setByName "allowWhereAndType" = SOME set.allowWhereAndType
   | setByName "allowPrim" = SOME set.allowPrim
   | setByName "allowBindEqual" = SOME set.allowBindEqual
@@ -118,7 +118,7 @@ val default : options = { allowExtendedNumConsts = true
                         , allowHexFloatConsts = true
                         , allowValRecTyVars = true
                         , allowValTyVarsRec = true
-                        , allowFreeTyVarsInDatatypeDec = true
+                        , allowFreeTyVarsInTypeDec = true
                         , allowWhereAndType = true
                         , allowPrim = false
                         , allowBindEqual = false
@@ -141,6 +141,6 @@ fun setSuccessorML value : options -> options
       o set.allowRecordUpdate value
       o set.allowValRecTyVars value
       o set.allowValTyVarsRec (not value)
-      o set.allowFreeTyVarsInDatatypeDec (not value)
+      o set.allowFreeTyVarsInTypeDec (not value)
       o set.allowWhereAndType (not value)
 end;

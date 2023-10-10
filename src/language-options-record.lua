@@ -19,7 +19,7 @@ return "LanguageOptionsRecord", {
   "allowHexFloatConsts",
   "allowValRecTyVars",
   "allowValTyVarsRec",
-  "allowFreeTyVarsInDatatypeDec",
+  "allowFreeTyVarsInTypeDec",
   "allowWhereAndType",
   "allowPrim",
   "allowBindEqual",
