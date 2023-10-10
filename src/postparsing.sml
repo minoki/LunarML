@@ -304,7 +304,11 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                 ) update
           val patrow = List.map (fn (label, _) => (label, Syntax.WildcardPat span)) update
           val vid = freshVId (ctx, "record")
-      in Syntax.LetInExp ( span
+      in if not (#allowRecordUpdate (#languageOptions ctx)) then
+             emitNonfatalError (ctx, [span], "record update is not allowed")
+         else
+             ()
+       ; Syntax.LetInExp ( span
                          , [Syntax.ValDec (span, [], [], [Syntax.PatBind ( span
                                                                          , Syntax.RecordPat { sourceSpan = span
                                                                                             , fields = patrow
