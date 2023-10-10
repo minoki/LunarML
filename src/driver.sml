@@ -106,7 +106,7 @@ fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt
           val (decs, _) = let fun onError (message, p1, p2) = Message.error (messageHandler, [{ start = p1, end_ = p2 }], "syntax", message)
                           in LunarMLParser.parse ((* lookahead *) 0, lexer, onError, name)
                           end handle LunarMLParser.ParseError => raise Message.Abort
-          val (fixity', decs) = Fixity.doProgram ({ nextVId = nextVId, messageHandler = messageHandler }, fixity, decs)
+          val (fixity', decs) = Fixity.doProgram ({ nextVId = nextVId, messageHandler = messageHandler, languageOptions = langopt }, fixity, decs)
           val () = CheckSyntacticRestrictions.checkProgram { messageHandler = messageHandler, languageOptions = langopt } decs
           val decs = PostParsing.scopeTyVarsInProgram decs
           val typingContext = { nextTyVar = nextTyVar, nextVId = nextVId, messageHandler = messageHandler, matchContext = [], languageOptions = langopt }

@@ -6,8 +6,10 @@ structure Fixity = struct
 
 type Context = { nextVId : int ref
                , messageHandler : Message.handler
+               , languageOptions : LanguageOptions.options
                }
 
+fun emitNonfatalError (ctx : Context, spans, message) = Message.error (#messageHandler ctx, spans, "syntax", message)
 fun emitError (ctx : Context, spans, message) = Message.fatalError (#messageHandler ctx, spans, "syntax", message)
 
 type FixityStatusMap = Syntax.FixityStatus Syntax.VIdMap.map
@@ -283,12 +285,17 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                         ) ([], NONE, []) items
       in case ellipsis of
              NONE => Syntax.RecordExp (span, fields2, NONE)
-           | SOME baseExp => if List.null fields2 then
-                                 Syntax.RecordExp (span, fields1, SOME baseExp)
-                             else (* desugar *)
-                                 let val vid = freshVId (ctx, "record")
-                                 in Syntax.RecordExp (span, fields1, SOME (Syntax.LetInExp (span, [Syntax.ValDec (span, [], [], [Syntax.PatBind (span, Syntax.VarPat (span, vid), baseExp)])], Syntax.RecordExp (span, fields2, SOME (Syntax.VarExp (span, Syntax.MkQualified ([], vid)))))))
-                                 end
+           | SOME baseExp => ( if not (#allowRecordExtension (#languageOptions ctx)) then
+                                   emitNonfatalError (ctx, [span], "record extension is not allowed")
+                               else
+                                   ()
+                             ; if List.null fields2 then
+                                   Syntax.RecordExp (span, fields1, SOME baseExp)
+                               else (* desugar *)
+                                   let val vid = freshVId (ctx, "record")
+                                   in Syntax.RecordExp (span, fields1, SOME (Syntax.LetInExp (span, [Syntax.ValDec (span, [], [], [Syntax.PatBind (span, Syntax.VarPat (span, vid), baseExp)])], Syntax.RecordExp (span, fields2, SOME (Syntax.VarExp (span, Syntax.MkQualified ([], vid)))))))
+                                   end
+                             )
       end
   | doExp(ctx, env, UnfixedSyntax.RecordUpdateExp (span, baseExp, update))
     = let val baseExp = doExp (ctx, env, baseExp)
