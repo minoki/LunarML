@@ -320,7 +320,7 @@ datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
               | TypeAliasDesc of SourcePos.span * (TyVar list * TyCon * Ty) list (* derived form *)
      and SigExp = BasicSigExp of SourcePos.span * Spec list
                 | SigIdExp of SourcePos.span * SigId
-                | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty
+                | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty * (* written as 'and type'? *) bool
 
 datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
                          | StrIdExp of SourcePos.span * LongStrId

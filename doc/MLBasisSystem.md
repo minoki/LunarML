@@ -50,7 +50,7 @@ An MLB file consists of `<basdec>`.
 * `allowValRecTyVars {true|false}`: no effect (not implemented yet)
 * `allowValTyVarsRec {true|false}`: no effect (not implemented yet)
 * `allowFreeTyVarsInDatatypeDec {true|false}`: no effect (not implemented yet)
-* `allowWhereAndType {true|false}`: no effect (not implemented yet)
+* `allowWhereAndType {true|false}`
 * `allowInfixingDot {false|true}`
 
 The default value for an annotation could be specified by `--default-ann` option.

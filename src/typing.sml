@@ -2588,7 +2588,7 @@ fun evalSignature (ctx : Context, env : SigEnv, S.BasicSigExp (span, specs)) : T
                                 end
          | NONE => emitFatalError (ctx, [span], "unknown signature name '" ^ name ^ "'")
       )
-  | evalSignature(ctx, env, S.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty))
+  | evalSignature (ctx, env, S.TypeRealisationExp (span, sigexp, tyvars, longtycon, ty, _))
     = let val s = evalSignature(ctx, env, sigexp)
           val tyvars = List.map (fn tv => (tv, genTyVar (ctx, tv))) tyvars
           val ty = let val env = { valMap = #valMap env

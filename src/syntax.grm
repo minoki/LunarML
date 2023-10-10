@@ -754,7 +754,7 @@ EQUAL_LongStrIds : EQUALS LongStrId EQUAL_LongStrIds (LongStrId :: EQUAL_LongStr
                  | EQUALS LongStrId (LongStrId :: nil)
 
 SigExp_NoSigId : SIG Specs END (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
-               | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty TypeRealisationRest (List.foldl (fn ((span, tyvarseq, longtycon, ty), sigexp) => (* TODO: mark as "not available in Successor ML" *) Syntax.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty)) (Syntax.TypeRealisationExp (span (SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty)) TypeRealisationRest)
+               | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty TypeRealisationRest (List.foldl (fn ((span, tyvarseq, longtycon, ty), sigexp) => Syntax.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty, true)) (Syntax.TypeRealisationExp (span (SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty, false)) TypeRealisationRest)
 
 SigExp : SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
        | SigExp_NoSigId (SigExp_NoSigId)
@@ -762,7 +762,7 @@ SigExp : SigId (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
 (* equivalent to 'SigExp AND' *)
 SigExp_AND : SIG Specs END AND (Syntax.BasicSigExp(span(SIGleft, ENDright), Specs))
            | SigId AND (Syntax.SigIdExp(span(SigIdleft, SigIdright), SigId))
-           | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty TypeRealisationRest_AND (List.foldl (fn ((span, tyvarseq, longtycon, ty), sigexp) => (* TODO: mark as "not available in Successor ML" *) Syntax.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty)) (Syntax.TypeRealisationExp (span (SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty)) TypeRealisationRest_AND)
+           | SigExp WHERE TYPE TyVarSeq LongTyCon EQUALS Ty TypeRealisationRest_AND (List.foldl (fn ((span, tyvarseq, longtycon, ty), sigexp) => Syntax.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty, true)) (Syntax.TypeRealisationExp (span (SigExpleft, Tyright), SigExp, TyVarSeq, LongTyCon, Ty, false)) TypeRealisationRest_AND)
 
 TypeRealisationRest : AND TYPE TyVarSeq LongTyCon EQUALS Ty TypeRealisationRest ((span (ANDleft, Tyright), TyVarSeq, LongTyCon, Ty) :: TypeRealisationRest) (* [removed in Successor ML] *)
                     | ([])

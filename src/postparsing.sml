@@ -652,7 +652,7 @@ fun doSigExp(ctx, env, Syntax.BasicSigExp(span, specs)) : IdStatusMap = doSpecs(
                                                             SOME m => m
                                                           | NONE => emitError(ctx, [span], "signature not found: " ^ Syntax.print_SigId sigid)
                                                        )
-  | doSigExp(ctx, env, Syntax.TypeRealisationExp(span, sigexp, tyvars, longtycon, ty)) = doSigExp(ctx, env, sigexp) (* does not affect idstatus *)
+  | doSigExp (ctx, env, Syntax.TypeRealisationExp (span, sigexp, tyvars, longtycon, ty, _)) = doSigExp (ctx, env, sigexp) (* does not affect idstatus *)
 and doSpecs(ctx, env, specs) = List.foldl (fn (spec, m) => mergeIdStatusMap(m, doSpec(ctx, mergeEnv(env, envWithIdStatusMap m), spec))) emptyIdStatusMap specs
 and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
   | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
@@ -1315,9 +1315,14 @@ fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), se
 and doSpecs ctx (span, specs) = List.app (doSpec ctx) specs
 and doSigExp ctx (S.BasicSigExp (span, specs)) = doSpecs ctx (span, specs)
   | doSigExp ctx (S.SigIdExp (_, _)) = ()
-  | doSigExp ctx (S.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty)) = ( checkTyVarSeq (ctx, span, tyvarseq)
-                                                                                  ; doTy ctx ty
-                                                                                  )
+  | doSigExp ctx (S.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty, andType))
+    = ( if andType andalso not (#allowWhereAndType (#languageOptions ctx)) then
+            emitError (ctx, [span], "'and type' is removed in Successor ML; use nested 'where type'")
+        else
+            ()
+      ; checkTyVarSeq (ctx, span, tyvarseq)
+      ; doTy ctx ty
+      )
 
 fun doStrExp ctx (S.StructExp (span, strdecs)) = List.app (doStrDec ctx) strdecs
   | doStrExp ctx (S.StrIdExp (span, longstrid)) = ()
