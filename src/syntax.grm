@@ -9,7 +9,7 @@ fun nilExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syn
 fun consOp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
 fun MkAndAlsoExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, e2, falseExp span)
 fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp span, e2)
-fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp(span, [UnfixedSyntax.Field (Syntax.NumericLabel 1, e1), UnfixedSyntax.Field (Syntax.NumericLabel 2, e2)])
+fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp (span, [UnfixedSyntax.Field (Syntax.NumericLabel 1, e1, false), UnfixedSyntax.Field (Syntax.NumericLabel 2, e2, false)])
 fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
 fun MkListExp (span, xs) = UnfixedSyntax.ListExp(span, Vector.fromList xs)
 fun MkVectorExp (span, xs) = UnfixedSyntax.VectorExp(span, Vector.fromList xs)
@@ -99,8 +99,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | Opt_BAR of Syntax.optional_bar
        | AtPat of UnfixedSyntax.Pat
        | AtPats of UnfixedSyntax.Pat list
-       | TypedPatPun of Syntax.Label * UnfixedSyntax.Pat
-       | PatPun of Syntax.Label * UnfixedSyntax.Pat
+       | TypedPatPun of Syntax.Label * UnfixedSyntax.Pat * bool
+       | PatPun of Syntax.Label * UnfixedSyntax.Pat * bool
        | PatRow of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | PatRowRest of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | AppOrInfPat of UnfixedSyntax.Pat list
@@ -349,16 +349,16 @@ Pat : TypedPat (TypedPat)
 *)
     | TypedPat AS Pat (UnfixedSyntax.ConjunctivePat(span(TypedPatleft,Patright), TypedPat, Pat)) (* layered or [Successor ML] conjunctive (R) *)
 
-TypedPatPun : BoundVId ((Syntax.IdentifierLabel(Syntax.getVIdName BoundVId), UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId))))
-            | BoundVId COLON Ty ((Syntax.IdentifierLabel(Syntax.getVIdName BoundVId), UnfixedSyntax.TypedPat(span(BoundVIdleft,Tyright),UnfixedSyntax.NonInfixVIdPat(span(BoundVIdleft,BoundVIdright),Syntax.MkQualified([],BoundVId)),Ty)))
+TypedPatPun : BoundVId ((Syntax.IdentifierLabel (Syntax.getVIdName BoundVId), UnfixedSyntax.NonInfixVIdPat (span (BoundVIdleft, BoundVIdright), Syntax.MkQualified ([], BoundVId)), true))
+            | BoundVId COLON Ty ((Syntax.IdentifierLabel (Syntax.getVIdName BoundVId), UnfixedSyntax.TypedPat (span (BoundVIdleft, Tyright), UnfixedSyntax.NonInfixVIdPat (span (BoundVIdleft, BoundVIdright), Syntax.MkQualified ([], BoundVId)), Ty), true))
 
 PatPun : TypedPatPun (TypedPatPun)
-       | TypedPatPun AS Pat ((#1 TypedPatPun, UnfixedSyntax.ConjunctivePat(span(TypedPatPunleft,Patright), #2 TypedPatPun, Pat)))
+       | TypedPatPun AS Pat ((#1 TypedPatPun, UnfixedSyntax.ConjunctivePat (span (TypedPatPunleft, Patright), #2 TypedPatPun, Pat), true))
 
 (* pattern rows *)
 PatRow : ELLIPSIS PatRowRest (UnfixedSyntax.Ellipsis (UnfixedSyntax.WildcardPat (span (ELLIPSISleft, ELLIPSISright))) :: PatRowRest) (* wildcard *)
        | ELLIPSIS EQUALS Pat PatRowRest (UnfixedSyntax.Ellipsis Pat :: PatRowRest) (* [Successor ML] ellipses *)
-       | Lab EQUALS Pat PatRowRest (UnfixedSyntax.Field (Lab, Pat) :: PatRowRest) (* pattern row *)
+       | Lab EQUALS Pat PatRowRest (UnfixedSyntax.Field (Lab, Pat, false) :: PatRowRest) (* pattern row *)
        | PatPun PatRowRest (UnfixedSyntax.Field PatPun :: PatRowRest) (* [derived] punning *)
 
 PatRowRest : COMMA PatRow (PatRow)
@@ -462,8 +462,9 @@ ExpSSeqRest : SEMICOLON Exp ExpSSeqRest ((Exp :: #1 ExpSSeqRest, #2 ExpSSeqRest)
             | (([], UnfixedSyntax.NO_SEMICOLON))
 
 (* expression rows *)
-ExpRow : Lab EQUALS Exp ExpRowRest (UnfixedSyntax.Field (Lab, Exp) :: ExpRowRest)
+ExpRow : Lab EQUALS Exp ExpRowRest (UnfixedSyntax.Field (Lab, Exp, false) :: ExpRowRest)
        | ELLIPSIS EQUALS Exp ExpRowRest (UnfixedSyntax.Ellipsis Exp :: ExpRowRest) (* [Successor ML] ellipses *)
+       | BoundVId ExpRowRest (UnfixedSyntax.Field (Syntax.IdentifierLabel (Syntax.getVIdName BoundVId), UnfixedSyntax.NonInfixVIdExp (span (BoundVIdleft, BoundVIdright), Syntax.MkQualified ([], BoundVId)), true) :: ExpRowRest) (* [Successor ML] record pun *)
 
 ExpRowRest : COMMA ExpRow (ExpRow)
            | ([])

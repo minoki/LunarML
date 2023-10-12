@@ -197,7 +197,7 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = ConOrVarPat(env, span, vid)
   | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE) (* TODO: Check idstatus? *)
   | doPat(ctx, env, UnfixedSyntax.RecordPat (span, items))
-    = let val (fields, ellipsis) = List.foldr (fn (UnfixedSyntax.Field (label, pat), (fields, ellipsis)) => ((label, doPat (ctx, env, pat)) :: fields, ellipsis)
+    = let val (fields, ellipsis) = List.foldr (fn (UnfixedSyntax.Field (label, pat, _), (fields, ellipsis)) => ((label, doPat (ctx, env, pat)) :: fields, ellipsis)
                                               | (UnfixedSyntax.Ellipsis pat, (fields, NONE)) => (fields, SOME (doPat (ctx, env, pat)))
                                               | (UnfixedSyntax.Ellipsis _, (_, SOME _)) => emitError (ctx, [span], "multiple ellipses in a record pattern")
                                               ) ([], NONE) items
@@ -284,8 +284,18 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp (ctx, env, UnfixedSyntax.InfixExp (span, _)) = emitError (ctx, [span], "infix operator used in non-infix position")
   | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
   | doExp(ctx, env, UnfixedSyntax.RecordExp (span, items))
-    = let val (fields1, ellipsis, fields2) = List.foldr (fn (UnfixedSyntax.Field (label, exp), (fields1, ellipsis as SOME _, fields2)) => ((label, doExp (ctx, env, exp)) :: fields1, ellipsis, fields2)
-                                                        | (UnfixedSyntax.Field (label, exp), (fields1, ellipsis as NONE, fields2)) => (fields1, ellipsis, (label, doExp (ctx, env, exp)) :: fields2)
+    = let val (fields1, ellipsis, fields2) = List.foldr (fn (UnfixedSyntax.Field (label, exp, pun), (fields1, ellipsis as SOME _, fields2)) => ( if pun andalso not (#allowRecordPunExps (#languageOptions ctx)) then
+                                                                                                                                                     emitNonfatalError (ctx, [span], "record pun in expression is not allowed")
+                                                                                                                                                 else
+                                                                                                                                                     ()
+                                                                                                                                               ; ((label, doExp (ctx, env, exp)) :: fields1, ellipsis, fields2)
+                                                                                                                                               )
+                                                        | (UnfixedSyntax.Field (label, exp, pun), (fields1, ellipsis as NONE, fields2)) => ( if pun andalso not (#allowRecordPunExps (#languageOptions ctx)) then
+                                                                                                                                                 emitNonfatalError (ctx, [span], "record pun in expression is not allowed")
+                                                                                                                                             else
+                                                                                                                                                 ()
+                                                                                                                                           ; (fields1, ellipsis, (label, doExp (ctx, env, exp)) :: fields2)
+                                                                                                                                           )
                                                         | (UnfixedSyntax.Ellipsis exp, (fields1, NONE, fields2)) => (fields1, SOME (doExp (ctx, env, exp)), fields2)
                                                         | (UnfixedSyntax.Ellipsis exp, (fields1, SOME _, fields2)) => emitError (ctx, [span], "multiple ellipses in a record expression")
                                                         ) ([], NONE, []) items
@@ -305,7 +315,12 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
       end
   | doExp(ctx, env, UnfixedSyntax.RecordUpdateExp (span, baseExp, update))
     = let val baseExp = doExp (ctx, env, baseExp)
-          val update = List.map (fn UnfixedSyntax.Field (label, exp) => (label, doExp (ctx, env, exp))
+          val update = List.map (fn UnfixedSyntax.Field (label, exp, pun) => ( if pun andalso not (#allowRecordPunExps (#languageOptions ctx)) then
+                                                                                   emitNonfatalError (ctx, [span], "record pun in expression is not allowed")
+                                                                               else
+                                                                                   ()
+                                                                             ; (label, doExp (ctx, env, exp))
+                                                                             )
                                 | UnfixedSyntax.Ellipsis exp => emitError (ctx, [span], "invalid record update")
                                 ) update
           val patrow = List.map (fn (label, _) => (label, Syntax.WildcardPat span)) update

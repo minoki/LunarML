@@ -480,7 +480,7 @@ open PrettyPrint
 end (* structure Syntax *)
 
 structure UnfixedSyntax = struct
-datatype 'a RecordItem = Field of Syntax.Label * 'a
+datatype 'a RecordItem = Field of Syntax.Label * 'a * (* pun *) bool
                        | Ellipsis of 'a
 datatype Pat
   = WildcardPat of SourcePos.span
@@ -544,7 +544,7 @@ type Program = ((Dec Syntax.TopDec) list) list
 
 local
     fun doFields i nil = nil
-      | doFields i (x :: xs) = Field (Syntax.NumericLabel i, x) :: doFields (i + 1) xs
+      | doFields i (x :: xs) = Field (Syntax.NumericLabel i, x, false) :: doFields (i + 1) xs
 in
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)
 fun TuplePat(span, xs) = RecordPat (span, doFields 1 xs)

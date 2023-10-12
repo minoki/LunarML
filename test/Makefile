@@ -216,6 +216,7 @@ should_compile += $(addprefix successor_ml/should_compile/,\
   record_extension_type.sml \
   optional-bar.sml \
   optional-semicolon.sml \
+  record-pun-exp.sml \
 )
 should_not_compile += $(addprefix successor_ml/should_not_compile/,\
   nonexhaustive_bind.sml \
