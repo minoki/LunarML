@@ -49,6 +49,7 @@ should_run += $(addprefix should_run/,\
   prime_as_typevar.sml \
   open.sml \
   exception.sml \
+  exception2.sml \
   local_exception.sml \
   local_datatype.sml \
   equality.sml \
