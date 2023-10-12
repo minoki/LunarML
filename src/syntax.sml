@@ -528,6 +528,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * Syntax.LongStrId list
              | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.VId list
+             | DoDec of SourcePos.span * Exp (* [Successor ML] do declaration *)
              | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
              | EqualityDec of SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Exp
              | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (Syntax.ESImportName * Syntax.VId * Syntax.Ty option) list, moduleName : string }

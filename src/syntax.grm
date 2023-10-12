@@ -558,6 +558,7 @@ Dec_NoLocal : ValDescInComment VAL ValBind (UnfixedSyntax.ValDec (span (VALleft,
             | INFIXR IntConst VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc (Int.fromLarge IntConst)), VIds)) (* infix (R) directive *)
             | INFIXR VIds (UnfixedSyntax.FixityDec (span(INFIXRleft, VIdsright), Syntax.Infix (Syntax.RightAssoc 0), VIds)) (* infix (R) directive *)
             | NONFIX VIds (UnfixedSyntax.FixityDec (span(NONFIXleft, VIdsright), Syntax.Nonfix, VIds)) (* nonfix directive *)
+            | DO Exp (UnfixedSyntax.DoDec (span (DOleft, Expright), Exp)) (* [Successor ML] do declaration *)
             | OVERLOAD AsciiStringConst LBRACK LongTyCon RBRACK LBRACE OverloadSpecs RBRACE (UnfixedSyntax.OverloadDec (span(OVERLOADleft, RBRACEright), #1 AsciiStringConst, LongTyCon, OverloadSpecs)) (* [extension] _overload "class" [ty] { + = ..., - = ..., ... } *)
             | EQUALITY LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [], LongTyCon, Exp)) (* [extension] _equality longtycon = exp *)
             | EQUALITY TyVar LongTyCon EQUALS Exp (UnfixedSyntax.EqualityDec (span(EQUALITYleft, Expright), [TyVar], LongTyCon, Exp)) (* [extension] _equality 'tyvar longtycon = exp *)

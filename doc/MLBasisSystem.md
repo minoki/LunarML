@@ -38,7 +38,7 @@ An MLB file consists of `<basdec>`.
 * `redundantRaise {warn|error|ignore}`
 * `sequenceNonUnit {ignore|warn|error}`
 * `valDescInComments {ignore|warn|error}`
-* `allowDoDecls {true|false}`: no effect (not implemented yet)
+* `allowDoDecls {true|false}`
 * `allowExtendedNumConsts {true|false}`
 * `allowExtendedTextConsts {true|false}`
 * `allowLineComments {true|false}`

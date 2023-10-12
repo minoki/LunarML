@@ -467,6 +467,12 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
   | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = let val fixityMap = List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids
                                                                    in (envWithFixityMap fixityMap, [])
                                                                    end
+  | doDec (ctx, env, UnfixedSyntax.DoDec (span, exp)) = ( if #allowDoDecls (#languageOptions ctx) then
+                                                              ()
+                                                          else
+                                                              emitNonfatalError (ctx, [span], "do declaration is not allowed")
+                                                        ; (emptyEnv, [Syntax.ValDec (span, [], [], [Syntax.PatBind (span, Syntax.RecordPat { sourceSpan = span, fields = [], ellipsis = NONE }, doExp (ctx, env, exp))])])
+                                                        )
   | doDec(ctx, env, UnfixedSyntax.OverloadDec(span, class, longtycon, map))
     = let val (class, keys) = case class of
                                   "Int" => (Syntax.CLASS_INT, [("+", Syntax.OVERLOAD_PLUS)
