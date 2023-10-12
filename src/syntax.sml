@@ -186,9 +186,11 @@ datatype Pat = WildcardPat of SourcePos.span
              | LayeredPat of SourcePos.span * VId * Ty option * Pat (* layered *)
              | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
 
+datatype optional_bar = NO_BAR | HAS_BAR of SourcePos.span
+
 datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
 datatype ConBind = ConBind of SourcePos.span * VId * Ty option
-datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * ConBind list
+datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * optional_bar * ConBind list
 datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
                 | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
 
@@ -310,7 +312,7 @@ datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
 datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
               | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
               | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
-              | DatDesc of SourcePos.span * (TyVar list * TyCon * ConBind list) list * TypBind list
+              | DatDesc of SourcePos.span * (TyVar list * TyCon * optional_bar * ConBind list) list * TypBind list
               | DatatypeRepSpec of SourcePos.span * TyCon * LongTyCon
               | ExDesc of SourcePos.span * (VId * Ty option) list
               | StrDesc of SourcePos.span * (StrId * SigExp) list
@@ -506,12 +508,12 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | JuxtapositionExp of SourcePos.span * Exp list (* application, or binary operator *)
              | AppExp of SourcePos.span * Exp * Exp (* application, used by desugaring of list expression *)
              | TypedExp of SourcePos.span * Exp * Syntax.Ty
-             | HandleExp of SourcePos.span * Exp * (Pat * Exp) list
+             | HandleExp of SourcePos.span * Exp * Syntax.optional_bar * (Pat * Exp) list
              | RaiseExp of SourcePos.span * Exp
              | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
              | WhileDoExp of SourcePos.span * Exp * Exp
-             | CaseExp of SourcePos.span * Exp * (Pat * Exp) list
-             | FnExp of SourcePos.span * (Pat * Exp) list
+             | CaseExp of SourcePos.span * Exp * Syntax.optional_bar * (Pat * Exp) list
+             | FnExp of SourcePos.span * Syntax.optional_bar * (Pat * Exp) list
              | ProjectionExp of SourcePos.span * Syntax.Label
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
@@ -519,7 +521,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | SequentialExp of SourcePos.span * Exp vector * Exp
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
              | RecValDec of SourcePos.span * Syntax.TyVar list * RecValStyle * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
-             | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * FValBind list
+             | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * Syntax.optional_bar * FValBind list
              | TypeDec of SourcePos.span * Syntax.TypBind list
              | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
              | DatatypeRepDec of SourcePos.span * Syntax.TyCon * Syntax.LongTyCon

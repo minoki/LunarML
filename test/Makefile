@@ -214,6 +214,7 @@ should_compile += $(addprefix successor_ml/should_compile/,\
   withtype_in_signature.sml \
   abstype.sml \
   record_extension_type.sml \
+  optional-bar.sml \
 )
 should_not_compile += $(addprefix successor_ml/should_not_compile/,\
   nonexhaustive_bind.sml \

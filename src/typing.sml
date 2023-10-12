@@ -1617,11 +1617,11 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
       end
   | typeCheckDec(ctx, env, S.DatatypeDec(span, datbinds, typbinds))
     = let val datbinds = let val goConBind = doWithtype (#context ctx, env, typbinds)
-                         in List.map (fn S.DatBind(span, tyvars, tycon, conbinds) => S.DatBind(span, tyvars, tycon, List.map goConBind conbinds)) datbinds
+                         in List.map (fn S.DatBind (span, tyvars, tycon, optBar, conbinds) => S.DatBind (span, tyvars, tycon, optBar, List.map goConBind conbinds)) datbinds
                          end
-          val equalityMap : bool S.TyConMap.map = determineDatatypeEquality (#context ctx, env, List.foldl (fn (S.DatBind (_, tyvars, tycon, conbinds), m) => S.TyConMap.insert (m, tycon, (tyvars, List.mapPartial (fn S.ConBind (_, _, optTy) => optTy) conbinds))) S.TyConMap.empty datbinds)
-          val datbinds = List.map (fn datbind as S.DatBind (span, tyvars, tycon, conbinds) => (datbind, newTyName (#context ctx, tycon))) datbinds
-          val partialEnv = envWithTyConEnv (List.foldl (fn ((S.DatBind(span, tyvars, tycon, conbinds), tycon'), (m, m')) =>
+          val equalityMap : bool S.TyConMap.map = determineDatatypeEquality (#context ctx, env, List.foldl (fn (S.DatBind (_, tyvars, tycon, _, conbinds), m) => S.TyConMap.insert (m, tycon, (tyvars, List.mapPartial (fn S.ConBind (_, _, optTy) => optTy) conbinds))) S.TyConMap.empty datbinds)
+          val datbinds = List.map (fn datbind as S.DatBind (span, tyvars, tycon, _, conbinds) => (datbind, newTyName (#context ctx, tycon))) datbinds
+          val partialEnv = envWithTyConEnv (List.foldl (fn ((S.DatBind (span, tyvars, tycon, _, conbinds), tycon'), (m, m')) =>
                                                            let val tyvars = List.map (fn tv => genTyVar (#context ctx, tv)) tyvars
                                                                val tystr = { typeFunction = T.TypeFunction (tyvars, T.TyCon (span, List.map (fn tv => T.TyVar (span, tv)) tyvars, tycon'))
                                                                            , valEnv = T.emptyValEnv
@@ -1634,7 +1634,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                                                            end
                                                        ) (Syntax.TyConMap.empty, TypedSyntax.TyNameMap.empty) datbinds)
           val (tyConMap, tyNameMap, valMap, datbinds)
-              = let fun doDatBind ((S.DatBind(span, tyvars, tycon, conbinds), tyname), (tyConMap, tyNameMap, accValEnv, datbinds))
+              = let fun doDatBind ((S.DatBind (span, tyvars, tycon, _, conbinds), tyname), (tyConMap, tyNameMap, accValEnv, datbinds))
                         = let val tyvars = List.map (fn tv => (tv, genTyVar (#context ctx, tv))) tyvars
                               val env = mergeEnv(env, { valMap = #valMap partialEnv
                                                       , tyConMap = #tyConMap partialEnv
@@ -2690,9 +2690,9 @@ and addSpec (ctx : Context, env : SigEnv, S.ValDesc (span, descs)) : T.QSignatur
                        }
                  , bound = TypedSyntax.TyNameMap.empty
                  } descs
-  | addSpec(ctx, env, S.DatDesc(span, descs : (S.TyVar list * S.TyCon * S.ConBind list) list, typbinds))
+  | addSpec (ctx, env, S.DatDesc (span, descs : (S.TyVar list * S.TyCon * S.optional_bar * S.ConBind list) list, typbinds))
     = let val descs = let val goConBind = doWithtype(ctx, env, typbinds)
-                      in List.map (fn (tyvars, tycon, conbinds) => (tyvars, tycon, List.map goConBind conbinds)) descs
+                      in List.map (fn (tyvars, tycon, _, conbinds) => (tyvars, tycon, List.map goConBind conbinds)) descs
                       end
           val localTyConMap = List.foldl (fn ((tyvars, tycon, conbinds), map) => S.TyConMap.insert(map, tycon, (tyvars, List.mapPartial (fn S.ConBind(_, _, optTy) => optTy) conbinds))) S.TyConMap.empty descs
           val equalityMap : bool S.TyConMap.map = determineDatatypeEquality(ctx, env, localTyConMap)
