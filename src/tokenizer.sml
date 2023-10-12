@@ -38,6 +38,10 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
             fun tokenizeOne (state, l, c, input)
                 = (case input of
                       nil => NONE (* end of input *)
+                    | #"(" :: #"*" :: #")" :: xs => if #allowLineComments opts then
+                                                        skipLineComment (state, l, c, l, 0, xs)
+                                                    else
+                                                        skipComment (state, l, c, l, c + 3, 0, xs)
                     | #"(" :: #"*" :: xs => if state = NORMAL andalso #valDescInComments opts <> LanguageOptions.IGNORE then
                                                 case xs of
                                                     #"!" :: xss => SOME (Tokens.START_VAL_DESC_COMMENT (pos (l, c), pos (l, c + 2)), SPECIAL_COMMENT, l, c + 3, xss)
@@ -141,10 +145,25 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                      ; tokenizeOne (state, l, c + 1, xs) (* continue *)
                                      )
                   )
+            and skipLineComment (state, l0, c0, l, n, #"\n" :: xs) = if n = 0 then
+                                                                         tokenizeOne (state, l + 1, 1, xs)
+                                                                     else
+                                                                         skipComment (state, l0, c0, l + 1, 1, n - 1, xs)
+              | skipLineComment (state, l0, c0, l, n, _ :: xs) = skipLineComment (state, l0, c0, l, n, xs)
+              | skipLineComment (state, l0, c0, l, n, nil) = ( if n <> 0 then
+                                                                   emitError (l0, c0, "unterminated comment")
+                                                               else
+                                                                   ()
+                                                             ; NONE
+                                                             )
             and skipComment (state, l0, c0, l, c, n, #"*" :: #")" :: xs) = if n = 0 then
                                                                                tokenizeOne (state, l, c + 2, xs)
                                                                            else
                                                                                skipComment (state, l0, c0, l, c + 2, n - 1, xs)
+              | skipComment (state, l0, c0, l, c, n, #"(" :: #"*" :: #")" :: xs) = if #allowLineComments opts then
+                                                                                       skipLineComment (state, l0, c0, l, n + 1, xs)
+                                                                                   else
+                                                                                       skipComment (state, l0, c0, l, c + 3, n + 1, xs)
               | skipComment (state, l0, c0, l, c, n, #"(" :: #"*" :: xs) = skipComment (state, l0, c0, l, c + 2, n + 1, xs)
               | skipComment (state, l0, c0, l, c, n, #"\n" :: xs) = skipComment (state, l0, c0, l + 1, 1, n, xs)
               | skipComment (state, l0, c0, l, c, n, _ :: xs) = skipComment (state, l0, c0, l, c + 1, n, xs)

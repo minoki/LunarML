@@ -207,6 +207,7 @@ should_run += $(addprefix successor_ml/should_run/,\
   record_update.sml \
   num-underscore.sml \
   binary.sml \
+  line-comment.sml \
 )
 should_compile += $(addprefix successor_ml/should_compile/,\
   typealias_in_signature.sml \
