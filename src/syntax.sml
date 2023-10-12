@@ -498,6 +498,8 @@ datatype Pat
 datatype RecValStyle = TYVAR_REC (* 'val' <tyvarseq> 'rec'; SML '97 *)
                      | REC_TYVAR (* 'val' 'rec' <tyvarseq>; Successor ML *)
 
+datatype optional_semicolon = NO_SEMICOLON | HAS_SEMICOLON of SourcePos.span
+
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
              | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
@@ -518,7 +520,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ListExp of SourcePos.span * Exp vector
              | VectorExp of SourcePos.span * Exp vector
              | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
-             | SequentialExp of SourcePos.span * Exp vector * Exp
+             | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
      and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
              | RecValDec of SourcePos.span * Syntax.TyVar list * RecValStyle * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
              | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * Syntax.optional_bar * FValBind list

@@ -402,7 +402,14 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
           val args = Vector.map (fn e => doExp(ctx, env, e)) args
       in Syntax.PrimExp(span, primOp, tyargs, args)
       end
-  | doExp (ctx, env, UnfixedSyntax.SequentialExp (span, xs, y)) = Syntax.SequentialExp (span, Vector.map (fn e => doExp (ctx, env, e)) xs, doExp (ctx, env, y))
+  | doExp (ctx, env, UnfixedSyntax.SequentialExp (span, xs, y, optSemicolon)) = ( case optSemicolon of
+                                                                                      UnfixedSyntax.NO_SEMICOLON => ()
+                                                                                    | UnfixedSyntax.HAS_SEMICOLON span' => if #allowOptSemicolon (#languageOptions ctx) then
+                                                                                                                               ()
+                                                                                                                           else
+                                                                                                                               emitNonfatalError (ctx, [span'], "extra semicolon")
+                                                                                ; Syntax.SequentialExp (span, Vector.map (fn e => doExp (ctx, env, e)) xs, doExp (ctx, env, y))
+                                                                                )
 and doDecs(ctx, env, nil) = (emptyEnv, nil)
   | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)

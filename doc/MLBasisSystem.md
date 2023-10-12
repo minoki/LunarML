@@ -43,7 +43,7 @@ An MLB file consists of `<basdec>`.
 * `allowExtendedTextConsts {true|false}`
 * `allowLineComments {true|false}`
 * `allowOptBar {true|false}`
-* `allowOptSemicolon {true|false}`: no effect (not implemented yet)
+* `allowOptSemicolon {true|false}`
 * `allowRecordPunExps {true|false}`: no effect (not implemented yet)
 * `allowSigWithtype {true|false}`
 * `allowVectorExps {true|false}`

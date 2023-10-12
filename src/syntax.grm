@@ -18,10 +18,10 @@ fun MkConsPat (span, p1, p2) = UnfixedSyntax.ConPat(span, Syntax.MkLongVId(nil, 
 fun MkListPat (span, nil) = nilPat span
   | MkListPat (span, x :: xs) = MkConsPat (span, x, MkListPat (span, xs))
 fun MkVectorPat (span, xs, ellipsis) = UnfixedSyntax.VectorPat(span, Vector.fromList xs, ellipsis)
-fun MkSequentialExp (span, x, xs) = let fun go (final, [], acc) = UnfixedSyntax.SequentialExp (span, Vector.fromList (List.rev acc), final)
-                                          | go (s, t :: ts, acc) = go (t, ts, s :: acc)
-                                    in go (x, xs, [])
-                                    end
+fun MkSequentialExp (span, x, xs, optSemi) = let fun go (final, [], acc) = UnfixedSyntax.SequentialExp (span, Vector.fromList (List.rev acc), final, optSemi)
+                                                   | go (s, t :: ts, acc) = go (t, ts, s :: acc)
+                                             in go (x, xs, [])
+                                             end
 fun MkTupleTy(_,[x]) = x
   | MkTupleTy(span, xs) = let fun doFields i nil = nil
                                 | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
@@ -126,7 +126,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | ExpRow of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpRowRest of (UnfixedSyntax.Exp UnfixedSyntax.RecordItem) list
        | ExpCSeqRest of UnfixedSyntax.Exp list
-       | ExpSSeqRest of UnfixedSyntax.Exp list
+       | ExpSSeqRest of UnfixedSyntax.Exp list * UnfixedSyntax.optional_semicolon
        | TypedExp of UnfixedSyntax.Exp
        | AndalsoExp of UnfixedSyntax.Exp
        | AndalsoExp_NoHead of UnfixedSyntax.Exp
@@ -437,10 +437,11 @@ AtExp : SCon (UnfixedSyntax.SConExp(span(SConleft,SConright),SCon)) (* special c
                                UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp(span(LPARENleft,RPARENright),[Exp])
                              | exp => exp
                           ) (* parenthesized expression *)
+      | LPAREN Exp SEMICOLON RPAREN (MkSequentialExp (span (LPARENleft, RPARENright), case Exp of UnfixedSyntax.InfixOrVIdExp _ => UnfixedSyntax.JuxtapositionExp (span (LPARENleft, RPARENright),[Exp]) | exp => exp, [], UnfixedSyntax.HAS_SEMICOLON (span (SEMICOLONleft, SEMICOLONright)))) (* parenthesized expression *)
       | LPAREN RPAREN (UnfixedSyntax.RecordExp (span (LPARENleft, RPARENright), [])) (* [derived] 0-tuple *)
       | LPAREN Exp COMMA Exp ExpCSeqRest RPAREN (UnfixedSyntax.TupleExp (span(LPARENleft,RPARENright), Exp1 :: Exp2 :: ExpCSeqRest)) (* [derived] tuple: {1=Exp1,...,n=Expn} (n >= 2) *)
-      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp (span(LPARENleft,RPARENright), Exp1, Exp2 :: ExpSSeqRest)) (* [derived] sequential execution *)
-      | LET Decs IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span(LETleft,ENDright), Decs, MkSequentialExp(span(Exp1left, ExpSSeqRestright), Exp1, Exp2 :: ExpSSeqRest))) (* [derived] local declaration *)
+      | LPAREN Exp SEMICOLON Exp ExpSSeqRest RPAREN (MkSequentialExp (span (LPARENleft, RPARENright), Exp1, Exp2 :: #1 ExpSSeqRest, #2 ExpSSeqRest)) (* [derived] sequential execution *)
+      | LET Decs IN Exp SEMICOLON Exp ExpSSeqRest END (UnfixedSyntax.LetInExp (span (LETleft, ENDright), Decs, MkSequentialExp (span (Exp1left, ExpSSeqRestright), Exp1, Exp2 :: #1 ExpSSeqRest, #2 ExpSSeqRest))) (* [derived] local declaration *)
       | LBRACK RBRACK (MkListExp(span(LBRACKleft,RBRACKright),[])) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | LBRACK Exp ExpCSeqRest RBRACK (MkListExp(span(LBRACKleft,RBRACKright), Exp :: ExpCSeqRest)) (* [derived] list: Exp1 :: ... :: Expn :: nil *)
       | HASHLBRACK RBRACK (MkVectorExp(span(HASHLBRACKleft,RBRACKright), [])) (* [extension] vector expression *)
@@ -456,8 +457,9 @@ ExpCSeqRest : COMMA Exp ExpCSeqRest (Exp :: ExpCSeqRest)
             | (nil)
 
 (* semicolon-separated list of expressions *)
-ExpSSeqRest : SEMICOLON Exp ExpSSeqRest (Exp :: ExpSSeqRest)
-            | (nil)
+ExpSSeqRest : SEMICOLON Exp ExpSSeqRest ((Exp :: #1 ExpSSeqRest, #2 ExpSSeqRest))
+            | SEMICOLON (([], UnfixedSyntax.HAS_SEMICOLON (span (SEMICOLONleft, SEMICOLONright))))
+            | (([], UnfixedSyntax.NO_SEMICOLON))
 
 (* expression rows *)
 ExpRow : Lab EQUALS Exp ExpRowRest (UnfixedSyntax.Field (Lab, Exp) :: ExpRowRest)
