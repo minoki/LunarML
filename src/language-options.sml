@@ -4,8 +4,13 @@
  *)
 structure LanguageOptions :> sig
               datatype ignore_warn_error = IGNORE | WARN | ERROR
-              type options = { allowExtendedNumConsts : bool
+              type options = { allowDoDecls : bool
+                             , allowExtendedNumConsts : bool
                              , allowExtendedTextConsts : bool
+                             , allowLineComments : bool
+                             , allowOptBar : bool
+                             , allowOptSemicolon : bool
+                             , allowRecordPunExps : bool
                              , allowSigWithtype : bool
                              , allowVectorExps : bool
                              , allowVectorPats : bool
@@ -34,8 +39,13 @@ structure LanguageOptions :> sig
               val setByName : string -> (bool -> options -> options) option
               val setSuccessorML : bool -> options -> options
               structure set : sig
+                            val allowDoDecls : bool -> options -> options
                             val allowExtendedNumConsts : bool -> options -> options
                             val allowExtendedTextConsts : bool -> options -> options
+                            val allowLineComments : bool -> options -> options
+                            val allowOptBar : bool -> options -> options
+                            val allowOptSemicolon : bool -> options -> options
+                            val allowRecordPunExps : bool -> options -> options
                             val allowSigWithtype : bool -> options -> options
                             val allowVectorExps : bool -> options -> options
                             val allowVectorPats : bool -> options -> options
@@ -63,8 +73,13 @@ structure LanguageOptions :> sig
           end = struct
 open LanguageOptionsRecord
 datatype ignore_warn_error = IGNORE | WARN | ERROR
-type options = { allowExtendedNumConsts : bool
+type options = { allowDoDecls : bool
+               , allowExtendedNumConsts : bool
                , allowExtendedTextConsts : bool
+               , allowLineComments : bool
+               , allowOptBar : bool
+               , allowOptSemicolon : bool
+               , allowRecordPunExps : bool
                , allowSigWithtype : bool
                , allowVectorExps : bool
                , allowVectorPats : bool
@@ -89,8 +104,13 @@ type options = { allowExtendedNumConsts : bool
                , sequenceNonUnit : ignore_warn_error
                , valDescInComments : ignore_warn_error
                }
-fun setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
+fun setByName "allowDoDecls" = SOME set.allowDoDecls
+  | setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowExtendedTextConsts" = SOME set.allowExtendedTextConsts
+  | setByName "allowLineComments" = SOME set.allowLineComments
+  | setByName "allowOptBar" = SOME set.allowOptBar
+  | setByName "allowOptSemicolon" = SOME set.allowOptSemicolon
+  | setByName "allowRecordPunExps" = SOME set.allowRecordPunExps
   | setByName "allowSigWithtype" = SOME set.allowSigWithtype
   | setByName "allowVectorExps" = SOME set.allowVectorExps
   | setByName "allowVectorPats" = SOME set.allowVectorPats
@@ -107,8 +127,13 @@ fun setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowOverload" = SOME set.allowOverload
   | setByName "allowInfixingDot" = SOME set.allowInfixingDot
   | setByName (_ : string) : (bool -> options -> options) option = NONE
-val default : options = { allowExtendedNumConsts = true
+val default : options = { allowDoDecls = true
+                        , allowExtendedNumConsts = true
                         , allowExtendedTextConsts = true
+                        , allowLineComments = true
+                        , allowOptBar = true
+                        , allowOptSemicolon = true
+                        , allowRecordPunExps = true
                         , allowSigWithtype = true
                         , allowVectorExps = true
                         , allowVectorPats = true
@@ -134,8 +159,13 @@ val default : options = { allowExtendedNumConsts = true
                         , valDescInComments = IGNORE
                         }
 fun setSuccessorML value : options -> options
-    = set.allowExtendedNumConsts value
+    = set.allowDoDecls value
+      o set.allowExtendedNumConsts value
       o set.allowExtendedTextConsts value
+      o set.allowLineComments value
+      o set.allowOptBar value
+      o set.allowOptSemicolon value
+      o set.allowRecordPunExps value
       o set.allowSigWithtype value
       o set.allowRecordExtension value
       o set.allowRecordUpdate value
