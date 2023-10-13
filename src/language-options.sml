@@ -37,7 +37,9 @@ structure LanguageOptions :> sig
                              }
               val default : options
               val setByName : string -> (bool -> options -> options) option
-              val setSuccessorML : bool -> options -> options
+              val setAllowExtendedConsts : bool -> options -> options
+              val setAllowVectorExpsAndPats : bool -> options -> options
+              val setAllowSuccessorML : bool -> options -> options
               structure set : sig
                             val allowDoDecls : bool -> options -> options
                             val allowExtendedNumConsts : bool -> options -> options
@@ -104,6 +106,27 @@ type options = { allowDoDecls : bool
                , sequenceNonUnit : ignore_warn_error
                , valDescInComments : ignore_warn_error
                }
+fun setAllowExtendedConsts value : options -> options
+    = set.allowExtendedNumConsts value
+      o set.allowExtendedTextConsts value
+fun setAllowVectorExpsAndPats value : options -> options
+    = set.allowVectorExps value
+      o set.allowVectorPats value
+fun setAllowSuccessorML value : options -> options
+    = set.allowDoDecls value
+      o set.allowExtendedNumConsts value
+      o set.allowExtendedTextConsts value
+      o set.allowLineComments value
+      o set.allowOptBar value
+      o set.allowOptSemicolon value
+      o set.allowRecordPunExps value
+      o set.allowSigWithtype value
+      o set.allowRecordExtension value
+      o set.allowRecordUpdate value
+      o set.allowValRecTyVars value
+      o set.allowValTyVarsRec (not value)
+      o set.allowFreeTyVarsInTypeDec (not value)
+      o set.allowWhereAndType (not value)
 fun setByName "allowDoDecls" = SOME set.allowDoDecls
   | setByName "allowExtendedNumConsts" = SOME set.allowExtendedNumConsts
   | setByName "allowExtendedTextConsts" = SOME set.allowExtendedTextConsts
@@ -126,6 +149,9 @@ fun setByName "allowDoDecls" = SOME set.allowDoDecls
   | setByName "allowBindEqual" = SOME set.allowBindEqual
   | setByName "allowOverload" = SOME set.allowOverload
   | setByName "allowInfixingDot" = SOME set.allowInfixingDot
+  | setByName "allowExtendedConsts" = SOME setAllowExtendedConsts
+  | setByName "allowVectorExpsAndPats" = SOME setAllowVectorExpsAndPats
+  | setByName "allowSuccessorML" = SOME setAllowSuccessorML
   | setByName (_ : string) : (bool -> options -> options) option = NONE
 val default : options = { allowDoDecls = true
                         , allowExtendedNumConsts = true
@@ -158,19 +184,4 @@ val default : options = { allowDoDecls = true
                         , sequenceNonUnit = IGNORE
                         , valDescInComments = IGNORE
                         }
-fun setSuccessorML value : options -> options
-    = set.allowDoDecls value
-      o set.allowExtendedNumConsts value
-      o set.allowExtendedTextConsts value
-      o set.allowLineComments value
-      o set.allowOptBar value
-      o set.allowOptSemicolon value
-      o set.allowRecordPunExps value
-      o set.allowSigWithtype value
-      o set.allowRecordExtension value
-      o set.allowRecordUpdate value
-      o set.allowValRecTyVars value
-      o set.allowValTyVarsRec (not value)
-      o set.allowFreeTyVarsInTypeDec (not value)
-      o set.allowWhereAndType (not value)
 end;

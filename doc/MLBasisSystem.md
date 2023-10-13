@@ -39,15 +39,17 @@ An MLB file consists of `<basdec>`.
 * `sequenceNonUnit {ignore|warn|error}`
 * `valDescInComments {ignore|warn|error}`
 * `allowDoDecls {true|false}`
-* `allowExtendedNumConsts {true|false}`
-* `allowExtendedTextConsts {true|false}`
+* `allowExtendedConsts {true|false}`
+    * `allowExtendedNumConsts {true|false}`
+    * `allowExtendedTextConsts {true|false}`
 * `allowLineComments {true|false}`
 * `allowOptBar {true|false}`
 * `allowOptSemicolon {true|false}`
 * `allowRecordPunExps {true|false}`
 * `allowSigWithtype {true|false}`
-* `allowVectorExps {true|false}`
-* `allowVectorPats {true|false}`
+* `allowVectorExpsAndPats {true|false}`
+    * `allowVectorExps {true|false}`
+    * `allowVectorPats {true|false}`
 * `allowRecordExtension {true|false}`
 * `allowRecordUpdate {true|false}`
 * `allowUtfEscapeSequences {true|false}`
@@ -57,6 +59,22 @@ An MLB file consists of `<basdec>`.
 * `allowFreeTyVarsInTypeDec {true|false}`
 * `allowWhereAndType {true|false}`
 * `allowInfixingDot {false|true}`
+* `allowSuccessorML {true|false}`
+    * This is a combination of the following annotations:
+        * `allowDoDecls <value>`
+        * `allowExtendedNumConsts <value>`
+        * `allowExtendedTextConsts <value>`
+        * `allowLineComments <value>`
+        * `allowOptBar <value>`
+        * `allowOptSemicolon <value>`
+        * `allowRecordPunExps <value>`
+        * `allowSigWithtype <value>`
+        * `allowRecordExtension <value>`
+        * `allowRecordUpdate <value>`
+        * `allowValRecTyVars <value>`
+        * `allowValTyVarsRec <not value>`
+        * `allowFreeTyVarsInTypeDec <not value>`
+        * `allowWhereAndType <not value>`
 
 The default value for an annotation could be specified by `--default-ann` option.
 
