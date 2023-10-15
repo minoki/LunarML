@@ -57,7 +57,7 @@ local
                    in if Lua.isNil result then
                           NONE
                       else
-                          SOME (Lua.unsafeFromValue result : elem)
+                          SOME (String.sub (Lua.unsafeFromValue result : vector, 0))
                    end
     fun inputN (f, n : int) = if n < 0 then
                                   raise Size
