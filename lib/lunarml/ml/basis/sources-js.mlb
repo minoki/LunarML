@@ -7,6 +7,7 @@ ann "sequenceNonUnit ignore"
 js/javascript-callback.sml
 nodejs/timer.sml
 nodejs/text-io.sml
+nodejs/bin-io-dummy.sml
 nodejs/os.sml
 nodejs/command-line.sml
 end
@@ -45,6 +46,7 @@ structure JavaScript (* extension *)
 structure LunarML (* extension *)
 structure Array
 structure ArraySlice
+structure BinIO
 structure Bool
 structure BoolArray
 structure BoolArraySlice

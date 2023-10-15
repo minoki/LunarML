@@ -65,6 +65,7 @@ widetext-8.sml
 lua/time.sml
 lua/timer.sml
 lua/text-io.sml
+lua/bin-io.sml
 lua/os.sml
 lua/command-line.sml
 delim-cont-$(DELIMITED_CONTINUATIONS).sml
@@ -105,6 +106,7 @@ structure Lua (* extension *)
 structure LunarML (* extension *)
 structure Array
 structure ArraySlice
+structure BinIO
 structure Bool
 structure BoolArray
 structure BoolArraySlice

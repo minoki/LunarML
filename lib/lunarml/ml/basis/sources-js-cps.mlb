@@ -8,6 +8,7 @@ delim-cont.sml
 js-cps/javascript-callback.sml
 nodejs/timer.sml
 nodejs/text-io-async.sml
+nodejs/bin-io-async.sml
 nodejs/os-async.sml
 nodejs/command-line.sml
 end
@@ -46,6 +47,7 @@ structure JavaScript (* extension *)
 structure LunarML (* extension *)
 structure Array
 structure ArraySlice
+structure BinIO
 structure Bool
 structure BoolArray
 structure BoolArraySlice

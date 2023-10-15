@@ -1,0 +1,2 @@
+structure BinIO = struct
+end;

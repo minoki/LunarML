@@ -31,6 +31,7 @@ signature VECTOR_SLICE
 signature WORD
 structure Array
 structure ArraySlice
+structure BinIO
 structure Bool
 structure BoolArray
 structure BoolArraySlice
