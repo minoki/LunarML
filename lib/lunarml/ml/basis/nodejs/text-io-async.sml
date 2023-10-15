@@ -304,7 +304,11 @@ local
     fun output1 (stream, elem) = output (stream, String.str elem)
     fun outputSubstr (stream, substring) = output (stream, Substring.string substring)
     fun flushOut stream = outputAndFlush (stream, "")
-    fun closeOut stream = ignore (JavaScript.method (stream, "end") #[])
+    fun closeOut stream = DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
+                                                                        let val callback = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
+                                                                        in ignore (JavaScript.method (stream, "end") #[JavaScript.unsafeToValue callback])
+                                                                        end
+                                                )
     fun openOut path = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
     fun openAppend path = let val options = JavaScript.newObject ()
                               val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
