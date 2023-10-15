@@ -7,6 +7,9 @@ structure OS :> sig
                             val isDir : string -> bool
                             val isLink : string -> bool
                             val readLink : string -> string
+                            val modTime : string -> Time.time
+                            val fileSize : string -> Position.int
+                            val setTime : string * Time.time option -> unit
                             val remove : string -> unit
                             val rename : { old : string, new : string } -> unit
                         end
@@ -51,7 +54,7 @@ type syserror = string
 exception SysErr of string * syserror option
 local
     structure fs = struct
-    _esImport [pure] { mkdirSync, rmdirSync, statSync, lstatSync, readlinkSync, rmSync, renameSync } from "node:fs";
+    _esImport [pure] { mkdirSync, rmdirSync, statSync, lstatSync, readlinkSync, rmSync, renameSync, utimesSync } from "node:fs";
     end
     structure process = struct
     _esImport [pure] { chdir, cwd, exit, env } from "node:process";
@@ -96,7 +99,19 @@ fun isLink (path : string) = let val stat = JavaScript.call fs.lstatSync #[JavaS
                              in JavaScript.unsafeFromValue (JavaScript.method (stat, "isSymbolicLink") #[])
                              end
 fun readLink (path : string) : string = JavaScript.encodeUtf8 (JavaScript.unsafeFromValue (JavaScript.call fs.readlinkSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]))
-(* fullPath, realPath, modTime, fileSize, setTime *)
+(* fullPath, realPath, fileSize, setTime *)
+fun modTime (path : string) : Time.time = let val options = JavaScript.newObject ()
+                                              val () = JavaScript.setField (options, "bigint", JavaScript.fromBool true)
+                                              val stat = JavaScript.call fs.statSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path), options]
+                                              val mtimeNs = JavaScript.unsafeFromValue (JavaScript.field (stat, "mtimeNs")) : IntInf.int
+                                          in Time.fromNanoseconds mtimeNs
+                                          end
+fun fileSize (path : string) : Position.int = let val stat = JavaScript.call fs.statSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
+                                              in JavaScript.unsafeFromValue (JavaScript.field (stat, "size")) : Position.int
+                                              end
+fun setTime (path : string, t : Time.time option) = let val u = Time.toReal (case t of NONE => Time.now () | SOME u => u)
+                                                    in ignore (JavaScript.call fs.utimesSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path), JavaScript.fromReal u, JavaScript.fromReal u])
+                                                    end
 fun remove (path : string) = ( JavaScript.call fs.rmSync #[JavaScript.fromWideString (JavaScript.decodeUtf8 path)]
                              ; ()
                              )

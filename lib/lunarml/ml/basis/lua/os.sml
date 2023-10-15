@@ -7,6 +7,9 @@ structure OS :> sig
                             val isDir : string -> bool (* requires LuaFileSystem *)
                             val isLink : string -> bool (* requires LuaFileSystem *)
                             val readLink : string -> string (* requires LuaFileSystem 1.7.0 or later *)
+                            val modTime : string -> Time.time (* requires LuaFileSystem *)
+                            val fileSize : string -> Position.int (* requires LuaFileSystem *)
+                            val setTime : string * Time.time option -> unit (* requires LuaFileSystem *)
                             val remove : string -> unit
                             val rename : { old : string, new : string } -> unit
                         end
@@ -148,7 +151,6 @@ val readLink : string -> string = LunarML.assumeDiscardable use_lfs ("symlinkatt
                                                                                                         end
                                                                     )
 (* fullPath, realPath *)
-(*
 val modTime : string -> Time.time = LunarML.assumeDiscardable use_lfs ("attributes", fn lfs_attributes =>
                                                                                  fn path => let val (r0, message) = Lua.call2 lfs_attributes #[Lua.fromString path, Lua.fromString "modification"]
                                                                                             in if Lua.isFalsy r0 then
@@ -156,7 +158,7 @@ val modTime : string -> Time.time = LunarML.assumeDiscardable use_lfs ("attribut
                                                                                                    in raise SysErr (message, SOME message)
                                                                                                    end
                                                                                                else
-                                                                                                   raise Fail "modTime: not implemented yet"
+                                                                                                   TimeImpl.fromLuaTime r0
                                                                                             end
                                                                       )
 val fileSize : string -> Position.int = LunarML.assumeDiscardable use_lfs ("attributes", fn lfs_attributes =>
@@ -166,7 +168,7 @@ val fileSize : string -> Position.int = LunarML.assumeDiscardable use_lfs ("attr
                                                                                                               in raise SysErr (message, SOME message)
                                                                                                               end
                                                                                                           else
-                                                                                                              raise Fail "fileSize: not implemented yet"
+                                                                                                              Lua.unsafeFromValue r0
                                                                                                        end
                                                                           )
 val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_lfs ("touch", fn lfs_touch =>
@@ -178,7 +180,8 @@ val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_
                                                                                                                         else
                                                                                                                             ()
                                                                                                                      end
-                                                                                                 | (path, SOME t) => let val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path, (* TODO *) t, (* TODO *) t]
+                                                                                                 | (path, SOME t) => let val u = TimeImpl.toLuaTime t
+                                                                                                                         val (r0, message) = Lua.call2 lfs_touch #[Lua.fromString path, u, u]
                                                                                                                      in if Lua.isFalsy r0 then
                                                                                                                             let val message = Lua.checkString message
                                                                                                                             in raise SysErr (message, SOME message)
@@ -188,7 +191,6 @@ val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_
                                                                                                                      end
                                                                                                  )
                                                                                     )
-*)
 val remove : string -> unit = fn filename => Lua.call0 os_remove #[Lua.fromString filename]
 val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 os_rename #[Lua.fromString old, Lua.fromString new]
 end (* structure FileSys *)

@@ -1163,9 +1163,9 @@ structure OS : sig
     val readLink : string -> string (* Lua backend: requires LuaFileSystem 1.7.0 or later *)
     (* val fullPath : string -> string *)
     (* val realPath : string -> string *)
-    (* val modTime : string -> Time.time *)
-    (* val fileSize : string -> Position.int *)
-    (* val setTime : string * Time.time option -> unit *)
+    val modTime : string -> Time.time (* Lua backend: requires LuaFileSystem *)
+    val fileSize : string -> Position.int (* Lua backend: requires LuaFileSystem *)
+    val setTime : string * Time.time option -> unit (* Lua backend: requires LuaFileSystem *)
     val remove : string -> unit
     val rename : { old : string, new : string } -> unit
     (* datatype access_mode = A_READ | A_WRITE | A_EXEC *)

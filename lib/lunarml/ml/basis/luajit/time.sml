@@ -72,6 +72,8 @@ structure TimeImpl :> sig
                             val fromString : string -> date option
                             *)
                         end
+              val fromLuaTime : Lua.value -> Time.time
+              val toLuaTime : Time.time -> Lua.value
           end = struct
 structure Time = struct
 type time = Int54.int (* in microseconds *)
