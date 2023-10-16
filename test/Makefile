@@ -183,6 +183,8 @@ should_run += $(addprefix mlbasis/should_run/,\
   substring.sml \
   char.sml \
   scan-word.sml \
+  string-issubstring.sml \
+  widestring-issubstring.sml \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)

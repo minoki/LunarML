@@ -58,6 +58,7 @@ byte.sml
 pack-word.sml
 scan-bool.sml
 scan-text.sml
+string.sml
 text.sml
 js-common/widetext.sml
 js-common/time.sml

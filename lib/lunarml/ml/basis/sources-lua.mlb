@@ -60,6 +60,7 @@ generic-mono-sequence.sml
 unsafe-mono-sequence.sml
 byte.sml
 pack-word.sml
+string.sml
 text.sml
 widetext-8.sml
 lua/time.sml

@@ -230,9 +230,7 @@ fun fromCString s = StringCvt.scanString scanC s
 open WideChar (* type char, type string, minChar, maxChar, maxOrd, ord, chr, succ, pred, <, <=, >, >=, compare, isAscii, isUpper, isLower, isDigit, isAlpha, isAlphaNum, isHexDigit, isGraph, isPrint, isPunct, isCntrl, isSpace, toLower, toUpper *)
 end;
 
-structure WideString :> STRING where type string = WideString.string
-                               where type char = WideChar.char
-= struct
+structure WideString = struct
 val maxSize = 0x7fffffff
 fun sub (s : WideString.string, i : int) : WideChar.char = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString s, "charCodeAt") #[JavaScript.fromInt i])
 fun substring (s : WideString.string, i : int, j : int) : WideString.string
@@ -302,6 +300,7 @@ fun isPrefix prefix s = let val n = WideString.size prefix
                            else
                                substring (s, 0, n) = prefix
                         end
+fun isSubstring needle haystack : bool = JavaScript.unsafeFromValue (JavaScript.method (JavaScript.fromWideString haystack, "includes") #[JavaScript.fromWideString needle])
 fun isSuffix suffix s = let val n = WideString.size suffix
                             val m = WideString.size s
                         in if n > m then
@@ -376,6 +375,10 @@ structure CharVector = Base.MonoVector
 structure CharVectorSlice = Base.MonoVectorSlice
 structure CharArray = Base.MonoArray
 structure CharArraySlice = Base.MonoArraySlice
+structure String = struct
+val collate = CharVector.collate
+open WideString
+end
 structure Substring = struct
 type char = WideChar.char
 type string = WideString.string
@@ -480,8 +483,8 @@ val foldr = CharVectorSlice.foldr
 end (* structure Substring *)
 end (* local *)
 structure Char = WideChar
-structure String = WideString
 end; (* structure WideText *)
+structure WideString = WideText.String;
 structure WideSubstring = WideText.Substring;
 structure WideCharVector = WideText.CharVector;
 structure WideCharArray = WideText.CharArray;
