@@ -392,7 +392,7 @@ fun print_TopDec (StrDec strdec) = print_StrDec strdec
 end (* structure PrettyPrint *)
 open PrettyPrint
 
-(*! val freeTyVarsInTy : TyVarSet.set * Ty -> TyVarSet.set *)
+(*: val freeTyVarsInTy : TyVarSet.set * Ty -> TyVarSet.set *)
 fun freeTyVarsInTy(bound, ty)
     = (case ty of
            TyVar(_,tv) => if TyVarSet.member(bound, tv) then
@@ -407,7 +407,7 @@ fun freeTyVarsInTy(bound, ty)
          | RecordExtType (_, xs, baseTy) => Syntax.LabelMap.foldl (fn (ty, set) => TyVarSet.union (freeTyVarsInTy (bound, ty), set)) (freeTyVarsInTy (bound, baseTy)) xs
       )
 
-(*! val freeAnonymousTyVarsInTy : Ty -> AnonymousTyVar list *)
+(*: val freeAnonymousTyVarsInTy : Ty -> AnonymousTyVar list *)
 fun freeAnonymousTyVarsInTy ty
     = (case ty of
            AnonymousTyVar (_, tv as ref (Unbound _)) => [tv]
@@ -419,7 +419,7 @@ fun freeAnonymousTyVarsInTy ty
          | RecordExtType (_, xs, baseTy) => Syntax.LabelMap.foldl (fn (ty, set) => freeAnonymousTyVarsInTy ty @ set) (freeAnonymousTyVarsInTy baseTy) xs
       )
 
-(*! val applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
+(*: val applySubstTy : Ty TyVarMap.map -> Ty -> Ty *)
 fun applySubstTy subst
     = let fun substTy (ty as TyVar(_, tv'))
               = (case TyVarMap.find(subst, tv') of
@@ -598,7 +598,7 @@ fun forceTy (ty as TyVar _) = ty
                                                           | baseTy' => RecordExtType (span, fields, baseTy') (* ill-kinded *)
                                                      end
 
-(*! val forceTyIn : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c, languageOptions : 'd } -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doTopDec : TopDec -> TopDec, doTopDecs : TopDec list -> TopDec list } *)
+(*: val forceTyIn : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c, languageOptions : 'd } -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doTopDec : TopDec -> TopDec, doTopDecs : TopDec list -> TopDec list } *)
 fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c, languageOptions : 'd })
     = let val doTy = forceTy
           fun doTypeScheme (TypeScheme (tyvarsWithConstraints, ty)) = TypeScheme (tyvarsWithConstraints, doTy ty)
@@ -687,7 +687,7 @@ fun forceTyIn (ctx : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, mes
          }
       end
 
-(*! val freeTyVarsInPat : 'a * Pat -> AnonymousTyVar list *)
+(*: val freeTyVarsInPat : 'a * Pat -> AnonymousTyVar list *)
 fun freeTyVarsInPat (bound, pat)
     = (case pat of
            WildcardPat _ => []
@@ -701,7 +701,7 @@ fun freeTyVarsInPat (bound, pat)
          | VectorPat (_, pats, _, elemTy) => Vector.foldl (fn (pat, set) => freeTyVarsInPat (bound, pat) @ set) (freeAnonymousTyVarsInTy elemTy) pats
       )
 
-(*! val freeTyVarsInExp : 'a * Exp -> AnonymousTyVar list *)
+(*: val freeTyVarsInExp : 'a * Exp -> AnonymousTyVar list *)
 fun freeTyVarsInExp (bound, exp)
     = (case exp of
            SConExp (_, _, ty) => freeAnonymousTyVarsInTy ty
@@ -752,7 +752,7 @@ and freeTyVarsInExBind (bound, ExBind (_, vid, NONE)) = []
   | freeTyVarsInExBind (bound, ExReplication (_, _, _, SOME ty)) = freeAnonymousTyVarsInTy ty
 and freeTyVarsInUnaryConstraint (bound, unaryConstraint) = []
 
-(*! val filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
+(*: val filterVarsInPat : (VId -> bool) -> Pat -> Pat *)
 fun filterVarsInPat pred =
     let fun doPat pat = case pat of
                             WildcardPat _ => pat
@@ -767,7 +767,7 @@ fun filterVarsInPat pred =
     in doPat
     end
 
-(*! val renameVarsInPat : VId VIdMap.map -> Pat -> Pat *)
+(*: val renameVarsInPat : VId VIdMap.map -> Pat -> Pat *)
 fun renameVarsInPat m =
     let fun doPat (pat as WildcardPat _) = pat
           | doPat (pat as SConPat _) = pat

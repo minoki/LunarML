@@ -30,7 +30,7 @@ val emptyEnv : Env
       , boundTyVars = Syntax.TyVarMap.empty
       }
 
-(*! val mergeEnv : ('val, 'str) Env' * ('val, 'str) Env' -> ('val, 'str) Env' *)
+(*: val mergeEnv : ('val, 'str) Env' * ('val, 'str) Env' -> ('val, 'str) Env' *)
 fun mergeEnv(env1 : ('val,'str) Env', env2 : ('val,'str) Env') : ('val,'str) Env'
     = { valMap = Syntax.VIdMap.unionWith #2 (#valMap env1, #valMap env2)
       , tyConMap = Syntax.TyConMap.unionWith #2 (#tyConMap env1, #tyConMap env2)
@@ -129,14 +129,14 @@ fun emitFatalError (ctx : Context, spans, message) = let val { matchContext, mes
                                                      end
 fun emitFatalTypeError (ctx : InferenceContext, spans, message) = emitFatalError (#context ctx, spans, message)
 
-(*! val lookupStr : Context * TypedSyntax.Signature * SourcePos.span * Syntax.StrId list -> TypedSyntax.Signature *)
+(*: val lookupStr : Context * TypedSyntax.Signature * SourcePos.span * Syntax.StrId list -> TypedSyntax.Signature *)
 fun lookupStr (ctx, s : TypedSyntax.Signature, span, nil) = s
   | lookupStr(ctx, s as { strMap = strMap, ... }, span, (strid0 as Syntax.MkStrId name) :: strids)
     = (case Syntax.StrIdMap.find(strMap, strid0) of
            NONE => emitFatalError (ctx, [span], "unknown structure name '" ^ name ^ "'")
          | SOME (TypedSyntax.MkSignature innerEnv) => lookupStr (ctx, innerEnv, span, strids)
       )
-(*! val lookupTyConInEnv : Context * ('val, 'str) Env' * SourcePos.span * Syntax.LongTyCon -> TypedSyntax.TypeStructure *)
+(*: val lookupTyConInEnv : Context * ('val, 'str) Env' * SourcePos.span * Syntax.LongTyCon -> TypedSyntax.TypeStructure *)
 fun lookupTyConInEnv(ctx, env : ('val,'str) Env', span, Syntax.MkQualified([], tycon as Syntax.MkTyCon name))
     = (case Syntax.TyConMap.find(#tyConMap env, tycon) of
            SOME tystr => tystr
@@ -161,7 +161,7 @@ datatype 'a LookupResult = Found of 'a
                          | ValueNotFound of Syntax.VId Syntax.Qualified
                          | StructureNotFound of Syntax.StrId Syntax.Qualified
 
-(*! val lookupStr' : 'context * TypedSyntax.Signature * Syntax.StrId list * Syntax.StrId list -> TypedSyntax.Signature LookupResult *)
+(*: val lookupStr' : 'context * TypedSyntax.Signature * Syntax.StrId list * Syntax.StrId list -> TypedSyntax.Signature LookupResult *)
 fun lookupStr' (ctx, s : TypedSyntax.Signature, _, nil) = Found s
   | lookupStr' (ctx, s as { strMap, ... }, revStrIds, (strid0 as Syntax.MkStrId name) :: strids)
     = (case Syntax.StrIdMap.find (strMap, strid0) of
@@ -169,7 +169,7 @@ fun lookupStr' (ctx, s : TypedSyntax.Signature, _, nil) = Found s
          | SOME (TypedSyntax.MkSignature innerEnv) => lookupStr' (ctx, innerEnv, strid0 :: revStrIds, strids)
       )
 
-(*! val lookupLongVIdInEnv : 'context * Env * 'span * Syntax.LongVId -> (TypedSyntax.LongVId * TypedSyntax.TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) LookupResult *)
+(*: val lookupLongVIdInEnv : 'context * Env * 'span * Syntax.LongVId -> (TypedSyntax.LongVId * TypedSyntax.TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) LookupResult *)
 fun lookupLongVIdInEnv (ctx : 'context, env : Env, span, longvid as Syntax.MkQualified ([], vid))
     = (case Syntax.VIdMap.find (#valMap env, vid) of
            SOME (tysc, ids, longvid) => Found (longvid, tysc, ids)
@@ -189,7 +189,7 @@ fun lookupLongVIdInEnv (ctx : 'context, env : Env, span, longvid as Syntax.MkQua
          | NONE => StructureNotFound (Syntax.MkQualified ([], strid0))
       )
 
-(*! val getConstructedType : Context * SourcePos.span * TypedSyntax.Ty -> TypedSyntax.TyName *)
+(*: val getConstructedType : Context * SourcePos.span * TypedSyntax.Ty -> TypedSyntax.TyName *)
 fun getConstructedType (ctx, span, TypedSyntax.TyVar _) = emitFatalError (ctx, [span], "getConstructedType: got a type variable")
   | getConstructedType (ctx, span, TypedSyntax.AnonymousTyVar _) = emitFatalError (ctx, [span], "getConstructedType: got a type variable")
   | getConstructedType (ctx, span, TypedSyntax.RecordType _) = emitFatalError (ctx, [span], "getConstructedType: got a record")
@@ -198,7 +198,7 @@ fun getConstructedType (ctx, span, TypedSyntax.TyVar _) = emitFatalError (ctx, [
   | getConstructedType (ctx, span, TypedSyntax.RecordExtType _) = emitFatalError (ctx, [span], "getConstructedType: got a record")
 
 (* The Definition, 4.7 Non-expansive Expressions *)
-(*! val isNonexpansive : Env * TypedSyntax.Exp -> bool *)
+(*: val isNonexpansive : Env * TypedSyntax.Exp -> bool *)
 fun isNonexpansive (env : Env, TypedSyntax.SConExp _) = true
   | isNonexpansive (env, TypedSyntax.VarExp _) = true (* <op> longvid *)
   | isNonexpansive (env, TypedSyntax.RecordExp (_, fields)) = List.all (fn (_, e) => isNonexpansive (env, e)) fields
@@ -216,7 +216,7 @@ and isConexp (env : Env, TypedSyntax.TypedExp (_, e, _)) = isConexp (env, e)
   | isConexp (env, TypedSyntax.VarExp (_, _, Syntax.ExceptionConstructor, _)) = true
   | isConexp(env, _) = false
 
-(*! val isExhaustive : 'context * Env * TypedSyntax.Pat -> bool *)
+(*: val isExhaustive : 'context * Env * TypedSyntax.Pat -> bool *)
 fun isExhaustive (ctx, env : Env, TypedSyntax.WildcardPat _) = true
   | isExhaustive (ctx, env, TypedSyntax.SConPat _) = false
   | isExhaustive (ctx, env, TypedSyntax.VarPat _) = true
@@ -388,7 +388,7 @@ local
     structure S = Syntax
     structure T = TypedSyntax
 in
-(*! val occurCheckAndAdjustLevel : T.AnonymousTyVar -> T.Ty -> bool (* returns true if the type variable occurs in the type *) *)
+(*: val occurCheckAndAdjustLevel : T.AnonymousTyVar -> T.Ty -> bool (* returns true if the type variable occurs in the type *) *)
 fun occurCheckAndAdjustLevel tv
     = let fun check (T.AnonymousTyVar (_, tv'))
               = if tv = tv' then
@@ -413,7 +413,7 @@ fun occurCheckAndAdjustLevel tv
 
 val applySubstTy = T.applySubstTy
 
-(*! val instantiate : InferenceContext * SourcePos.span * T.TypeScheme -> T.Ty * (T.Ty * T.UnaryConstraint list) list *)
+(*: val instantiate : InferenceContext * SourcePos.span * T.TypeScheme -> T.Ty * (T.Ty * T.UnaryConstraint list) list *)
 fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
     = let val (subst, tyargs) = List.foldl (fn ((v, preds), (set, rest)) =>
                                                let val tv = freshTyVar (ctx, span, preds)
@@ -424,7 +424,7 @@ fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
       in (applySubstTy subst ty, List.rev tyargs)
       end
 
-(*! val unify : InferenceContext * Env * T.Constraint list -> unit *)
+(*: val unify : InferenceContext * Env * T.Constraint list -> unit *)
 (* The environment is used to determine if a data type admits equality *)
 fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = ()
   | unify (ctx, env, ct :: ctrs)
@@ -775,7 +775,7 @@ and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, t
      )
 fun addConstraint (ctx : InferenceContext, env : Env, ct : T.Constraint) = unify (ctx, env, [ct])
 
-(*! val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
+(*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
 fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
     = (case Syntax.TyVarMap.find(#boundTyVars env, tv) of
            SOME tv => T.TyVar (span, tv)
@@ -802,7 +802,7 @@ fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
       end
   | evalTy (ctx, env, S.FnType (span, ty1, ty2)) = T.FnType (span, evalTy (ctx, env, ty1), evalTy (ctx, env, ty2))
 
-(*! val typeCheckPat : InferenceContext * Env * S.Pat * (* type hint *) T.Ty option -> T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat *)
+(*: val typeCheckPat : InferenceContext * Env * S.Pat * (* type hint *) T.Ty option -> T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat *)
 fun typeCheckPat (ctx : InferenceContext, env : Env, S.WildcardPat span, typeHint : T.Ty option) : T.Ty * (T.VId * T.Ty) S.VIdMap.map * T.Pat
     = (case typeHint of
            NONE => let val ty = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
@@ -1089,7 +1089,7 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
       in S.TyConSet.foldl (fn (tycon, map) => S.TyConMap.insert (map, tycon, not (S.TyConSet.member (nonEqualitySet, tycon)))) S.TyConMap.empty localTyCons
       end
 
-(*!
+(*:
 val typeCheckExp : InferenceContext * Env * S.Exp * (* type hint *) T.Ty option -> T.Ty * T.Exp
 and typeCheckDec : InferenceContext * Env * S.Dec -> (* created environment *) Env * T.Dec list
 and typeCheckDecs : InferenceContext * Env * S.Dec list -> (* created environment *) Env * T.Dec list
@@ -1994,7 +1994,7 @@ fun print_Env ({ tyConMap, valMap, strMap, boundTyVars, ... } : Env) = "Env{tyMa
 end (* structure PrettyPrint *)
 open PrettyPrint
           *)
-(*! val applyDefaultTypes : Context * TypedSyntax.Dec list -> unit *)
+(*: val applyDefaultTypes : Context * TypedSyntax.Dec list -> unit *)
 fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
     let fun findClass [] = NONE
           | findClass ((span, TypedSyntax.IsInt) :: _) = SOME (span, Syntax.CLASS_INT)
@@ -3393,7 +3393,7 @@ fun typeCheckTopDecs(ctx, env, []) = (emptyEnv, [])
                                               in (mergeEnv(env', env''), dec @ decs)
                                               end
 
-(*! val typeCheckProgram : Context * Env * ((Syntax.Dec Syntax.TopDec) list) list -> Env * (TypedSyntax.TopDec list) list *)
+(*: val typeCheckProgram : Context * Env * ((Syntax.Dec Syntax.TopDec) list) list -> Env * (TypedSyntax.TopDec list) list *)
 fun typeCheckProgram (ctx, env, [] : ((Syntax.Dec Syntax.TopDec) list) list) : Env * (TypedSyntax.TopDec list) list = (emptyEnv, [])
   | typeCheckProgram(ctx, env, topdec :: topdecs) = let val (env', topdec') = typeCheckTopDecs (ctx, env, topdec)
                                                         val (env'', topdecs') = typeCheckProgram(ctx, mergeEnv(env, env'), topdecs)

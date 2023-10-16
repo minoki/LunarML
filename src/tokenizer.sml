@@ -44,7 +44,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                         skipComment (state, l, c, l, c + 3, 0, xs)
                     | #"(" :: #"*" :: xs => if state = NORMAL andalso #valDescInComments opts <> LanguageOptions.IGNORE then
                                                 case xs of
-                                                    #"!" :: xss => SOME (Tokens.START_VAL_DESC_COMMENT (pos (l, c), pos (l, c + 2)), SPECIAL_COMMENT, l, c + 3, xss)
+                                                    #":" :: xss => SOME (Tokens.START_VAL_DESC_COMMENT (pos (l, c), pos (l, c + 2)), SPECIAL_COMMENT, l, c + 3, xss)
                                                   | _ => skipComment (state, l, c, l, c + 2, 0, xs) (* beginning of comment *)
                                             else
                                                 skipComment (state, l, c, l, c + 2, 0, xs) (* beginning of comment *)

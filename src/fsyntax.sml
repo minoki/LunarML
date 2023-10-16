@@ -135,7 +135,7 @@ fun EqualityType t = FnType (PairType (t, t), TyVar (tyNameToTyVar (Typing.primT
 fun arityToKind 0 = TypeKind
   | arityToKind n = ArrowKind (TypeKind, arityToKind (n - 1))
 
-(*! val occurCheck : TyVar -> Ty -> bool *)
+(*: val occurCheck : TyVar -> Ty -> bool *)
 fun occurCheck tv =
     let fun check (TyVar tv') = TypedSyntax.eqUTyVar (tv, tv')
           | check (RecordType xs) = Syntax.LabelMap.exists check xs
@@ -156,7 +156,7 @@ fun occurCheck tv =
     in check
     end
 
-(*! val substituteTy : TyVar * Ty -> Ty -> Ty *)
+(*: val substituteTy : TyVar * Ty -> Ty -> Ty *)
 fun substituteTy (tv, replacement) =
     let fun go (ty as TyVar tv') = if TypedSyntax.eqUTyVar (tv, tv') then
                                        replacement
@@ -195,7 +195,7 @@ fun substituteTy (tv, replacement) =
     in go
     end
 
-(*! val substTy : Ty TypedSyntax.TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list } *)
+(*: val substTy : Ty TypedSyntax.TyVarMap.map -> { doTy : Ty -> Ty, doConBind : ConBind -> ConBind, doPat : Pat -> Pat, doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list } *)
 fun substTy (subst : Ty TypedSyntax.TyVarMap.map) =
     let fun doTy (ty as TyVar tv) = (case TypedSyntax.TyVarMap.find (subst, tv) of
                                          NONE => ty
@@ -642,7 +642,7 @@ local structure T = TypedSyntax
                                     ]
                       end
 in
-(*! val toFTy : Context * 'dummy * TypedSyntax.Ty -> FSyntax.Ty *)
+(*: val toFTy : Context * 'dummy * TypedSyntax.Ty -> FSyntax.Ty *)
 fun toFTy (ctx, env : 'dummy, T.TyVar (span, tv)) = F.TyVar tv
   | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Link ty))) = toFTy (ctx, env, ty)
   | toFTy (ctx, env, T.AnonymousTyVar (span, ref (T.Unbound _))) = emitFatalError (ctx, [span], "unexpected anonymous type variable")
@@ -908,7 +908,7 @@ fun cookStringConstant (ctx : Context, env : Env, span, value, ty)
            end
          | _ => emitFatalError (ctx, [span], "invalid string constant: type")
       )
-(*!
+(*:
 val toFPat : Context * Env * TypedSyntax.Pat -> FSyntax.Ty TypedSyntax.VIdMap.map * FSyntax.Pat
 and toFExp : Context * Env * TypedSyntax.Exp -> FSyntax.Exp
 and toFDecs : Context * Env * TypedSyntax.Dec list -> Env * FSyntax.Dec list

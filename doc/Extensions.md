@@ -65,6 +65,8 @@ if WideChar.maxOrd = 65535 then
 
 ## Infixing dot
 
+Status: experimental.
+
 To use this extension, `allowInfixingDot` annotation in MLB file is needed:
 
 ```
@@ -88,6 +90,8 @@ fun a .foo. b = print (a ^ ", " ^ b ^ "\n"); (* equivalent to fun foo (a, b) = .
 
 ## Value description in comments
 
+Status: experimental.
+
 To use this extension, `valDescInComments` annotation in MLB file is needed:
 
 ```
@@ -101,7 +105,7 @@ end
 *)
 ```
 
-With this extension, comments that start with `(*!` will be parsed and the compatibility with the following value declaration (`val`, `fun`) is checked against.
+With this extension, comments that start with `(*:` will be parsed and the compatibility with the following value declaration (`val`, `fun`) is checked against.
 Type mismatch is reported as warning or error.
 
 The content in the special comment does not affect type inference.
@@ -109,22 +113,22 @@ The content in the special comment does not affect type inference.
 Good examples:
 
 ```sml
-(*! val fact : int -> int *)
+(*: val fact : int -> int *)
 fun fact 0 = 1
   | fact n = n * fact (n - 1);
 
-(*! val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
+(*: val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
 fun curry f x y = f (x, y);
 ```
 
 Bad examples:
 
 ```sml
-(*! val fact : IntInf.int -> IntInf.int *)
+(*: val fact : IntInf.int -> IntInf.int *)
 fun fact 0 = 1
   | fact n = n * fact (n - 1);
 
-(*! val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
+(*: val curry : ('a * 'b -> 'c) -> 'a -> 'b -> 'c *)
 fun curry f x y = f (y, x);
 ```
 
@@ -134,10 +138,12 @@ Syntax:
 <valspec> ::= 'val' <valdesc>
 <valspecs> ::= <valspec> <valspecs>
              | <valspec>
-<valdescincomment> ::= '(*!' <valspecs> '*)'
+<valdescincomment> ::= '(*:' <valspecs> '*)'
 <dec> ::= <valdescincomment> 'val' ...
         | <valdescincomment> 'fun' ...
 ```
+
+Note: The starting symbol `(*:` may change before stabilization of this feature.
 
 ## Other extensions planned
 

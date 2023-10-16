@@ -417,7 +417,7 @@ and doBlock stats = (fn rest => Vector.foldr (fn (stat, acc) => doStat stat acc)
 
 fun doProgram stats = buildProgram (doBlock stats [])
 
-(*! val doImports : { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string *)
+(*: val doImports : { specs : (string * JsSyntax.Id) list, moduleName : string } list -> string *)
 fun doImports imports = let fun importOne ({ specs, moduleName }, rest)
                                 = let val (default, named) = List.partition (fn (name, _) => name = "default") specs
                                       (* length default must be <= 1 *)

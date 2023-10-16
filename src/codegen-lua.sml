@@ -257,7 +257,7 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
   | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
-(*!
+(*:
 val doDecs : Context * Env * C.CVar option * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list
 and doCExp : Context * Env * C.CVar option * C.CExp -> L.Stat list
  *)

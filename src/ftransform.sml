@@ -324,7 +324,7 @@ fun isDiscardable (F.PrimExp (primOp, tyargs, args)) = isDiscardablePrimOp primO
   | isDiscardable F.ExitProgram = false
   | isDiscardable (F.ExportValue _) = false
   | isDiscardable (F.ExportModule _) = false
-(*!
+(*:
 val doPat : F.Pat -> TypedSyntax.VIdSet.set -> (* constructors used *) TypedSyntax.VIdSet.set
 and doExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp
 and doIgnoredExp : F.Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set * F.Exp list

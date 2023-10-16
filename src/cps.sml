@@ -282,7 +282,7 @@ val initialEnv = List.foldl TypedSyntax.VIdMap.insert' TypedSyntax.VIdMap.empty
                             ,(InitialEnv.VId_true, C.BoolConst true)
                             ,(InitialEnv.VId_nil, C.Nil)
                             ]
-(*!
+(*:
 val transform : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> { revDecs : C.Dec list, resultHint : C.Var option } -> (C.Dec list * C.Value -> C.CExp) -> C.CExp
 and transformT : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * C.CVar -> C.CExp
 and transformX : Context * C.Value TypedSyntax.VIdMap.map -> F.Exp -> C.Dec list * cont -> C.CExp
@@ -584,7 +584,7 @@ and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, Vector.foldl (goDec g
   | goExp (g, C.If { cond, thenCont, elseCont }, acc) = goExp (g, elseCont, goExp (g, thenCont, addValue (cond, acc)))
   | goExp (g, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = goExp (g, body, goExp (g, h, acc))
   | goExp (g, C.Unreachable, acc) = acc
-(*! val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
+(*: val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
 fun makeGraph program = let val g = TypedSyntax.VIdTable.mkTable (1, Fail "dead code analysis table lookup failed")
                         in (g, goExp (g, program, TypedSyntax.VIdSet.empty))
                         end

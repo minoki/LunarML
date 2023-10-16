@@ -237,7 +237,7 @@ fun applyCont (ctx : Context, env : Env, cont, args)
                                    | _ => raise CodeGenError "invalid return arity"
                                 )
         | NONE => raise CodeGenError "undefined continuation"
-(*! val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
+(*: val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
 fun doDecs (ctx, env, decs, finalExp, revStats)
     = (case VectorSlice.getItem decs of
            NONE => List.revAppend (revStats, doCExp ctx env finalExp)
