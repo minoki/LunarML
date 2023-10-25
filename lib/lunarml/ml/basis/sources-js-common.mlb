@@ -139,6 +139,10 @@ structure Int8Array
 structure Int8ArraySlice
 structure Int8Vector
 structure Int8VectorSlice
+structure IntArray
+structure IntArraySlice
+structure IntVector
+structure IntVectorSlice
 structure IntInf
 structure LargeInt
 structure LargeReal
