@@ -1,6 +1,3 @@
-# Unsafe structure
-
-```sml
 signature UNSAFE_MONO_VECTOR = sig
   type vector
   type elem
@@ -14,10 +11,8 @@ signature UNSAFE_MONO_ARRAY = sig
   val update : array * int * elem -> unit
   val create : int -> array
 end
-```
 
-```sml
-structure Unsafe : sig
+signature UNSAFE = sig
   structure Vector : sig
     val sub : 'a vector * int -> 'a
   end
@@ -55,4 +50,5 @@ structure Unsafe : sig
   structure RealArray : UNSAFE_MONO_ARRAY where type elem = Real.real where type array = RealArray.array
   val cast : 'a -> 'b
 end
-```
+
+structure Unsafe : UNSAFE = Unsafe;

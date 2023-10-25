@@ -185,6 +185,7 @@ should_run += $(addprefix mlbasis/should_run/,\
   scan-word.sml \
   string-issubstring.sml \
   widestring-issubstring.sml \
+  widestring-sub.sml \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)
@@ -198,6 +199,7 @@ should_compile += $(addprefix interface/should_compile/,\
   INTEGER.sml \
   WORD.sml \
   CHAR.sml \
+  UNSAFE.mlb \
 )
 should_run += $(addprefix successor_ml/should_run/,\
   record_extension_pattern.sml \
