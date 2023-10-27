@@ -11,7 +11,7 @@ structure S = CommandLineSettings;
 datatype OutputMode = ExecutableMode | LibraryMode
 
 val progName = CommandLine.name ();
-fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML <unreleased>\n")
+fun showVersion () = TextIO.output (TextIO.stdErr, "LunarML version " ^ LunarMLVersion.version ^ "\n")
 fun showHelp () = TextIO.output (TextIO.stdErr, "Usage:\n\
                                                 \  " ^ progName ^ " [subcommand] [options] file.sml\n\
                                                 \Subcommand:\n\

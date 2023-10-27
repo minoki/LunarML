@@ -49,6 +49,7 @@ sources = \
   src/driver.sml \
   src/mlb-eval.sml \
   src/command-line-settings.sml \
+  src/version.sml \
   src/main.sml \
   src/main-default.sml
 

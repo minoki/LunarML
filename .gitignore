@@ -17,3 +17,4 @@ lib/lunarml/ml/mlyacc-lib/
 lib/lunarml/ml/smlnj-lib/
 package/npm/lunarml.mjs
 package/npm/lib/
+*.bak
