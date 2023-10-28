@@ -100,6 +100,7 @@ val VId_Lua_Lib_math_abs = newVId "_Prim.Lua.Lib.math.abs"
 val VId_Lua_Lib_math_type = newVId "_Prim.Lua.Lib.math.type'"
 val VId_Lua_Lib_math_maxinteger = newVId "_Prim.Lua.Lib.math.maxinteger"
 val VId_Lua_Lib_math_mininteger = newVId "_Prim.Lua.Lib.math.mininteger"
+val VId_Lua_Lib_math_ult = newVId "_Prim.Lua.Lib.math.ult"
 val VId_Lua_Lib_string = newVId "_Prim.Lua.Lib.string"
 val VId_Lua_Lib_string_char = newVId "_Prim.Lua.Lib.string.char"
 val VId_Lua_Lib_string_format = newVId "_Prim.Lua.Lib.string.format"
@@ -230,6 +231,7 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Lua.Lib.math.type'", VId_Lua_Lib_math_type, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.math.maxinteger", VId_Lua_Lib_math_maxinteger, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.math.mininteger", VId_Lua_Lib_math_mininteger, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.math.ult", VId_Lua_Lib_math_ult, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.string.char", VId_Lua_Lib_string_char, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.string.format", VId_Lua_Lib_string_format, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.pack", VId_Lua_Lib_table_pack, TypeScheme ([], primTy_Lua_value))

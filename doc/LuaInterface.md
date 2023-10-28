@@ -64,6 +64,206 @@ structure Lua : sig
   val checkWord : value -> word
   val checkReal : value -> real
   val optString : value -> string option
+  structure Lib : sig
+    val GLOBAL : value (* _G *)
+    val VERSION : value (* _VERSION *)
+    val assert : value
+    val collectgarbage : value
+    val coroutine : value
+    val debug : value
+    val dofile : value
+    val error : value
+    val getfenv : value (* LuaJIT only *)
+    val getmetatable : value
+    val io : value
+    val ipairs : value
+    val load : value
+    val loadfile : value
+    val loadstring : value (* LuaJIT only *)
+    val module : value (* LuaJIT only *)
+    val math : value
+    val next : value
+    val os : value
+    val package : value
+    val pairs : value
+    val pcall : value
+    val print : value
+    val rawequal : value
+    val rawget : value
+    val rawlen : value (* Lua 5.3/5.4 only *)
+    val rawset : value
+    val require : value
+    val select : value
+    val setfenv : value (* LuaJIT only *)
+    val setmetatable : value
+    val string : value
+    val table : value
+    val tonumber : value
+    val tostring : value
+    val type' : value
+    val unpack : value (* LuaJIT only *)
+    val utf8 : value (* Lua 5.3/5.4 only *)
+    val xpcall : value
+    structure coroutine : sig
+      val create : value
+      val isyieldable : value (* Lua 5.3/5.4 only *)
+      val resume : value
+      val running : value
+      val status : value
+      val wrap : value
+      val yield : value
+    end
+    structure debug : sig
+      val debug : value
+      val getfenv : value (* LuaJIT only *)
+      val gethook : value
+      val getinfo : value
+      val getlocal : value
+      val getmetatable : value
+      val getregistry : value
+      val getupvalue : value
+      val getuservalue : value (* Lua 5.3/5.4 only *)
+      val setfenv : value (* LuaJIT only *)
+      val sethook : value
+      val setlocal : value
+      val setmetatable : value
+      val setupvalue : value
+      val setuservalue : value (* Lua 5.3/5.4 only *)
+      val traceback : value
+      val upvalueid : value
+      val upvaluejoin : value
+    end
+    structure io : sig
+      val close : value
+      val flush : value
+      val input : value
+      val lines : value
+      val open' : value
+      val output : value
+      val popen : value
+      val read : value
+      val stderr : value
+      val stdin : value
+      val stdout : value
+      val tmpfile : value
+      val type' : value
+      val write : value
+    end
+    structure math : sig
+      val abs : value
+      val acos : value
+      val asin : value
+      val atan : value
+      val atan2 : value (* LuaJIT only *)
+      val ceil : value
+      val cos : value
+      val cosh : value
+      val deg : value
+      val exp : value
+      val floor : value
+      val fmod : value
+      val frexp : value (* LuaJIT only *)
+      val huge : value
+      val ldexp : value (* LuaJIT only *)
+      val log : value
+      val log10 : value (* LuaJIT only *)
+      val max : value
+      val maxinteger : value (* Lua 5.3/5.4 only *)
+      val min : value
+      val mininteger : value (* Lua 5.3/5.4 only *)
+      val modf : value
+      val pi : value
+      val pow : value (* LuaJIT only *)
+      val rad : value
+      val random : value
+      val randomseed : value
+      val sin : value
+      val sqrt : value
+      val tan : value
+      val tanh : value (* LuaJIT only *)
+      val tointeger : value (* Lua 5.3/5.4 only *)
+      val type' : value (* Lua 5.3/5.4 only *)
+      val ult : value (* Lua 5.3/5.4 only *)
+    end
+    structure os : sig
+      val clock : value
+      val date : value
+      val difftime : value
+      val execute : value
+      val exit : value
+      val getenv : value
+      val remove : value
+      val rename : value
+      val setlocale : value
+      val time : value
+      val tmpname : value
+    end
+    structure package : sig
+      val config : value (* Lua 5.3/5.4 only *)
+      val cpath : value
+      val loaded : value
+      val loaders : value (* LuaJIT only *)
+      val loadlib : value
+      val path : value
+      val preload : value
+      val searchers : value (* Lua 5.3/5.4 only *)
+      val searchpath : value
+      val seeall : value (* LuaJIT only *)
+    end
+    structure string : sig
+      val byte : value
+      val char : value
+      val dump : value
+      val find : value
+      val format : value
+      val gmatch : value
+      val gsub : value
+      val len : value
+      val lower : value
+      val match : value
+      val pack : value (* Lua 5.3/5.4 only *)
+      val packsize : value (* Lua 5.3/5.4 only *)
+      val rep : value
+      val reverse : value
+      val sub : value
+      val unpack : value (* Lua 5.3/5.4 only *)
+      val upper : value
+    end
+    structure table : sig
+      val concat : value
+      val insert : value
+      val maxn : value (* LuaJIT only *)
+      val move : value (* Lua 5.3/5.4 only *)
+      val pack : value
+      val remove : value
+      val sort : value
+      val unpack : value
+    end
+    structure utf8 : sig (* Lua 5.3/5.4 only *)
+      val char : value
+      val charpattern : value
+      val codepoint : value
+      val codes : value
+      val len : value
+      val offset : value
+    end
+    structure bit : sig (* LuaJIT only *)
+      val tobit : value
+      val tohex : value
+      val bnot : value
+      val band : value
+      val bor : value
+      val bxor : value
+      val lshift : value
+      val rshift : value
+      val arshift : value
+      val rol : value
+      val ror : value
+      val bswap : value
+    end
+    val bit : value (* Lua BitOp; LuaJIT only *)
+    val lfs : value option (* LuaFileSystem *)
+  end
 end
 ```
 

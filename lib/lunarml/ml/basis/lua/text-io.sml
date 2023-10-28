@@ -23,9 +23,6 @@ structure TextIO :> sig
               val print : string -> unit
           end = struct
 local
-    val io = LunarML.assumeDiscardable Lua.global "io"
-    val io_open = LunarML.assumeDiscardable Lua.field (io, "open")
-    val io_write = LunarML.assumeDiscardable Lua.field (io, "write")
     structure Instream :> sig
                   type instream
                   type vector = string
@@ -86,13 +83,13 @@ local
                          else
                              SOME (Lua.unsafeFromValue result : string)
                       end
-    fun openIn f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "r"]
+    fun openIn f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "r"]
                    in if Lua.isNil r0 then
                           raise IO.Io { name = f, function = "TextIO.openIn", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                       else
                           r0
                    end
-    val stdIn = LunarML.assumeDiscardable Lua.field (io, "stdin")
+    val stdIn = Lua.Lib.io.stdin
     end
     structure Outstream :> sig
                   type outstream
@@ -116,21 +113,21 @@ local
     fun flushOut f = (Lua.method (f, "flush") #[]; ())
     fun closeOut f = (Lua.method (f, "close") #[]; ())
     (* outputsubstr : outstream * substring -> unit *)
-    fun openOut f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "w"]
+    fun openOut f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "w"]
                     in if Lua.isNil r0 then
                            raise IO.Io { name = f, function = "TextIO.openOut", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                        else
                            r0
                     end
-    fun openAppend f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "a"]
+    fun openAppend f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "a"]
                        in if Lua.isNil r0 then
                               raise IO.Io { name = f, function = "TextIO.openAppend", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                           else
                               r0
                        end
-    val stdOut = LunarML.assumeDiscardable Lua.field (io, "stdout")
-    val stdErr = LunarML.assumeDiscardable Lua.field (io, "stderr")
-    fun print s = Lua.call0 io_write #[Lua.fromString s]
+    val stdOut = Lua.Lib.io.stdout
+    val stdErr = Lua.Lib.io.stderr
+    fun print s = Lua.call0 Lua.Lib.io.write #[Lua.fromString s]
     end
 in
 open Instream

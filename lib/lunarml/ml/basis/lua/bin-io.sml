@@ -18,8 +18,6 @@ structure BinIO :> sig
               val openAppend : string -> outstream
           end = struct
 local
-    val io = LunarML.assumeDiscardable Lua.global "io"
-    val io_open = LunarML.assumeDiscardable Lua.field (io, "open")
     structure Instream :> sig
                   type instream
                   type vector = Word8Vector.vector
@@ -69,7 +67,7 @@ local
                                false
                         end
     (* BIN_IO *)
-    fun openIn f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "rb"]
+    fun openIn f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "rb"]
                    in if Lua.isNil r0 then
                           raise IO.Io { name = f, function = "BinIO.openIn", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                       else
@@ -95,13 +93,13 @@ local
     fun flushOut f = (Lua.method (f, "flush") #[]; ())
     fun closeOut f = (Lua.method (f, "close") #[]; ())
     (* BIN_IO *)
-    fun openOut f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "wb"]
+    fun openOut f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "wb"]
                     in if Lua.isNil r0 then
                            raise IO.Io { name = f, function = "BinIO.openOut", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                        else
                            r0
                     end
-    fun openAppend f = let val (r0, message) = Lua.call2 io_open #[Lua.fromString f, Lua.fromString "ab"]
+    fun openAppend f = let val (r0, message) = Lua.call2 Lua.Lib.io.open' #[Lua.fromString f, Lua.fromString "ab"]
                        in if Lua.isNil r0 then
                               raise IO.Io { name = f, function = "BinIO.openAppend", cause = Fail (Lua.unsafeFromValue message) } (* TODO: cause *)
                           else

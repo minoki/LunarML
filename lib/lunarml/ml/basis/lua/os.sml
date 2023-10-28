@@ -52,14 +52,6 @@ structure OS :> sig
           end = struct
 type syserror = string
 exception SysErr of string * syserror option
-local
-    val oslib = LunarML.assumeDiscardable Lua.global "os"
-    val os_execute = LunarML.assumeDiscardable Lua.field (oslib, "execute")
-    val os_exit = LunarML.assumeDiscardable Lua.field (oslib, "exit")
-    val os_getenv = LunarML.assumeDiscardable Lua.field (oslib, "getenv")
-    val os_remove = LunarML.assumeDiscardable Lua.field (oslib, "remove")
-    val os_rename = LunarML.assumeDiscardable Lua.field (oslib, "rename")
-in
 structure FileSys = struct
 (*
 type dirstream
@@ -191,8 +183,8 @@ val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_
                                                                                                                      end
                                                                                                  )
                                                                                     )
-val remove : string -> unit = fn filename => Lua.call0 os_remove #[Lua.fromString filename]
-val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 os_rename #[Lua.fromString old, Lua.fromString new]
+val remove : string -> unit = fn filename => Lua.call0 Lua.Lib.os.remove #[Lua.fromString filename]
+val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 Lua.Lib.os.rename #[Lua.fromString old, Lua.fromString new]
 end (* structure FileSys *)
 structure IO = struct end
 structure Path = struct
@@ -317,17 +309,17 @@ type status = int
 val success : status = 0
 val failure : status = 1
 val isSuccess : status -> bool = fn 0 => true | _ => false
-val system : string -> status = fn command => let val () = Lua.call0 os_execute #[Lua.fromString command]
+val system : string -> status = fn command => let val () = Lua.call0 Lua.Lib.os.execute #[Lua.fromString command]
                                               in failure (* TODO *)
                                               end
 (* val atExit : (unit -> unit) -> unit *)
-val exit : status -> 'a = fn status => let val () = Lua.call0 os_exit #[Lua.fromInt status, Lua.fromBool true]
+val exit : status -> 'a = fn status => let val () = Lua.call0 Lua.Lib.os.exit #[Lua.fromInt status, Lua.fromBool true]
                                        in _primCall "unreachable" ()
                                        end
-val terminate : status -> 'a = fn status => let val () = Lua.call0 os_exit #[Lua.fromInt status, Lua.fromBool false]
+val terminate : status -> 'a = fn status => let val () = Lua.call0 Lua.Lib.os.exit #[Lua.fromInt status, Lua.fromBool false]
                                             in _primCall "unreachable" ()
                                             end
-val getEnv : string -> string option = fn name => let val result = Lua.call1 os_getenv #[Lua.fromString name]
+val getEnv : string -> string option = fn name => let val result = Lua.call1 Lua.Lib.os.getenv #[Lua.fromString name]
                                                   in if Lua.isNil result then
                                                          NONE
                                                      else
@@ -335,7 +327,6 @@ val getEnv : string -> string option = fn name => let val result = Lua.call1 os_
                                                   end
 (* val sleep : Time.time -> unit : LuaSocket's socket.sleep or luaposix's posix.time.nanosleep or use native API (nanosleep or Sleep) via FFI or system command via os.execute or busy loop *)
 end (* structure Process *)
-end (* local *)
 (*
 eqtype syserror
 exception SysErr of string * syserror option

@@ -28,17 +28,13 @@ signature TIME = sig
     *)
 end;
 local
-    val oslib = LunarML.assumeDiscardable Lua.global "os"
-    val os_date = LunarML.assumeDiscardable Lua.field (oslib, "date")
-    val os_time = LunarML.assumeDiscardable Lua.field (oslib, "time")
-    val os_difftime = LunarML.assumeDiscardable Lua.field (oslib, "difftime")
     val epoch = LunarML.assumeDiscardable (fn () =>
                                               let val t = Lua.newTable ()
                                               in Lua.setField (t, "year", Lua.fromInt 1970)
                                                ; Lua.setField (t, "month", Lua.fromInt 1)
                                                ; Lua.setField (t, "day", Lua.fromInt 1)
                                                ; Lua.setField (t, "hour", Lua.fromInt 0)
-                                               ; Lua.call1 os_time #[t]
+                                               ; Lua.call1 Lua.Lib.os.time #[t]
                                               end
                                           ) () (* local time; depends on time zone *)
 in
@@ -83,7 +79,7 @@ fun fromReal (x : LargeReal.real) : time = Int54.fromLarge (LargeReal.toLargeInt
 fun toReal (x : time) : LargeReal.real = LargeReal.fromLargeInt (Int54.toLarge x) / 1e6
 end
 fun fromLuaTime (x : Lua.value) : Time.time
-    = let val d = Lua.unsafeFromValue (Lua.call1 os_difftime #[x, epoch]) : real
+    = let val d = Lua.unsafeFromValue (Lua.call1 Lua.Lib.os.difftime #[x, epoch]) : real
       in Time.fromReal d
       end
 fun toLuaTime (x : Int54.int) : Lua.value
@@ -101,7 +97,7 @@ fun toLuaTime (x : Int54.int) : Lua.value
        ; Lua.setField (t, "hour", Lua.fromInt54 hour)
        ; Lua.setField (t, "min", Lua.fromInt54 min)
        ; Lua.setField (t, "sec", Lua.fromInt54 sec)
-       ; Lua.call1 os_time #[t]
+       ; Lua.call1 Lua.Lib.os.time #[t]
       end
 structure Time = struct
 open Time
@@ -120,7 +116,7 @@ fun fromMicroseconds (x : LargeInt.int) : time = Int54.fromLarge x handle Overfl
 fun fromNanoseconds (x : LargeInt.int) : time = Int54.fromLarge (x Lquot 1000) handle Overflow => raise Time
 end
 val compare = Int54.compare
-fun now () : time = fromLuaTime (Lua.call1 os_time #[])
+fun now () : time = fromLuaTime (Lua.call1 Lua.Lib.os.time #[])
 fun fmt (n : int) (t : time) : string
     = if n < 0 then
           raise Size
@@ -166,7 +162,7 @@ fun date { year : int, month : month, day : int, hour : int, minute : int, secon
           val () = Lua.setField (t, "hour", Lua.fromInt hour)
           val () = Lua.setField (t, "min", Lua.fromInt minute)
           val () = Lua.setField (t, "sec", Lua.fromInt second)
-          val u = Lua.call1 os_date #[Lua.fromString "*t", Lua.call1 os_time #[t]] (* TODO: error handling *)
+          val u = Lua.call1 Lua.Lib.os.date #[Lua.fromString "*t", Lua.call1 Lua.Lib.os.time #[t]] (* TODO: error handling *)
           val () = Lua.setField (u, "offset", Lua.unsafeToValue offset)
       in u
       end
@@ -205,19 +201,19 @@ fun isDst t : bool option = let val x = Lua.unsafeFromValue (Lua.field (t, "isds
                                else
                                    SOME (Lua.unsafeFromValue x) (* boolean *)
                             end
-fun localOffset () : Time.time = let val now = Lua.call1 os_time #[]
-                                     val t_utc = Lua.call1 os_time #[Lua.call1 os_date #[Lua.fromString "!*t", now]]
-                                 in Time.fromReal (Lua.unsafeFromValue (Lua.call1 os_difftime #[t_utc, now]))
+fun localOffset () : Time.time = let val now = Lua.call1 Lua.Lib.os.time #[]
+                                     val t_utc = Lua.call1 Lua.Lib.os.time #[Lua.call1 Lua.Lib.os.date #[Lua.fromString "!*t", now]]
+                                 in Time.fromReal (Lua.unsafeFromValue (Lua.call1 Lua.Lib.os.difftime #[t_utc, now]))
                                  end
-fun fromTimeLocal t = let val u = Lua.call1 os_date #[Lua.fromString "*t", toLuaTime t]
+fun fromTimeLocal t = let val u = Lua.call1 Lua.Lib.os.date #[Lua.fromString "*t", toLuaTime t]
                           val () = Lua.setField (u, "offset", Lua.unsafeToValue (NONE : Time.time option))
                       in u
                       end
-fun fromTimeUniv t = let val u = Lua.call1 os_date #[Lua.fromString "!*t", toLuaTime t]
+fun fromTimeUniv t = let val u = Lua.call1 Lua.Lib.os.date #[Lua.fromString "!*t", toLuaTime t]
                          val () = Lua.setField (u, "offset", Lua.unsafeToValue (SOME Time.zeroTime : Time.time option))
                      in u
                      end
-fun toTime date = let val t = fromLuaTime (Lua.call1 os_time #[date]) (* local time *)
+fun toTime date = let val t = fromLuaTime (Lua.call1 Lua.Lib.os.time #[date]) (* local time *)
                   in case offset date of
                          NONE => t
                        | SOME u => t + u
@@ -238,7 +234,7 @@ fun compare (date1, date2) = case Int.compare (year date1, year date2) of
                                           )
                                | r => r
 fun doFmt ("*t", date) = "*t"
-  | doFmt (s, date) = Lua.unsafeFromValue (Lua.call1 os_date #[Lua.fromString s, toLuaTime (toTime date)]) : string
+  | doFmt (s, date) = Lua.unsafeFromValue (Lua.call1 Lua.Lib.os.date #[Lua.fromString s, toLuaTime (toTime date)]) : string
 fun fmt s date = if String.sub (s, 0) = #"!" then
                      "!" ^ doFmt (String.extract (s, 1, NONE), date)
                  else

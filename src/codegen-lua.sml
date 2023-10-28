@@ -72,6 +72,7 @@ val builtins
                     ,(VId_Lua_Lib_math_type, "math_type")
                     ,(VId_Lua_Lib_math_maxinteger, "math_maxinteger")
                     ,(VId_Lua_Lib_math_mininteger, "math_mininteger")
+                    ,(VId_Lua_Lib_math_ult, "math_ult")
                     ,(VId_Lua_Lib_string, "string")
                     ,(VId_Lua_Lib_string_char, "string_char")
                     ,(VId_Lua_Lib_string_format, "string_format")
