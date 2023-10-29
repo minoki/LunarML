@@ -1,6 +1,9 @@
 LUA = lua
 LUAJIT = luajit
 NODE = node
+MKDIR = mkdir -p
+CP = cp -fpR
+INSTALL_EXEC = install -p -m 0755
 
 all: bin/lunarml
 
@@ -122,6 +125,20 @@ verify-js: bin/lunarml bin/lunarml.gen2.mjs
 	$(MAKE) -C test verify-nodejs-cps VARIANT=nodejs-cps NODE=$(NODE) LUNARML_GEN2="$(NODE) ../bin/lunarml.gen2.mjs" VARIANT_GEN2=gen2
 
 .PHONY: all typecheck test test-lua test-lua-continuations test-luajit test-nodejs test-nodejs-cps validate-lua validate-luajit validate-js verify-lua verify-luajit verify-js
+
+#
+# install
+#
+
+PREFIX = /usr/local
+
+install: bin/lunarml
+	make -C thirdparty install
+	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
+	$(INSTALL_EXEC) bin/lunarml $(PREFIX)/bin
+	$(CP) lib/ $(PREFIX)/lib
+
+.PHONY: install
 
 #
 # install-npm
