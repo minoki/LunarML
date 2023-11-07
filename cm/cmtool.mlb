@@ -4,11 +4,13 @@ $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 ../pluto/pluto.mlb
 ../src/numeric.sml
 ../src/text.sml
+../src/language-options-record.sml
 ../src/language-options.sml
-../src/target-info.sml
 ../src/primitives.sml
+../src/target-info.sml
 ../src/syntax.grm.sig
 ../src/sourcepos.sml
+../src/message.sml
 ../src/tokenizer.sml
 ../src/syntax.sml
 ../src/syntax.grm.sml

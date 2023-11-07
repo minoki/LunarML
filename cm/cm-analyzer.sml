@@ -1,7 +1,7 @@
 structure CMAnalyzer = struct
 fun rep (c, n) = CharVector.tabulate (n, fn _ => c)
 fun untab s = String.map (fn #"\t" => #" " | c => c) s
-fun printPos (name, lines, p) =
+fun printPos (name, lines, p : SourcePos.pos) =
     if #file p = name then
         let val l = #line p - 1
             val c = #column p - 1
@@ -70,21 +70,28 @@ fun parse ({ languageOptions }, name, lines, str) : UnfixedSyntax.Program option
                       print (name ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ s ^ "\n")
                 ; printSpan (name, lines, { start = p1, end_ = p2 })
                 )
-          val lexErrors = ref []
-          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, languageOptions, lexErrors)
-          val error = case !lexErrors of
-                          [] => false
-                        | errors => ( List.app (fn LunarMLLex.TokError (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": syntax error: " ^ message ^ "\n")
-                                                                                         ; printPos (name, lines, pos)
-                                                                                         )
-                                               | LunarMLLex.TokWarning (pos, message) => ( print (name ^ ":" ^ Int.toString (#line pos) ^ ":" ^ Int.toString (#column pos) ^ ": warning: " ^ message ^ "\n")
-                                                                                         ; printPos (name, lines, pos)
-                                                                                         )
-                                               ) errors
-                                    ; List.exists (fn LunarMLLex.TokError _ => true | _ => false) errors
-                                    )
+          fun printMessage { spans, domain, message, type_ }
+              = let val t = case type_ of
+                                Message.WARNING => "warning: "
+                              | Message.ERROR => "error: "
+                in case spans of
+                       [] => TextIO.output (TextIO.stdErr, t ^ message ^ "\n")
+                     | { start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 }} :: _ =>
+                       ( if f1 = f2 then
+                             if p1 = p2 then
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ t ^ message ^ "\n")
+                             else
+                                 TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ t ^ message ^ "\n")
+                         else
+                             TextIO.output (TextIO.stdErr, f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ "-" ^ f2 ^ ":" ^ Int.toString l2 ^ ":" ^ Int.toString c2 ^ ": " ^ t ^ message ^ "\n")
+                       ; List.app (fn s => printSpan (name, lines, s)) spans
+                       )
+                end
+          val counter = Message.newCounter { errorTolerance = 10 }
+          val messageHandler = Message.newHandler (counter, printMessage)
+          val lexer = LunarMLParser.makeLexer (LunarMLLex.makeInputFromString str) (name, languageOptions, messageHandler)
           val result = #1 (LunarMLParser.parse ((* lookahead *) 0, lexer, printError, name))
-      in if error then
+      in if Message.anyError counter then
              NONE
          else
              SOME result
@@ -124,9 +131,10 @@ fun goPat env (U.WildcardPat _) = Syntax.StrIdSet.empty
   | goPat env (U.SConPat (_, _)) = Syntax.StrIdSet.empty
   | goPat env (U.NonInfixVIdPat (_, longvid)) = goQualified env longvid
   | goPat env (U.InfixOrVIdPat (_, _)) = Syntax.StrIdSet.empty
+  | goPat env (U.InfixPat (_, longvid)) = goQualified env longvid
   | goPat env (U.JuxtapositionPat (_, pats)) = List.foldl (fn (pat, acc) => Syntax.StrIdSet.union (goPat env pat, acc)) Syntax.StrIdSet.empty pats
   | goPat env (U.ConPat (_, longvid, pat)) = Syntax.StrIdSet.union (goQualified env longvid, goPat env pat)
-  | goPat env (U.RecordPat (_, fields)) = List.foldl (fn (U.Field (_, pat), acc) => Syntax.StrIdSet.union (goPat env pat, acc)
+  | goPat env (U.RecordPat (_, fields)) = List.foldl (fn (U.Field (_, pat, _), acc) => Syntax.StrIdSet.union (goPat env pat, acc)
                                                      | (U.Ellipsis pat, acc) => Syntax.StrIdSet.union (goPat env pat, acc)
                                                      ) Syntax.StrIdSet.empty fields
   | goPat env (U.TypedPat (_, pat, ty)) = Syntax.StrIdSet.union (goPat env pat, goTy env ty)
@@ -136,10 +144,11 @@ fun goPat env (U.WildcardPat _) = Syntax.StrIdSet.empty
 fun goExp env (U.SConExp (_, _)) = Syntax.StrIdSet.empty
   | goExp env (U.NonInfixVIdExp (_, longvid)) = goQualified env longvid
   | goExp env (U.InfixOrVIdExp (_, _)) = Syntax.StrIdSet.empty
-  | goExp env (U.RecordExp (_, items)) = List.foldl (fn (U.Field (_, e), acc) => Syntax.StrIdSet.union (goExp env e, acc)
+  | goExp env (U.InfixExp (_, longvid)) = goQualified env longvid
+  | goExp env (U.RecordExp (_, items)) = List.foldl (fn (U.Field (_, e, _), acc) => Syntax.StrIdSet.union (goExp env e, acc)
                                                     | (U.Ellipsis e, acc) => Syntax.StrIdSet.union (goExp env e, acc)
                                                     ) Syntax.StrIdSet.empty items
-  | goExp env (U.RecordUpdateExp (_, base, items)) = List.foldl (fn (U.Field (_, e), acc) => Syntax.StrIdSet.union (goExp env e, acc)
+  | goExp env (U.RecordUpdateExp (_, base, items)) = List.foldl (fn (U.Field (_, e, _), acc) => Syntax.StrIdSet.union (goExp env e, acc)
                                                                 | (U.Ellipsis e, acc) => Syntax.StrIdSet.union (goExp env e, acc)
                                                                 ) (goExp env base) items
   | goExp env (U.LetInExp (_, decs, exp)) = let val (env', usage) = goDecs env decs
@@ -148,34 +157,41 @@ fun goExp env (U.SConExp (_, _)) = Syntax.StrIdSet.empty
   | goExp env (U.JuxtapositionExp (_, exps)) = List.foldl (fn (e, acc) => Syntax.StrIdSet.union (goExp env e, acc)) Syntax.StrIdSet.empty exps
   | goExp env (U.AppExp (_, exp1, exp2)) = Syntax.StrIdSet.union (goExp env exp1, goExp env exp2)
   | goExp env (U.TypedExp (_, exp, ty)) = Syntax.StrIdSet.union (goExp env exp, goTy env ty)
-  | goExp env (U.HandleExp (_, exp, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) (goExp env exp) matches
+  | goExp env (U.HandleExp (_, exp, _, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) (goExp env exp) matches
   | goExp env (U.RaiseExp (_, exp)) = goExp env exp
   | goExp env (U.IfThenElseExp (_, exp1, exp2, exp3)) = Syntax.StrIdSet.union (goExp env exp1, Syntax.StrIdSet.union (goExp env exp2, goExp env exp3))
   | goExp env (U.WhileDoExp (_, exp1, exp2)) = Syntax.StrIdSet.union (goExp env exp1, goExp env exp2)
-  | goExp env (U.CaseExp (_, exp, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) (goExp env exp) matches
-  | goExp env (U.FnExp (_, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) Syntax.StrIdSet.empty matches
+  | goExp env (U.CaseExp (_, exp, _, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) (goExp env exp) matches
+  | goExp env (U.FnExp (_, _, matches)) = List.foldl (fn ((pat, body), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env body, acc))) Syntax.StrIdSet.empty matches
   | goExp env (U.ProjectionExp (_, _)) = Syntax.StrIdSet.empty
   | goExp env (U.ListExp (_, exps)) = Vector.foldl (fn (exp, acc) => Syntax.StrIdSet.union (goExp env exp, acc)) Syntax.StrIdSet.empty exps
   | goExp env (U.VectorExp (_, exps)) = Vector.foldl (fn (exp, acc) => Syntax.StrIdSet.union (goExp env exp, acc)) Syntax.StrIdSet.empty exps
   | goExp env (U.PrimExp (_, _, tys, exps)) = Vector.foldl (fn (exp, acc) => Syntax.StrIdSet.union (goExp env exp, acc)) (Vector.foldl (fn (ty, acc) => Syntax.StrIdSet.union (goTy env ty, acc)) Syntax.StrIdSet.empty tys) exps
-and goDec env (U.ValDec (_, _, valbinds)) = (emptyEnv, List.foldl (fn (U.PatBind (_, pat, exp), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env exp, acc))) Syntax.StrIdSet.empty valbinds)
-  | goDec env (U.RecValDec (_, _, valbinds)) = (emptyEnv, List.foldl (fn (U.PatBind (_, pat, exp), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env exp, acc))) Syntax.StrIdSet.empty valbinds)
-  | goDec env (U.FValDec (_, _, fvalbinds)) = (emptyEnv, List.foldl (fn (U.FValBind (_, rules), acc) =>
-                                                                        List.foldl (fn (U.FMRule (_, U.FPat (_, pats), optTy, exp), acc) =>
-                                                                                       let val acc = Syntax.StrIdSet.union (goExp env exp, case optTy of NONE => acc | SOME ty => Syntax.StrIdSet.union (goTy env ty, acc))
-                                                                                       in List.foldl (fn (pat, acc) => Syntax.StrIdSet.union (goPat env pat, acc)) acc pats
-                                                                                       end
-                                                                                   ) acc rules
-                                                                    ) Syntax.StrIdSet.empty fvalbinds)
+  | goExp env (U.SequentialExp (_, exps, finalExp, _)) = Vector.foldl (fn (exp, acc) => Syntax.StrIdSet.union (goExp env exp, acc)) (goExp env finalExp) exps
+and goDec env (U.ValDec (_, _, valspecs, valbinds)) = let val acc = List.foldl (fn ((_, _, ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)) Syntax.StrIdSet.empty valspecs
+                                                      in (emptyEnv, List.foldl (fn (U.PatBind (_, pat, exp), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env exp, acc))) acc valbinds)
+                                                      end
+  | goDec env (U.RecValDec (_, _, _, valspecs, valbinds)) = let val acc = List.foldl (fn ((_, _, ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)) Syntax.StrIdSet.empty valspecs
+                                                            in (emptyEnv, List.foldl (fn (U.PatBind (_, pat, exp), acc) => Syntax.StrIdSet.union (goPat env pat, Syntax.StrIdSet.union (goExp env exp, acc))) acc valbinds)
+                                                            end
+  | goDec env (U.FValDec (_, _, valspecs, _, fvalbinds)) = let val acc = List.foldl (fn ((_, _, ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)) Syntax.StrIdSet.empty valspecs
+                                                           in (emptyEnv, List.foldl (fn (U.FValBind (_, rules), acc) =>
+                                                                                        List.foldl (fn (U.FMRule (_, U.FPat (_, pats), optTy, exp), acc) =>
+                                                                                                       let val acc = Syntax.StrIdSet.union (goExp env exp, case optTy of NONE => acc | SOME ty => Syntax.StrIdSet.union (goTy env ty, acc))
+                                                                                                       in List.foldl (fn (pat, acc) => Syntax.StrIdSet.union (goPat env pat, acc)) acc pats
+                                                                                                       end
+                                                                                                   ) acc rules
+                                                                                    ) acc fvalbinds)
+                                                           end
   | goDec env (U.TypeDec (_, typbinds)) = (emptyEnv, List.foldl (fn (S.TypBind (_, _, _, ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)) Syntax.StrIdSet.empty typbinds)
-  | goDec env (U.DatatypeDec (_, datbinds, typbinds)) = let val acc = List.foldl (fn (S.DatBind (_, _, _, conbinds), acc) =>
+  | goDec env (U.DatatypeDec (_, datbinds, typbinds)) = let val acc = List.foldl (fn (S.DatBind (_, _, _, _, conbinds), acc) =>
                                                                                      List.foldl (fn (S.ConBind (_, _, SOME ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)
                                                                                                 | (S.ConBind (_, _, NONE), acc) => acc) acc conbinds
                                                                                  ) Syntax.StrIdSet.empty datbinds
                                                         in (emptyEnv, List.foldl (fn (S.TypBind (_, _, _, ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)) acc typbinds)
                                                         end
   | goDec env (U.DatatypeRepDec (_, _, longtycon)) = (emptyEnv, goQualified env longtycon)
-  | goDec env (U.AbstypeDec (_, datbinds, typbinds, decs)) = let val acc = List.foldl (fn (S.DatBind (_, _, _, conbinds), acc) =>
+  | goDec env (U.AbstypeDec (_, datbinds, typbinds, decs)) = let val acc = List.foldl (fn (S.DatBind (_, _, _, _, conbinds), acc) =>
                                                                                           List.foldl (fn (S.ConBind (_, _, SOME ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc)
                                                                                                      | (S.ConBind (_, _, NONE), acc) => acc) acc conbinds
                                                                                       ) Syntax.StrIdSet.empty datbinds
@@ -205,8 +221,10 @@ and goDec env (U.ValDec (_, _, valbinds)) = (emptyEnv, List.foldl (fn (U.PatBind
                                                            end
                                                        ) (emptyEnv, Syntax.StrIdSet.empty) longstrids
   | goDec env (U.FixityDec (_, _, _)) = (emptyEnv, Syntax.StrIdSet.empty)
+  | goDec env (U.DoDec (_, exp)) = (emptyEnv, goExp env exp)
   | goDec env (U.OverloadDec (_, _, longtycon, fields)) = (emptyEnv, List.foldl (fn ((_, e), acc) => Syntax.StrIdSet.union (goExp env e, acc)) (goQualified env longtycon) fields)
   | goDec env (U.EqualityDec (_, _, longtycon, exp)) = (emptyEnv, Syntax.StrIdSet.union (goQualified env longtycon, goExp env exp))
+  | goDec env (U.ESImportDec { sourceSpan = _, pure = _, specs, moduleName = _ }) = (emptyEnv, List.foldl (fn ((_, _, SOME ty), acc) => Syntax.StrIdSet.union (goTy env ty, acc) | ((_, _, NONE), acc) => acc) Syntax.StrIdSet.empty specs)
 and goDecs env [] = (emptyEnv, Syntax.StrIdSet.empty)
   | goDecs env (dec :: decs) = let val (env', set) = goDec env dec
                                    val (env'', set') = goDecs (mergeEnv (env, env')) decs
@@ -241,7 +259,7 @@ fun goSpec (env : module_env) (S.ValDesc (_, items)) : env' Syntax.StrIdMap.map 
     = (Syntax.StrIdMap.empty, fromCoreUsage (List.foldl (fn ((_, ty), acc) => Syntax.StrIdSet.union (goTy (toCoreEnv env) ty, acc)) Syntax.StrIdSet.empty items))
   | goSpec env (S.TypeDesc (_, _)) = (Syntax.StrIdMap.empty, emptyModuleUsage)
   | goSpec env (S.EqtypeDesc (_, _)) = (Syntax.StrIdMap.empty, emptyModuleUsage)
-  | goSpec env (S.DatDesc (_, datdescs, typdescs)) = let val acc = List.foldl (fn ((_, _, condescs), acc) =>
+  | goSpec env (S.DatDesc (_, datdescs, typdescs)) = let val acc = List.foldl (fn ((_, _, _, condescs), acc) =>
                                                                                   List.foldl (fn (S.ConBind (_, _, SOME ty), acc) => Syntax.StrIdSet.union (goTy (toCoreEnv env) ty, acc)
                                                                                              | (S.ConBind (_, _, NONE), acc) => acc) acc condescs
                                                                               ) Syntax.StrIdSet.empty datdescs
@@ -271,10 +289,10 @@ and goSigExp env (S.BasicSigExp (_, specs)) : env' Syntax.StrIdMap.map * module_
                                                 NONE => (Syntax.StrIdMap.empty, { usedStructures = Syntax.StrIdSet.empty, usedSignatures = Syntax.SigIdSet.singleton sigid, usedFunctors = Syntax.FunIdSet.empty })
                                               | SOME (MkEnv strMap) => (strMap, emptyModuleUsage)
                                            )
-  | goSigExp env (S.TypeRealisationExp (_, sigexp, _, longtycon, ty)) = let val (s, usage) = goSigExp env sigexp
-                                                                            val usage' = goTy (toCoreEnv env) ty
-                                                                        in (s, unionModuleUsage (usage, fromCoreUsage usage'))
-                                                                        end
+  | goSigExp env (S.TypeRealisationExp (_, sigexp, _, longtycon, ty, _)) = let val (s, usage) = goSigExp env sigexp
+                                                                               val usage' = goTy (toCoreEnv env) ty
+                                                                           in (s, unionModuleUsage (usage, fromCoreUsage usage'))
+                                                                           end
 
 fun goStrExp (env : module_env) (S.StructExp (_, strdecs)) : env' Syntax.StrIdMap.map * module_usage = goStrDecs env strdecs
   | goStrExp env (S.StrIdExp (_, longstrid)) = (case longstrid of
