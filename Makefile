@@ -131,12 +131,15 @@ verify-js: bin/lunarml bin/lunarml.gen2.mjs
 #
 
 PREFIX = /usr/local
+libdir = $(PREFIX)/lib/lunarml
 
 install: bin/lunarml
 	make -C thirdparty install
 	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
-	$(INSTALL_EXEC) bin/lunarml $(PREFIX)/bin
-	$(CP) lib/ $(PREFIX)/lib
+	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper > $(PREFIX)/bin/lunarml
+	chmod a+x $(PREFIX)/bin/lunarml
+	$(CP) lib/lunarml/ $(PREFIX)/lib/lunarml
+	$(INSTALL_EXEC) bin/lunarml $(libdir)/lunarml
 
 .PHONY: install
 

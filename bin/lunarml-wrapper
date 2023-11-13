@@ -1,0 +1,3 @@
+#!/bin/sh
+libdir="__LIBDIR__"
+exec "$libdir/lunarml" -B"$libdir" "$@"
