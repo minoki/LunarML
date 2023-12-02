@@ -15,28 +15,7 @@ structure OS :> sig
                         end
               structure IO : sig
                         end
-              structure Path : sig
-                            exception Path
-                            exception InvalidArc
-                            val parentArc : string
-                            val currentArc : string
-                            val fromString : string -> { isAbs : bool, vol : string, arcs : string list }
-                            val toString : { isAbs : bool, vol : string, arcs : string list } -> string
-                            val splitDirFile : string -> { dir : string, file : string }
-                            val joinDirFile : { dir : string, file : string } -> string
-                            val dir : string -> string
-                            val file : string -> string
-                            val splitBaseExt : string -> { base : string, ext : string option }
-                            val joinBaseExt : { base : string, ext : string option } -> string
-                            val base : string -> string
-                            val ext : string -> string option
-                            val mkCanonical : string -> string
-                            val mkAbsolute : { path : string, relativeTo : string } -> string
-                            val mkRelative : { path : string, relativeTo : string } -> string
-                            val isAbsolute : string -> bool
-                            val isRelative : string -> bool
-                            val concat : string * string -> string
-                        end
+              structure Path : OS_PATH
               structure Process : sig
                             type status
                             val success : status
@@ -120,123 +99,9 @@ fun rename { old : string, new : string } = ( JavaScript.call fs.renameSync #[Ja
                                             )
 end (* structure FileSys *)
 structure IO = struct end
-structure Path = struct
-exception Path
-exception InvalidArc
-val parentArc = ".."
-val currentArc = "."
-fun isAbsolute path = if String.isPrefix "/" path then (* TODO: Windows *)
-                          true
-                      else
-                          false
-fun isRelative path = not (isAbsolute path)
-fun fromString path = case String.fields (fn c => c = #"/") path of (* TODO: Windows *)
-                          [""] => { isAbs = false, vol = "", arcs = [] }
-                        | "" :: xs => { isAbs = true, vol = "", arcs = xs }
-                        | xs => { isAbs = false, vol = "", arcs = xs }
-local
-    fun isValidArc arc = CharVector.all (fn c => c <> #"/") arc
-in
-fun toString { isAbs, vol, arcs } = if vol <> "" then
-                                        raise Path (* invalid volume *)
-                                    else
-                                        case (isAbs, arcs) of
-                                            (false, "" :: _) => raise Path
-                                          | _ => if List.all isValidArc arcs then
-                                                     if isAbs then
-                                                         "/" ^ String.concatWith "/" arcs
-                                                     else
-                                                         String.concatWith "/" arcs
-                                                 else
-                                                     raise InvalidArc
-end
-fun splitDirFile path = let val { isAbs, vol, arcs } = fromString path
-                            fun go (revAcc, [last]) = { dir = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, file = last }
-                              | go (revAcc, x :: xs) = go (x :: revAcc, xs)
-                              | go (revAcc, []) = { dir = toString { isAbs = isAbs, vol = vol, arcs = [] }, file = "" }
-                        in go ([], arcs)
-                        end
-fun joinDirFile { dir, file } = let val { isAbs, vol, arcs } = fromString dir
-                                in toString { isAbs = isAbs, vol = vol, arcs = arcs @ [file] }
-                                end
-val dir = #dir o splitDirFile
-val file = #file o splitDirFile
-fun splitBaseExt path = let val { isAbs, vol, arcs } = fromString path
-                            fun go (revAcc, [lastArc]) = let val (l, r) = Substring.splitr (fn c => c <> #".") (Substring.full lastArc)
-                                                             val l = Substring.string l
-                                                             and r = Substring.string r
-                                                             val (base, ext) = case (l, r) of
-                                                                                   ("", _) => (lastArc, NONE)
-                                                                                 | (_, "") => (lastArc, NONE)
-                                                                                 | (".", _) => (lastArc, NONE)
-                                                                                 | (base, ext) => (String.substring (base, 0, String.size base - 1), SOME ext)
-                                                         in { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev (base :: revAcc) }, ext = ext }
-                                                         end
-                              | go (revAcc, x :: xs) = go (x :: revAcc, xs)
-                              | go (revAcc, []) = { base = toString { isAbs = isAbs, vol = vol, arcs = List.rev revAcc }, ext = NONE }
-                        in go ([], arcs)
-                        end
-fun joinBaseExt { base, ext } = case ext of
-                                    NONE => base
-                                  | SOME "" => base
-                                  | SOME x => base ^ "." ^ x
-fun base path = #base (splitBaseExt path)
-fun ext path = #ext (splitBaseExt path)
-local
-    fun go (revArcs, []) = String.concatWith "/" (List.rev revArcs)
-      | go ([], #"." :: #"." :: nil) = ""
-      | go (_ :: revArcs, #"." :: #"." :: nil) = go (revArcs, [])
-      | go (_ :: revArcs, #"." :: #"." :: #"/" :: xs) = go (revArcs, xs)
-      | go (revArcs, #"." :: nil) = go (revArcs, [])
-      | go (revArcs, #"." :: #"/" :: xs) = go (revArcs, xs)
-      | go (revArcs, #"/" :: xs) = go (revArcs, xs)
-      | go (revArcs, xs) = let val (arc, rest) = takeArc ([], xs)
-                           in go (arc :: revArcs, rest)
-                           end
-    and takeArc (acc, #"/" :: xs) = (String.implodeRev acc, xs)
-      | takeArc (acc, x :: xs) = takeArc (x :: acc, xs)
-      | takeArc (acc, xs as []) = (String.implodeRev acc, xs)
-in
-fun mkCanonical path = case String.explode path of
-                           [] => "."
-                         | #"/" :: xs => "/" ^ go ([], xs)
-                         | xs => go ([], xs)
-end
-fun concat (path, t) = case (fromString path, fromString t) of
-                           (_, { isAbs = true, ... }) => raise Path
-                         | ({ isAbs, vol = v1, arcs = arcs1 }, { vol = v2, arcs = arcs2, ... }) => if v2 = "" orelse v1 = v2 then
-                                                                                                       toString { isAbs = isAbs, vol = v1, arcs = concatArcs (arcs1, arcs2) }
-                                                                                                   else
-                                                                                                       raise Path
-and concatArcs ([], arcs2) = arcs2
-  | concatArcs ([""], arcs2) = arcs2
-  | concatArcs (x :: xs, arcs2) = x :: concatArcs (xs, arcs2)
-fun mkAbsolute { path, relativeTo } = if isAbsolute path then
-                                          path
-                                      else
-                                          mkCanonical (concat (relativeTo, path))
-fun mkRelative { path, relativeTo } = case (fromString path, fromString relativeTo) of
-                                          ({ isAbs = false, ... }, _) => path (* path is relative *)
-                                        | (_, { isAbs = false, ... }) => raise Path (* relativeTo is relative *)
-                                        | ({ isAbs = true, vol = pVol, arcs = pArcs }, { isAbs = true, vol = rVol, arcs = _ }) =>
-                                          if pVol <> rVol then
-                                              raise Path
-                                          else
-                                              let val abs = mkCanonical relativeTo
-                                              in if path = abs then
-                                                     currentArc
-                                                 else
-                                                     let val rArcs = #arcs (fromString abs)
-                                                         fun stripCommonPrefix (xs as (x :: xs'), ys as (y :: ys')) = if x = y then
-                                                                                                                          stripCommonPrefix (xs', ys')
-                                                                                                                      else
-                                                                                                                          (xs, ys)
-                                                           | stripCommonPrefix (xs, ys) = (xs, ys)
-                                                         val (path', abs') = stripCommonPrefix (pArcs, rArcs)
-                                                     in toString { isAbs = false, vol = pVol, arcs = List.map (fn _ => "..") abs' @ (case path' of [""] => [] | _ => path') }
-                                                     end
-                                              end
-end
+structure Path = UnixPath (exception Path
+                           exception InvalidArc
+                          )
 structure Process = struct
 type status = int
 val success : status = 0

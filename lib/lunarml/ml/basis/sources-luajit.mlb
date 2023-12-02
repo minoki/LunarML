@@ -67,6 +67,8 @@ luajit/time.sml
 lua/timer.sml
 lua/text-io.sml
 lua/bin-io.sml
+os-path-sig.sml
+os-path-unix.sml
 lua/os.sml
 lua/command-line.sml
 end
@@ -88,6 +90,7 @@ signature MONO_ARRAY_SLICE
 signature MONO_VECTOR
 signature MONO_VECTOR_SLICE
 signature OPTION
+signature OS_PATH
 signature PACK_WORD
 signature REAL
 signature STRING
@@ -214,5 +217,6 @@ structure WordArray
 structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
+functor UnixPath (* extension *)
 top-level.sml
 end
