@@ -1089,50 +1089,41 @@ fun determineDatatypeEquality(ctx, env : ('val,'str) Env', datbinds : (S.TyVar l
       in S.TyConSet.foldl (fn (tycon, map) => S.TyConMap.insert (map, tycon, not (S.TyConSet.member (nonEqualitySet, tycon)))) S.TyConMap.empty localTyCons
       end
 
+(*: val forceTy : T.Ty -> T.Ty *)
+fun forceTy (T.AnonymousTyVar (_, ref (T.Link ty))) = forceTy ty
+  | forceTy (ty as T.RecordExtType (span, fieldTypes, baseTy))
+    = let val baseTy = forceTy baseTy
+      in case baseTy of
+             T.RecordType (_, fieldTypes') => T.RecordType (span, Syntax.LabelMap.unionWith #1 (fieldTypes, fieldTypes'))
+           | _ => ty
+      end
+  | forceTy ty = ty
+
 (*:
-val typeCheckExp : InferenceContext * Env * S.Exp * (* type hint *) T.Ty option -> T.Ty * T.Exp
+val synthTypeOfExp : InferenceContext * Env * S.Exp -> T.Ty * T.Exp
+and checkTypeOfExp : InferenceContext * Env * S.Exp * T.Ty -> T.Exp
 and typeCheckDec : InferenceContext * Env * S.Dec -> (* created environment *) Env * T.Dec list
 and typeCheckDecs : InferenceContext * Env * S.Dec list -> (* created environment *) Env * T.Dec list
 and typeCheckMatch : InferenceContext * Env * SourcePos.span * (S.Pat * S.Exp) list * (* pattern type hint *) T.Ty option * (* expression type hint *) T.Ty option -> (* pattern *) T.Ty * (* expression *) T.Ty * (T.Pat * T.Exp) list
  *)
-fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typeHint : T.Ty option) : T.Ty * T.Exp
+fun synthTypeOfExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon)) : T.Ty * T.Exp
     = let val ty = case scon of
-                       Syntax.IntegerConstant x   => (case typeHint of
-                                                          NONE => let val tv = freshTyVar (ctx, span, [T.IsInt])
-                                                                  in T.AnonymousTyVar (span, tv)
-                                                                  end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt))
-                                                                             ; expectedTy
-                                                                             )
-                                                     )
-                     | Syntax.WordConstant x      => (case typeHint of
-                                                          NONE => let val tv = freshTyVar (ctx, span, [T.IsWord])
-                                                                  in T.AnonymousTyVar (span, tv)
-                                                                  end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord))
-                                                                             ; expectedTy
-                                                                             )
-                                                     )
+                       Syntax.IntegerConstant x   => let val tv = freshTyVar (ctx, span, [T.IsInt])
+                                                     in T.AnonymousTyVar (span, tv)
+                                                     end
+                     | Syntax.WordConstant x      => let val tv = freshTyVar (ctx, span, [T.IsWord])
+                                                     in T.AnonymousTyVar (span, tv)
+                                                     end
                      | Syntax.RealConstant x      => primTy_real (* TODO: overloaded literals *)
-                     | Syntax.CharacterConstant x => (case typeHint of
-                                                          NONE => let val tv = freshTyVar (ctx, span, [T.IsChar])
-                                                                  in T.AnonymousTyVar (span, tv)
-                                                                  end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar))
-                                                                             ; expectedTy
-                                                                             )
-                                                     )
-                     | Syntax.StringConstant x    => (case typeHint of
-                                                          NONE => let val tv = freshTyVar (ctx, span, [T.IsString])
-                                                                  in T.AnonymousTyVar (span, tv)
-                                                                  end
-                                                        | SOME expectedTy => ( addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString))
-                                                                             ; expectedTy
-                                                                             )
-                                                     )
+                     | Syntax.CharacterConstant x => let val tv = freshTyVar (ctx, span, [T.IsChar])
+                                                     in T.AnonymousTyVar (span, tv)
+                                                     end
+                     | Syntax.StringConstant x    => let val tv = freshTyVar (ctx, span, [T.IsString])
+                                                     in T.AnonymousTyVar (span, tv)
+                                                     end
       in (ty, T.SConExp (span, scon, ty))
       end
-  | typeCheckExp (ctx, env, exp as S.VarExp (span, longvid), typeHint)
+  | synthTypeOfExp (ctx, env, S.VarExp (span, longvid))
     = (case lookupLongVIdInEnv(ctx, env, span, longvid) of
            Found (longvid, tysc, ids) => let val (ty, tyargs) = instantiate(ctx, span, tysc)
                                          in (ty, T.VarExp (span, longvid, ids, tyargs))
@@ -1146,94 +1137,79 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                          in (ty, T.BogusExp (span, ty))
                                          end
       )
-  | typeCheckExp (ctx, env, S.RecordExp (span, fields, NONE), typeHint)
-    = let fun oneField (label, exp) = let val typeHint' = case typeHint of
-                                                              SOME (T.RecordType (_, m)) => Syntax.LabelMap.find (m, label)
-                                                            | _ => NONE
-                                          val (ty, exp) = typeCheckExp (ctx, env, exp, typeHint')
-                                      in ((label, ty), (label, exp))
-                                      end
-          val (fieldTypes, fields) = ListPair.unzip (List.map oneField fields)
-      in (T.RecordType (span, Syntax.LabelMapFromList fieldTypes), T.RecordExp (span, fields))
-      end
-  | typeCheckExp (ctx, env, S.RecordExp (span, fields, SOME baseExp), typeHint)
-    = let val (baseTy, baseExp) = typeCheckExp (ctx, env, baseExp, NONE)
-          val recordTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-          fun oneField ((label, exp), (fieldTypes, fields))
-              = let val typeHint' = case typeHint of
-                                        SOME (T.RecordType (_, m)) => Syntax.LabelMap.find (m, label)
-                                      | _ => NONE
-                    val (ty, exp) = typeCheckExp (ctx, env, exp, typeHint')
-                in (Syntax.LabelMap.insert (fieldTypes, label, ty), (label, exp) :: fields)
+  | synthTypeOfExp (ctx, env, S.RecordExp (span, fields, NONE))
+    = let fun doField ((label, exp), (typeMap, expList))
+              = let val (ty, exp) = synthTypeOfExp (ctx, env, exp)
+                in (Syntax.LabelMap.insert (typeMap, label, ty), (label, exp) :: expList)
                 end
-          val (fieldTypes, fields) = List.foldr oneField (Syntax.LabelMap.empty, []) fields
-          val fieldConstrs = T.UnaryConstraint (span, baseTy, T.IsRecord) :: List.map (fn (label, _) => T.UnaryConstraint (span, baseTy, T.NoField label)) fields
-      in unify (ctx, env, T.EqConstr (span, recordTy, T.RecordExtType (span, fieldTypes, baseTy)) :: fieldConstrs)
-       ; (recordTy, T.RecordExtExp { sourceSpan = span, fields = fields, baseExp = baseExp, baseTy = baseTy })
+          val (fieldTypes, revFields) = List.foldl doField (Syntax.LabelMap.empty, []) fields
+      in (T.RecordType (span, fieldTypes), T.RecordExp (span, List.rev revFields))
       end
-  | typeCheckExp (ctx, env, S.LetInExp (span, decs, innerExp), typeHint)
-    = let val (env', decs) = typeCheckDecs(ctx, env, decs)
-          val (ty, innerExp) = typeCheckExp (ctx, mergeEnv (env, env'), innerExp, typeHint)
+  | synthTypeOfExp (ctx, env, S.RecordExp (span, fields, SOME baseExp))
+    = let val (baseTy, baseExp) = synthTypeOfExp (ctx, env, baseExp)
+          val () = unify (ctx, env, [T.UnaryConstraint (span, baseTy, T.IsRecord)])
+          fun doField ((label, exp), (typeMap, expList))
+              = let val (ty, exp) = synthTypeOfExp (ctx, env, exp)
+                    val () = unify (ctx, env, [T.UnaryConstraint (span, baseTy, T.NoField label)])
+                in (Syntax.LabelMap.insert (typeMap, label, ty), (label, exp) :: expList)
+                end
+          val (fieldTypes, revFields) = List.foldl doField (Syntax.LabelMap.empty, []) fields
+          val recordTy = case forceTy baseTy of
+                             T.RecordType (span, fieldTypes') => T.RecordType (span, Syntax.LabelMap.unionWith #1 (fieldTypes, fieldTypes'))
+                           | baseTy => T.RecordExtType (span, fieldTypes, baseTy)
+      in (recordTy, T.RecordExtExp { sourceSpan = span, fields = List.rev revFields, baseExp = baseExp, baseTy = baseTy })
+      end
+  | synthTypeOfExp (ctx, env, S.LetInExp (span, decs, innerExp))
+    = let val (env', decs) = typeCheckDecs (ctx, env, decs)
+          val (ty, innerExp) = synthTypeOfExp (ctx, mergeEnv (env, env'), innerExp)
       in (ty, T.LetInExp (span, decs, innerExp))
       end
-  | typeCheckExp (ctx, env, S.AppExp (span, f, x), typeHint)
-          (* f: s -> t, x: s *)
-    = let val (funTy, f) = typeCheckExp (ctx, env, f, NONE)
-          val argTyHint = case funTy of
-                              T.FnType (_, argTy, _) => SOME argTy
-                            | _ => NONE
-          val (argTy, x) = typeCheckExp (ctx, env, x, argTyHint)
-          val retTy = case funTy of
-                          T.FnType (_, argTy', retTy) => ( addConstraint (ctx, env, T.EqConstr (span, argTy, argTy')) ; retTy )
-                        | _ => let val retTy = case typeHint of
-                                                   SOME expectedTy => expectedTy
-                                                 | _ => T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-                               in addConstraint (ctx, env, T.EqConstr (span, funTy, T.FnType (span, argTy, retTy))) (* funTy = (argTy -> retTy) *)
-                                ; retTy
-                               end
-      in (retTy, T.AppExp (span, f, x))
+  | synthTypeOfExp (ctx, env, S.AppExp (span, f, arg))
+    (* TODO: special case for projection *)
+    = let val (funTy, f) = synthTypeOfExp (ctx, env, f)
+      in case forceTy funTy of
+             T.FnType (_, argTy, resultTy) =>
+             (resultTy, T.AppExp (span, f, checkTypeOfExp (ctx, env, arg, argTy)))
+           | funTy =>
+             let val (argTy, arg) = synthTypeOfExp (ctx, env, arg)
+                 val resultTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                 val () = unify (ctx, env, [T.EqConstr (span, funTy, T.FnType (span, argTy, resultTy))])
+             in (resultTy, T.AppExp (span, f, arg))
+             end
       end
-  | typeCheckExp (ctx, env, S.TypedExp (span, exp, ty), typeHint)
+  | synthTypeOfExp (ctx, env, S.TypedExp (span, exp, ty))
     = let val ty = evalTy (#context ctx, env, ty)
-          val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME ty)
-      in addConstraint (ctx, env, T.EqConstr (span, expTy, ty))
-       ; (ty, T.TypedExp (span, exp, ty))
+          val exp = checkTypeOfExp (ctx, env, exp, ty)
+      in (ty, T.TypedExp (span, exp, ty))
       end
-  | typeCheckExp (ctx, env, S.HandleExp (span, exp, matches), typeHint)
-          (* exp: t, matches: exn -> t *)
-    = let val (expTy, exp) = typeCheckExp (ctx, env, exp, typeHint)
+  | synthTypeOfExp (ctx, env, S.HandleExp (span, exp, matches))
+    (* exp : t, matches : exn -> t *)
+    = let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
           val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME primTy_exn, SOME expTy)
-      in addConstraint (ctx, env, T.EqConstr (span, patTy, primTy_exn)) (* patTy = exn *)
-       ; addConstraint (ctx, env, T.EqConstr (span, expTy, retTy))
+      in addConstraint (ctx, env, T.EqConstr (span, patTy, primTy_exn))
+       ; addConstraint (ctx, env, T.EqConstr (span, retTy, expTy))
        ; (expTy, T.HandleExp (span, exp, matches, expTy))
       end
-  | typeCheckExp (ctx, env, S.RaiseExp (span, exp), typeHint)
-    = let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME primTy_exn)
-          val resultTy = case typeHint of
-                             SOME expectedTy => expectedTy
-                           | NONE => T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-      in addConstraint (ctx, env, T.EqConstr (span, expTy, primTy_exn)) (* expTy = exn *)
-       ; (resultTy, T.RaiseExp (span, resultTy, exp))
+  | synthTypeOfExp (ctx, env, S.RaiseExp (span, exp))
+    = let val exp = checkTypeOfExp (ctx, env, exp, primTy_exn)
+          val resultTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+      in (resultTy, T.RaiseExp (span, resultTy, exp))
       end
-  | typeCheckExp (ctx, env, S.IfThenElseExp (span, cond, thenPart, elsePart), typeHint)
-    = let val (condTy, cond) = typeCheckExp (ctx, env, cond, SOME primTy_bool)
-          val (thenTy, thenPart) = typeCheckExp (ctx, env, thenPart, typeHint)
-          val (elseTy, elsePart) = typeCheckExp (ctx, env, elsePart, typeHint)
-      in addConstraint (ctx, env, T.EqConstr (span, condTy, primTy_bool)) (* condTy = bool *)
-       ; addConstraint (ctx, env, T.EqConstr (span, thenTy, elseTy)) (* thenTy = elseTy *)
+  | synthTypeOfExp (ctx, env, S.IfThenElseExp (span, cond, thenPart, elsePart))
+    = let val cond = checkTypeOfExp (ctx, env, cond, primTy_bool)
+          val (thenTy, thenPart) = synthTypeOfExp (ctx, env, thenPart)
+          val (elseTy, elsePart) = synthTypeOfExp (ctx, env, elsePart)
+      in addConstraint (ctx, env, T.EqConstr (span, thenTy, elseTy))
        ; (thenTy, T.IfThenElseExp (span, cond, thenPart, elsePart))
       end
-  | typeCheckExp (ctx, env, S.CaseExp (span, exp, matches), typeHint)
-    = let val (expTy, exp) = typeCheckExp (ctx, env, exp, NONE)
-          val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME expTy, typeHint)
+  | synthTypeOfExp (ctx, env, S.CaseExp (span, exp, matches))
+    = let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
+          val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME expTy, NONE)
       in addConstraint (ctx, env, T.EqConstr (span, expTy, patTy))
        ; (retTy, T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = matches, matchType = T.CASE, resultTy = retTy })
       end
-  | typeCheckExp (ctx, env, S.FnExp (span, matches), typeHint)
-    = let val (argTyHint, retTyHint) = case typeHint of
-                                           SOME (T.FnType (_, argTy, retTy)) => (SOME argTy, SOME retTy)
-                                         | _ => (NONE, NONE)
-          val (argTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, argTyHint, retTyHint)
+  | synthTypeOfExp (ctx, env, S.FnExp (span, matches))
+    = let val (argTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, NONE, NONE)
           val fnExp = case matches of
                           [(T.VarPat (span2, vid, _), body)] => T.FnExp (span, vid, argTy, body)
                         | _ => let val vid = newVId (#context ctx, Syntax.MkVId "a")
@@ -1241,35 +1217,43 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                end
       in (T.FnType (span, argTy, retTy), fnExp)
       end
-  | typeCheckExp (ctx, env, S.ProjectionExp (span, label), typeHint)
-    = let val (recordTy, fieldTy) = case typeHint of
-                                        SOME (T.FnType (_, argTy, retTy)) => (argTy, retTy)
-                                      | _ => (TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, [])), TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, [])))
+  | synthTypeOfExp (ctx, env, S.ProjectionExp (span, label))
+    = let val fieldTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
           val baseTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, [T.NoField label, T.IsRecord]))
-      in unify (ctx, env, [T.EqConstr (span, recordTy, T.RecordExtType (span, Syntax.LabelMap.insert (Syntax.LabelMap.empty, label, fieldTy), baseTy))])
-       ; (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
+          val recordTy = T.RecordExtType (span, Syntax.LabelMap.insert (Syntax.LabelMap.empty, label, fieldTy), baseTy)
+      in (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
-  | typeCheckExp (ctx, env, S.ListExp (span, xs), typeHint)
-    = let val elemTy = case typeHint of
-                           SOME (T.TyCon (_, [elemTy], _)) => elemTy
-                         | _ => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-          val xs = Vector.map (fn exp => let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME elemTy)
-                                         in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
-                                          ; exp
-                                         end) xs
-      in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, xs, elemTy))
-      end
-  | typeCheckExp (ctx, env, S.VectorExp (span, xs), typeHint)
-    = let val elemTy = case typeHint of
-                           SOME (T.TyCon (_, [elemTy], _)) => elemTy
-                         | _ => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-          val xs = Vector.map (fn exp => let val (expTy, exp) = typeCheckExp (ctx, env, exp, SOME elemTy)
-                                         in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
-                                          ; exp
-                                         end) xs
-      in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, xs, elemTy))
-      end
-  | typeCheckExp (ctx, env, S.PrimExp (span, primOp, tyargs, args), typeHint)
+  | synthTypeOfExp (ctx, env, S.ListExp (span, xs))
+    = (case VectorSlice.getItem (VectorSlice.full xs) of
+           NONE =>
+           let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+           in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, vector [], elemTy))
+           end
+         | SOME (x0, x1) =>
+           let val (elemTy, x0) = synthTypeOfExp (ctx, env, x0)
+               val x1 = VectorSlice.map (fn exp => let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
+                                                   in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
+                                                    ; exp
+                                                   end) x1
+           in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, Vector.concat [vector [x0], x1], elemTy))
+           end
+      )
+  | synthTypeOfExp (ctx, env, S.VectorExp (span, xs))
+    = (case VectorSlice.getItem (VectorSlice.full xs) of
+           NONE =>
+           let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+           in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, vector [], elemTy))
+           end
+         | SOME (x0, x1) =>
+           let val (elemTy, x0) = synthTypeOfExp (ctx, env, x0)
+               val x1 = VectorSlice.map (fn exp => let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
+                                                   in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
+                                                    ; exp
+                                                   end) x1
+           in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, Vector.concat [vector [x0], x1], elemTy))
+           end
+      )
+  | synthTypeOfExp (ctx, env, S.PrimExp (span, primOp, tyargs, args))
     = let val () = if Vector.length tyargs = 0 then
                        ()
                    else
@@ -1287,26 +1271,206 @@ fun typeCheckExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon), typ
                                            ) (T.TyVarMap.empty, []) typeVariables
           val argTypes = Vector.map (applySubstTy subst) argTypes
           val resultType = applySubstTy subst resultType
-          val args = Vector.mapi (fn (i, argTy) =>
-                                     let val (argTy', arg) = typeCheckExp (ctx, env, Vector.sub (args, i), NONE)
-                                     in addConstraint (ctx, env, T.EqConstr (span, argTy, argTy'))
-                                      ; arg
-                                     end
-                                 ) argTypes
+          val args = Vector.mapi (fn (i, argTy) => checkTypeOfExp (ctx, env, Vector.sub (args, i), argTy)) argTypes
       in (resultType, T.PrimExp (span, primOp, vector tyargs, args))
       end
-  | typeCheckExp (ctx, env, S.SequentialExp (span, xs, y), typeHint)
+  | synthTypeOfExp (ctx, env, S.SequentialExp (span, xs, y))
     = let val decs = Vector.foldr (fn (x, decs) =>
                                       let val span = S.getSourceSpanOfExp x
-                                          val (ty, x) = typeCheckExp (ctx, env, x, NONE)
+                                          val (ty, x) = synthTypeOfExp (ctx, env, x)
                                       in if #sequenceNonUnit (#languageOptions (#context ctx)) = LanguageOptions.IGNORE then
                                              T.IgnoreDec (span, x, ty) :: decs
                                          else
                                              T.IgnoreDec (span, x, ty) :: T.ValDescDec { sourceSpan = span, expected = T.TypeScheme ([], primTy_unit), actual = T.TypeScheme ([], ty), origin = T.VALDESC_SEQUENCE } :: decs
                                       end
                                   ) [] xs
-          val (resultType, y) = typeCheckExp (ctx, env, y, typeHint)
+          val (resultType, y) = synthTypeOfExp (ctx, env, y)
       in (resultType, T.LetInExp (span, decs, y))
+      end
+and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
+    = ( case scon of
+            Syntax.IntegerConstant x   => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt))
+          | Syntax.WordConstant x      => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord))
+          | Syntax.RealConstant x      => unify (ctx, env, [T.EqConstr (span, primTy_real, expectedTy)]) (* TODO: overloaded literals *)
+          | Syntax.CharacterConstant x => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar))
+          | Syntax.StringConstant x    => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString))
+      ; T.SConExp (span, scon, expectedTy)
+      )
+  | checkTypeOfExp (ctx, env, exp as S.RecordExp (span, fields, NONE), expectedTy)
+    = (case forceTy expectedTy of
+           T.RecordType (_, fieldTypes) =>
+           let val () = if List.length fields <> Syntax.LabelMap.numItems fieldTypes then
+                            emitTypeError (ctx, [span], "different number of fields: expected=" ^ Int.toString (Syntax.LabelMap.numItems fieldTypes) ^ ", actual=" ^ Int.toString (List.length fields))
+                        else
+                            ()
+               fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
+                                              SOME fieldType => SOME (label, checkTypeOfExp (ctx, env, exp, fieldType))
+                                            | NONE => ( emitTypeError (ctx, [span], "extra field: " ^ Syntax.print_Label label)
+                                                      ; NONE
+                                                      )
+           in T.RecordExp (span, List.mapPartial doField fields)
+           end
+         | expectedTy =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, exp as S.RecordExp (span, fields, SOME baseExp), expectedTy)
+    = (case forceTy expectedTy of
+           T.RecordType (span', fieldTypes) =>
+           let val () = if List.length fields > Syntax.LabelMap.numItems fieldTypes then
+                            emitTypeError (ctx, [span], "different number of fields: expected<=" ^ Int.toString (Syntax.LabelMap.numItems fieldTypes) ^ ", actual=" ^ Int.toString (List.length fields))
+                        else
+                            ()
+               fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
+                                              SOME fieldType => SOME (label, checkTypeOfExp (ctx, env, exp, fieldType))
+                                            | NONE => ( emitTypeError (ctx, [span], "extra field: " ^ Syntax.print_Label label)
+                                                      ; NONE
+                                                      )
+               val fields = List.mapPartial doField fields
+               val baseFields = List.foldl (fn ((label, _), map) => if Syntax.LabelMap.inDomain (map, label) then
+                                                                        #1 (Syntax.LabelMap.remove (map, label))
+                                                                    else
+                                                                        map) fieldTypes fields
+               val baseTy = T.RecordType (span', baseFields)
+               val baseExp = checkTypeOfExp (ctx, env, baseExp, baseTy)
+           in T.RecordExtExp { sourceSpan = span, fields = fields, baseExp = baseExp, baseTy = baseTy }
+           end
+         | expectedTy =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, S.LetInExp (span, decs, innerExp), expectedTy)
+    = let val (env', decs) = typeCheckDecs (ctx, env, decs)
+          val innerExp = checkTypeOfExp (ctx, mergeEnv (env, env'), innerExp, expectedTy)
+      in T.LetInExp (span, decs, innerExp)
+      end
+  | checkTypeOfExp (ctx, env, S.HandleExp (span, exp, matches), expectedTy)
+    (* exp : t, matches : exn -> t *)
+    = let val exp = checkTypeOfExp (ctx, env, exp, expectedTy)
+          val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME primTy_exn, SOME expectedTy)
+      in addConstraint (ctx, env, T.EqConstr (span, patTy, primTy_exn))
+       ; addConstraint (ctx, env, T.EqConstr (span, retTy, expectedTy))
+       ; T.HandleExp (span, exp, matches, expectedTy)
+      end
+  | checkTypeOfExp (ctx, env, S.RaiseExp (span, exp), expectedTy)
+    = let val exp = checkTypeOfExp (ctx, env, exp, primTy_exn)
+      in T.RaiseExp (span, expectedTy, exp)
+      end
+  | checkTypeOfExp (ctx, env, S.IfThenElseExp (span, cond, thenPart, elsePart), expectedTy)
+    = let val cond = checkTypeOfExp (ctx, env, cond, primTy_bool)
+          val thenPart = checkTypeOfExp (ctx, env, thenPart, expectedTy)
+          val elsePart = checkTypeOfExp (ctx, env, elsePart, expectedTy)
+      in T.IfThenElseExp (span, cond, thenPart, elsePart)
+      end
+  | checkTypeOfExp (ctx, env, S.CaseExp (span, exp, matches), expectedTy)
+    = let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
+          val (patTy, retTy, matches) = typeCheckMatch (ctx, env, span, matches, SOME expTy, SOME expectedTy)
+      in addConstraint (ctx, env, T.EqConstr (span, expTy, patTy))
+       ; addConstraint (ctx, env, T.EqConstr (span, retTy, expectedTy))
+       ; T.CaseExp { sourceSpan = span, subjectExp = exp, subjectTy = expTy, matches = matches, matchType = T.CASE, resultTy = retTy }
+      end
+  | checkTypeOfExp (ctx, env, exp as S.FnExp (span, matches), expectedTy)
+    = (case forceTy expectedTy of
+           T.FnType (_, argTy, retTy) =>
+           let val (argTy', retTy', matches) = typeCheckMatch (ctx, env, span, matches, SOME argTy, SOME retTy)
+           in addConstraint (ctx, env, T.EqConstr (span, argTy', argTy))
+            ; addConstraint (ctx, env, T.EqConstr (span, retTy', retTy))
+            ; case matches of
+                  [(T.VarPat (span2, vid, _), body)] => T.FnExp (span, vid, argTy, body)
+                | _ => let val vid = newVId (#context ctx, Syntax.MkVId "a")
+                       in T.FnExp (span, vid, argTy, T.CaseExp { sourceSpan = span, subjectExp = T.VarExp (span, T.MkShortVId vid, Syntax.ValueVariable, []), subjectTy = argTy, matches = matches, matchType = T.CASE, resultTy = retTy })
+                       end
+           end
+         | expectedTy =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, exp as S.ProjectionExp (span, label), expectedTy)
+    = (case forceTy expectedTy of
+           T.FnType (_, recordTy, fieldTy) =>
+           (case forceTy recordTy of
+                T.RecordType (_, fieldTypes) =>
+                (case Syntax.LabelMap.find (fieldTypes, label) of
+                     SOME fieldTy' =>
+                     ( unify (ctx, env, [T.EqConstr (span, fieldTy', fieldTy)])
+                     ; T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy }
+                     )
+                   | NONE => ( emitTypeError (ctx, [span], "invalid projection")
+                             ; T.BogusExp (span, expectedTy)
+                             )
+                )
+              | _ =>
+                let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+                    val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                in exp
+                end
+           )
+         | _ =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, exp as S.ListExp (span, xs), expectedTy)
+    = (case forceTy expectedTy of
+           T.TyCon (_, [elemTy], con) =>
+           if T.eqTyName (con, primTyName_list) then
+               let val xs = Vector.map (fn exp => checkTypeOfExp (ctx, env, exp, elemTy)) xs
+               in T.ListExp (span, xs, elemTy)
+               end
+           else
+               let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+                   val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               in exp
+               end
+         | _ =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, exp as S.VectorExp (span, xs), expectedTy)
+    = (case forceTy expectedTy of
+           T.TyCon (_, [elemTy], con) =>
+           if T.eqTyName (con, primTyName_vector) then
+               let val xs = Vector.map (fn exp => checkTypeOfExp (ctx, env, exp, elemTy)) xs
+               in T.VectorExp (span, xs, elemTy)
+               end
+           else
+               let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+                   val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               in exp
+               end
+         | _ =>
+           let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in exp
+           end
+      )
+  | checkTypeOfExp (ctx, env, S.SequentialExp (span, xs, y), expectedTy)
+    = let val decs = Vector.foldr (fn (x, decs) =>
+                                      let val span = S.getSourceSpanOfExp x
+                                          val (ty, x) = synthTypeOfExp (ctx, env, x)
+                                      in if #sequenceNonUnit (#languageOptions (#context ctx)) = LanguageOptions.IGNORE then
+                                             T.IgnoreDec (span, x, ty) :: decs
+                                         else
+                                             T.IgnoreDec (span, x, ty) :: T.ValDescDec { sourceSpan = span, expected = T.TypeScheme ([], primTy_unit), actual = T.TypeScheme ([], ty), origin = T.VALDESC_SEQUENCE } :: decs
+                                      end
+                                  ) [] xs
+          val y = checkTypeOfExp (ctx, env, y, expectedTy)
+      in T.LetInExp (span, decs, y)
+      end
+  | checkTypeOfExp (ctx, env, exp, expectedTy)
+    = let val span = S.getSourceSpanOfExp exp
+          val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
+      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+       ; exp
       end
 and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
@@ -1319,7 +1483,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                                        , boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
                                        }
                          in List.map (fn S.PatBind(span, pat, exp) =>
-                                         let val (expTy, exp) = typeCheckExp (ctx', env, exp, NONE)
+                                         let val (expTy, exp) = synthTypeOfExp (ctx', env, exp)
                                              val (patTy, newValEnv, pat) = typeCheckPat (ctx', env, pat, SOME expTy)
                                              val () = addConstraint (ctx', env, T.EqConstr (span, patTy, expTy))
                                              val generalizable = isExhaustive (ctx', env, pat) andalso isNonexpansive (env, exp)
@@ -1485,15 +1649,14 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                             , boundTyVars = List.foldl Syntax.TyVarMap.insert' boundTyVars tyvarseq'
                             }
                          end
-          val valbinds'' = List.map (fn (span, (patTy, newValEnv, pat), exp) =>
-                                        let val (expTy, exp) = typeCheckExp (ctx', localEnv, exp, SOME patTy)
-                                            val () = addConstraint (ctx', env, T.EqConstr (span, patTy, expTy))
+          val valbinds'' = List.map (fn (span, (ty, newValEnv, pat), exp) =>
+                                        let val exp = checkTypeOfExp (ctx', localEnv, exp, ty)
                                             val generalizable = isExhaustive (ctx', env, pat) andalso isNonexpansive (env, exp)
                                         in if generalizable then
                                                ()
                                            else
                                                emitTypeError (ctx', [span], "'val rec' must be generalizable")
-                                         ; { sourceSpan = span, pat = pat, exp = exp, expTy = expTy, valEnv = newValEnv }
+                                         ; { sourceSpan = span, pat = pat, exp = exp, expTy = ty, valEnv = newValEnv }
                                         end
                                     ) valbinds'
           val tyVars_env = freeTyVarsInEnv (T.TyVarSet.empty, env)
@@ -1831,7 +1994,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                        else
                            emitFatalTypeError (ctx, [span], "overload declaration: longtycon must refer to a concrete type")
           val ty = T.TyCon (span, [], tyname)
-          val map : (T.Ty * T.Exp) Syntax.OverloadKeyMap.map = Syntax.OverloadKeyMap.map (fn exp => typeCheckExp (ctx, env, exp, NONE)) map
+          val map : (T.Ty * T.Exp) Syntax.OverloadKeyMap.map = Syntax.OverloadKeyMap.map (fn exp => synthTypeOfExp (ctx, env, exp)) map
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_abs) of
                        NONE => ()
                      | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, ty, ty)))
@@ -1938,8 +2101,7 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                          , funMap = #funMap innerEnv
                          , boundTyVars = List.foldl Syntax.TyVarMap.insert' (#boundTyVars innerEnv) typarams'
                          }
-          val (eqTy, exp) = typeCheckExp (ctx, innerEnv, exp, SOME (T.FnType (span, T.PairType (span, ty, ty), primTy_bool))) (* allow recursion *)
-          val () = addConstraint (ctx, env, T.EqConstr (span, eqTy, T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
+          val exp = checkTypeOfExp (ctx, innerEnv, exp, T.FnType (span, T.PairType (span, ty, ty), primTy_bool)) (* allow recursion *)
       in (env', [T.EqualityDec (span, List.map #2 typarams', tyname, exp)])
       end
   | typeCheckDec (ctx, env, S.ESImportDec { sourceSpan, pure, specs, moduleName })
@@ -1983,7 +2145,7 @@ and typeCheckMatch (ctx, env, span, (pat0, exp0) :: rest, patTyHint : T.Ty optio
 and typeCheckMatchBranch (ctx : InferenceContext, env : Env, pat : S.Pat, exp : S.Exp, patTyHint, expTyHint) : T.Ty * T.Ty * T.Pat * T.Exp
     = let val (patTy, vars, pat') = typeCheckPat (ctx, env, pat, patTyHint)
           val env' = mergeEnv (env, envWithValEnv (Syntax.VIdMap.map (fn (vid, ty) => (T.TypeScheme ([], ty), Syntax.ValueVariable, T.MkShortVId vid)) vars))
-          val (expTy, exp') = typeCheckExp (ctx, env', exp, expTyHint)
+          val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
       in (patTy, expTy, pat', exp')
       end
 
