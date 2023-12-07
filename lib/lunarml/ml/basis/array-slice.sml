@@ -38,7 +38,7 @@ fun sub ({ base, start, length }, i) = if 0 <= i andalso i < length then
                                        else
                                            raise Subscript
 fun update ({ base, start, length }, i, x) = if 0 <= i andalso i < length then
-                                                 Unsafe.Array.update (base, start + i)
+                                                 Unsafe.Array.update (base, start + i, x)
                                              else
                                                  raise Subscript
 fun full a = { base = a, start = 0, length = Array.length a }
