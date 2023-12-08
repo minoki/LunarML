@@ -191,6 +191,7 @@ should_run += $(addprefix mlbasis/should_run/,\
   string-issubstring.sml \
   widestring-issubstring.sml \
   widestring-sub.sml \
+  os-path-unix.mlb \
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)
