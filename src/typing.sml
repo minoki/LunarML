@@ -442,7 +442,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
          | T.EqConstr (span1, ty, T.TyVar (span2, T.MkTyVar (name, _))) => (emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name); unify (ctx, env, ctrs))
          | T.EqConstr (span, T.FnType (_, s0, s1), T.FnType (_, t0, t1)) => unify (ctx, env, T.EqConstr (span, s0, t0) :: T.EqConstr (span, s1, t1) :: ctrs)
          | T.EqConstr (span1, T.RecordType (span2, fields), T.RecordType (span3, fields')) =>
-           let val incompatible = if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields then
+           let val incompatible = if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields' then
                                       (emitTypeError (ctx, [span1, span2, span3], "unification failed: incompatible record types (different number of fields)"); true)
                                   else
                                       false
@@ -1380,15 +1380,19 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
   | checkTypeOfExp (ctx, env, exp as S.RecordExp (span, fields, NONE), expectedTy)
     = (case forceTy expectedTy of
            T.RecordType (_, fieldTypes) =>
-           let val () = if List.length fields <> Syntax.LabelMap.numItems fieldTypes then
-                            emitTypeError (ctx, [span], "different number of fields: expected=" ^ Int.toString (Syntax.LabelMap.numItems fieldTypes) ^ ", actual=" ^ Int.toString (List.length fields))
-                        else
-                            ()
-               fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
+           let fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
                                               SOME fieldType => SOME (label, checkTypeOfExp (ctx, env, exp, fieldType))
                                             | NONE => ( emitTypeError (ctx, [span], "extra field: " ^ Syntax.print_Label label)
                                                       ; NONE
                                                       )
+               val extraFields = List.foldl (fn ((label, _), map) => if Syntax.LabelMap.inDomain (map, label) then
+                                                                         #1 (Syntax.LabelMap.remove (map, label))
+                                                                     else
+                                                                         map) fieldTypes fields
+               val () = if Syntax.LabelMap.isEmpty extraFields then
+                            ()
+                        else
+                            emitTypeError (ctx, [span], "missing fields: " ^ Syntax.print_list Syntax.print_Label (Syntax.LabelMap.foldri (fn (label, _, acc) => label :: acc) [] extraFields))
            in T.RecordExp (span, List.mapPartial doField fields)
            end
          | expectedTy =>
@@ -1400,11 +1404,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
   | checkTypeOfExp (ctx, env, exp as S.RecordExp (span, fields, SOME baseExp), expectedTy)
     = (case forceTy expectedTy of
            T.RecordType (span', fieldTypes) =>
-           let val () = if List.length fields > Syntax.LabelMap.numItems fieldTypes then
-                            emitTypeError (ctx, [span], "different number of fields: expected<=" ^ Int.toString (Syntax.LabelMap.numItems fieldTypes) ^ ", actual=" ^ Int.toString (List.length fields))
-                        else
-                            ()
-               fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
+           let fun doField (label, exp) = case Syntax.LabelMap.find (fieldTypes, label) of
                                               SOME fieldType => SOME (label, checkTypeOfExp (ctx, env, exp, fieldType))
                                             | NONE => ( emitTypeError (ctx, [span], "extra field: " ^ Syntax.print_Label label)
                                                       ; NONE

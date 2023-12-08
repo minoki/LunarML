@@ -145,6 +145,11 @@ should_not_compile += $(addprefix should_not_compile/,\
   inexact-hex-float.sml \
   inexact-hex-float-2.sml \
   unicode-char.sml \
+  record1.sml \
+  record3.sml \
+  record4.sml \
+  record5.sml \
+  record6.sml \
 )
 should_run += $(addprefix mlbasis/should_run/,\
   general.sml \
@@ -234,6 +239,7 @@ should_not_compile += $(addprefix successor_ml/should_not_compile/,\
   record_extension_type.sml \
   num-underscore-1.sml \
   num-underscore-2.sml \
+  record2.sml \
 )
 should_run += $(addprefix extension/should_run/,\
   vector_exp.sml \
