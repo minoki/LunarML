@@ -424,10 +424,10 @@ fun instantiate (ctx : InferenceContext, span, T.TypeScheme (vars, ty))
       in (applySubstTy subst ty, List.rev tyargs)
       end
 
-(*: val unify : InferenceContext * Env * T.Constraint list -> unit *)
+(*: val solve : InferenceContext * Env * T.Constraint list -> unit *)
 (* The environment is used to determine if a data type admits equality *)
-fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = ()
-  | unify (ctx, env, ct :: ctrs)
+fun solve (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = ()
+  | solve (ctx, env, ct :: ctrs)
     = (case ct of
            T.EqConstr (span1, T.AnonymousTyVar (span2, tv), ty) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
          | T.EqConstr (span1, ty, T.AnonymousTyVar (span2, tv)) => unifyTyVarAndTy (ctx, env, span1, tv, ty, ctrs)
@@ -436,17 +436,17 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                  () (* do nothing *)
              else
                  emitTypeError (ctx, [span1, span2, span3], "cannot unify named type variable: " ^ name ^ " and " ^ name')
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
-         | T.EqConstr (span1, T.TyVar (span2, T.MkTyVar (name, _)), ty) => (emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name); unify (ctx, env, ctrs))
-         | T.EqConstr (span1, ty, T.TyVar (span2, T.MkTyVar (name, _))) => (emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name); unify (ctx, env, ctrs))
-         | T.EqConstr (span, T.FnType (_, s0, s1), T.FnType (_, t0, t1)) => unify (ctx, env, T.EqConstr (span, s0, t0) :: T.EqConstr (span, s1, t1) :: ctrs)
+         | T.EqConstr (span1, T.TyVar (span2, T.MkTyVar (name, _)), ty) => (emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name); solve (ctx, env, ctrs))
+         | T.EqConstr (span1, ty, T.TyVar (span2, T.MkTyVar (name, _))) => (emitTypeError (ctx, [span1, span2], "cannot unify named type variable: " ^ name); solve (ctx, env, ctrs))
+         | T.EqConstr (span, T.FnType (_, s0, s1), T.FnType (_, t0, t1)) => solve (ctx, env, T.EqConstr (span, s0, t0) :: T.EqConstr (span, s1, t1) :: ctrs)
          | T.EqConstr (span1, T.RecordType (span2, fields), T.RecordType (span3, fields')) =>
            let val incompatible = if Syntax.LabelMap.numItems fields <> Syntax.LabelMap.numItems fields' then
                                       (emitTypeError (ctx, [span1, span2, span3], "unification failed: incompatible record types (different number of fields)"); true)
                                   else
                                       false
-           in unify (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
+           in solve (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
                                                          case Syntax.LabelMap.find (fields', label) of
                                                              NONE => ( if incompatible then () else emitTypeError (ctx, [span1, span2, span3], "unification failed: incompatible record types")
                                                                      ; acc
@@ -460,7 +460,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                                   else
                                       false
                val extraFields = Syntax.LabelMap.filteri (fn (label, ty) => not (Syntax.LabelMap.inDomain (fields', label))) fields
-           in unify (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
+           in solve (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
                                                           case Syntax.LabelMap.find (fields, label) of
                                                               NONE => ( if incompatible then () else emitTypeError (ctx, [span1, span2, span3], "unification failed: incompatible record types")
                                                                       ; acc
@@ -473,7 +473,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                                   else
                                       false
                val extraFields = Syntax.LabelMap.filteri (fn (label, ty) => not (Syntax.LabelMap.inDomain (fields', label))) fields
-           in unify (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
+           in solve (ctx, env, Syntax.LabelMap.foldli (fn (label, ty, acc) =>
                                                           case Syntax.LabelMap.find (fields, label) of
                                                               NONE => ( if incompatible then () else emitTypeError (ctx, [span1, span2, span3], "unification failed: incompatible record types")
                                                                       ; acc
@@ -486,107 +486,107 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                val uniqueFields' = Syntax.LabelMap.filteri (fn (label, ty) => not (Syntax.LabelMap.inDomain (fields, label))) fields'
                val ctrs = commonFields @ ctrs
            in case (Syntax.LabelMap.isEmpty uniqueFields, Syntax.LabelMap.isEmpty uniqueFields') of
-                  (true, true) => unify (ctx, env, T.EqConstr (span1, baseTy, baseTy') :: ctrs)
-                | (true, false) => unify (ctx, env, T.EqConstr (span1, baseTy, T.RecordExtType (span3, uniqueFields', baseTy')) :: ctrs) (* fields is a proper submap of fields' *)
-                | (false, true) => unify (ctx, env, T.EqConstr (span1, T.RecordExtType (span3, uniqueFields, baseTy), baseTy') :: ctrs) (* fields' is a proper submap of fields *)
+                  (true, true) => solve (ctx, env, T.EqConstr (span1, baseTy, baseTy') :: ctrs)
+                | (true, false) => solve (ctx, env, T.EqConstr (span1, baseTy, T.RecordExtType (span3, uniqueFields', baseTy')) :: ctrs) (* fields is a proper submap of fields' *)
+                | (false, true) => solve (ctx, env, T.EqConstr (span1, T.RecordExtType (span3, uniqueFields, baseTy), baseTy') :: ctrs) (* fields' is a proper submap of fields *)
                 | (false, false) => let val unionFields = Syntax.LabelSet.toList (Syntax.LabelMap.foldli (fn (label, _, acc) => Syntax.LabelSet.add (acc, label)) (Syntax.LabelMap.foldli (fn (label, _, acc) => Syntax.LabelSet.add (acc, label)) Syntax.LabelSet.empty fields) fields')
                                         val commonBaseTy = T.AnonymousTyVar (span1, freshTyVar (ctx, span1, T.IsRecord :: List.map T.NoField unionFields))
-                                    in unify (ctx, env, T.EqConstr (span1, baseTy, T.RecordExtType (span3, uniqueFields', commonBaseTy)) :: T.EqConstr (span1, baseTy', T.RecordExtType (span2, uniqueFields, commonBaseTy)) :: ctrs)
+                                    in solve (ctx, env, T.EqConstr (span1, baseTy, T.RecordExtType (span3, uniqueFields', commonBaseTy)) :: T.EqConstr (span1, baseTy', T.RecordExtType (span2, uniqueFields, commonBaseTy)) :: ctrs)
                                     end
            end
          | T.EqConstr (span1, t1 as T.TyCon (span2, tyarg, con), t2 as T.TyCon (span3, tyarg', con')) =>
            if T.eqTyName (con, con') then
-               unify (ctx, env, (ListPair.mapEq (fn (x, y) => T.EqConstr (span1, x, y)) (tyarg, tyarg')
+               solve (ctx, env, (ListPair.mapEq (fn (x, y) => T.EqConstr (span1, x, y)) (tyarg, tyarg')
                                  handle ListPair.UnequalLengths => (emitTypeError (ctx, [span1, span2, span3], "unification failed: the number of type arguments differ"); [])
                                 ) @ ctrs)
            else
                ( emitTypeError (ctx, [span1, span2, span3], "unification failed: type constructor mismatch (" ^ TypedSyntax.PrettyPrint.print_Ty t1 ^ " vs " ^ TypedSyntax.PrettyPrint.print_Ty t2 ^ ")") (* ??? *)
-               ; unify (ctx, env, ctrs)
+               ; solve (ctx, env, ctrs)
                )
          | T.EqConstr (span, ty1, ty2) => ( emitTypeError (ctx, [span], "unification failed: not match (" ^ TypedSyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ TypedSyntax.PrettyPrint.print_Ty ty2 ^ ")")
-                                          ; unify (ctx, env, ctrs)
+                                          ; solve (ctx, env, ctrs)
                                           )
          | T.UnaryConstraint (span1, recordTy, T.NoField label) =>
            (case recordTy of
                 T.RecordType (span2, fields) => (case Syntax.LabelMap.find (fields, label) of
-                                                     NONE => unify (ctx, env, ctrs)
+                                                     NONE => solve (ctx, env, ctrs)
                                                    | SOME _ => emitTypeError (ctx, [span1, span2], "duplicate record field")
                                                 )
               | T.RecordExtType (span2, fields, baseTy) => (case Syntax.LabelMap.find (fields, label) of
-                                                                NONE => unify (ctx, env, T.UnaryConstraint (span1, baseTy, T.NoField label) :: ctrs)
-                                                              | SOME _ => (emitTypeError (ctx, [span1, span2], "duplicate record field"); unify (ctx, env, ctrs))
+                                                                NONE => solve (ctx, env, T.UnaryConstraint (span1, baseTy, T.NoField label) :: ctrs)
+                                                              | SOME _ => (emitTypeError (ctx, [span1, span2], "duplicate record field"); solve (ctx, env, ctrs))
                                                            )
-              | T.TyCon (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a non-record type"); unify (ctx, env, ctrs))
-              | T.FnType (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a function type"); unify (ctx, env, ctrs))
-              | T.TyVar (span2, _) => (emitTypeError (ctx, [span1, span2], "record field for an named type variable"); unify (ctx, env, ctrs))
+              | T.TyCon (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a non-record type"); solve (ctx, env, ctrs))
+              | T.FnType (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a function type"); solve (ctx, env, ctrs))
+              | T.TyVar (span2, _) => (emitTypeError (ctx, [span1, span2], "record field for an named type variable"); solve (ctx, env, ctrs))
               | T.AnonymousTyVar (span2, tv) =>
                 (case !tv of
-                     T.Link replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, T.NoField label) :: ctrs)
+                     T.Link replacement => solve (ctx, env, T.UnaryConstraint (span1, replacement, T.NoField label) :: ctrs)
                    | T.Unbound (cts, level) => ( tv := T.Unbound ((span1, T.NoField label) :: cts, level)
-                                               ; unify(ctx, env, ctrs)
+                                               ; solve (ctx, env, ctrs)
                                                )
                 )
            )
          | T.UnaryConstraint (span1, recordTy, T.IsRecord) =>
            (case recordTy of
-                T.RecordType (span2, fields) => unify (ctx, env, ctrs)
-              | T.RecordExtType (span2, fields, baseTy) => unify (ctx, env, T.UnaryConstraint (span1, baseTy, T.IsRecord) :: ctrs)
-              | T.TyCon (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a non-record type"); unify (ctx, env, ctrs))
-              | T.FnType (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a function type"); unify (ctx, env, ctrs))
-              | T.TyVar (span2, _) => (emitTypeError (ctx, [span1, span2], "record field for an named type variable"); unify (ctx, env, ctrs))
+                T.RecordType (span2, fields) => solve (ctx, env, ctrs)
+              | T.RecordExtType (span2, fields, baseTy) => solve (ctx, env, T.UnaryConstraint (span1, baseTy, T.IsRecord) :: ctrs)
+              | T.TyCon (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a non-record type"); solve (ctx, env, ctrs))
+              | T.FnType (span2, _, _) => (emitTypeError (ctx, [span1, span2], "record field for a function type"); solve (ctx, env, ctrs))
+              | T.TyVar (span2, _) => (emitTypeError (ctx, [span1, span2], "record field for an named type variable"); solve (ctx, env, ctrs))
               | T.AnonymousTyVar (span2, tv) =>
                 (case !tv of
-                     T.Link replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, T.IsRecord) :: ctrs)
+                     T.Link replacement => solve (ctx, env, T.UnaryConstraint (span1, replacement, T.IsRecord) :: ctrs)
                    | T.Unbound (cts, level) => ( tv := T.Unbound ((span1, T.IsRecord) :: cts, level)
-                                               ; unify(ctx, env, ctrs)
+                                               ; solve (ctx, env, ctrs)
                                                )
                 )
            )
-         | T.UnaryConstraint (span1, T.RecordType (span2, fields), T.IsEqType) => unify (ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType) :: acc) ctrs fields)
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a real"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a char"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a string"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, fields, baseTy), T.IsEqType) => unify (ctx, env, T.UnaryConstraint (span1, baseTy, T.IsEqType) :: Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType) :: acc) ctrs fields)
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a real"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a char"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a string"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsEqType) => (emitTypeError (ctx, [span1, span2], "function type does not admit equality"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare functions"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with an int"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a word"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a real"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a char"); unify (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a string"); unify (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, fields), T.IsEqType) => solve (ctx, env, Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType) :: acc) ctrs fields)
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a real"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a char"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a string"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, fields, baseTy), T.IsEqType) => solve (ctx, env, T.UnaryConstraint (span1, baseTy, T.IsEqType) :: Syntax.LabelMap.foldr (fn (ty, acc) => T.UnaryConstraint (span1, ty, T.IsEqType) :: acc) ctrs fields)
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a real"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a char"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a string"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsEqType) => (emitTypeError (ctx, [span1, span2], "function type does not admit equality"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare functions"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with an int"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a word"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsReal) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a real"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsChar) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a char"); solve (ctx, env, ctrs))
+         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsString) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a string"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsEqType) =>
            let val { admitsEquality, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
            in if isRefOrArray tyname then
-                  unify(ctx, env, ctrs)
+                  solve (ctx, env, ctrs)
               else if admitsEquality then
-                  unify (ctx, env, List.map (fn tyarg => T.UnaryConstraint (span1, tyarg, T.IsEqType)) tyargs @ ctrs)
+                  solve (ctx, env, List.map (fn tyarg => T.UnaryConstraint (span1, tyarg, T.IsEqType)) tyargs @ ctrs)
               else
                   ( emitTypeError (ctx, [span1, span2], TypedSyntax.PrettyPrint.print_TyName tyname ^ " does not admit equality")
-                  ; unify (ctx, env, ctrs)
+                  ; solve (ctx, env, ctrs)
                   )
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsIntegral) =>
@@ -599,7 +599,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; unify (ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSignedReal) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
@@ -611,7 +611,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; unify (ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsRing) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
@@ -624,7 +624,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; unify(ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsField) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
@@ -635,7 +635,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; unify(ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSigned) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
@@ -647,7 +647,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; unify (ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsOrdered) =>
            let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
@@ -662,7 +662,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "comparison operator on unsupported type")
-            ; unify (ctx, env, ctrs)
+            ; solve (ctx, env, ctrs)
            end
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsInt) =>
            ( if TypedSyntax.eqTyName (tyname, primTyName_int) then
@@ -682,7 +682,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                     else
                         emitTypeError (ctx, [span1, span2], "invalid integer constant: " ^ TypedSyntax.print_TyName tyname)
                  end
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsWord) =>
            ( if TypedSyntax.eqTyName (tyname, primTyName_word) then
@@ -698,7 +698,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                     else
                         emitTypeError (ctx, [span1, span2], "invalid word constant")
                  end
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsReal) =>
            ( if TypedSyntax.eqTyName (tyname, primTyName_real) then
@@ -710,7 +710,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                     else
                         emitTypeError (ctx, [span1, span2], "invalid real constant")
                end
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsChar) =>
            ( if TypedSyntax.eqTyName (tyname, primTyName_char) then
@@ -722,7 +722,7 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                     else
                         emitTypeError (ctx, [span1, span2], "invalid character constant")
                  end
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsString) =>
            ( if TypedSyntax.eqTyName (tyname, primTyName_string) then
@@ -734,46 +734,46 @@ fun unify (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                     else
                         emitTypeError (ctx, [span1, span2], "invalid string constant")
                  end
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyVar (span2, tv as T.MkTyVar (name, _)), T.IsEqType) =>
            ( if T.tyVarAdmitsEquality tv then
                  ()
              else
                  emitTypeError (ctx, [span1, span2], "the type variable " ^ name ^ " does not admit equality")
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.TyVar (span2, tv as T.MkTyVar (name, _)), _) =>
            ( emitTypeError (ctx, [span1, span2], "the use of " ^ name ^ " is non-free")
-           ; unify (ctx, env, ctrs)
+           ; solve (ctx, env, ctrs)
            )
          | T.UnaryConstraint (span1, T.AnonymousTyVar (span2, tv), pred) =>
            (case !tv of
-                T.Link replacement => unify (ctx, env, T.UnaryConstraint (span1, replacement, pred) :: ctrs)
+                T.Link replacement => solve (ctx, env, T.UnaryConstraint (span1, replacement, pred) :: ctrs)
               | T.Unbound (cts, level) => ( tv := T.Unbound ((span1, pred) :: cts, level)
-                                          ; unify (ctx, env, ctrs)
+                                          ; solve (ctx, env, ctrs)
                                           )
            )
       )
 and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, tv : T.AnonymousTyVar, ty : T.Ty, ctrs : T.Constraint list) : unit
     = (case !tv of
-           T.Link replacement => unify (ctx, env, T.EqConstr (span, replacement, ty) :: ctrs)
+           T.Link replacement => solve (ctx, env, T.EqConstr (span, replacement, ty) :: ctrs)
          | T.Unbound (cts, level) =>
            let val ty = T.forceTy ty
            in if (case ty of T.AnonymousTyVar (_, tv') => tv = tv' | _ => false) then (* ty = AnonymousTyVar tv *)
-                  unify (ctx, env, ctrs) (* do nothing *)
+                  solve (ctx, env, ctrs) (* do nothing *)
               else if occurCheckAndAdjustLevel tv ty then
                   ( emitTypeError (ctx, [span, T.getSourceSpanOfTy ty], "unification failed: occurrence check (" ^ TypedSyntax.print_AnonymousTyVar tv ^ " in " ^ TypedSyntax.print_Ty ty ^ ")")
-                  ; unify (ctx, env, ctrs)
+                  ; solve (ctx, env, ctrs)
                   )
               else
                   let fun toConstraint (span, predicate) = T.UnaryConstraint (span, ty, predicate)
                   in tv := T.Link ty
-                   ; unify (ctx, env, List.map toConstraint cts @ ctrs)
+                   ; solve (ctx, env, List.map toConstraint cts @ ctrs)
                   end
            end
      )
-fun addConstraint (ctx : InferenceContext, env : Env, ct : T.Constraint) = unify (ctx, env, [ct])
+fun addConstraint (ctx : InferenceContext, env : Env, ct : T.Constraint) = solve (ctx, env, [ct])
 
 (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
 fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
@@ -875,7 +875,7 @@ fun synthTypeOfPat (ctx : InferenceContext, env : Env, S.WildcardPat span) : T.T
              let val (baseTy, vars', basePat) = synthTypeOfPat (ctx, env, basePat)
                  val recordTy = T.RecordExtType (sourceSpan, fieldTypes, baseTy)
                  val fieldConstrs = T.UnaryConstraint (sourceSpan, baseTy, T.IsRecord) :: List.map (fn (label, _) => T.UnaryConstraint (sourceSpan, baseTy, T.NoField label)) fields
-             in unify (ctx, env, fieldConstrs)
+             in solve (ctx, env, fieldConstrs)
               ; (recordTy, Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [sourceSpan], "duplicate identifier in a pattern"); y)) (vars, vars'), T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME basePat, wholeRecordType = recordTy })
              end
            | NONE => let val recordTy = T.RecordType (sourceSpan, fieldTypes)
@@ -951,33 +951,33 @@ and checkTypeOfPat (ctx : InferenceContext, env : Env, S.WildcardPat span, expec
     = (S.VIdMap.empty, T.WildcardPat span)
   | checkTypeOfPat (ctx, env, S.SConPat (span, scon), expectedTy)
     = (case scon of
-           Syntax.IntegerConstant _   => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsInt), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
+           Syntax.IntegerConstant _   => ( solve (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsInt), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                          ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                          )
-         | Syntax.WordConstant _      => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsWord), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
+         | Syntax.WordConstant _      => ( solve (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsWord), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                          ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                          )
          | Syntax.RealConstant _      => emitFatalTypeError (ctx, [span], "no real constant may occur in a pattern")
-         | Syntax.CharacterConstant _ => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsChar), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
+         | Syntax.CharacterConstant _ => ( solve (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsChar), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                          ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                          )
-         | Syntax.StringConstant _    => ( unify (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsString), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
+         | Syntax.StringConstant _    => ( solve (ctx, env, [T.UnaryConstraint (span, expectedTy, T.IsString), T.UnaryConstraint (span, expectedTy, T.IsEqType)])
                                          ; (S.VIdMap.empty, T.SConPat (span, scon, expectedTy))
                                          )
       )
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.ref"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.::"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.unit.equal"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, S.VarPat (span, vid), expectedTy)
@@ -1020,7 +1020,7 @@ and checkTypeOfPat (ctx : InferenceContext, env : Env, S.WildcardPat span, expec
          | _ =>
            let val span = S.getSourceSpanOfPat pat
                val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-           in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
             ; (map, pat)
            end
       )
@@ -1043,19 +1043,19 @@ and checkTypeOfPat (ctx : InferenceContext, env : Env, S.WildcardPat span, expec
                end
            else
                let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-               in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
                 ; (map, pat)
                end
          | _ =>
            let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-           in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
             ; (map, pat)
            end
       )
   | checkTypeOfPat (ctx, env, pat, expectedTy)
     = let val span = S.getSourceSpanOfPat pat
           val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
        ; (map, pat)
       end
 
@@ -1231,10 +1231,10 @@ fun synthTypeOfExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon)) :
       end
   | synthTypeOfExp (ctx, env, S.RecordExp (span, fields, SOME baseExp))
     = let val (baseTy, baseExp) = synthTypeOfExp (ctx, env, baseExp)
-          val () = unify (ctx, env, [T.UnaryConstraint (span, baseTy, T.IsRecord)])
+          val () = solve (ctx, env, [T.UnaryConstraint (span, baseTy, T.IsRecord)])
           fun doField ((label, exp), (typeMap, expList))
               = let val (ty, exp) = synthTypeOfExp (ctx, env, exp)
-                    val () = unify (ctx, env, [T.UnaryConstraint (span, baseTy, T.NoField label)])
+                    val () = solve (ctx, env, [T.UnaryConstraint (span, baseTy, T.NoField label)])
                 in (Syntax.LabelMap.insert (typeMap, label, ty), (label, exp) :: expList)
                 end
           val (fieldTypes, revFields) = List.foldl doField (Syntax.LabelMap.empty, []) fields
@@ -1257,7 +1257,7 @@ fun synthTypeOfExp (ctx : InferenceContext, env : Env, S.SConExp (span, scon)) :
            | funTy =>
              let val (argTy, arg) = synthTypeOfExp (ctx, env, arg)
                  val resultTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-                 val () = unify (ctx, env, [T.EqConstr (span, funTy, T.FnType (span, argTy, resultTy))])
+                 val () = solve (ctx, env, [T.EqConstr (span, funTy, T.FnType (span, argTy, resultTy))])
              in (resultTy, T.AppExp (span, f, arg))
              end
       end
@@ -1372,7 +1372,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
     = ( case scon of
             Syntax.IntegerConstant x   => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt))
           | Syntax.WordConstant x      => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord))
-          | Syntax.RealConstant x      => unify (ctx, env, [T.EqConstr (span, primTy_real, expectedTy)]) (* TODO: overloaded literals *)
+          | Syntax.RealConstant x      => solve (ctx, env, [T.EqConstr (span, primTy_real, expectedTy)]) (* TODO: overloaded literals *)
           | Syntax.CharacterConstant x => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar))
           | Syntax.StringConstant x    => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString))
       ; T.SConExp (span, scon, expectedTy)
@@ -1397,7 +1397,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1420,7 +1420,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1462,7 +1462,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1473,7 +1473,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                 T.RecordType (_, fieldTypes) =>
                 (case Syntax.LabelMap.find (fieldTypes, label) of
                      SOME fieldTy' =>
-                     ( unify (ctx, env, [T.EqConstr (span, fieldTy', fieldTy)])
+                     ( solve (ctx, env, [T.EqConstr (span, fieldTy', fieldTy)])
                      ; T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy }
                      )
                    | NONE => ( emitTypeError (ctx, [span], "invalid projection")
@@ -1482,13 +1482,13 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                 )
               | _ =>
                 let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                    val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                    val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
                 in exp
                 end
            )
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1501,12 +1501,12 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                end
            else
                let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                   val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                   val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
                in exp
                end
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1519,12 +1519,12 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                end
            else
                let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                   val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                   val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
                in exp
                end
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
            in exp
            end
       )
@@ -1544,7 +1544,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
   | checkTypeOfExp (ctx, env, exp, expectedTy)
     = let val span = S.getSourceSpanOfExp exp
           val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-      in unify (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
        ; exp
       end
 and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
