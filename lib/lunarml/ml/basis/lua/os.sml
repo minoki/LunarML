@@ -166,9 +166,27 @@ val remove : string -> unit = fn filename => Lua.call0 Lua.Lib.os.remove #[Lua.f
 val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 Lua.Lib.os.rename #[Lua.fromString old, Lua.fromString new]
 end (* structure FileSys *)
 structure IO = struct end
-structure Path = UnixPath (exception Path
-                           exception InvalidArc
-                          )
+structure Path = struct
+exception Path
+exception InvalidArc
+structure UnixPath = UnixPath (exception Path = Path
+                               exception InvalidArc = InvalidArc
+                              )
+structure WindowsPath = WindowsPath (exception Path = Path
+                                     exception InvalidArc = InvalidArc
+                                    )
+val parentArc = ".."
+val currentArc = "."
+val { fromString, toString, validVolume, getVolume, getParent, splitDirFile, joinDirFile, dir, file, splitBaseExt, joinBaseExt, base, ext, mkCanonical, isCanonical, mkAbsolute, mkRelative, isAbsolute, isRelative, isRoot, concat, fromUnixPath, toUnixPath }
+    = LunarML.assumeDiscardable (fn () =>
+                                    let val isWindows = String.sub (Lua.unsafeFromValue (Lua.field (Lua.Lib.package, "config")), 0) = #"\\"
+                                    in if isWindows then
+                                           { fromString = WindowsPath.fromString, toString = WindowsPath.toString, validVolume = WindowsPath.validVolume, getVolume = WindowsPath.getVolume, getParent = WindowsPath.getParent, splitDirFile = WindowsPath.splitDirFile, joinDirFile = WindowsPath.joinDirFile, dir = WindowsPath.dir, file = WindowsPath.file, splitBaseExt = WindowsPath.splitBaseExt, joinBaseExt = WindowsPath.joinBaseExt, base = WindowsPath.base, ext = WindowsPath.ext, mkCanonical = WindowsPath.mkCanonical, isCanonical = WindowsPath.isCanonical, mkAbsolute = WindowsPath.mkAbsolute, mkRelative = WindowsPath.mkRelative, isAbsolute = WindowsPath.isAbsolute, isRelative = WindowsPath.isRelative, isRoot = WindowsPath.isRoot, concat = WindowsPath.concat, fromUnixPath = WindowsPath.fromUnixPath, toUnixPath = WindowsPath.toUnixPath }
+                                       else
+                                           { fromString = UnixPath.fromString, toString = UnixPath.toString, validVolume = UnixPath.validVolume, getVolume = UnixPath.getVolume, getParent = UnixPath.getParent, splitDirFile = UnixPath.splitDirFile, joinDirFile = UnixPath.joinDirFile, dir = UnixPath.dir, file = UnixPath.file, splitBaseExt = UnixPath.splitBaseExt, joinBaseExt = UnixPath.joinBaseExt, base = UnixPath.base, ext = UnixPath.ext, mkCanonical = UnixPath.mkCanonical, isCanonical = UnixPath.isCanonical, mkAbsolute = UnixPath.mkAbsolute, mkRelative = UnixPath.mkRelative, isAbsolute = UnixPath.isAbsolute, isRelative = UnixPath.isRelative, isRoot = UnixPath.isRoot, concat = UnixPath.concat, fromUnixPath = UnixPath.fromUnixPath, toUnixPath = UnixPath.toUnixPath }
+                                    end
+                                ) ()
+end
 structure Process = struct
 type status = int
 val success : status = 0

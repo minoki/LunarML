@@ -1258,8 +1258,6 @@ end
 
 ## structure OS.Path - complete
 
-Currently, only Unix-style paths are supported.
-
 ```sml
 signature OS_PATH = sig
   exception Path

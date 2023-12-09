@@ -196,11 +196,11 @@ should_run += $(addprefix mlbasis/should_run/,\
 )
 # int-inf-factorial.sml
 ifeq ($(VARIANT), lua)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 else ifeq ($(VARIANT), lua-continuations)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 else ifeq ($(VARIANT), luajit)
-should_run += mlbasis/should_run/os-path.sml mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
+should_run += mlbasis/should_run/scan-real.sml lua/should_run/nil_in_vector.mlb
 endif
 should_compile += $(addprefix interface/should_compile/,\
   INTEGER.sml \
