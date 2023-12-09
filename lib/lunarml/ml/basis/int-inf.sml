@@ -175,7 +175,7 @@ fun add3 (x : Word.word, y : Word.word, z : Word.word) : { lo : Word.word, hi : 
       in { lo = lo2, hi = hi1 + hi2 }
       end
 
-val wordSize_2 = Word.fromInt Word.wordSize div 0w2
+val wordSize_2 = LunarML.assumeDiscardable (fn () => Word.fromInt Word.wordSize div 0w2) ()
 val word_lo_mask = UncheckedWord.<< (0w1, wordSize_2) - 0w1
 fun mul2 (0w0, _) = { lo = 0w0, hi = 0w0 }
   | mul2 (_, 0w0) = { lo = 0w0, hi = 0w0 }
