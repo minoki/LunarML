@@ -306,6 +306,8 @@ return {
 
 ## Internal representation
 
+Warning: The internal representation of data types may change in the future. Do not rely on it!
+
 Primitives
 
 * `unit` (empty record): `nil`.

@@ -1,6 +1,6 @@
 # LunarML
 
-A Standard ML compiler that produces Lua/JavaScript.
+The Standard ML compiler that produces Lua/JavaScript.
 
 ## Trying pre-built binaries
 
@@ -13,7 +13,7 @@ $ lua example/hello.lua
 Hello world!
 ```
 
-## Building
+## Building and Installing
 
 You need a recent version of MLton to build the executable, and Lua 5.3+ or recent Node.js to run the compiled script.
 
@@ -27,6 +27,14 @@ $ make test-nodejs-cps
 $ bin/lunarml compile example/hello.sml
 $ lua example/hello.lua
 Hello world!
+```
+
+You can install the built binary with `make install`:
+
+```
+$ make install PREFIX=/opt/lunarml
+$ export PATH="/opt/lunarml/bin:$PATH"
+$ lunarml compile example/hello.sml
 ```
 
 Alternatively, you can use Docker to build and run LunarML.

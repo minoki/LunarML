@@ -130,6 +130,8 @@ Note on CPS mode: You cannot call certain functions including `print` at top-lev
 
 ## Internal representation
 
+Warning: The internal representation of data types may change in the future. Do not rely on it!
+
 Primitives
 
 * `unit` (empty record): `undefined`
