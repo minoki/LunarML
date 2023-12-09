@@ -69,6 +69,7 @@ lua/text-io.sml
 lua/bin-io.sml
 os-path-sig.sml
 os-path-unix.sml
+os-path-windows.sml
 lua/os.sml
 lua/command-line.sml
 delim-cont-$(DELIMITED_CONTINUATIONS).sml
@@ -219,5 +220,6 @@ structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
 functor UnixPath (* extension *)
+functor WindowsPath (* extension *)
 top-level.sml
 end

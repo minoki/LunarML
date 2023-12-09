@@ -11,6 +11,7 @@ nodejs/text-io-async.sml
 nodejs/bin-io-async.sml
 os-path-sig.sml
 os-path-unix.sml
+os-path-windows.sml
 nodejs/os-async.sml
 nodejs/command-line.sml
 end
@@ -158,5 +159,6 @@ structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
 functor UnixPath (* extension *)
+functor WindowsPath (* extension *)
 top-level.sml
 end

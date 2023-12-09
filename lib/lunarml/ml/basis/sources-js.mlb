@@ -10,6 +10,7 @@ nodejs/text-io.sml
 nodejs/bin-io-dummy.sml
 os-path-sig.sml
 os-path-unix.sml
+os-path-windows.sml
 nodejs/os.sml
 nodejs/command-line.sml
 end
@@ -158,5 +159,6 @@ structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
 functor UnixPath (* extension *)
+functor WindowsPath (* extension *)
 top-level.sml
 end

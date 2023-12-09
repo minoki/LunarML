@@ -1,0 +1,56 @@
+{ isAbs = false, vol = "", arcs = [] }
+{ isAbs = true, vol = "", arcs = [""] }
+{ isAbs = true, vol = "", arcs = ["",""] }
+{ isAbs = false, vol = "", arcs = ["a"] }
+{ isAbs = true, vol = "", arcs = ["a"] }
+{ isAbs = true, vol = "", arcs = ["","a"] }
+{ isAbs = false, vol = "", arcs = ["a",""] }
+{ isAbs = false, vol = "", arcs = ["a","",""] }
+{ isAbs = false, vol = "", arcs = ["a","b"] }
+{ isAbs = true, vol = "C:", arcs = ["Users","a","b"] }
+{ isAbs = false, vol = "z:", arcs = ["a","b"] }
+""
+{ dir = "", file = "" }
+{ dir = "", file = "." }
+{ dir = "", file = "b" }
+{ dir = "b", file = "" }
+{ dir = "a", file = "b" }
+{ base = "", ext = NONE }
+{ base = ".login", ext = NONE }
+{ base = "a", ext = NONE }
+{ base = "a.", ext = NONE }
+{ base = "a", ext = SOME "b" }
+{ base = "a.b", ext = SOME "c" }
+{ base = ".news\\comp", ext = NONE }
+"a/b"
+"a/b"
+"..\\..\\.."
+"..\\b\\"
+"..\\b"
+"..\\b\\"
+"..\\b"
+"."
+"."
+".."
+"..\\b\\..\\c"
+"..\\..\\a\\b"
+"..\\a\\b"
+"a\\b"
+"/"
+"."
+"a/.."
+"a///.."
+"a/"
+"a/b/.."
+"..\\.."
+".."
+".."
+"///.."
+true
+true
+true
+false
+""
+"z:"
+"A:"
+"U:"
