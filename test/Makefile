@@ -206,6 +206,7 @@ should_compile += $(addprefix interface/should_compile/,\
   INTEGER.sml \
   WORD.sml \
   CHAR.sml \
+  STRING.sml \
   UNSAFE.mlb \
 )
 should_run += $(addprefix successor_ml/should_run/,\

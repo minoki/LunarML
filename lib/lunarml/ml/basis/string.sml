@@ -26,10 +26,10 @@ signature STRING = sig
     val > : string * string -> bool
     val >= : string * string -> bool
     val toString : string -> String.string
-    (* val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader; implemented in scan-text.sml *)
-    (* val fromString : String.string -> string option; implemented in scan-text.sml *)
+    val scan : (Char.char, 'a) StringCvt.reader -> (string, 'a) StringCvt.reader
+    val fromString : String.string -> string option
     val toCString : string -> String.string
-    (* val fromCString : String.string -> string option; implemented in scan-text.sml *)
+    val fromCString : String.string -> string option
 
     (* from https://github.com/SMLFamily/BasisLibrary/wiki/2015-003d-STRING: *)
     (* val rev : string -> string *)
