@@ -25,6 +25,9 @@ fun MkLongVId(strids, vid: VId) = MkQualified(strids, vid)
 fun MkLongTyCon(strids, tycon: TyCon) = MkQualified(strids, tycon)
 fun MkLongStrId(strids, strid: StrId) = MkQualified(strids, strid)
 
+datatype ShortOrInfixVId = ShortVId of VId
+                         | InfixVId of string
+
 fun getVIdName(MkVId name) = name
   | getVIdName(GeneratedVId (name, i)) = name ^ "@" ^ Int.toString i
 
@@ -531,7 +534,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
              | ExceptionDec of SourcePos.span * Syntax.ExBind list
              | LocalDec of SourcePos.span * Dec list * Dec list
              | OpenDec of SourcePos.span * Syntax.LongStrId list
-             | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.VId list
+             | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.ShortOrInfixVId list
              | DoDec of SourcePos.span * Exp (* [Successor ML] do declaration *)
              | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
              | EqualityDec of SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Exp

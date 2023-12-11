@@ -1,0 +1,5 @@
+$(SML_LIB)/basis/basis.mlb
+ann "allowInfixingDot true" in
+infixingdot.sml
+end
+

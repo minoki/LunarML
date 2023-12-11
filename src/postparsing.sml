@@ -20,6 +20,7 @@ withtype IdStatusMap = { valMap : (unit Syntax.IdStatus) Syntax.VIdMap.map
                        , strMap : IdStatusMap' Syntax.StrIdMap.map
                        }
 type Env = { fixityMap : FixityStatusMap
+           , dottedFixityMap : Syntax.InfixAssociativity Syntax.VIdMap.map
            , idStatusMap : IdStatusMap
            , sigMap : IdStatusMap Syntax.SigIdMap.map
            , funMap : IdStatusMap Syntax.FunIdMap.map
@@ -31,25 +32,30 @@ val emptyIdStatusMap : IdStatusMap = { valMap = Syntax.VIdMap.empty
                                      }
 
 val emptyEnv : Env = { fixityMap = Syntax.VIdMap.empty
+                     , dottedFixityMap = Syntax.VIdMap.empty
                      , idStatusMap = emptyIdStatusMap
                      , sigMap = Syntax.SigIdMap.empty
                      , funMap = Syntax.FunIdMap.empty
                      }
 
 (* used by fixity declaration *)
-fun envWithFixityMap fixityMap : Env = { fixityMap = fixityMap
-                                       , idStatusMap = emptyIdStatusMap
-                                       , sigMap = Syntax.SigIdMap.empty
-                                       , funMap = Syntax.FunIdMap.empty
-                                       }
+fun envWithFixityMap (fixityMap, dottedFixityMap) : Env
+    = { fixityMap = fixityMap
+      , dottedFixityMap = dottedFixityMap
+      , idStatusMap = emptyIdStatusMap
+      , sigMap = Syntax.SigIdMap.empty
+      , funMap = Syntax.FunIdMap.empty
+      }
 
 fun envWithIdStatusMap idStatusMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                           , dottedFixityMap = Syntax.VIdMap.empty
                                            , idStatusMap = idStatusMap
                                            , sigMap = Syntax.SigIdMap.empty
                                            , funMap = Syntax.FunIdMap.empty
                                            }
 
 fun envWithStrMap strMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , dottedFixityMap = Syntax.VIdMap.empty
                                  , idStatusMap = { valMap = Syntax.VIdMap.empty
                                                  , tyConMap = Syntax.TyConMap.empty
                                                  , strMap = strMap
@@ -60,12 +66,14 @@ fun envWithStrMap strMap : Env = { fixityMap = Syntax.VIdMap.empty
 
 (* used by signature binding *)
 fun envWithSigMap sigMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , dottedFixityMap = Syntax.VIdMap.empty
                                  , idStatusMap = emptyIdStatusMap
                                  , sigMap = sigMap
                                  , funMap = Syntax.FunIdMap.empty
                                  }
 
 fun envWithFunMap funMap : Env = { fixityMap = Syntax.VIdMap.empty
+                                 , dottedFixityMap = Syntax.VIdMap.empty
                                  , idStatusMap = emptyIdStatusMap
                                  , sigMap = Syntax.SigIdMap.empty
                                  , funMap = funMap
@@ -79,6 +87,7 @@ fun mergeIdStatusMap(env1 : IdStatusMap, env2 : IdStatusMap) : IdStatusMap
 
 fun mergeEnv(env1 : Env, env2 : Env) : Env
     = { fixityMap = Syntax.VIdMap.unionWith #2 (#fixityMap env1, #fixityMap env2)
+      , dottedFixityMap = Syntax.VIdMap.unionWith #2 (#dottedFixityMap env1, #dottedFixityMap env2)
       , idStatusMap = mergeIdStatusMap(#idStatusMap env1, #idStatusMap env2)
       , sigMap = Syntax.SigIdMap.unionWith #2 (#sigMap env1, #sigMap env2)
       , funMap = Syntax.FunIdMap.unionWith #2 (#funMap env1, #funMap env2)
@@ -88,6 +97,11 @@ fun getFixityStatus ({ fixityMap, ... } : Env, vid)
     = case Syntax.VIdMap.find (fixityMap, vid) of
           SOME a => a
         | NONE => Syntax.Nonfix
+
+fun getDottedFixityStatus ({ dottedFixityMap, ... } : Env, vid)
+    = case Syntax.VIdMap.find (dottedFixityMap, vid) of
+          SOME a => a
+        | NONE => Syntax.LeftAssoc 0
 
 fun isConstructor ({ idStatusMap = { valMap, ... }, ... } : Env, vid)
     = case Syntax.VIdMap.find (valMap, vid) of
@@ -212,8 +226,8 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
                                       )
                    | Syntax.Infix assoc => emitError(ctx, [span1], "infix operator used in prefix position")
                 )
-            | doPrefix (atpat :: UnfixedSyntax.InfixPat (span2, longvid) :: pats)
-              = let val assoc = Syntax.LeftAssoc 0
+            | doPrefix (atpat :: UnfixedSyntax.InfixPat (span2, longvid as Syntax.MkQualified (_, shortvid)) :: pats)
+              = let val assoc = getDottedFixityStatus (env, shortvid)
                 in Tree (doPat (ctx, env, atpat), assoc, span2, longvid, doPrefix pats)
                 end
             | doPrefix(UnfixedSyntax.InfixOrVIdPat(span1, vid) :: atpat :: pats)
@@ -243,8 +257,8 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
                      Syntax.Nonfix => emitError(ctx, [SourcePos.mergeSpan(Syntax.getSourceSpanOfPat lhs, span2)], "invalid pattern")
                    | Syntax.Infix assoc => Tree (lhs, assoc, span2, Syntax.MkQualified ([], vid), doPrefix pats)
                 )
-            | doInfix (lhs : Syntax.Pat, UnfixedSyntax.InfixPat (span2, longvid) :: pats)
-              = let val assoc = Syntax.LeftAssoc 0 (* TODO: Allow setting *)
+            | doInfix (lhs : Syntax.Pat, UnfixedSyntax.InfixPat (span2, longvid as Syntax.MkQualified (_, shortvid)) :: pats)
+              = let val assoc = getDottedFixityStatus (env, shortvid)
                 in Tree (lhs, assoc, span2, longvid, doPrefix pats)
                 end
             | doInfix(lhs, nil) = Leaf lhs
@@ -350,8 +364,8 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                      Syntax.Nonfix => doInfix(Syntax.AppExp(SourcePos.mergeSpan(Syntax.getSourceSpanOfExp lhs, span2), lhs, Syntax.VarExp(span2, Syntax.MkLongVId([], vid))), rest)
                    | Syntax.Infix assoc => Tree (lhs, assoc, span2, Syntax.MkQualified ([], vid), doPrefix rest)
                 )
-            | doInfix (lhs : Syntax.Exp, UnfixedSyntax.InfixExp (span2, longvid) :: rest)
-              = let val assoc = Syntax.LeftAssoc 0 (* TODO: Allow setting *)
+            | doInfix (lhs : Syntax.Exp, UnfixedSyntax.InfixExp (span2, longvid as Syntax.MkQualified (_, shortvid)) :: rest)
+              = let val assoc = getDottedFixityStatus (env, shortvid)
                 in Tree (lhs, assoc, span2, longvid, doPrefix rest)
                 end
             | doInfix(lhs, x :: rest) = let val x' = doExp(ctx, env, x)
@@ -500,9 +514,18 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
                                                                                             ) emptyIdStatusMap strids
                                                            in (envWithIdStatusMap idStatusMap, [Syntax.OpenDec(span, strids)])
                                                            end
-  | doDec(ctx, env, UnfixedSyntax.FixityDec(span, fixity, vids)) = let val fixityMap = List.foldl (fn (vid, m) => Syntax.VIdMap.insert(m, vid, fixity)) Syntax.VIdMap.empty vids
-                                                                   in (envWithFixityMap fixityMap, [])
-                                                                   end
+  | doDec (ctx, env, UnfixedSyntax.FixityDec (span, fixity as Syntax.Infix assoc, vids))
+    = let val fixityMaps = List.foldl (fn (Syntax.ShortVId vid, (m, n)) => (Syntax.VIdMap.insert (m, vid, fixity), n)
+                                      | (Syntax.InfixVId vid, (m, n)) => (m, Syntax.VIdMap.insert (n, Syntax.MkVId vid, assoc))
+                                      ) (Syntax.VIdMap.empty, Syntax.VIdMap.empty) vids
+      in (envWithFixityMap fixityMaps, [])
+      end
+  | doDec (ctx, env, UnfixedSyntax.FixityDec (span, fixity as Syntax.Nonfix, vids))
+    = let val fixityMap = List.foldl (fn (Syntax.ShortVId vid, m) => Syntax.VIdMap.insert (m, vid, fixity)
+                                     | (Syntax.InfixVId vid, m) => (emitNonfatalError (ctx, [span], "invalid nonfix declaration for dotted identifier"); m)
+                                     ) Syntax.VIdMap.empty vids
+      in (envWithFixityMap (fixityMap, Syntax.VIdMap.empty), [])
+      end
   | doDec (ctx, env, UnfixedSyntax.DoDec (span, exp)) = ( if #allowDoDecls (#languageOptions ctx) then
                                                               ()
                                                           else

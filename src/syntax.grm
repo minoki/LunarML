@@ -43,7 +43,8 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
     | SymbolicIdent of string
     | QualifiedSymbolicIdent of string list * string
     | DotSymbolicIdent of string (* identifier with leading dot (may be used by future extension) *)
-    | InfixIdent of string list * string (* identifier with prefix and postfix dots (extension) *)
+    | InfixIdent of string (* identifier with prefix and postfix dots (extension) *)
+    | QualifiedInfixIdent of string list * string (* identifier with prefix and postfix dots (extension) *)
     | PrimIdent of string (* identifiers prefixed by "_Prim." (extension) *)
     | PosInt of IntInf.int (* positive integer literal, not starting with 0, and not containing any underscore *)
     | ZNIntConst of IntInf.int (* starting with 0, or negative integer literal, or contains an underscore *)
@@ -154,7 +155,7 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | Dec of UnfixedSyntax.Dec
        | Decs of UnfixedSyntax.Dec list
        | LongStrIds of Syntax.LongStrId list
-       | VIds of Syntax.VId list
+       | VIds of Syntax.ShortOrInfixVId list
        | ValBind of UnfixedSyntax.ValBind list
        | FValBind of UnfixedSyntax.FValBind list
        | FMatch of UnfixedSyntax.FMRule list
@@ -334,7 +335,8 @@ AtPat : UNDERSCORE (UnfixedSyntax.WildcardPat(span(UNDERSCOREleft,UNDERSCORErigh
 (* one or more atomic patterns *)
 AtPats : AtPat ([AtPat])
        | AtPat AtPats (AtPat :: AtPats)
-       | AtPat InfixIdent AtPats (AtPat :: UnfixedSyntax.InfixPat (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 InfixIdent), Syntax.MkVId (#2 InfixIdent))) :: AtPats)
+       | AtPat InfixIdent AtPats (AtPat :: UnfixedSyntax.InfixPat (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)) :: AtPats)
+       | AtPat QualifiedInfixIdent AtPats (AtPat :: UnfixedSyntax.InfixPat (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))) :: AtPats)
 
 TypedPat : AtPats (UnfixedSyntax.JuxtapositionPat(span(AtPatsleft, AtPatsright), AtPats))
          | TypedPat COLON Ty (UnfixedSyntax.TypedPat (span(TypedPatleft, Tyright), TypedPat, Ty)) (* typed *)
@@ -478,7 +480,8 @@ InfExp : AppExp
 
 AppOrInfExp : AtExp AppOrInfExp (AtExp :: AppOrInfExp) (* atomic *)
             | AtExp ([AtExp])
-            | AtExp InfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 InfixIdent), Syntax.MkVId (#2 InfixIdent))) :: AppOrInfExp)
+            | AtExp InfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (InfixIdentleft, InfixIdentright), Syntax.MkQualified ([], Syntax.MkVId InfixIdent)) :: AppOrInfExp)
+            | AtExp QualifiedInfixIdent AppOrInfExp (AtExp :: UnfixedSyntax.InfixExp (span (QualifiedInfixIdentleft, QualifiedInfixIdentright), Syntax.MkQualified (List.map Syntax.MkStrId (#1 QualifiedInfixIdent), Syntax.MkVId (#2 QualifiedInfixIdent))) :: AppOrInfExp)
 
 TypedExp : AppOrInfExp (UnfixedSyntax.JuxtapositionExp(span(AppOrInfExpleft,AppOrInfExpright), AppOrInfExp))
          | TypedExp COLON Ty (UnfixedSyntax.TypedExp (span(TypedExpleft,Tyright), TypedExp, Ty)) (* typed (L) *)
@@ -616,8 +619,10 @@ LongStrIds : LongStrId LongStrIds (LongStrId :: LongStrIds)
            | LongStrId (LongStrId :: nil)
 
 (* VId[1] ... VId[n] *)
-VIds : VId VIds (VId :: VIds)
-     | VId (VId :: nil)
+VIds : VId VIds (Syntax.ShortVId VId :: VIds)
+     | InfixIdent VIds (Syntax.InfixVId InfixIdent :: VIds)
+     | VId (Syntax.ShortVId VId :: nil)
+     | InfixIdent (Syntax.InfixVId InfixIdent :: nil)
 
 (* value bindings *)
 ValBind : Pat EQUALS Exp AND ValBind (UnfixedSyntax.PatBind (span(Patleft, ValBindright), Pat, Exp) :: ValBind)

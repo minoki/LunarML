@@ -79,13 +79,25 @@ end
 
 `pat_1 .longvid. pat_2` is equivalent to `op longvid (pat_1, pat_2)`.
 
-Associativity of `.longvid.` is currently `infix 0`, but I plan to allow overriding.
+Associativity of `.strid1...stridN.vid.` can be controlled by `infix(r) <prec> .vid.` declaration.
+If no such declaration is found, `infix 0` is assumed.
 
 Examples:
 
 ```sml
 0wxdead .Word.andb. 0wxbeef; (* equivalent to Word.andb (0wxdead, 0wxbeef) *)
 fun a .foo. b = print (a ^ ", " ^ b ^ "\n"); (* equivalent to fun foo (a, b) = ... *)
+infix 7 .*.
+infix 6 .+.
+val x = 1 .Int.*. 2 .Int.+. 3 .Int.*. 4 (* equivalent to Int.+ (Int.* (1, 2), Int.* (3, 4)) *)
+```
+
+The standard library `$(SML_LIB)/basis/basis.mlb` contains the following declarations:
+
+```sml
+infix 7 .*. ./. .div. .mod. .quot. .rem.
+infix 6 .+. .-. .^.
+infix 4 .>. .>=. .<. .<=. .==. .!=. .?=.
 ```
 
 ## Value description in comments

@@ -10,6 +10,7 @@ val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, 
                                         val refConMap = mkValConMap ["ref"]
                                         val listConMap = mkValConMap ["nil", "::"]
                                     in { fixityMap = Syntax.VIdMap.empty
+                                       , dottedFixityMap = Syntax.VIdMap.empty
                                        , idStatusMap = { valMap = List.foldl (Syntax.VIdMap.unionWith #2) (mkExConMap ["Match", "Bind", "Div", "Overflow", "Size", "Subscript", "Fail", "_Prim.Lua.Error"]) [boolConMap, refConMap, listConMap]
                                                        , tyConMap = mkTyConMap [("bool", boolConMap)
                                                                                ,("ref", refConMap)

@@ -248,6 +248,7 @@ should_run += $(addprefix extension/should_run/,\
   vector_exp.sml \
   overload.mlb \
   helloja.sml \
+  infixingdot.mlb \
 )
 should_compile += $(addprefix extension/should_compile/,\
   vector_exp_generalize.sml \
