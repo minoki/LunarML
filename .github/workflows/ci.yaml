@@ -40,3 +40,12 @@ jobs:
         run: make validate-js
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
+      - name: Archive
+        run: make archive
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: archive
+          path: |
+            lunarml-*.tar.gz
+            lunarml-*.zip
