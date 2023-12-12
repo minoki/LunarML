@@ -1,3 +1,4 @@
 .gitattributes export-ignore
 .gitignore export-ignore
 /.github export-ignore
+/set-version.sh export-ignore

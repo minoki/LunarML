@@ -5,6 +5,8 @@ MKDIR = mkdir -p
 CP = cp -fpR
 INSTALL_EXEC = install -p -m 0755
 
+include version.mk
+
 all: bin/lunarml
 
 sources = \
@@ -70,6 +72,16 @@ bin/lunarml.gen2-luajit.lua: src/lunarml.mlb bin/lunarml $(sources)
 
 bin/lunarml.gen2.mjs: src/lunarml.mlb bin/lunarml $(sources)
 	bin/lunarml compile --default-ann "valDescInComments error" --nodejs-cps -o $@ $<
+
+bin/lunarml.lua: bin/lunarml.gen2.lua
+	echo '#!/usr/bin/env lua' > $@
+	cat bin/lunarml.gen2.lua >> $@
+	chmod +x $@
+
+bin/lunarml.mjs: bin/lunarml.gen2.mjs
+	echo '#!/usr/bin/env node' > $@
+	cat bin/lunarml.gen2.mjs >> $@
+	chmod +x $@
 
 src/syntax.grm.sml src/syntax.grm.sig: src/syntax.grm
 	mlyacc $<
@@ -155,3 +167,13 @@ install-npm: package/npm/lunarml.mjs
 	cp -R lib/ package/npm/lib
 
 .PHONY: install-npm
+
+#
+# archive
+#
+
+archive: bin/lunarml.lua bin/lunarml.mjs src/syntax.grm.sml src/syntax.grm.sig
+	git archive -o "lunarml-$(VERSION).tar.gz" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml.lua --add-file=bin/lunarml.mjs --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
+	git archive -o "lunarml-$(VERSION).zip" --prefix="lunarml-$(VERSION)/bin/" --add-file=bin/lunarml.lua --add-file=bin/lunarml.mjs --prefix="lunarml-$(VERSION)/src/" --add-file=src/syntax.grm.sml --add-file=src/syntax.grm.sig --prefix="lunarml-$(VERSION)/" HEAD
+
+.PHONY: archive
