@@ -153,7 +153,23 @@ install: bin/lunarml
 	$(CP) lib/lunarml/ $(PREFIX)/lib/lunarml
 	$(INSTALL_EXEC) bin/lunarml $(libdir)/lunarml
 
-.PHONY: install
+install-precompiled-lua:
+	make -C thirdparty install
+	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
+	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper > $(PREFIX)/bin/lunarml
+	chmod a+x $(PREFIX)/bin/lunarml
+	$(CP) lib/lunarml/ $(PREFIX)/lib/lunarml
+	$(INSTALL_EXEC) bin/lunarml.lua $(libdir)/lunarml
+
+install-precompiled-node:
+	make -C thirdparty install
+	$(MKDIR) $(PREFIX)/bin $(PREFIX)/lib
+	sed -e "s;__LIBDIR__;$(libdir);" < bin/lunarml-wrapper-node > $(PREFIX)/bin/lunarml
+	chmod a+x $(PREFIX)/bin/lunarml
+	$(CP) lib/lunarml/ $(PREFIX)/lib/lunarml
+	$(INSTALL_EXEC) bin/lunarml.mjs $(libdir)/lunarml.mjs
+
+.PHONY: install install-precompiled-lua install-precompiled-node
 
 #
 # install-npm
