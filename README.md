@@ -13,6 +13,25 @@ $ lua example/hello.lua
 Hello world!
 ```
 
+In case you do not want to use Docker, there are precompiled scripts available in the tarball.
+You can use `install-precompiled-lua` target to install `lunarml.lua` which can be run with Lua 5.3/5.4 and LuaFileSystem.
+
+```
+$ make install-precompiled-lua PREFIX=/opt/lunarml
+$ export PATH=/opt/lunarml/bin:$PATH
+$ lunarml compile example/hello.sml
+```
+
+You can use `install-precompiled-node` target to install `lunarml.mjs` to be run with Node.js.
+
+```
+$ make install-precompiled-node PREFIX=/opt/lunarml
+$ export PATH=/opt/lunarml/bin:$PATH
+$ lunarml compile example/hello.sml
+```
+
+Warning: Script-compiled LunarML is slow. Use native binary for serious use.
+
 ## Building and Installing
 
 You need a recent version of MLton to build the executable, and Lua 5.3+ or recent Node.js to run the compiled script.
