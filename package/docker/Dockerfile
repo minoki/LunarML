@@ -5,7 +5,7 @@ FROM ubuntu:23.04
 RUN apt-get update && apt-get install -y mlton make lua5.3 patch
 
 WORKDIR /work
-COPY Makefile .
+COPY Makefile version.mk .
 COPY src/ src/
 COPY pluto/ pluto/
 COPY util/ util/
