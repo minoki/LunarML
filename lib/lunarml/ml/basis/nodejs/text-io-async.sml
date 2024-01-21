@@ -57,6 +57,7 @@ local
                                                                                )
                                       in JavaScript.method (stream, "once") #[JavaScript.fromWideString "readable", readableHandler]
                                        ; JavaScript.method (stream, "once") #[JavaScript.fromWideString "end", endHandler]
+                                       ; JavaScript.method (stream, "read") #[JavaScript.fromInt 0] (* This seems to be needed to trigger 'readadble'/'end' for interactive stdin *)
                                        ; ()
                                       end
               )
