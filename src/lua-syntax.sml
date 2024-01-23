@@ -8,6 +8,13 @@ datatype TableKey = IntKey of int
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
 type Label = Id
+structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
+structure StringSet = struct
+(* compatibility with older smlnj-lib *)
+open StringSet
+fun toList set = foldr (op ::) [] set
+open StringSet
+end
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -140,6 +147,28 @@ fun MultiAssignStat (vars : Id list, values : Exp list)
                              in AssignStat (List.map VarExp vars, List.map (fn v => #rhs (IdMap.lookup (graph, v))) vars)
                              end) sccs
       end
+
+fun predefinedIdsInExp (ConstExp _, acc) = acc
+  | predefinedIdsInExp (VarExp (PredefinedId i), acc) = StringSet.add (acc, i)
+  | predefinedIdsInExp (VarExp (UserDefinedId _), acc) = acc
+  | predefinedIdsInExp (TableExp fields, acc) = Vector.foldl (fn ((_, x), acc) => predefinedIdsInExp (x, acc)) acc fields
+  | predefinedIdsInExp (CallExp (x, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInExp (MethodExp (x, _, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInExp (FunctionExp (_, body), acc) = predefinedIdsInBlock (body, acc)
+  | predefinedIdsInExp (BinExp (_, x, y), acc) = predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
+  | predefinedIdsInExp (UnaryExp (_, x), acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInExp (IndexExp (x, y), acc) = predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
+  | predefinedIdsInExp (SingleValueExp x, acc) = predefinedIdsInExp (x, acc)
+and predefinedIdsInStat (LocalStat (_, xs), acc) = List.foldl predefinedIdsInExp acc xs
+  | predefinedIdsInStat (AssignStat (xs, ys), acc) = List.foldl predefinedIdsInExp (List.foldl predefinedIdsInExp acc xs) ys
+  | predefinedIdsInStat (CallStat (x, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInStat (MethodStat (x, _, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInStat (IfStat (x, t, e), acc) = predefinedIdsInBlock (e, predefinedIdsInBlock (t, predefinedIdsInExp (x, acc)))
+  | predefinedIdsInStat (ReturnStat xs, acc) = Vector.foldl predefinedIdsInExp acc xs
+  | predefinedIdsInStat (DoStat { loopLike = _, body }, acc) = predefinedIdsInBlock (body, acc)
+  | predefinedIdsInStat (GotoStat _, acc) = acc
+  | predefinedIdsInStat (LabelStat _, acc) = acc
+and predefinedIdsInBlock (block, acc) = Vector.foldl predefinedIdsInStat acc block
 end;
 
 structure LuaWriter :> sig

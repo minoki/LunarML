@@ -41,6 +41,7 @@ driver.sml
 mlb-eval.sml
 command-line-settings.sml
 version.sml
+initfile.sml
 main.sml
 $(SML_LIB)/basis/javascript.mlb
 main-esmod.sml

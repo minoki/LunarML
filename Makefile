@@ -55,6 +55,7 @@ sources = \
   src/mlb-eval.sml \
   src/command-line-settings.sml \
   src/version.sml \
+  src/initfile.sml \
   src/main.sml \
   src/main-default.sml
 

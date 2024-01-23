@@ -58,9 +58,6 @@ type options = { subcommand : subcommand option
 fun showMessageAndFail message = ( TextIO.output (TextIO.stdErr, message)
                                  ; OS.Process.exit OS.Process.failure
                                  )
-fun readFile filename = let val ins = TextIO.openIn filename (* may raise Io *)
-                        in TextIO.inputAll ins before TextIO.closeIn ins
-                        end
 fun getTargetInfo (opts : options) : TargetInfo.target_info
     = (case #backend opts of
            BACKEND_LUA _ => { defaultInt = Primitives.INT
@@ -111,7 +108,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                                                             LUA_PLAIN => "mlinit.lua"
                                                           | LUA_CONTINUATIONS => "mlinit-continuations.lua"
                                                }
-          val mlinit = readFile mlinit_lua
+          val mlinit = InitFile.readFile (InitFile.LUA, mlinit_lua)
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUA5_3, hasDelimitedContinuations = runtime = LUA_CONTINUATIONS }
           val lua = case runtime of
                         LUA_PLAIN => CodeGenLua.doProgram luactx cont cexp
@@ -121,10 +118,12 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val usedLib = LuaSyntax.StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, LuaSyntax.StringSet.empty))
           val lua = LuaWriter.doChunk lua
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
-          val () = TextIO.output (outs, mlinit)
+          val () = InitFile.output (outs, mlinit)
           val () = TextIO.output (outs, lua)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then
@@ -141,7 +140,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
                                                , file = "mlinit-luajit.lua"
                                                }
-          val mlinit = readFile mlinit_lua
+          val mlinit = InitFile.readFile (InitFile.LUA, mlinit_lua)
           val luactx = { nextLuaId = nextId, targetLuaVersion = CodeGenLua.LUAJIT, hasDelimitedContinuations = false }
           val lua = CodeGenLua.doProgram luactx cont cexp
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
@@ -150,10 +149,12 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val usedLib = LuaSyntax.StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, LuaSyntax.StringSet.empty))
           val lua = LuaWriter.doChunk lua
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".lua")) (* may raise Io *)
-          val () = TextIO.output (outs, mlinit)
+          val () = InitFile.output (outs, mlinit)
           val () = TextIO.output (outs, lua)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then
@@ -171,7 +172,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val mlinit_js = case style of
                               CodeGenJs.DIRECT_STYLE => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit.js" }
                             | CodeGenJs.CPS => OS.Path.joinDirFile { dir = #libDir opts, file = "mlinit-cps.js" }
-          val mlinit = readFile mlinit_js
+          val mlinit = InitFile.readFile (InitFile.JS, mlinit_js)
           val jsctx = { nextJsId = nextId, contEscapeMap = contEscapeMap, style = style, imports = ref [] }
           val js = case (style, export) of
                        (CodeGenJs.DIRECT_STYLE, ToFSyntax.NO_EXPORT) => CodeGenJs.doProgramDirect jsctx cont cexp
@@ -183,12 +184,19 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
           val codegenTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val js = JsTransform.doProgram { nextVId = nextId } js
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val hasImports = not (List.null (!(#imports jsctx)))
           val imports = JsWriter.doImports (!(#imports jsctx))
+          val usedLib = JsSyntax.StringSet.toList (JsSyntax.predefinedIdsInBlock (js, JsSyntax.StringSet.empty))
           val js = JsWriter.doProgram js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
+          val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
           val outs = TextIO.openOut (Option.getOpt (#output opts, base ^ ".mjs")) (* may raise Io *)
           val () = TextIO.output (outs, imports)
-          val () = TextIO.output (outs, mlinit)
+          val () = if hasImports then
+                       ()
+                   else
+                       TextIO.output (outs, "\"use strict\";\n")
+          val () = InitFile.output (outs, mlinit)
           val () = TextIO.output (outs, js)
           val () = TextIO.closeOut outs
           val () = if #printTimings opts then

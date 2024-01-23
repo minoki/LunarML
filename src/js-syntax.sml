@@ -7,6 +7,13 @@ datatype ObjectKey = IntKey of int
                    | StringKey of string
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
+structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
+structure StringSet = struct
+(* compatibility with older smlnj-lib *)
+open StringSet
+fun toList set = foldr (op ::) [] set
+open StringSet
+end
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -96,6 +103,37 @@ fun AssignStat (lhs, rhs) = ExpStat (BinExp (ASSIGN, lhs, rhs))
 fun MultiAssignStat ([], []) = []
   | MultiAssignStat ([lhs], [rhs]) = [ AssignStat (lhs, rhs) ]
   | MultiAssignStat (lhs, rhs) = [ ExpStat (BinExp (ASSIGN, ArrayExp (vector lhs), ArrayExp (vector rhs))) ]
+
+fun predefinedIdsInExp (ConstExp _, acc) = acc
+  | predefinedIdsInExp (ThisExp, acc) = acc
+  | predefinedIdsInExp (VarExp (PredefinedId i), acc) = StringSet.add (acc, i)
+  | predefinedIdsInExp (VarExp (UserDefinedId _), acc) = acc
+  | predefinedIdsInExp (ObjectExp fields, acc) = Vector.foldl (fn ((_, x), acc) => predefinedIdsInExp (x, acc)) acc fields
+  | predefinedIdsInExp (ArrayExp elems, acc) = Vector.foldl predefinedIdsInExp acc elems
+  | predefinedIdsInExp (CallExp (x, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInExp (MethodExp (x, _, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInExp (NewExp (x, ys), acc) = Vector.foldl predefinedIdsInExp (predefinedIdsInExp (x, acc)) ys
+  | predefinedIdsInExp (FunctionExp (_, body), acc) = predefinedIdsInBlock (body, acc)
+  | predefinedIdsInExp (BinExp (_, x, y), acc) = predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
+  | predefinedIdsInExp (UnaryExp (_, x), acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInExp (IndexExp (x, y), acc) = predefinedIdsInExp (y, predefinedIdsInExp (x, acc))
+  | predefinedIdsInExp (CondExp (x, y, z), acc) = predefinedIdsInExp (z, predefinedIdsInExp (y, predefinedIdsInExp (x, acc)))
+and predefinedIdsInStat (LetStat xs, acc) = Vector.foldl (fn ((_, SOME x), acc) => predefinedIdsInExp (x, acc) | ((_, NONE), acc) => acc) acc xs
+  | predefinedIdsInStat (ConstStat xs, acc) = Vector.foldl (fn ((_, x), acc) => predefinedIdsInExp (x, acc)) acc xs
+  | predefinedIdsInStat (ExpStat x, acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInStat (IfStat (x, t, e), acc) = predefinedIdsInBlock (e, predefinedIdsInBlock (t, predefinedIdsInExp (x, acc)))
+  | predefinedIdsInStat (ReturnStat NONE, acc) = acc
+  | predefinedIdsInStat (ReturnStat (SOME x), acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInStat (TryCatchStat (body, _, catch), acc) = predefinedIdsInBlock (catch, predefinedIdsInBlock (body, acc))
+  | predefinedIdsInStat (ThrowStat x, acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInStat (BlockStat (_, body), acc) = predefinedIdsInBlock (body, acc)
+  | predefinedIdsInStat (LoopStat (_, body), acc) = predefinedIdsInBlock (body, acc)
+  | predefinedIdsInStat (SwitchStat (x, clauses), acc) = List.foldl (fn ((_, block), acc) => predefinedIdsInBlock (block, acc)) (predefinedIdsInExp (x, acc)) clauses
+  | predefinedIdsInStat (BreakStat _, acc) = acc
+  | predefinedIdsInStat (ContinueStat _, acc) = acc
+  | predefinedIdsInStat (DefaultExportStat x, acc) = predefinedIdsInExp (x, acc)
+  | predefinedIdsInStat (NamedExportStat xs, acc) = Vector.foldl (fn ((PredefinedId i, _), acc) => StringSet.add (acc, i) | ((UserDefinedId _, _), acc) => acc) acc xs
+and predefinedIdsInBlock (block, acc) = Vector.foldl predefinedIdsInStat acc block
 end;
 
 structure JsWriter :> sig
