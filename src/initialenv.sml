@@ -347,7 +347,7 @@ val primOverloadEnv : Typing.Env
                                ,("div", VId_div,    TypeScheme ([(tyVarA, [TypedSyntax.IsIntegral])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
                                ,("mod", VId_mod,    TypeScheme ([(tyVarA, [TypedSyntax.IsIntegral])],   mkPairType (tyA, tyA) --> tyA))             (* forall 'a:wordint. 'a * 'a -> 'a,   default: int * int -> int *)
                                ,("*",   VId_TIMES,  TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
-                               ,("/",   VId_DIVIDE, TypeScheme ([(tyVarA, [TypedSyntax.IsField])],      mkPairType (tyA, tyA) --> tyA))             (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
+                               ,("/",   VId_DIVIDE, TypeScheme ([(tyVarA, [TypedSyntax.IsReal])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:Real.    'a * 'a -> 'a,   default: real * real -> real *)
                                ,("+",   VId_PLUS,   TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
                                ,("-",   VId_MINUS,  TypeScheme ([(tyVarA, [TypedSyntax.IsRing])],       mkPairType (tyA, tyA) --> tyA))             (* forall 'a:num.     'a * 'a -> 'a,   default: int * int -> int *)
                                ,("<",   VId_LT,     TypeScheme ([(tyVarA, [TypedSyntax.IsOrdered])],    mkPairType (tyA, tyA) --> primTy_bool))     (* forall 'a:numtxt.  'a * 'a -> bool, default: int * int -> bool *)

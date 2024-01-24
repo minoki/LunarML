@@ -546,8 +546,6 @@ fun solve (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordType (span2, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); solve (ctx, env, ctrs))
@@ -558,8 +556,6 @@ fun solve (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare records"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with an int"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.RecordExtType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a record with a word"); solve (ctx, env, ctrs))
@@ -570,8 +566,6 @@ fun solve (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsIntegral) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSignedReal) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsRing) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsField) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
-         | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsSigned) => (emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on function type"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsOrdered) => (emitTypeError (ctx, [span1, span2], "cannot compare functions"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsInt) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with an int"); solve (ctx, env, ctrs))
          | T.UnaryConstraint (span1, T.FnType (span2, _, _), T.IsWord) => (emitTypeError (ctx, [span1, span2], "cannot unify a function with a word"); solve (ctx, env, ctrs))
@@ -621,29 +615,6 @@ fun solve (ctx : InferenceContext, env : Env, nil : T.Constraint list) : unit = 
                               | SOME Syntax.CLASS_REAL => true
                               | _ => false
            in if isRing then
-                  () (* do nothing *)
-              else
-                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; solve (ctx, env, ctrs)
-           end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsField) =>
-           let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
-               val isField = case overloadClass of
-                                 SOME Syntax.CLASS_REAL => true
-                               | _ => false
-           in if isField then
-                  () (* do nothing *)
-              else
-                  emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
-            ; solve (ctx, env, ctrs)
-           end
-         | T.UnaryConstraint (span1, T.TyCon (span2, tyargs, tyname), T.IsSigned) =>
-           let val { overloadClass, ... } = lookupTyNameInEnv (#context ctx, env, span2, tyname)
-               val isSigned = case overloadClass of
-                                  SOME Syntax.CLASS_INT => true
-                                | SOME Syntax.CLASS_REAL => true
-                                | _ => false
-           in if isSigned then
                   () (* do nothing *)
               else
                   emitTypeError (ctx, [span1, span2], "arithmetic operator on unsupported type")
@@ -2272,8 +2243,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                                              | TypedSyntax.IsIntegral => ()
                                              | TypedSyntax.IsSignedReal => ()
                                              | TypedSyntax.IsRing => ()
-                                             | TypedSyntax.IsField => emitError (ctx, [span1, span2], "cannot apply / operator on ints")
-                                             | TypedSyntax.IsSigned => ()
                                              | TypedSyntax.IsOrdered => ()
                                              | TypedSyntax.IsInt => ()
                                              | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: int vs word")
@@ -2291,8 +2260,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                                              | TypedSyntax.IsIntegral => ()
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "abs is invalid for word")
                                              | TypedSyntax.IsRing => ()
-                                             | TypedSyntax.IsField => emitError (ctx, [span1, span2], "cannot apply / operator on words")
-                                             | TypedSyntax.IsSigned => ()
                                              | TypedSyntax.IsOrdered => ()
                                              | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: word vs int")
                                              | TypedSyntax.IsWord => ()
@@ -2310,8 +2277,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "div, mod are invalid for real")
                                              | TypedSyntax.IsSignedReal => ()
                                              | TypedSyntax.IsRing => ()
-                                             | TypedSyntax.IsField => ()
-                                             | TypedSyntax.IsSigned => ()
                                              | TypedSyntax.IsOrdered => ()
                                              | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: real vs int")
                                              | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: real vs word")
@@ -2329,8 +2294,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on char")
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on char")
                                              | TypedSyntax.IsRing => emitError (ctx, [span1, span2], "invalid operation on char")
-                                             | TypedSyntax.IsField => emitError (ctx, [span1, span2], "invalid operation on char")
-                                             | TypedSyntax.IsSigned => emitError (ctx, [span1, span2], "invalid operation on char")
                                              | TypedSyntax.IsOrdered => ()
                                              | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: char vs int")
                                              | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: char vs word")
@@ -2348,8 +2311,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on string")
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on string")
                                              | TypedSyntax.IsRing => emitError (ctx, [span1, span2], "invalid operation on string")
-                                             | TypedSyntax.IsField => emitError (ctx, [span1, span2], "invalid operation on string")
-                                             | TypedSyntax.IsSigned => emitError (ctx, [span1, span2], "invalid operation on string")
                                              | TypedSyntax.IsOrdered => ()
                                              | TypedSyntax.IsInt => emitError (ctx, [span1, span2], "type mismatch: string vs int")
                                              | TypedSyntax.IsWord => emitError (ctx, [span1, span2], "type mismatch: string vs word")
@@ -2368,8 +2329,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                 | TypedSyntax.IsIntegral => doInt (span1, xs)
                 | TypedSyntax.IsSignedReal => doIntOrReal (span1, xs)
                 | TypedSyntax.IsRing => doIntOrReal (span1, xs)
-                | TypedSyntax.IsField => doReal (span1, xs)
-                | TypedSyntax.IsSigned => doIntOrReal (span1, xs)
                 | TypedSyntax.IsOrdered => doIntOrReal (span1, xs)
                 | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
                 | TypedSyntax.IsWord => doIntOrReal (span1, xs) (* cannot occur *)
@@ -2385,8 +2344,6 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
                 | TypedSyntax.IsIntegral => doInt (span1, xs)
                 | TypedSyntax.IsSignedReal => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
                 | TypedSyntax.IsRing => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
-                | TypedSyntax.IsField => (if eq then emitError (ctx, span1 :: spans, "real does not admit equality") else ();  doReal (span1, xs))
-                | TypedSyntax.IsSigned => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
                 | TypedSyntax.IsOrdered => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)
                 | TypedSyntax.IsInt => doInt (span1, xs) (* cannot occur *)
                 | TypedSyntax.IsWord => doWord (span1, xs) (* cannot occur *)

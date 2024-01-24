@@ -97,8 +97,6 @@ datatype UnaryConstraint
   | IsIntegral (* Int, Word; div, mod; defaults to int *)
   | IsSignedReal (* Int, Real; abs; defaults to int *)
   | IsRing (* Int, Word, Real; *, +, -, ~; defaults to int *)
-  | IsField (* Real; /; defaults to real *)
-  | IsSigned (* Int, Real; defaults to int *)
   | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
   | IsInt (* Int; defaults to int *)
   | IsWord (* Word; defaults to word *)
@@ -362,8 +360,6 @@ and print_UnaryConstraint (NoField label) = "NoField(" ^ Syntax.print_Label labe
   | print_UnaryConstraint IsIntegral = "IsIntegral"
   | print_UnaryConstraint IsSignedReal = "IsSignedReal"
   | print_UnaryConstraint IsRing = "IsRing"
-  | print_UnaryConstraint IsField = "IsField"
-  | print_UnaryConstraint IsSigned = "IsSigned"
   | print_UnaryConstraint IsOrdered = "IsOrdered"
   | print_UnaryConstraint IsInt = "IsInt"
   | print_UnaryConstraint IsWord = "IsWord"
