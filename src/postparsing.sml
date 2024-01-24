@@ -2,7 +2,30 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure Fixity = struct
+structure Fixity :> sig
+              type Context = { nextVId : int ref
+                             , messageHandler : Message.handler
+                             , languageOptions : LanguageOptions.options
+                             }
+              type FixityStatusMap = Syntax.FixityStatus Syntax.VIdMap.map
+              type IdStatusMap'
+              type IdStatusMap = { valMap : (unit Syntax.IdStatus) Syntax.VIdMap.map
+                                 , tyConMap : ((unit Syntax.IdStatus) Syntax.VIdMap.map) Syntax.TyConMap.map
+                                 , strMap : IdStatusMap' Syntax.StrIdMap.map
+                                 }
+              type Env = { fixityMap : FixityStatusMap
+                         , dottedFixityMap : Syntax.InfixAssociativity Syntax.VIdMap.map
+                         , idStatusMap : IdStatusMap
+                         , sigMap : IdStatusMap Syntax.SigIdMap.map
+                         , funMap : IdStatusMap Syntax.FunIdMap.map
+                         }
+              val emptyEnv : Env
+              val envWithStrMap : IdStatusMap' Syntax.StrIdMap.map -> Env
+              val envWithSigMap : IdStatusMap Syntax.SigIdMap.map -> Env
+              val envWithFunMap : IdStatusMap Syntax.FunIdMap.map -> Env
+              val mergeEnv : Env * Env -> Env
+              val doProgram : Context * Env * UnfixedSyntax.Program -> Env * Syntax.Program
+          end = struct
 
 type Context = { nextVId : int ref
                , messageHandler : Message.handler

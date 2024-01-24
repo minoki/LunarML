@@ -2,7 +2,183 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure TypedSyntax = struct
+structure TypedSyntax :> sig
+              datatype VId = MkVId of string * int
+              datatype TyVar = MkTyVar of string * int
+              datatype TyName = MkTyName of string * int
+              datatype StrId = MkStrId of string * int
+              datatype FunId = MkFunId of string * int
+              datatype LongVId = MkShortVId of VId
+                               | MkLongVId of StrId * Syntax.StrId list * Syntax.VId
+              datatype LongStrId = MkLongStrId of StrId * Syntax.StrId list
+              val eqUTyVar : TyVar * TyVar -> bool
+              val eqTyName : TyName * TyName -> bool
+              val eqVId : VId * VId -> bool
+              val tyVarAdmitsEquality : TyVar -> bool
+              structure TyVarSet : ORD_SET where type Key.ord_key = TyVar
+              structure TyVarMap : ORD_MAP where type Key.ord_key = TyVar
+              structure VIdKey : ORD_KEY where type ord_key = VId
+              structure VIdSet : ORD_SET where type Key.ord_key = VId
+              structure VIdMap : ORD_MAP where type Key.ord_key = VId
+              structure VIdTable : MONO_HASH_TABLE where type Key.hash_key = VId
+              structure VIdSCC : sig
+                            val components : ('node -> VIdSet.set) * 'node VIdMap.map -> VIdSet.set list
+                        end
+              structure TyNameSet : ORD_SET where type Key.ord_key = TyName
+              structure TyNameMap : ORD_MAP where type Key.ord_key = TyName
+              type level = int
+              datatype UnaryConstraint
+                = NoField of Syntax.Label
+                | IsRecord
+                | IsEqType
+                | IsIntegral (* Int, Word; div, mod; defaults to int *)
+                | IsSignedReal (* Int, Real; abs; defaults to int *)
+                | IsRing (* Int, Word, Real; *, +, -, ~; defaults to int *)
+                | IsOrdered (* NumTxt; <, >, <=, >=; defaults to int *)
+                | IsInt (* Int; defaults to int *)
+                | IsWord (* Word; defaults to word *)
+                | IsReal (* Real; defaults to real *)
+                | IsChar (* Char; defaults to char *)
+                | IsString (* String; defaults to string *)
+              datatype Ty = TyVar of SourcePos.span * TyVar (* named type variable *)
+                          | AnonymousTyVar of SourcePos.span * TyVarData ref (* anonymous type variable; only used during type checking *)
+                          | RecordType of SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
+                          | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
+                          | FnType of SourcePos.span * Ty * Ty (* function type expression *)
+                          | RecordExtType of SourcePos.span * Ty Syntax.LabelMap.map * Ty (* only used during type checking *)
+                   and TyVarData = Unbound of (SourcePos.span * UnaryConstraint) list * level
+                                 | Link of Ty
+              type AnonymousTyVar = TyVarData ref
+              val PairType : SourcePos.span * Ty * Ty -> Ty
+              val TupleType : SourcePos.span * Ty list -> Ty
+              datatype Constraint
+                = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
+                | UnaryConstraint of SourcePos.span * Ty * UnaryConstraint
+              datatype TypeFunction = TypeFunction of TyVar list * Ty
+              datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
+              type ValEnv = (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+              val emptyValEnv : ValEnv
+              type TypeStructure = { typeFunction : TypeFunction
+                                   , valEnv : ValEnv
+                                   }
+              datatype Signature' = MkSignature of { valMap : (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+                                                   , tyConMap : TypeStructure Syntax.TyConMap.map
+                                                   , strMap : Signature' Syntax.StrIdMap.map
+                                                   }
+              type Signature = { valMap : (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+                               , tyConMap : TypeStructure Syntax.TyConMap.map
+                               , strMap : Signature' Syntax.StrIdMap.map
+                               }
+              type QSignature = { s : Signature
+                                , bound : { arity : int, admitsEquality : bool, longtycon : Syntax.LongTyCon } TyNameMap.map
+                                }
+              type PackedSignature = { s : Signature
+                                     , bound : { tyname : TyName, arity : int, admitsEquality : bool } list
+                                     }
+              type FunSig = { bound : { tyname : TyName, arity : int, admitsEquality : bool, longtycon : Syntax.LongTyCon } list
+                            , paramSig : Signature
+                            , resultSig : PackedSignature
+                            }
+              datatype Pat = WildcardPat of SourcePos.span
+                           | SConPat of SourcePos.span * Syntax.SCon * Ty (* special constant *)
+                           | VarPat of SourcePos.span * VId * Ty (* variable *)
+                           | RecordPat of { sourceSpan : SourcePos.span, fields : (Syntax.Label * Pat) list, ellipsis : Pat option, wholeRecordType : Ty }
+                           | ConPat of { sourceSpan : SourcePos.span
+                                       , longvid : LongVId
+                                       , payload : (Ty * Pat) option
+                                       , tyargs : Ty list
+                                       , valueConstructorInfo : Syntax.ValueConstructorInfo option
+                                       }
+                           | TypedPat of SourcePos.span * Pat * Ty (* typed *)
+                           | LayeredPat of SourcePos.span * VId * Ty * Pat (* layered *)
+                           | VectorPat of SourcePos.span * Pat vector * bool * Ty (* [extension] vector pattern *)
+              datatype TypBind = TypBind of SourcePos.span * TyVar list * Syntax.TyCon * Ty
+              datatype ConBind = ConBind of SourcePos.span * VId * Ty option * Syntax.ValueConstructorInfo
+              datatype DatBind = DatBind of SourcePos.span * TyVar list * TyName * ConBind list * (* admits equality? *) bool
+              datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
+                              | ExReplication of SourcePos.span * VId * LongVId * Ty option
+              datatype match_type = CASE | VAL | HANDLE
+              datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
+              datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
+                           | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
+                           | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
+                           | RecordExtExp of { sourceSpan : SourcePos.span
+                                             , fields : (Syntax.Label * Exp) list
+                                             , baseExp : Exp
+                                             , baseTy : Ty
+                                             } (* record extension *)
+                           | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
+                           | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
+                           | TypedExp of SourcePos.span * Exp * Ty
+                           | HandleExp of SourcePos.span * Exp * (Pat * Exp) list * Ty
+                           | RaiseExp of SourcePos.span * Ty * Exp (* result type, exception *)
+                           | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
+                           | CaseExp of { sourceSpan : SourcePos.span
+                                        , subjectExp : Exp
+                                        , subjectTy : Ty
+                                        , matches : (Pat * Exp) list
+                                        , matchType : match_type
+                                        , resultTy : Ty
+                                        }
+                           | FnExp of SourcePos.span * VId * Ty * Exp (* parameter name, parameter type, body *)
+                           | ProjectionExp of { sourceSpan : SourcePos.span, label : Syntax.Label, recordTy : Ty, fieldTy : Ty }
+                           | ListExp of SourcePos.span * Exp vector * Ty
+                           | VectorExp of SourcePos.span * Exp vector * Ty
+                           | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+                           | BogusExp of SourcePos.span * Ty (* undefined identifier *)
+                   and Dec = ValDec of SourcePos.span * ValBind list (* non-recursive *)
+                           | RecValDec of SourcePos.span * ValBind list (* recursive (val rec) *)
+                           | IgnoreDec of SourcePos.span * Exp * Ty (* val _ = ... *)
+                           | TypeDec of SourcePos.span * TypBind list (* not used by the type checker *)
+                           | DatatypeDec of SourcePos.span * DatBind list
+                           | ExceptionDec of SourcePos.span * ExBind list
+                           | OverloadDec of SourcePos.span * Syntax.OverloadClass * TyName * Exp Syntax.OverloadKeyMap.map
+                           | EqualityDec of SourcePos.span * TyVar list * TyName * Exp
+                           | ValDescDec of { sourceSpan : SourcePos.span, expected : TypeScheme, actual : TypeScheme, origin : valdesc_origin }
+                           | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (Syntax.ESImportName * VId * Ty) list, moduleName : string }
+                   and ValBind = TupleBind of SourcePos.span * (VId * Ty) list * Exp (* monomorphic binding; produced during type-check *)
+                               | PolyVarBind of SourcePos.span * VId * TypeScheme * Exp (* polymorphic binding; produced during type-check *)
+              datatype StrExp = StructExp of { sourceSpan : SourcePos.span
+                                             , valMap : (LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
+                                             , tyConMap : TypeStructure Syntax.TyConMap.map
+                                             , strMap : LongStrId Syntax.StrIdMap.map
+                                             }
+                              | StrIdExp of SourcePos.span * LongStrId
+                              | PackedStrExp of { sourceSpan : SourcePos.span, strExp : StrExp, payloadTypes : TypeFunction list, packageSig : PackedSignature }
+                              | FunctorAppExp of { sourceSpan : SourcePos.span, funId : FunId, argumentTypes : { typeFunction : TypeFunction, admitsEquality : bool } list, argumentStr : StrExp, packageSig : PackedSignature }
+                              | LetInStrExp of SourcePos.span * StrDec list * StrExp
+                   and StrDec = CoreDec of SourcePos.span * Dec
+                              | StrBindDec of SourcePos.span * StrId * StrExp * PackedSignature
+              type FunExp = { tyname : TyName, arity : int, admitsEquality : bool } list * StrId * Signature * StrExp
+              datatype TopDec = StrDec of StrDec
+                              | FunDec of FunId * FunExp
+              type Program = (TopDec list) list
+              val TupleExp : SourcePos.span * Exp list -> Exp
+              val getSourceSpanOfTy : Ty -> SourcePos.span
+              val getSourceSpanOfExp : Exp -> SourcePos.span
+              structure PrettyPrint : sig
+                            val print_TyVar : TyVar -> string
+                            val print_AnonymousTyVar : AnonymousTyVar -> string
+                            val print_TyName : TyName -> string
+                            val print_Ty : Ty -> string
+                        end
+              val print_VId : VId -> string
+              val print_LongVId : LongVId -> string
+              val print_TyVar : TyVar -> string
+              val print_AnonymousTyVar : AnonymousTyVar -> string
+              val print_TyName : TyName -> string
+              val print_Ty : Ty -> string
+              val freeTyVarsInTy : TyVarSet.set * Ty -> TyVarSet.set
+              val freeAnonymousTyVarsInTy : Ty -> AnonymousTyVar list
+              val applySubstTy : Ty TyVarMap.map -> Ty -> Ty
+              val applySubstTyInExpOrDec : Ty TyVarMap.map -> { doExp : Exp -> Exp, doDec : Dec -> Dec }
+              val substVId : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list -> Exp) VIdMap.map -> { doExp : Exp -> Exp, doDec : Dec -> VIdSet.set * Dec, doDecs : Dec list -> VIdSet.set * Dec list }
+              val forceTy : Ty -> Ty
+              val forceTyIn : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c, languageOptions : 'd } -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doTopDec : TopDec -> TopDec, doTopDecs : TopDec list -> TopDec list }
+              val freeTyVarsInDecs : 'a * Dec list -> AnonymousTyVar list
+              val filterVarsInPat : (VId -> bool) -> Pat -> Pat
+              val renameVarsInPat : VId VIdMap.map -> Pat -> Pat
+          end = struct
 datatype VId = MkVId of string * int
 datatype TyVar = MkTyVar of string * int
 datatype TyName = MkTyName of string * int
@@ -37,13 +213,6 @@ fun compare (MkVId (x, a), MkVId (y, b)) = case Int.compare (a, b) of
                                              | ord => ord
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
-structure VIdSet = struct
-(* compatibility with older smlnj-lib *)
-open VIdSet
-val toList = foldr (op ::) []
-fun disjoint (x, y) = isEmpty (intersection (x, y))
-open VIdSet
-end
 structure VIdMap = RedBlackMapFn(VIdKey)
 structure VIdTable = HashTableFn (struct
                                    type hash_key = VId

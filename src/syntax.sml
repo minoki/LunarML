@@ -2,7 +2,206 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure Syntax = struct
+structure Syntax :> sig
+              datatype SCon = IntegerConstant of IntInf.int (* decimal / hexadecimal *)
+                            | WordConstant of IntInf.int (* decimal / hexadecimal *)
+                            | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
+                            | StringConstant of StringElement.char vector
+                            | CharacterConstant of StringElement.char
+              datatype VId = MkVId of string
+                           | GeneratedVId of string * int
+              datatype TyVar = MkTyVar of string
+              datatype TyCon = MkTyCon of string
+              datatype Label = NumericLabel of int
+                             | IdentifierLabel of string
+              datatype StrId = MkStrId of string
+              datatype SigId = MkSigId of string
+              datatype FunId = MkFunId of string
+              datatype 'a Qualified = MkQualified of StrId list * 'a
+              type LongVId = VId Qualified
+              type LongTyCon = TyCon Qualified
+              type LongStrId = StrId Qualified
+              val MkLongVId : StrId list * VId -> LongVId
+              val MkLongTyCon : StrId list * TyCon -> LongTyCon
+              val MkLongStrId : StrId list * StrId -> LongStrId
+              datatype ShortOrInfixVId = ShortVId of VId
+                                       | InfixVId of string
+              val getVIdName : VId -> string
+              datatype InfixAssociativity = LeftAssoc of int
+                                          | RightAssoc of int
+              datatype FixityStatus = Nonfix
+                                    | Infix of InfixAssociativity
+              structure VIdKey : ORD_KEY where type ord_key = VId
+              structure VIdSet : ORD_SET where type Key.ord_key = VId
+              structure VIdMap : ORD_MAP where type Key.ord_key = VId
+              structure StrIdKey : ORD_KEY where type ord_key = StrId
+              structure StrIdSet : ORD_SET where type Key.ord_key = StrId
+              structure StrIdMap : ORD_MAP where type Key.ord_key = StrId
+              structure SigIdSet : ORD_SET where type Key.ord_key = SigId
+              structure SigIdMap : ORD_MAP where type Key.ord_key = SigId
+              structure FunIdSet : ORD_SET where type Key.ord_key = FunId
+              structure FunIdMap : ORD_MAP where type Key.ord_key = FunId
+              structure TyVarMap : ORD_MAP where type Key.ord_key = TyVar
+              structure TyVarSet : ORD_SET where type Key.ord_key = TyVar
+              structure LabelSet : ORD_SET where type Key.ord_key = Label
+              structure LabelMap : ORD_MAP where type Key.ord_key = Label
+              val LabelMapFromList : (Label * 'a) list -> 'a LabelMap.map
+              structure TyConSet : ORD_SET where type Key.ord_key = TyCon
+              structure TyConMap : ORD_MAP where type Key.ord_key = TyCon
+              structure LongTyCon : sig
+                            type t = LongTyCon
+                            type ord_key = t
+                            val compare : t * t -> order
+                            val min : t * t -> t
+                        end
+              structure LongTyConSet : ORD_SET where type Key.ord_key = LongTyCon
+              datatype ValueConstructorRep = REP_BOXED
+                                           | REP_REF
+                                           | REP_LIST (* nil, :: *)
+                                           | REP_BOOL (* true, false *)
+                                           | REP_ENUM (* multiple constructors with no payload *)
+                                           | REP_ALIAS (* single constructor with payload *)
+                                           | REP_UNIT (* single constructor with no payload *)
+              type ValueConstructorInfo = { tag : string
+                                          , allConstructors : VIdSet.set
+                                          , constructorsWithPayload : VIdSet.set
+                                          , representation : ValueConstructorRep
+                                          }
+              datatype 'vconinfo IdStatus = ValueVariable
+                                          | ValueConstructor of 'vconinfo
+                                          | ExceptionConstructor
+              val isValueConstructor : 'vconinfo IdStatus -> bool
+              datatype Ty = TyVar of SourcePos.span * TyVar (* type variable *)
+                          | RecordType of SourcePos.span * (Label * Ty) list * Ty option (* record type expression *)
+                          | TyCon of SourcePos.span * Ty list * LongTyCon (* type construction *)
+                          | FnType of SourcePos.span * Ty * Ty (* function type expression *)
+              datatype Pat = WildcardPat of SourcePos.span
+                           | SConPat of SourcePos.span * SCon (* special constant *)
+                           | VarPat of SourcePos.span * VId (* variable *)
+                           | RecordPat of { sourceSpan : SourcePos.span
+                                          , fields : (Label * Pat) list
+                                          , ellipsis : Pat option
+                                          }
+                           | ConPat of SourcePos.span * LongVId * Pat option (* constructed pattern *)
+                           | TypedPat of SourcePos.span * Pat * Ty (* typed *)
+                           | LayeredPat of SourcePos.span * VId * Ty option * Pat (* layered *)
+                           | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
+              datatype optional_bar = NO_BAR | HAS_BAR of SourcePos.span
+              datatype TypBind = TypBind of SourcePos.span * TyVar list * TyCon * Ty
+              datatype ConBind = ConBind of SourcePos.span * VId * Ty option
+              datatype DatBind = DatBind of SourcePos.span * TyVar list * TyCon * optional_bar * ConBind list
+              datatype ExBind = ExBind of SourcePos.span * VId * Ty option (* <op> vid <of ty> *)
+                              | ExReplication of SourcePos.span * VId * LongVId (* <op> vid = <op> longvid *)
+              datatype OverloadClass = CLASS_INT
+                                     | CLASS_WORD
+                                     | CLASS_REAL
+                                     | CLASS_CHAR
+                                     | CLASS_STRING
+              datatype OverloadKey = OVERLOAD_abs
+                                   | OVERLOAD_TILDE
+                                   | OVERLOAD_div
+                                   | OVERLOAD_mod
+                                   | OVERLOAD_TIMES
+                                   | OVERLOAD_DIVIDE
+                                   | OVERLOAD_PLUS
+                                   | OVERLOAD_MINUS
+                                   | OVERLOAD_LT
+                                   | OVERLOAD_LE
+                                   | OVERLOAD_GT
+                                   | OVERLOAD_GE
+                                   | OVERLOAD_fromInt (* used by desugaring of literals *)
+                                   | OVERLOAD_fromWord (* used by desugaring of literals *)
+                                   | OVERLOAD_minInt
+                                   | OVERLOAD_maxInt
+                                   | OVERLOAD_wordSize
+                                   | OVERLOAD_maxOrd
+              structure OverloadKeyMap : ORD_MAP where type Key.ord_key = OverloadKey
+              type ESImportName = string
+              datatype Exp = SConExp of SourcePos.span * SCon (* special constant *)
+                           | VarExp of SourcePos.span * LongVId (* value identifier, with or without 'op'  *)
+                           | RecordExp of SourcePos.span * (Label * Exp) list * Exp option (* record *)
+                           | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
+                           | AppExp of SourcePos.span * Exp * Exp (* function, argument *)
+                           | TypedExp of SourcePos.span * Exp * Ty
+                           | HandleExp of SourcePos.span * Exp * (Pat * Exp) list
+                           | RaiseExp of SourcePos.span * Exp
+                           | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
+                           | CaseExp of SourcePos.span * Exp * (Pat * Exp) list
+                           | FnExp of SourcePos.span * (Pat * Exp) list
+                           | ProjectionExp of SourcePos.span * Label
+                           | ListExp of SourcePos.span * Exp vector
+                           | VectorExp of SourcePos.span * Exp vector
+                           | PrimExp of SourcePos.span * Primitives.PrimOp * Ty vector * Exp vector
+                           | SequentialExp of SourcePos.span * Exp vector * Exp
+                   and Dec = ValDec of SourcePos.span * TyVar list * (SourcePos.span * VId * TyVar list * Ty) list * ValBind list (* non-recursive *)
+                           | RecValDec of SourcePos.span * TyVar list * (SourcePos.span * VId * TyVar list * Ty) list * ValBind list (* recursive (val rec) *)
+                           | TypeDec of SourcePos.span * TypBind list
+                           | DatatypeDec of SourcePos.span * DatBind list * TypBind list
+                           | DatatypeRepDec of SourcePos.span * TyCon * LongTyCon
+                           | AbstypeDec of SourcePos.span * DatBind list * TypBind list * Dec list
+                           | ExceptionDec of SourcePos.span * ExBind list
+                           | LocalDec of SourcePos.span * Dec list * Dec list
+                           | OpenDec of SourcePos.span * LongStrId list
+                           | OverloadDec of SourcePos.span * OverloadClass * LongTyCon * Exp OverloadKeyMap.map
+                           | EqualityDec of SourcePos.span * TyVar list * LongTyCon * Exp
+                           | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (ESImportName * VId * Ty option) list, moduleName : string }
+                   and ValBind = PatBind of SourcePos.span * Pat * Exp
+              datatype Spec = ValDesc of SourcePos.span * (VId * Ty) list
+                            | TypeDesc of SourcePos.span * (TyVar list * TyCon) list
+                            | EqtypeDesc of SourcePos.span * (TyVar list * TyCon) list
+                            | DatDesc of SourcePos.span * (TyVar list * TyCon * optional_bar * ConBind list) list * TypBind list
+                            | DatatypeRepSpec of SourcePos.span * TyCon * LongTyCon
+                            | ExDesc of SourcePos.span * (VId * Ty option) list
+                            | StrDesc of SourcePos.span * (StrId * SigExp) list
+                            | Include of SourcePos.span * SigExp
+                            | Sharing of SourcePos.span * Spec list * LongTyCon list
+                            | SharingStructure of SourcePos.span * Spec list * LongStrId list (* derived form *)
+                            | TypeAliasDesc of SourcePos.span * (TyVar list * TyCon * Ty) list (* derived form *)
+                   and SigExp = BasicSigExp of SourcePos.span * Spec list
+                              | SigIdExp of SourcePos.span * SigId
+                              | TypeRealisationExp of SourcePos.span * SigExp * TyVar list * LongTyCon * Ty * (* written as 'and type'? *) bool
+              datatype 'coreDec StrExp = StructExp of SourcePos.span * ('coreDec StrDec) list
+                                       | StrIdExp of SourcePos.span * LongStrId
+                                       | TransparentConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
+                                       | OpaqueConstraintExp of SourcePos.span * 'coreDec StrExp * SigExp
+                                       | FunctorAppExp of SourcePos.span * FunId * 'coreDec StrExp
+                                       | LetInStrExp of SourcePos.span * ('coreDec StrDec) list * 'coreDec StrExp
+                   and 'coreDec StrDec = CoreDec of SourcePos.span * 'coreDec
+                                       | StrBindDec of SourcePos.span * (StrId * 'coreDec StrExp) list
+                                       | LocalStrDec of SourcePos.span * ('coreDec StrDec) list * ('coreDec StrDec) list
+              datatype 'coreDec FunExp = NamedFunExp of StrId * SigExp * 'coreDec StrExp
+                                       | AnonymousFunExp of SigExp * 'coreDec StrExp
+              datatype 'coreDec TopDec = StrDec of 'coreDec StrDec
+                                       | SigDec of (SigId * SigExp) list
+                                       | FunDec of (SourcePos.span * FunId * 'coreDec FunExp) list
+              type Program = ((Dec TopDec) list) list
+              val TupleExp : SourcePos.span * Exp list -> Exp
+              val TuplePat : SourcePos.span * Pat list -> Pat
+              val getSourceSpanOfPat : Pat -> SourcePos.span
+              val getSourceSpanOfExp : Exp -> SourcePos.span
+              val MkInfixConPat : Pat * SourcePos.span * LongVId * Pat -> Pat
+              val MkInfixExp : Exp * SourcePos.span * LongVId * Exp -> Exp
+              val extractTuple : int * (Label * 'a) list -> ('a list) option
+              val mapRecordRow : ('a -> 'b) -> (Label * 'a) list -> (Label * 'b) list
+              structure PrettyPrint : sig
+                            val print_Label : Label -> string
+                        end
+              val print_list : ('a -> string) -> 'a list -> string
+              val print_option : ('a -> string) -> 'a option -> string
+              val print_pair : ('a -> string) * ('b -> string) -> 'a * 'b -> string
+              val print_SCon : SCon -> string
+              val print_VId : VId -> string
+              val print_TyVar : TyVar -> string
+              val print_TyCon : TyCon -> string
+              val print_Label : Label -> string
+              val print_StrId : StrId -> string
+              val print_SigId : SigId -> string
+              val print_FunId : FunId -> string
+              val print_LongVId : LongVId -> string
+              val print_LongTyCon : LongTyCon -> string
+              val print_LongStrId : LongStrId -> string
+              val print_IdStatus : 'a IdStatus -> string
+          end = struct
 datatype SCon = IntegerConstant of IntInf.int (* decimal / hexadecimal *)
               | WordConstant of IntInf.int (* decimal / hexadecimal *)
               | RealConstant of Numeric.float_notation (* decimal / hexadecimal *)
@@ -48,21 +247,6 @@ fun compare (MkVId x, MkVId y) = String.compare (x,y)
                                                          )
 end : ORD_KEY
 structure VIdSet = RedBlackSetFn(VIdKey)
-structure VIdSet = struct
-(* compatibility with older smlnj-lib *)
-open VIdSet
-fun minItem set = let val p = foldl (fn (x, NONE) => SOME x
-                                    | (x, y' as SOME y) => if VIdKey.compare (x, y) = LESS then
-                                                               SOME x
-                                                           else
-                                                               y'
-                                    ) NONE set
-                  in case p of
-                         NONE => raise Empty
-                       | SOME x => x
-                  end
-open VIdSet
-end
 structure VIdMap = RedBlackMapFn(VIdKey)
 structure StrIdKey = struct
 type ord_key = StrId
@@ -88,13 +272,6 @@ fun compare (MkTyVar x, MkTyVar y) = String.compare (x,y)
 end : ORD_KEY
 structure TyVarMap = RedBlackMapFn(TyVarKey)
 structure TyVarSet = RedBlackSetFn(TyVarKey)
-structure TyVarSet = struct
-(* compatibility with older smlnj-lib *)
-open TyVarSet
-val toList = foldr (op ::) []
-fun disjoint (x, y) = isEmpty (intersection (x, y))
-open TyVarSet
-end
 structure LabelKey = struct
 type ord_key = Label
 (* NumericLabel _ < IdentifierLabel _ *)
@@ -104,23 +281,7 @@ fun compare (NumericLabel x, NumericLabel y) = Int.compare (x,y)
   | compare (IdentifierLabel x, IdentifierLabel y) = String.compare (x,y)
 end
 structure LabelSet = RedBlackSetFn(LabelKey)
-structure LabelSet = struct
-(* compatibility with older smlnj-lib *)
-open LabelSet
-val toList = foldr (op ::) []
-open LabelSet
-end
 structure LabelMap = RedBlackMapFn(LabelKey)
-structure LabelMap = struct
-(* compatibility with older smlnj-lib *)
-open LabelMap
-val insertWith = fn comb => fn (map, key, value) => let val value = case find (map, key) of
-                                                                        SOME x => comb (x, value)
-                                                                      | NONE => value
-                                                    in insert (map, key, value)
-                                                    end
-open LabelMap
-end
 fun LabelMapFromList (xs : (Label * 'a) list) : 'a LabelMap.map = List.foldl LabelMap.insert' LabelMap.empty xs
 
 structure TyConKey = struct
@@ -482,7 +643,71 @@ open PrettyPrint
 
 end (* structure Syntax *)
 
-structure UnfixedSyntax = struct
+structure UnfixedSyntax :> sig
+              datatype 'a RecordItem = Field of Syntax.Label * 'a * (* pun *) bool
+                                     | Ellipsis of 'a
+              datatype Pat
+                = WildcardPat of SourcePos.span
+                | SConPat of SourcePos.span * Syntax.SCon (* special constant *)
+                | NonInfixVIdPat of SourcePos.span * Syntax.LongVId (* value identifier, with 'op' or structure identifiers *)
+                | InfixOrVIdPat of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifers *)
+                | InfixPat of SourcePos.span * Syntax.LongVId (* [extension] infix identifier *)
+                | JuxtapositionPat of SourcePos.span * Pat list (* constructed pattern, maybe with binary operator  *)
+                | ConPat of SourcePos.span * Syntax.LongVId * Pat (* constructed pattern, used by desugaring of list patttern *)
+                | RecordPat of SourcePos.span * (Pat RecordItem) list
+                | TypedPat of SourcePos.span * Pat * Syntax.Ty (* typed *)
+                | ConjunctivePat of SourcePos.span * Pat * Pat (* layered or [Successor ML] conjunctive *)
+                | VectorPat of SourcePos.span * Pat vector * bool (* [extension] vector pattern *)
+              datatype RecValStyle = TYVAR_REC (* 'val' <tyvarseq> 'rec'; SML '97 *)
+                                   | REC_TYVAR (* 'val' 'rec' <tyvarseq>; Successor ML *)
+
+              datatype optional_semicolon = NO_SEMICOLON | HAS_SEMICOLON of SourcePos.span
+
+              datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
+                           | NonInfixVIdExp of SourcePos.span * Syntax.LongVId (* value identifier, with or without 'op'  *)
+                           | InfixOrVIdExp of SourcePos.span * Syntax.VId (* value identifier, without 'op' or structure identifiers *)
+                           | InfixExp of SourcePos.span * Syntax.LongVId (* [extension] infix identifier *)
+                           | RecordExp of SourcePos.span * (Exp RecordItem) list (* record *)
+                           | RecordUpdateExp of SourcePos.span * Exp * (Exp RecordItem) list (* [Successor ML] record update *)
+                           | LetInExp of SourcePos.span * Dec list * Exp (* local declaration *)
+                           | JuxtapositionExp of SourcePos.span * Exp list (* application, or binary operator *)
+                           | AppExp of SourcePos.span * Exp * Exp (* application, used by desugaring of list expression *)
+                           | TypedExp of SourcePos.span * Exp * Syntax.Ty
+                           | HandleExp of SourcePos.span * Exp * Syntax.optional_bar * (Pat * Exp) list
+                           | RaiseExp of SourcePos.span * Exp
+                           | IfThenElseExp of SourcePos.span * Exp * Exp * Exp
+                           | WhileDoExp of SourcePos.span * Exp * Exp
+                           | CaseExp of SourcePos.span * Exp * Syntax.optional_bar * (Pat * Exp) list
+                           | FnExp of SourcePos.span * Syntax.optional_bar * (Pat * Exp) list
+                           | ProjectionExp of SourcePos.span * Syntax.Label
+                           | ListExp of SourcePos.span * Exp vector
+                           | VectorExp of SourcePos.span * Exp vector
+                           | PrimExp of SourcePos.span * string * Syntax.Ty vector * Exp vector
+                           | SequentialExp of SourcePos.span * Exp vector * Exp * optional_semicolon
+                   and Dec = ValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
+                           | RecValDec of SourcePos.span * Syntax.TyVar list * RecValStyle * (SourcePos.span * Syntax.VId * Syntax.Ty) list * ValBind list
+                           | FValDec of SourcePos.span * Syntax.TyVar list * (SourcePos.span * Syntax.VId * Syntax.Ty) list * Syntax.optional_bar * FValBind list
+                           | TypeDec of SourcePos.span * Syntax.TypBind list
+                           | DatatypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list
+                           | DatatypeRepDec of SourcePos.span * Syntax.TyCon * Syntax.LongTyCon
+                           | AbstypeDec of SourcePos.span * Syntax.DatBind list * Syntax.TypBind list * Dec list
+                           | ExceptionDec of SourcePos.span * Syntax.ExBind list
+                           | LocalDec of SourcePos.span * Dec list * Dec list
+                           | OpenDec of SourcePos.span * Syntax.LongStrId list
+                           | FixityDec of SourcePos.span * Syntax.FixityStatus * Syntax.ShortOrInfixVId list
+                           | DoDec of SourcePos.span * Exp (* [Successor ML] do declaration *)
+                           | OverloadDec of SourcePos.span * string * Syntax.LongTyCon * (string * Exp) list
+                           | EqualityDec of SourcePos.span * Syntax.TyVar list * Syntax.LongTyCon * Exp
+                           | ESImportDec of { sourceSpan : SourcePos.span, pure : bool, specs : (Syntax.ESImportName * Syntax.VId * Syntax.Ty option) list, moduleName : string }
+                   and ValBind = PatBind of SourcePos.span * Pat * Exp
+                   and FValBind = FValBind of SourcePos.span * FMRule list
+                   and FMRule = FMRule of SourcePos.span * FPat * Syntax.Ty option * Exp
+                   and FPat = FPat of SourcePos.span * Pat list
+              type Program = ((Dec Syntax.TopDec) list) list
+              val TupleExp : SourcePos.span * Exp list -> Exp
+              val TuplePat : SourcePos.span * Pat list -> Pat
+              val getSourceSpanOfPat : Pat -> SourcePos.span
+          end = struct
 datatype 'a RecordItem = Field of Syntax.Label * 'a * (* pun *) bool
                        | Ellipsis of 'a
 datatype Pat

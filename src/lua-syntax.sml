@@ -9,12 +9,6 @@ datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
 type Label = Id
 structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
-structure StringSet = struct
-(* compatibility with older smlnj-lib *)
-open StringSet
-fun toList set = foldr (op ::) [] set
-open StringSet
-end
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -23,12 +17,6 @@ fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
   | compare (UserDefinedId x, UserDefinedId y) = TypedSyntax.VIdKey.compare (x, y)
 end : ORD_KEY
 structure IdSet = RedBlackSetFn (IdKey)
-structure IdSet = struct
-(* compatibility with older smlnj-lib *)
-open IdSet
-val toList = foldr (op ::) []
-open IdSet
-end
 structure IdMap = RedBlackMapFn (IdKey)
 structure IdSCC = StronglyConnectedComponents (type t = Id
                                                structure Map = IdMap

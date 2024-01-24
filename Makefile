@@ -17,6 +17,10 @@ sources = \
   pluto/parser-combinator.fun \
   pluto/char-parser.sig \
   pluto/char-parser.fun \
+  src/compat/ord_set.sig \
+  src/compat/ord_map.sig \
+  src/compat/red-black-set-fn.sml \
+  src/compat/red-black-map-fn.sml \
   src/list-util.sml \
   src/vector-util.sml \
   src/numeric.sml \

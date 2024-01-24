@@ -2,7 +2,87 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure Typing = struct
+structure Typing :> sig
+              val primTyName_int : TypedSyntax.TyName
+              val primTyName_word : TypedSyntax.TyName
+              val primTyName_real : TypedSyntax.TyName
+              val primTyName_string : TypedSyntax.TyName
+              val primTyName_char : TypedSyntax.TyName
+              val primTyName_exn : TypedSyntax.TyName
+              val primTyName_bool : TypedSyntax.TyName
+              val primTyName_ref : TypedSyntax.TyName
+              val primTyName_list : TypedSyntax.TyName
+              val primTyName_array : TypedSyntax.TyName
+              val primTyName_vector : TypedSyntax.TyName
+              val primTyName_exntag : TypedSyntax.TyName
+              val primTyName_function2 : TypedSyntax.TyName
+              val primTyName_function3 : TypedSyntax.TyName
+              val primTyName_char16 : TypedSyntax.TyName
+              val primTyName_string16 : TypedSyntax.TyName
+              val primTyName_intInf : TypedSyntax.TyName
+              val primTyName_Lua_value : TypedSyntax.TyName
+              val primTyName_JavaScript_value : TypedSyntax.TyName
+              val primTyName_prompt_tag : TypedSyntax.TyName
+              val primTyName_subcont : TypedSyntax.TyName
+              val primTyName_int32 : TypedSyntax.TyName
+              val primTyName_int54 : TypedSyntax.TyName
+              val primTyName_int64 : TypedSyntax.TyName
+              val primTyName_word32 : TypedSyntax.TyName
+              val primTyName_word64 : TypedSyntax.TyName
+              val primTy_unit : TypedSyntax.Ty
+              val primTy_int : TypedSyntax.Ty
+              val primTy_word : TypedSyntax.Ty
+              val primTy_real : TypedSyntax.Ty
+              val primTy_string : TypedSyntax.Ty
+              val primTy_char : TypedSyntax.Ty
+              val primTy_exn : TypedSyntax.Ty
+              val primTy_exntag : TypedSyntax.Ty
+              val primTy_bool : TypedSyntax.Ty
+              val primTy_char16 : TypedSyntax.Ty
+              val primTy_string16 : TypedSyntax.Ty
+              val primTy_intInf : TypedSyntax.Ty
+              val primTy_Lua_value : TypedSyntax.Ty
+              val primTy_JavaScript_value : TypedSyntax.Ty
+              val primTy_int32 : TypedSyntax.Ty
+              val primTy_int54 : TypedSyntax.Ty
+              val primTy_int64 : TypedSyntax.Ty
+              val primTy_word32 : TypedSyntax.Ty
+              val primTy_word64 : TypedSyntax.Ty
+              val VId_Bind : TypedSyntax.VId
+              val VId_ref : TypedSyntax.VId
+              val VId_DCOLON : TypedSyntax.VId
+              val VId_unit_equal : TypedSyntax.VId
+              val isRefOrArray : TypedSyntax.TyName -> bool
+              type TyNameAttr = { arity : int
+                                , admitsEquality : bool
+                                , overloadClass : Syntax.OverloadClass option
+                                }
+              type ('val,'str) Env' = { valMap : (TypedSyntax.TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus * 'val) Syntax.VIdMap.map
+                                      , tyConMap : TypedSyntax.TypeStructure Syntax.TyConMap.map
+                                      , tyNameMap : TyNameAttr TypedSyntax.TyNameMap.map
+                                      , strMap : (TypedSyntax.Signature * 'str) Syntax.StrIdMap.map
+                                      , sigMap : TypedSyntax.QSignature Syntax.SigIdMap.map
+                                      , funMap : (TypedSyntax.FunSig * TypedSyntax.FunId) Syntax.FunIdMap.map
+                                      , boundTyVars : TypedSyntax.TyVar Syntax.TyVarMap.map
+                                      }
+              type Env = (TypedSyntax.LongVId, TypedSyntax.LongStrId) Env'
+              type SigEnv = (unit, unit) Env'
+              val emptyEnv : Env
+              val mergeEnv : ('val, 'str) Env' * ('val, 'str) Env' -> ('val, 'str) Env'
+              val envWithStrMap : (TypedSyntax.Signature * 'str) Syntax.StrIdMap.map -> ('val, 'str) Env'
+              val envWithSigMap : TypedSyntax.QSignature Syntax.SigIdMap.map -> ('val, 'str) Env'
+              val envWithFunMap : (TypedSyntax.FunSig * TypedSyntax.FunId) Syntax.FunIdMap.map -> ('val, 'str) Env'
+              val newTyVarCounter : unit -> int ref
+              val newVIdCounter : unit -> int ref
+              type Context = { nextTyVar : int ref
+                             , nextVId : int ref
+                             , messageHandler : Message.handler
+                             , matchContext : Syntax.VId list
+                             , languageOptions : LanguageOptions.options
+                             }
+              val checkTyScopeOfProgram : Context * TypedSyntax.TyNameSet.set * TypedSyntax.Program -> TypedSyntax.TyNameSet.set
+              val typeCheckProgram : Context * Env * ((Syntax.Dec Syntax.TopDec) list) list -> Env * (TypedSyntax.TopDec list) list
+          end = struct
 
 type TyNameAttr = { arity : int
                   , admitsEquality : bool
