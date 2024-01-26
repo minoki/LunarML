@@ -2,7 +2,118 @@
  * Copyright (c) 2022 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure FSyntax = struct
+structure FSyntax :> sig
+              type TyVar = TypedSyntax.TyVar
+              datatype Kind = TypeKind
+                            | ArrowKind of Kind * Kind
+              datatype Ty = TyVar of TyVar
+                          | RecordType of Ty Syntax.LabelMap.map
+                          | AppType of { applied : Ty, arg : Ty }
+                          | FnType of Ty * Ty
+                          | ForallType of TyVar * Kind * Ty
+                          | ExistsType of TyVar * Kind * Ty
+                          | TypeFn of TyVar * Kind * Ty (* type-level function *)
+              datatype ConBind = ConBind of TypedSyntax.VId * Ty option
+              datatype DatBind = DatBind of TyVar list * TyVar * ConBind list
+              datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
+                              | WordConstOp of IntInf.int (* 1 type argument *)
+                              | RealConstOp of Numeric.float_notation (* 1 type argument *)
+                              | Char8ConstOp of char (* 1 type argument *)
+                              | Char16ConstOp of int (* 1 type argument *)
+                              | String8ConstOp of string (* 1 type argument *)
+                              | String16ConstOp of int vector (* 1 type argument *)
+                              | RaiseOp of SourcePos.span (* type argument: result type, value argument: the exception *)
+                              | ListOp (* type argument: element type, value arguments: the elements *)
+                              | VectorOp (* type argument: element type, value arguments: the elements *)
+                              | DataTagAsStringOp of Syntax.ValueConstructorInfo (* value argument: the data *)
+                              | DataTagAsString16Op of Syntax.ValueConstructorInfo (* value argument: the data *)
+                              | DataPayloadOp of Syntax.ValueConstructorInfo (* type argument: payload, value argument: the data *)
+                              | ExnPayloadOp (* type argument: payload, value argument: the data *)
+                              | ConstructValOp of Syntax.ValueConstructorInfo (* type argument: data type *)
+                              | ConstructValWithPayloadOp of Syntax.ValueConstructorInfo (* type arguments: data type, payload, value argument: payload *)
+                              | ConstructExnOp (* value argument: exception tag *)
+                              | ConstructExnWithPayloadOp (* type argument: payload, value argument: exception tag, value argument: payload *)
+                              | PrimCall of Primitives.PrimOp
+                              | JsCallOp (* value argument: function, arguments *)
+                              | JsMethodOp (* value argument: object, name, arguments *)
+                              | JsNewOp (* value argument: constructor, arguments *)
+                              | LuaCallOp (* value argument: function, arguments *)
+                              | LuaCall1Op (* value argument: function, arguments *)
+                              | LuaMethodOp of string (* value argument: object, arguments *)
+              datatype PatternSCon = IntegerConstant of IntInf.int
+                                   | WordConstant of IntInf.int
+                                   | CharConstant of char
+                                   | Char16Constant of int
+                                   | StringConstant of string
+                                   | String16Constant of int vector
+              datatype Pat = WildcardPat of SourcePos.span
+                           | SConPat of { sourceSpan : SourcePos.span
+                                        , scon : PatternSCon
+                                        , equality : Exp
+                                        , cookedValue : Exp
+                                        }
+                           | VarPat of SourcePos.span * TypedSyntax.VId * Ty
+                           | RecordPat of { sourceSpan : SourcePos.span
+                                          , fields : (Syntax.Label * Pat) list
+                                          , ellipsis : Pat option
+                                          , allFields : Syntax.LabelSet.set
+                                          }
+                           | ValConPat of { sourceSpan : SourcePos.span, info : Syntax.ValueConstructorInfo, payload : (Ty * Pat) option }
+                           | ExnConPat of { sourceSpan : SourcePos.span, tagPath : Exp, payload : (Ty * Pat) option }
+                           | LayeredPat of SourcePos.span * TypedSyntax.VId * Ty * Pat
+                           | VectorPat of SourcePos.span * Pat vector * bool * Ty
+                   and Exp = PrimExp of PrimOp * Ty list * Exp list
+                           | VarExp of TypedSyntax.VId
+                           | RecordExp of (Syntax.Label * Exp) list
+                           | LetExp of Dec list * Exp
+                           | AppExp of Exp * Exp
+                           | HandleExp of { body : Exp
+                                          , exnName : TypedSyntax.VId
+                                          , handler : Exp
+                                          }
+                           | IfThenElseExp of Exp * Exp * Exp
+                           | CaseExp of { sourceSpan : SourcePos.span, subjectExp : Exp, subjectTy : Ty, matches : (Pat * Exp) list, matchType : TypedSyntax.match_type, resultTy : Ty }
+                           | FnExp of TypedSyntax.VId * Ty * Exp
+                           | ProjectionExp of { label : Syntax.Label, record : Exp, fieldTypes : Ty Syntax.LabelMap.map }
+                           | TyAbsExp of TyVar * Kind * Exp
+                           | TyAppExp of Exp * Ty
+                           | PackExp of { payloadTy : Ty, exp : Exp, packageTy : Ty } (* packageTy must be ExistsType *)
+                           | BogusExp of Ty
+                           | ExitProgram
+                           | ExportValue of Exp
+                           | ExportModule of (string * Exp) vector
+                   and Dec = ValDec of TypedSyntax.VId * Ty option * Exp
+                           | RecValDec of (TypedSyntax.VId * Ty * Exp) list
+                           | UnpackDec of TyVar * Kind * TypedSyntax.VId * (* the type of the new identifier *) Ty * Exp
+                           | IgnoreDec of Exp (* val _ = ... *)
+                           | DatatypeDec of DatBind list (* does not define value-level constructors *)
+                           | ExceptionDec of { name : string, tagName : TypedSyntax.VId, payloadTy : Ty option } (* does not define value-level constructors *)
+                           | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * TypedSyntax.VId * Ty) list, moduleName : string }
+              val ValueLabel : Syntax.VId -> Syntax.Label
+              val StructLabel : Syntax.StrId -> Syntax.Label
+              val ExnTagLabel : Syntax.VId -> Syntax.Label
+              val IntConstExp : IntInf.int * Ty -> Exp
+              val WordConstExp : IntInf.int * Ty -> Exp
+              val RaiseExp : SourcePos.span * Ty * Exp -> Exp
+              val ListExp : Exp vector * Ty -> Exp
+              val VectorExp : Exp vector * Ty -> Exp
+              val TupleType : Ty list -> Ty
+              val PairType : Ty * Ty -> Ty
+              val TuplePat : SourcePos.span * Pat list -> Pat
+              val TupleExp : Exp list -> Exp
+              val tyNameToTyVar : TypedSyntax.TyName -> TypedSyntax.TyVar
+              val TyCon : Ty list * TypedSyntax.TyName -> Ty
+              val AsciiStringAsDatatypeTag : TargetInfo.target_info * string -> Exp
+              val strIdToVId : TypedSyntax.StrId -> TypedSyntax.VId
+              val SimplifyingAndalsoExp : Exp * Exp -> Exp
+              val EqualityType : Ty -> Ty
+              val arityToKind : int -> Kind
+              val freeVarsInExp : TypedSyntax.VIdSet.set * Exp -> TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set
+              val getSourceSpanOfPat : Pat -> SourcePos.span
+              structure PrettyPrint : sig
+                            val print_Ty : Ty -> string
+                        end
+          end = struct
 type TyVar = TypedSyntax.TyVar
 datatype Kind = TypeKind
               | ArrowKind of Kind * Kind
@@ -499,7 +610,18 @@ val print_Decs = Syntax.print_list print_Dec
 end (* structure PrettyPrint *)
 end (* structure FSyntax *)
 
-structure ToFSyntax = struct
+structure ToFSyntax :> sig
+              type Context = { nextVId : int ref
+                             , nextTyVar : int ref
+                             , targetInfo : TargetInfo.target_info
+                             , messageHandler : Message.handler
+                             }
+              type Env
+              val programToFDecs : Context * Env * TypedSyntax.TopDec list -> Env * FSyntax.Dec list
+              datatype export_entity = NO_EXPORT | EXPORT_VALUE | EXPORT_NAMED of string vector
+              val addExport : Context * Typing.Env * Env * FSyntax.Dec list -> FSyntax.Exp * export_entity
+              val initialEnv : Env
+          end = struct
 type Context = { nextVId : int ref
                , nextTyVar : int ref
                , targetInfo : TargetInfo.target_info

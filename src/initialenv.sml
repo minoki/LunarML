@@ -2,7 +2,93 @@
  * Copyright (c) 2021 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure InitialEnv = struct
+structure InitialEnv :> sig
+              val initialFixityEnv : Fixity.Env
+              val VId_true : TypedSyntax.VId
+              val VId_false : TypedSyntax.VId
+              val VId_nil : TypedSyntax.VId
+              val VId_Match : TypedSyntax.VId
+              val VId_Bind : TypedSyntax.VId
+              val VId_Div : TypedSyntax.VId
+              val VId_Overflow : TypedSyntax.VId
+              val VId_Size : TypedSyntax.VId
+              val VId_Subscript : TypedSyntax.VId
+              val VId_Fail : TypedSyntax.VId
+              val VId_Match_tag : TypedSyntax.VId
+              val VId_Bind_tag : TypedSyntax.VId
+              val VId_Div_tag : TypedSyntax.VId
+              val VId_Overflow_tag : TypedSyntax.VId
+              val VId_Size_tag : TypedSyntax.VId
+              val VId_Subscript_tag : TypedSyntax.VId
+              val VId_Fail_tag : TypedSyntax.VId
+              val VId_exnName : TypedSyntax.VId
+              val VId_abs : TypedSyntax.VId
+              val VId_TILDE : TypedSyntax.VId
+              val VId_div : TypedSyntax.VId
+              val VId_mod : TypedSyntax.VId
+              val VId_TIMES : TypedSyntax.VId
+              val VId_DIVIDE : TypedSyntax.VId
+              val VId_PLUS : TypedSyntax.VId
+              val VId_MINUS : TypedSyntax.VId
+              val VId_LT : TypedSyntax.VId
+              val VId_GT : TypedSyntax.VId
+              val VId_LE : TypedSyntax.VId
+              val VId_GE : TypedSyntax.VId
+              val VId_Int_TILDE : TypedSyntax.VId
+              val VId_Int_abs : TypedSyntax.VId
+              val VId_Real_abs : TypedSyntax.VId
+              val VId_Vector_tabulate : TypedSyntax.VId
+              val VId_Vector_concat : TypedSyntax.VId
+              val VId_Vector_fromList : TypedSyntax.VId
+              val VId_Array_array : TypedSyntax.VId
+              val VId_Array_fromList : TypedSyntax.VId
+              val VId_Array_tabulate : TypedSyntax.VId
+              val VId_Lua_NIL : TypedSyntax.VId
+              val VId_Lua_function : TypedSyntax.VId
+              val VId_Lua_Lib_assert : TypedSyntax.VId
+              val VId_Lua_Lib_error : TypedSyntax.VId
+              val VId_Lua_Lib_getmetatable : TypedSyntax.VId
+              val VId_Lua_Lib_pairs : TypedSyntax.VId
+              val VId_Lua_Lib_pcall : TypedSyntax.VId
+              val VId_Lua_Lib_setmetatable : TypedSyntax.VId
+              val VId_Lua_Lib_math : TypedSyntax.VId
+              val VId_Lua_Lib_math_abs : TypedSyntax.VId
+              val VId_Lua_Lib_math_type : TypedSyntax.VId
+              val VId_Lua_Lib_math_maxinteger : TypedSyntax.VId
+              val VId_Lua_Lib_math_mininteger : TypedSyntax.VId
+              val VId_Lua_Lib_math_ult : TypedSyntax.VId
+              val VId_Lua_Lib_string : TypedSyntax.VId
+              val VId_Lua_Lib_string_char : TypedSyntax.VId
+              val VId_Lua_Lib_string_format : TypedSyntax.VId
+              val VId_Lua_Lib_table : TypedSyntax.VId
+              val VId_Lua_Lib_table_pack : TypedSyntax.VId
+              val VId_Lua_Lib_table_unpack : TypedSyntax.VId
+              val VId_Lua_Lib_bit : TypedSyntax.VId
+              val VId_Lua_Lib_bit_bnot : TypedSyntax.VId
+              val VId_Lua_Lib_bit_band : TypedSyntax.VId
+              val VId_Lua_Lib_bit_bor : TypedSyntax.VId
+              val VId_Lua_Lib_bit_bxor : TypedSyntax.VId
+              val VId_Lua_Lib_bit_lshift : TypedSyntax.VId
+              val VId_Lua_Lib_bit_rshift : TypedSyntax.VId
+              val VId_Lua_Error : TypedSyntax.VId
+              val VId_Lua_Error_tag : TypedSyntax.VId
+              val VId_JavaScript_undefined : TypedSyntax.VId
+              val VId_JavaScript_null : TypedSyntax.VId
+              val VId_JavaScript_function : TypedSyntax.VId
+              val VId_JavaScript_encodeUtf8 : TypedSyntax.VId
+              val VId_JavaScript_decodeUtf8 : TypedSyntax.VId
+              val VId_String_concat : TypedSyntax.VId
+              val VId_String_concatWith : TypedSyntax.VId
+              val VId_String_implode : TypedSyntax.VId
+              val VId_String_translate : TypedSyntax.VId
+              val VId_DelimCont_pushPrompt : TypedSyntax.VId
+              val VId_DelimCont_withSubCont : TypedSyntax.VId
+              val VId_DelimCont_pushSubCont : TypedSyntax.VId
+              val VId_DelimCont_topLevel : TypedSyntax.VId
+              val initialEnv : Typing.Env
+              val primOverloadEnv : Typing.Env
+              val initialTyNameSet : TypedSyntax.TyNameSet.set
+          end = struct
 val initialFixityEnv : Fixity.Env = let fun mkValConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert (m, Syntax.MkVId n, Syntax.ValueConstructor ())) Syntax.VIdMap.empty xs
                                         fun mkExConMap xs = List.foldl (fn (n, m) => Syntax.VIdMap.insert(m, Syntax.MkVId n, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty xs
                                         fun mkTyConMap xs = List.foldl (fn ((n, y), m) => Syntax.TyConMap.insert(m, Syntax.MkTyCon n, y)) Syntax.TyConMap.empty xs
@@ -81,6 +167,7 @@ val VId_Real_abs = newVId "_Prim.Real.abs"
 (* Vector *)
 val VId_Vector_tabulate = newVId "_Prim.Vector.tabulate"
 val VId_Vector_concat = newVId "_Prim.Vector.concat"
+val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
 
 (* Array *)
 val VId_Array_array = newVId "_Prim.Array.array"
@@ -126,8 +213,6 @@ val VId_JavaScript_encodeUtf8 = newVId "_Prim.JavaScript.encodeUtf8"
 val VId_JavaScript_decodeUtf8 = newVId "_Prim.JavaScript.decodeUtf8"
 
 (* Other primitives *)
-val VId_Vector_fromList = newVId "_Prim.Vector.fromList"
-
 val VId_String_concat = newVId "_Prim.String.concat"
 val VId_String_concatWith = newVId "_Prim.String.concatWith"
 val VId_String_implode = newVId "_Prim.String.implode"

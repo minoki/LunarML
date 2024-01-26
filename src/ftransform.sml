@@ -225,7 +225,9 @@ fun desugarPatternMatches (ctx: Context) : { doExp : F.Exp -> F.Exp, doDec : F.D
       end
 end (* structure DesugarPatternMatches *)
 
-structure DecomposeValRec = struct
+structure DecomposeValRec :> sig
+              val doExp : FSyntax.Exp -> FSyntax.Exp
+          end = struct
 structure F = FSyntax
 type Context = {}
 fun doExp (F.PrimExp (primOp, tyargs, args)) = F.PrimExp (primOp, tyargs, List.map doExp args)

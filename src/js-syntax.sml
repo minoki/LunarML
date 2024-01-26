@@ -2,7 +2,86 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure JsSyntax = struct
+structure JsSyntax :> sig
+              datatype ObjectKey = IntKey of int
+                                 | StringKey of string
+              datatype Id = PredefinedId of string
+                          | UserDefinedId of TypedSyntax.VId
+              structure StringSet : ORD_SET where type Key.ord_key = string
+              structure IdSet : ORD_SET where type Key.ord_key = Id
+              datatype JsConst = Null
+                               | False
+                               | True
+                               | Numeral of string (* integer *)
+                               | WideString of int vector
+              val asciiStringAsIntVector : string -> int vector
+              val asciiStringAsWide : string -> JsConst
+              datatype BinaryOp = PLUS
+                                | MINUS
+                                | TIMES
+                                | DIV
+                                | MOD
+                                | BITAND
+                                | BITXOR
+                                | BITOR
+                                | RSHIFT (* >> *)
+                                | LSHIFT (* << *)
+                                | URSHIFT (* >>> *)
+                                | LT
+                                | LE
+                                | GT
+                                | GE
+                                | EQUAL (* === *)
+                                | NOTEQUAL (* !== *)
+                                | LAXEQUAL (* == *)
+                                | NOTLAXEQUAL (* != *)
+                                | AND (* && *)
+                                | OR (* || *)
+                                | ASSIGN
+                                | INSTANCEOF
+                                | IN
+                                | EXP (* ** *)
+              datatype UnaryOp = VOID
+                               | TYPEOF
+                               | TONUMBER (* unary + *)
+                               | NEGATE
+                               | BITNOT
+                               | NOT
+              datatype Exp = ConstExp of JsConst
+                           | ThisExp
+                           | VarExp of Id
+                           | ObjectExp of (ObjectKey * Exp) vector
+                           | ArrayExp of Exp vector
+                           | CallExp of Exp * Exp vector
+                           | MethodExp of Exp * string * Exp vector (* method name must be ASCII Identifier *)
+                           | NewExp of Exp * Exp vector
+                           | FunctionExp of Id vector * Stat vector
+                           | BinExp of BinaryOp * Exp * Exp
+                           | UnaryExp of UnaryOp * Exp
+                           | IndexExp of Exp * Exp
+                           | CondExp of Exp * Exp * Exp (* exp1 ? exp2 : exp3 *)
+                   and Stat = LetStat of (TypedSyntax.VId * Exp option) vector (* must not be empty *)
+                            | ConstStat of (TypedSyntax.VId * Exp) vector (* must not be empty *)
+                            | ExpStat of Exp
+                            | IfStat of Exp * Stat vector * Stat vector
+                            | ReturnStat of Exp option
+                            | TryCatchStat of Stat vector * TypedSyntax.VId * Stat vector
+                            | ThrowStat of Exp
+                            | BlockStat of Id option * Stat vector
+                            | LoopStat of Id option * Stat vector (* label: for(;;) { body } *)
+                            | SwitchStat of Exp * (JsConst * Stat vector) list (* switch (e) { case c0: { ... } case c1: { ... } } *)
+                            | BreakStat of Id option
+                            | ContinueStat of Id option
+                            | DefaultExportStat of Exp (* export default <expression> *)
+                            | NamedExportStat of (Id * string) vector (* export { x1 as name1, x2 as name2, ... } *)
+              type Block = Stat vector
+              val UndefinedExp : Exp
+              val ToInt32Exp : Exp -> Exp
+              val ToUint32Exp : Exp -> Exp
+              val AssignStat : Exp * Exp -> Stat
+              val MultiAssignStat : Exp list * Exp list -> Stat list
+              val predefinedIdsInBlock : Block * StringSet.set -> StringSet.set
+          end = struct
 datatype ObjectKey = IntKey of int
                    | StringKey of string
 datatype Id = PredefinedId of string

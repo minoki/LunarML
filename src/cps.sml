@@ -2,7 +2,55 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure CSyntax = struct
+structure CSyntax :> sig
+              exception InvalidCode of string
+              type Var = TypedSyntax.VId
+              structure CVar : sig
+                            eqtype t
+                            type ord_key = t
+                            val compare : ord_key * ord_key -> order
+                            val fromInt : int -> t
+                            val toInt : t -> int
+                            val dummy : t
+                        end
+              type CVar = CVar.t
+              structure CVarSet : ORD_SET where type Key.ord_key = CVar.t
+              structure CVarMap : ORD_MAP where type Key.ord_key = CVar.t
+              structure CVarTable : MONO_HASH_TABLE where type Key.hash_key = CVar.t
+              datatype Value = Var of Var
+                             | Unit (* : unit *)
+                             | Nil (* : 'a list *)
+                             | BoolConst of bool
+                             | IntConst of Primitives.int_width * IntInf.int
+                             | WordConst of Primitives.word_width * IntInf.int
+                             | CharConst of char
+                             | Char16Const of int
+                             | StringConst of string
+                             | String16Const of int vector
+              datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty list, args : Value list }
+                                 | Record of Value Syntax.LabelMap.map (* non-empty record *)
+                                 | ExnTag of { name : string, payloadTy : FSyntax.Ty option }
+                                 | Projection of { label : Syntax.Label, record : Value, fieldTypes : FSyntax.Ty Syntax.LabelMap.map }
+                                 | Abs of { contParam : CVar, params : Var list, body : CExp } (* non-recursive function *)
+                   and Dec = ValDec of { exp : SimpleExp, result : Var option }
+                           | RecDec of (Var * CVar * Var list * CExp) list (* recursive function *)
+                           | ContDec of { name : CVar, params : (Var option) list, body : CExp }
+                           | RecContDec of (CVar * (Var option) list * CExp) list
+                           | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
+                   and CExp = Let of { decs : Dec vector, cont : CExp }
+                            | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
+                            | AppCont of { applied : CVar, args : Value list }
+                            | If of { cond : Value
+                                    , thenCont : CExp
+                                    , elseCont : CExp
+                                    }
+                            | Handle of { body : CExp, handler : Var * CExp, successfulExitIn : CVar, successfulExitOut : CVar }
+                            | Unreachable
+              val isDiscardable : SimpleExp -> bool
+              val containsApp : CExp -> bool
+              val freeVarsInExp : TypedSyntax.VIdSet.set * CExp * TypedSyntax.VIdSet.set -> TypedSyntax.VIdSet.set
+              val recurseCExp : (CExp -> CExp) -> CExp -> CExp
+          end = struct
 exception InvalidCode of string
 type Var = TypedSyntax.VId
 type Tag = string
@@ -220,7 +268,7 @@ fun recurseCExp f
 end
 end
 
-structure CpsTransform : sig
+structure CpsTransform :> sig
               type Context = { targetInfo : TargetInfo.target_info
                              , nextVId : int ref
                              , exportAsRecord : bool

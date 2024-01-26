@@ -2,7 +2,70 @@
  * Copyright (c) 2023 ARATA Mizuki
  * This file is part of LunarML.
  *)
-structure LuaSyntax = struct
+structure LuaSyntax :> sig
+              datatype TableKey = IntKey of int
+                                | StringKey of string
+              datatype Id = PredefinedId of string
+                          | UserDefinedId of TypedSyntax.VId
+              type Label = Id
+              structure StringSet : ORD_SET where type Key.ord_key = string
+              structure IdSet : ORD_SET where type Key.ord_key = Id
+              structure IdMap : ORD_MAP where type Key.ord_key = Id
+              datatype VarAttr = CONST | LATE_INIT | MUTABLE
+              datatype LuaConst = Nil
+                                | False
+                                | True
+                                | Numeral of string (* integer, word (hexadecimal), floating-point *)
+                                | LiteralString of string
+              datatype BinaryOp = PLUS
+                                | MINUS
+                                | TIMES
+                                | DIV
+                                | INTDIV
+                                | POW
+                                | MOD
+                                | BITAND
+                                | BITXOR
+                                | BITOR
+                                | RSHIFT
+                                | LSHIFT
+                                | CONCAT
+                                | LT
+                                | LE
+                                | GT
+                                | GE
+                                | EQUAL
+                                | NOTEQUAL
+                                | AND
+                                | OR
+              datatype UnaryOp = NEGATE
+                               | NOT
+                               | LENGTH
+                               | BITNOT
+              datatype Exp = ConstExp of LuaConst
+                           | VarExp of Id
+                           | TableExp of (TableKey * Exp) vector
+                           | CallExp of Exp * Exp vector
+                           | MethodExp of Exp * string * Exp vector
+                           | FunctionExp of Id vector * Stat vector (* function parameters are implicitly const *)
+                           | BinExp of BinaryOp * Exp * Exp
+                           | UnaryExp of UnaryOp * Exp
+                           | IndexExp of Exp * Exp
+                           | SingleValueExp of Exp (* (f(...)) *)
+                   and Stat = LocalStat of (TypedSyntax.VId * VarAttr) list * Exp list (* vars must not be empty *)
+                            | AssignStat of Exp list * Exp list (* LHS must be non-empty prefixexps and RHS must not be empty*)
+                            | CallStat of Exp * Exp vector
+                            | MethodStat of Exp * string * Exp vector (* name must be a valid Lua identifier *)
+                            | IfStat of Exp * Stat vector * Stat vector (* 'elseif' will be synthesized by writer *)
+                            | ReturnStat of Exp vector (* must be the last statement in a block *)
+                            | DoStat of { loopLike : bool, body : Stat vector }
+                            | GotoStat of Label
+                            | LabelStat of Label
+              type Block = Stat vector
+              val makeDoStat : { loopLike : bool, body : Stat list } -> Stat list
+              val MultiAssignStat : Id list * Exp list -> Stat list
+              val predefinedIdsInBlock : Block * StringSet.set -> StringSet.set
+          end = struct
 datatype TableKey = IntKey of int
                   | StringKey of string
 datatype Id = PredefinedId of string
