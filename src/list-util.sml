@@ -18,9 +18,9 @@ in
 fun splitAt (xs, n) = splitAt' (xs, [], n)
 end
 
-fun mapCont f [] cont = cont []
+fun mapCont _ [] cont = cont []
   | mapCont f (x :: xs) cont = f (x, fn y => mapCont f xs (fn ys => cont (y :: ys)))
 
-fun foldlCont f init [] cont = cont init
+fun foldlCont _ init [] cont = cont init
   | foldlCont f init (x :: xs) cont = f (x, init, fn y => foldlCont f y xs cont)
 end; (* structure ListUtil *)

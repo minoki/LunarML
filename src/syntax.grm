@@ -5,12 +5,8 @@
 fun nilPat span = UnfixedSyntax.NonInfixVIdPat (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
 fun trueExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("true")))
 fun falseExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("false")))
-fun nilExp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("nil")))
-fun consOp span = UnfixedSyntax.NonInfixVIdExp (span, Syntax.MkLongVId (nil, Syntax.MkVId ("::")))
 fun MkAndAlsoExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, e2, falseExp span)
 fun MkOrElseExp (span,e1,e2) = UnfixedSyntax.IfThenElseExp (span, e1, trueExp span, e2)
-fun MkPairExp (span,e1,e2) = UnfixedSyntax.RecordExp (span, [UnfixedSyntax.Field (Syntax.NumericLabel 1, e1, false), UnfixedSyntax.Field (Syntax.NumericLabel 2, e2, false)])
-fun MkConsExp (span,e1,e2) = UnfixedSyntax.AppExp (span, consOp span, MkPairExp (span, e1,e2))
 fun MkListExp (span, xs) = UnfixedSyntax.ListExp(span, Vector.fromList xs)
 fun MkVectorExp (span, xs) = UnfixedSyntax.VectorExp(span, Vector.fromList xs)
 fun MkPairPat (span, p1, p2) = UnfixedSyntax.TuplePat(span, [p1, p2])
@@ -23,11 +19,10 @@ fun MkSequentialExp (span, x, xs, optSemi) = let fun go (final, [], acc) = Unfix
                                              in go (x, xs, [])
                                              end
 fun MkTupleTy(_,[x]) = x
-  | MkTupleTy(span, xs) = let fun doFields i nil = nil
-                                | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
-                          in Syntax.RecordType (span, doFields 1 xs, NONE)
-                          end
-fun prependStrId(strid, Syntax.MkQualified(strids, x)) = Syntax.MkQualified(strid :: strids, x)
+  | MkTupleTy (span, xs) = let fun doFields _ nil = nil
+                                 | doFields i (t :: ts) = (Syntax.NumericLabel i, t) :: doFields (i + 1) ts
+                           in Syntax.RecordType (span, doFields 1 xs, NONE)
+                           end
 fun span(p1,p2) = { start = p1, end_ = p2 }
 %%
 
@@ -104,7 +99,6 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | PatPun of Syntax.Label * UnfixedSyntax.Pat * bool
        | PatRow of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
        | PatRowRest of (UnfixedSyntax.Pat UnfixedSyntax.RecordItem) list
-       | AppOrInfPat of UnfixedSyntax.Pat list
        | TypedPat of UnfixedSyntax.Pat
        | Pat of UnfixedSyntax.Pat
        | PatSeqRest of UnfixedSyntax.Pat list
@@ -112,7 +106,6 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | AtTy of Syntax.Ty
        | ConTy of Syntax.Ty
        | TupTy of Syntax.Ty list
-       | Ty_NoARROW of Syntax.Ty
        | Ty of Syntax.Ty
        | ConTy_NoFROM of Syntax.Ty
        | TupTy_NoFROM of Syntax.Ty list
@@ -140,7 +133,6 @@ fun span(p1,p2) = { start = p1, end_ = p2 }
        | HeadExp of UnfixedSyntax.Exp
        | HeadExp_NoMatch of UnfixedSyntax.Exp
        | MatchClauses of (UnfixedSyntax.Pat * UnfixedSyntax.Exp) list
-       | MRule of UnfixedSyntax.Pat * UnfixedSyntax.Exp
        | ValDescInComment of (SourcePos.span * Syntax.VId * Syntax.Ty) list
        | ValDescInCommentVal of (SourcePos.span * Syntax.VId * Syntax.Ty) list
        | ValDescInCommentVals of (SourcePos.span * Syntax.VId * Syntax.Ty) list

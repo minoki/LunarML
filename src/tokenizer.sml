@@ -16,7 +16,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
         type pos = SourcePos.pos (* line, column; both 1-based *)
         type svalue = Tokens.svalue
         type ('a,'b) token = ('a,'b) Tokens.token
-        type result = (svalue,pos) token
+        (* type result = (svalue,pos) token *)
         type arg = (* filename *) string * LanguageOptions.options * Message.handler
         end
         datatype NumericLitType = NLTUnsigned
@@ -150,12 +150,12 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                      else
                                                                          skipComment (state, l0, c0, l + 1, 1, n - 1, xs)
               | skipLineComment (state, l0, c0, l, n, _ :: xs) = skipLineComment (state, l0, c0, l, n, xs)
-              | skipLineComment (state, l0, c0, l, n, nil) = ( if n <> 0 then
-                                                                   emitError (l0, c0, "unterminated comment")
-                                                               else
-                                                                   ()
-                                                             ; NONE
-                                                             )
+              | skipLineComment (_, l0, c0, _, n, nil) = ( if n <> 0 then
+                                                               emitError (l0, c0, "unterminated comment")
+                                                           else
+                                                               ()
+                                                         ; NONE
+                                                         )
             and skipComment (state, l0, c0, l, c, n, #"*" :: #")" :: xs) = if n = 0 then
                                                                                tokenizeOne (state, l, c + 2, xs)
                                                                            else
@@ -165,11 +165,11 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                                    else
                                                                                        skipComment (state, l0, c0, l, c + 3, n + 1, xs)
               | skipComment (state, l0, c0, l, c, n, #"(" :: #"*" :: xs) = skipComment (state, l0, c0, l, c + 2, n + 1, xs)
-              | skipComment (state, l0, c0, l, c, n, #"\n" :: xs) = skipComment (state, l0, c0, l + 1, 1, n, xs)
+              | skipComment (state, l0, c0, l, _, n, #"\n" :: xs) = skipComment (state, l0, c0, l + 1, 1, n, xs)
               | skipComment (state, l0, c0, l, c, n, _ :: xs) = skipComment (state, l0, c0, l, c + 1, n, xs)
-              | skipComment (state, l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
-                                                            ; NONE
-                                                            )
+              | skipComment (_, l0, c0, _, _, _, nil) = ( emitError (l0, c0, "unterminated comment")
+                                                        ; NONE
+                                                        )
             and readIdentifierOrKeyword (state, l, c0, c1, startingDot, rstrids, accum, nil)
                 = let val name = String.implode (List.rev accum)
                       val (tok, ident) = recognizeKeyword (l, c1, name)
@@ -210,7 +210,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                           val (tok, ident) = recognizeKeyword (l, c1, name)
                       in if List.null rstrids then
                              case ident of
-                                 SOME (name, p2) =>
+                                 SOME (name, _) =>
                                  if x = #"." then
                                      let fun finalize () = if startingDot then
                                                                let val p1 = pos (l, c0)
@@ -374,14 +374,29 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                     val p2 = pos(l,c + String.size name - 1)
                                                 in (tok (pos(l, c), p2), Option.map (fn name => (name, p2)) ident)
                                                 end
-            and readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, accum, nil) = let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
-                                                                                              in if startingDot then
-                                                                                                     case ident of
-                                                                                                         SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), state, l, c1 + length accum, nil)
-                                                                                                       | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, nil) )
-                                                                                                 else
-                                                                                                     SOME (tok, state, l, c1 + length accum, nil)
-                                                                                              end
+            and readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, accum, input as nil) = let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
+                                                                                                       in if List.null rstrids then
+                                                                                                              if startingDot then
+                                                                                                                  case ident of
+                                                                                                                      SOME (name, p2) => SOME (Tokens.DotSymbolicIdent (name, pos (l, c0), p2), state, l, c1 + length accum, input)
+                                                                                                                    | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, input) )
+                                                                                                              else
+                                                                                                                  SOME (tok, state, l, c1 + length accum, input)
+                                                                                                          else
+                                                                                                              ( if startingDot then
+                                                                                                                    emitError (l, c0, "stray dot")
+                                                                                                                else
+                                                                                                                    ()
+                                                                                                              ; case ident of
+                                                                                                                    SOME (name, p2) => (case List.rev rstrids of
+                                                                                                                                            strids as "_Prim" :: _ => SOME (Tokens.PrimIdent (String.concatWith "." (strids @ [name]), pos (l, c0), p2), state, l, c1 + length accum, input)
+                                                                                                                                          | strids => SOME (Tokens.QualifiedSymbolicIdent ((strids, name), pos (l, c0), p2), state, l, c1 + length accum, input)
+                                                                                                                                       )
+                                                                                                                  | NONE => ( emitError (l, c1, "invalid qualified name")
+                                                                                                                            ; SOME (tok, state, l, c1 + length accum, input)
+                                                                                                                            )
+                                                                                                              )
+                                                                                                       end
               | readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, accum, input as x :: xs)
                 = if isSymbolChar x then
                       readSymbolicIdentifier (state, l, c0, c1, startingDot, rstrids, x :: accum, xs)
@@ -389,23 +404,23 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                       let val (tok, ident) = recognizeSymbolic (l, c1, String.implode (rev accum))
                       in if List.null rstrids then
                              case ident of
-                                 SOME (name, p2) => ( if #allowInfixingDot opts then
-                                                          ()
-                                                      else
-                                                          emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
-                                                    ; SOME (Tokens.InfixIdent (name, pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
-                                                    )
+                                 SOME (name, _) => ( if #allowInfixingDot opts then
+                                                         ()
+                                                     else
+                                                         emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                   ; SOME (Tokens.InfixIdent (name, pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
+                                                   )
                                | _ => ( emitError (l, c0, "stray dot"); SOME (tok, state, l, c1 + length accum, input) )
                          else
                              case ident of
-                                 SOME (name, p2) => ( if #allowInfixingDot opts then
-                                                          ()
-                                                      else
-                                                          emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
-                                                    ; case List.rev rstrids of
-                                                          strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (String.concatWith "." (strids @ [name]), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
-                                                        | strids => SOME (Tokens.QualifiedInfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
-                                                    )
+                                 SOME (name, _) => ( if #allowInfixingDot opts then
+                                                         ()
+                                                     else
+                                                         emitError (l, c0, "stray dot; set \"allowInfixingDot true\" to enable infix identifiers")
+                                                   ; case List.rev rstrids of
+                                                         strids as "_Prim" :: _ => SOME (Tokens.InfixIdent (String.concatWith "." (strids @ [name]), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
+                                                       | strids => SOME (Tokens.QualifiedInfixIdent ((strids, name), pos (l, c0), pos (l, c1 + String.size name)), state, l, c1 + length accum, xs)
+                                                   )
                                | NONE => ( emitError (l, c0, "stray dot")
                                          ; emitError (l, c1, "invalid qualified name")
                                          ; SOME (tok, state, l, c1 + length accum, input)
@@ -477,7 +492,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                                SOME (anyUnderscores, c + 1, x, xs)
                                                                            else
                                                                                NONE
-              | skipUnderscoresAndReadDigit (_, c, []) = NONE
+              | skipUnderscoresAndReadDigit (_, _, []) = NONE
             and skipUnderscoresAndReadHexDigit (c, #"_" :: xs) = if #allowExtendedNumConsts opts then
                                                                      skipUnderscoresAndReadHexDigit (c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
                                                                  else
@@ -486,13 +501,13 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                   SOME (c + 1, x, xs)
                                                               else
                                                                   NONE
-              | skipUnderscoresAndReadHexDigit (c, []) = NONE
+              | skipUnderscoresAndReadHexDigit (_, []) = NONE
             and skipUnderscoresAndReadBinaryDigit (c, #"_" :: xs) = skipUnderscoresAndReadBinaryDigit (c + 1, xs) (* [Successor ML] extended literal syntax (underscore) *)
               | skipUnderscoresAndReadBinaryDigit (c, x :: xs) = if isBinDigit x then
                                                                      SOME (c + 1, x, xs)
                                                                  else
                                                                      NONE
-              | skipUnderscoresAndReadBinaryDigit (c, []) = NONE
+              | skipUnderscoresAndReadBinaryDigit (_, []) = NONE
             and readDecimalConstant (state, l1, c1, c', numericLitType : NumericLitType, x0 : IntInf.int, xs : char list)
                 (* x0 is a decimal digit *)
                 = let fun mkIntConst (anyUnderscores, p2, a) = if numericLitType = NLTWord then
@@ -647,7 +662,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                 ( emitError (l, c, "malformed number: fractional part must not be empty")
                                 ; (c + 1, SOME (vector []), xs)
                                 )
-                        | parseFracPart (l, c, xs) = (c, NONE, xs)
+                        | parseFracPart (_, c, xs) = (c, NONE, xs)
                       and parseMoreFracPart (c, revAcc, xs)
                           = (case skipUnderscoresAndReadHexDigit (c, xs) of
                                  SOME (c', x, xss) => parseMoreFracPart (c', hexDigitToInt x :: revAcc, xss)
@@ -692,7 +707,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
             and readStringLit (l0, c0, l, c, accum, nil) = ( emitError (l0, c0, "unterminated string literal")
                                                            ; (l, c, rev accum, nil)
                                                            )
-              | readStringLit (l0, c0, l, c, accum, #"\"" :: xs) = (l, c+1, rev accum, xs)
+              | readStringLit (_, _, l, c, accum, #"\"" :: xs) = (l, c + 1, rev accum, xs)
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"a" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\a") :: accum, xs) (* bell *)
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"b" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\b") :: accum, xs) (* backspace *)
               | readStringLit (l0, c0, l, c, accum, #"\\" :: #"t" :: xs) = readStringLit (l0, c0, l, c + 2, StringElement.CODEUNIT (ord #"\t") :: accum, xs) (* horizontal tab *)
@@ -729,7 +744,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                         ( emitError (l, c, "invalid \\u{} escape sequence")
                                                         ; readStringLit (l0, c0, l, c, accum, y :: ys)
                                                         )
-                        | go (c, scalar, ys as []) = readStringLit (l0, c0, l, c, accum, ys) (* unterminated string literal *)
+                        | go (c, _, ys as []) = readStringLit (l0, c0, l, c, accum, ys) (* unterminated string literal *)
                   in if Char.isHexDigit x0 then
                          go (c1 + 4, hexDigitToInt x0, xs)
                      else
@@ -797,7 +812,7 @@ functor LunarMLLexFun (structure Tokens: LunarML_TOKENS) : sig
                                                                       ; (l, c, rev accum, nil)
                                                                       )
               | skipFormattingCharacters (l0, c0, l, c, accum, #"\\" :: xs) = readStringLit (l0, c0, l, c+1, accum, xs)
-              | skipFormattingCharacters (l0, c0, l, c, accum, #"\n" :: xs) = skipFormattingCharacters(l0, c0, l+1, 1, accum, xs)
+              | skipFormattingCharacters (l0, c0, l, _, accum, #"\n" :: xs) = skipFormattingCharacters (l0, c0, l+1, 1, accum, xs)
               | skipFormattingCharacters (l0, c0, l, c, accum, x :: xs) = if Char.isSpace x then
                                                                               skipFormattingCharacters (l0, c0, l, c+1, accum, xs)
                                                                           else

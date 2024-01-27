@@ -507,9 +507,8 @@ datatype 'coreDec TopDec = StrDec of 'coreDec StrDec
 
 type Program = ((Dec TopDec) list) list
 
-fun SimpleVarExp(span, vid) = VarExp (span, MkLongVId ([], vid))
 local
-    fun doFields i nil = nil
+    fun doFields _ nil = nil
       | doFields i (x :: xs) = (NumericLabel i, x) :: doFields (i + 1) xs
 in
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs, NONE)
@@ -550,7 +549,7 @@ fun MkInfixExp (exp1, vspan, longvid, exp2) = let val span = SourcePos.mergeSpan
                                               end
 
 (*: val extractTuple : int * (Label * 'a) list -> ('a list) option *)
-fun extractTuple (i, nil) = SOME nil
+fun extractTuple (_, nil) = SOME nil
   | extractTuple (i, (NumericLabel j,e) :: xs) = if i = j then
                                                      case extractTuple (i + 1, xs) of
                                                          NONE => NONE
@@ -566,7 +565,7 @@ fun ('a,'b) mapRecordRow (f : 'a -> 'b) (row : (Label * 'a) list) = List.map (fn
 structure PrettyPrint = struct
 fun print_list p xs = "[" ^ String.concatWith "," (map p xs) ^ "]"
 fun print_option p (SOME x) = "SOME(" ^ p x ^ ")"
-  | print_option p NONE = "NONE"
+  | print_option _ NONE = "NONE"
 fun print_pair (f,g) (x,y) = "(" ^ f x ^ "," ^ g y ^ ")"
 
 fun print_SCon (IntegerConstant x) = "IntegerConstant " ^ IntInf.toString x
@@ -634,10 +633,10 @@ and print_Dec (ValDec (_, bound, _, valbind)) = "ValDec(" ^ print_list print_TyV
   | print_Dec (RecValDec (_, bound, _, valbind)) = "RecValDec(" ^ print_list print_TyVar bound ^ "," ^ print_list print_ValBind valbind  ^ ")"
   | print_Dec _ = "<Dec>"
 and print_ValBind (PatBind (_,pat, exp)) = "PatBind(" ^ print_Pat pat ^ "," ^ print_Exp exp ^ ")"
-val print_Decs = print_list print_Dec
-fun print_VIdMap print_elem x = print_list (print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
-fun print_TyConMap print_elem x = print_list (print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
-fun print_StrIdMap print_elem x = print_list (print_pair (print_StrId,print_elem)) (StrIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x)
+(* val print_Decs = print_list print_Dec *)
+(* fun print_VIdMap print_elem x = print_list (print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
+(* fun print_TyConMap print_elem x = print_list (print_pair (print_TyCon,print_elem)) (TyConMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
+(* fun print_StrIdMap print_elem x = print_list (print_pair (print_StrId,print_elem)) (StrIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
 end
 open PrettyPrint
 
@@ -771,7 +770,7 @@ datatype Exp = SConExp of SourcePos.span * Syntax.SCon (* special constant *)
 type Program = ((Dec Syntax.TopDec) list) list
 
 local
-    fun doFields i nil = nil
+    fun doFields _ nil = nil
       | doFields i (x :: xs) = Field (Syntax.NumericLabel i, x, false) :: doFields (i + 1) xs
 in
 fun TupleExp(span, xs) = RecordExp (span, doFields 1 xs)

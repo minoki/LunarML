@@ -40,7 +40,6 @@ structure F = FSyntax
 structure C = CSyntax
 structure J = JsSyntax
 
-fun LetStat (vid, exp) = J.LetStat (vector [(vid, SOME exp)])
 fun ConstStat (vid, exp) = J.ConstStat (vector [(vid, exp)])
 
 val builtinsDirect
@@ -168,7 +167,7 @@ fun doValue (ctx, env : Env) (C.Var vid) = (case TypedSyntax.VIdMap.find (#subst
   | doValue _ C.Nil = J.ConstExp J.Null (* empty list *)
   | doValue _ (C.BoolConst false) = J.ConstExp J.False
   | doValue _ (C.BoolConst true) = J.ConstExp J.True
-  | doValue _ (C.IntConst (Primitives.INT, x)) = raise Fail "NativeIntConst is not supported by JavaScript backend"
+  | doValue _ (C.IntConst (Primitives.INT, _)) = raise Fail "NativeIntConst is not supported by JavaScript backend"
   | doValue _ (C.IntConst (Primitives.I32, x)) = if x < 0 then
                                                      J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x))))
                                                  else
@@ -185,7 +184,7 @@ fun doValue (ctx, env : Env) (C.Var vid) = (case TypedSyntax.VIdMap.find (#subst
                                                          J.UnaryExp (J.NEGATE, J.ConstExp (J.Numeral (LargeInt.toString (~ x) ^ "n")))
                                                      else
                                                          J.ConstExp (J.Numeral (LargeInt.toString x ^ "n"))
-  | doValue _ (C.WordConst (Primitives.WORD, x)) = raise Fail "NativeWordConst is not supported by JavaScript backend"
+  | doValue _ (C.WordConst (Primitives.WORD, _)) = raise Fail "NativeWordConst is not supported by JavaScript backend"
   | doValue _ (C.WordConst (Primitives.W32, x)) = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
   | doValue _ (C.WordConst (Primitives.W64, x)) = J.ConstExp (J.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ "n"))
   | doValue _ (C.CharConst x) = J.ConstExp (J.Numeral (Int.toString (ord x)))
@@ -207,12 +206,14 @@ fun genSymNamed (ctx : Context, name) = let val n = !(#nextJsId ctx)
                                         in TypedSyntax.MkVId (name, n)
                                         end
 fun genSym ctx = genSymNamed (ctx, "tmp")
+(*
 fun genExnContSym (ctx : Context) = let val n = !(#nextJsId ctx)
                                         val _ = #nextJsId ctx := n + 1
                                     in CSyntax.CVar.fromInt n
                                     end
+*)
 
-fun applyCont (ctx : Context, env : Env, cont, args)
+fun applyCont (_ : Context, env : Env, cont, args)
     = case C.CVarMap.find (#continuations env, cont) of
           SOME (BREAK_TO { label, which, params }) => let val (params', args') = ListPair.foldrEq (fn (SOME p, a, (pp, aa)) => (p :: pp, a :: aa)
                                                                                                   | (NONE, _, acc) => acc
@@ -242,9 +243,9 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
     = (case VectorSlice.getItem decs of
            NONE => List.revAppend (revStats, doCExp ctx env finalExp)
          | SOME (dec, decs) =>
-           let fun pure (NONE, exp) = doDecs (ctx, env, decs, finalExp, revStats)
+           let fun pure (NONE, _) = doDecs (ctx, env, decs, finalExp, revStats)
                  | pure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
-               fun discardable (NONE, exp) = doDecs (ctx, env, decs, finalExp, revStats)
+               fun discardable (NONE, _) = doDecs (ctx, env, decs, finalExp, revStats)
                  | discardable (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
                fun impure (NONE, exp) = doDecs (ctx, env, decs, finalExp, J.ExpStat exp :: revStats)
                  | impure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
@@ -308,13 +309,10 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                       val payload = doValue (ctx, env) payload
                   in pure (result, J.NewExp (tag, vector [payload]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (_ (* span as { start as { file, line, column }, ... } *)), tyargs = _, args = [exp] }, result = _ } =>
                   List.rev (J.ThrowStat (doValue (ctx, env) exp) :: revStats) (* TODO: location information *)
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs, args }, result } =>
-                  let fun ConstStatOrExpStat e = case result of
-                                                     SOME result => ConstStat (result, e)
-                                                   | NONE => J.ExpStat e
-                      fun doNullary f = case args of
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, result } =>
+                  let fun doNullary f = case args of
                                             [] => f ()
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doNullaryExp (f, purity) = doNullary (fn () =>
@@ -530,12 +528,12 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                   impure (result, J.CallExp (J.IndexExp (doValue (ctx, env) obj, doValue (ctx, env) name), Vector.map (doValue (ctx, env)) (vector args)))
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, result } =>
                   impure (result, J.NewExp (doValue (ctx, env) ctor, Vector.map (doValue (ctx, env)) (vector args)))
-                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " is not supported on JavaScript backend")
                 | C.ValDec { exp = C.Record fields, result } =>
                   let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (label, doValue (ctx, env) v) :: acc) [] fields
                       fun isTuple (_, []) = true
-                        | isTuple (i, (Syntax.NumericLabel n, x) :: xs) = i = n andalso isTuple (i + 1, xs)
+                        | isTuple (i, (Syntax.NumericLabel n, _) :: xs) = i = n andalso isTuple (i + 1, xs)
                         | isTuple _ = false
                       val exp = if isTuple (1, fields) then
                                     J.ArrayExp (vector (List.map #2 fields))
@@ -557,7 +555,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        end
                      | NONE => doDecs (ctx, env, decs, finalExp, revStats)
                   )
-                | C.ValDec { exp = C.Projection { label, record, fieldTypes }, result } =>
+                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, result } =>
                   let val label = case label of
                                       Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
                                     | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
@@ -641,7 +639,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                        DIRECT_STYLE => false
                                      | CPS => List.exists (fn (name, _, _) => CpsAnalyze.escapesTransitively (#contEscapeMap ctx, name)) defs
                   in if escape then
-                         let val env' = { continuations = List.foldl (fn ((name, params, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
+                         let val env' = { continuations = List.foldl (fn ((name, _, _), e) => C.CVarMap.insert (e, name, TAILCALL name)) (#continuations env) defs
                                         , subst = #subst env
                                         }
                              val (decs', assignments) = List.foldr (fn ((name, params, body), (decs, assignments)) =>
@@ -654,7 +652,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                            | NO_INIT
                              val init = case (VectorSlice.isEmpty decs, finalExp) of
                                             (true, C.AppCont { applied, args }) =>
-                                            let fun find (i, []) = NO_INIT
+                                            let fun find (_, []) = NO_INIT
                                                   | find (i, (name, params, _) :: xs) = if name = applied then
                                                                                             INIT_WITH_VALUES (i, params, args)
                                                                                         else
@@ -667,7 +665,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                   | NO_WHICH of C.CVar * (C.Var option) list * C.CExp
                              val maxargs = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length (List.filter Option.isSome params))) 0 defs
                              val commonParams = List.tabulate (maxargs, fn _ => genSym ctx)
-                             fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME p, (c :: rest, acc)) => (rest, SOME c :: acc)
+                             fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME _, (c :: rest, acc)) => (rest, SOME c :: acc)
                                                                                    | (_, (rest, acc)) => (rest, NONE :: acc)
                                                                                    ) (commonParams, []) params))
                              val (optWhich, vars) = case defs of
@@ -719,7 +717,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                            , initAndRest
                                              @ [ J.LoopStat ( SOME loopLabel
                                                             , case optWhich of
-                                                                  NO_WHICH (name, params, body) =>
+                                                                  NO_WHICH (_, params, body) =>
                                                                   let val dec = let val defs = ListPair.map (fn (p, c) => (p, J.VarExp (J.UserDefinedId c))) (List.mapPartial (fn x => x) params, commonParams)
                                                                                 in if List.null defs then
                                                                                        []
@@ -730,7 +728,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                                   end
                                                                 | NEED_WHICH which' =>
                                                                   vector [ J.SwitchStat ( J.VarExp which'
-                                                                                        , #2 (List.foldr (fn ((name, params, body), (i, cases)) =>
+                                                                                        , #2 (List.foldr (fn ((_, params, body), (i, cases)) =>
                                                                                                              let val i = i - 1
                                                                                                                  val dec = let val defs = ListPair.map (fn (p, c) => (p, J.VarExp (J.UserDefinedId c))) (List.mapPartial (fn x => x) params, commonParams)
                                                                                                                            in if List.null defs then
@@ -834,7 +832,7 @@ and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
                   end
            end
       )
-  | doCExp ctx env C.Unreachable = []
+  | doCExp _ _ C.Unreachable = []
 
 fun doProgramDirect ctx cont cexp
     = let val label = CVarToJs cont

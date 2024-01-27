@@ -66,7 +66,7 @@ fun readFile (lang, path)
                   | NONE => go ({ provides = provides, requires = requires, body = String.concat (List.rev acc) } :: chunks)
       in go [] before TextIO.closeIn ins
       end
-fun doEliminate (chunk as { provides, requires, body }, (acc, used))
+fun doEliminate (chunk as { provides, requires, body = _ }, (acc, used))
     = if List.exists (fn p => StringSet.member (used, p)) provides then
           (chunk :: acc, List.foldl StringSet.add' used requires)
       else
@@ -74,7 +74,7 @@ fun doEliminate (chunk as { provides, requires, body }, (acc, used))
 fun eliminateUnusedChunks (chunks, used) = let val usedSet = List.foldl StringSet.add' StringSet.empty used
                                            in #1 (List.foldr doEliminate ([], usedSet) chunks)
                                            end
-fun output (outs, chunks) = let fun outputOne { provides, requires, body } = TextIO.output (outs, body)
+fun output (outs, chunks) = let fun outputOne { provides = _, requires = _, body } = TextIO.output (outs, body)
                             in List.app outputOne chunks
                             end
 end;

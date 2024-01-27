@@ -2,10 +2,12 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
 ann "sequenceNonUnit warn" in
+(* ann "warnUnused false" in *)
 compat/ord_set.sig
 compat/ord_map.sig
 compat/red-black-set-fn.sml
 compat/red-black-map-fn.sml
+(* end *)
 list-util.sml
 vector-util.sml
 ../pluto/pluto.mlb

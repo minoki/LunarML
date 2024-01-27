@@ -53,7 +53,6 @@ structure CSyntax :> sig
           end = struct
 exception InvalidCode of string
 type Var = TypedSyntax.VId
-type Tag = string
 structure CVar :> sig
               eqtype t
               type ord_key = t
@@ -139,7 +138,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true
   | isDiscardable (Abs _) = true
-fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
+(* fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
                                              F.IntConstOp _ => false
                                            | F.WordConstOp _ => false
                                            | F.RealConstOp _ => false
@@ -169,17 +168,17 @@ fun mayRaise (PrimOp { primOp, ... }) = (case primOp of
   | mayRaise (Record _) = false
   | mayRaise (ExnTag _) = false
   | mayRaise (Projection _) = false
-  | mayRaise (Abs _) = false
+  | mayRaise (Abs _) = false *)
 
 fun containsAppDec (ValDec _) = false
   | containsAppDec (RecDec _) = false
-  | containsAppDec (ContDec { name, params, body }) = containsApp body
+  | containsAppDec (ContDec { name = _, params = _, body }) = containsApp body
   | containsAppDec (RecContDec defs) = List.exists (fn (_, _, body) => containsApp body) defs
   | containsAppDec (ESImportDec _) = false
 and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists containsAppDec decs
   | containsApp (App _) = true
   | containsApp (AppCont _) = false
-  | containsApp (If { cond, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
+  | containsApp (If { cond = _, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
   | containsApp (Handle { body, handler = (_, h), ... }) = containsApp body orelse containsApp h
   | containsApp Unreachable = false
 
@@ -200,13 +199,13 @@ fun freeVarsInValue bound (v, acc)
         | String16Const _ => acc
 fun VIdSet_addOpt (SOME x, set) = TypedSyntax.VIdSet.add (set, x)
   | VIdSet_addOpt (NONE, set) = set
-fun freeVarsInSimpleExp (bound, PrimOp { primOp, tyargs = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
+fun freeVarsInSimpleExp (bound, PrimOp { primOp = _, tyargs = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
   | freeVarsInSimpleExp (bound, Record fields, acc) = Syntax.LabelMap.foldl (freeVarsInValue bound) acc fields
-  | freeVarsInSimpleExp (bound, ExnTag { name, payloadTy }, acc) = acc
-  | freeVarsInSimpleExp (bound, Projection { label, record, fieldTypes }, acc) = freeVarsInValue bound (record, acc)
-  | freeVarsInSimpleExp (bound, Abs { contParam, params, body }, acc) = let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
-                                                                        in freeVarsInExp (bound, body, acc)
-                                                                        end
+  | freeVarsInSimpleExp (_, ExnTag { name = _, payloadTy = _ }, acc) = acc
+  | freeVarsInSimpleExp (bound, Projection { label = _, record, fieldTypes = _ }, acc) = freeVarsInValue bound (record, acc)
+  | freeVarsInSimpleExp (bound, Abs { contParam = _, params, body }, acc) = let val bound = List.foldl TypedSyntax.VIdSet.add' bound params
+                                                                            in freeVarsInExp (bound, body, acc)
+                                                                            end
 and freeVarsInDec (ValDec { exp, result }, (bound, acc))
     = let val acc = freeVarsInSimpleExp (bound, exp, acc)
       in case result of
@@ -222,7 +221,7 @@ and freeVarsInDec (ValDec { exp, result }, (bound, acc))
                                ) acc defs
       in (bound, acc)
       end
-  | freeVarsInDec (ContDec { name, params, body }, (bound, acc))
+  | freeVarsInDec (ContDec { name = _, params, body }, (bound, acc))
     = let val bound = List.foldl VIdSet_addOpt bound params
       in (bound, freeVarsInExp (bound, body, acc))
       end
@@ -238,11 +237,11 @@ and freeVarsInDec (ValDec { exp, result }, (bound, acc))
 and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = Vector.foldl freeVarsInDec (bound, acc) decs
                                                      in freeVarsInExp (bound, cont, acc)
                                                      end
-  | freeVarsInExp (bound, App { applied, cont, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
-  | freeVarsInExp (bound, AppCont { applied, args }, acc) = List.foldl (freeVarsInValue bound) acc args
+  | freeVarsInExp (bound, App { applied, cont = _, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
+  | freeVarsInExp (bound, AppCont { applied = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
   | freeVarsInExp (bound, If { cond, thenCont, elseCont }, acc) = freeVarsInExp (bound, elseCont, freeVarsInExp (bound, thenCont, freeVarsInValue bound (cond, acc)))
-  | freeVarsInExp (bound, Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = freeVarsInExp (bound, body, freeVarsInExp (TypedSyntax.VIdSet.add (bound, e), h, acc))
-  | freeVarsInExp (bound, Unreachable, acc) = acc
+  | freeVarsInExp (bound, Handle { body, handler = (e, h), successfulExitIn = _, successfulExitOut = _ }, acc) = freeVarsInExp (bound, body, freeVarsInExp (TypedSyntax.VIdSet.add (bound, e), h, acc))
+  | freeVarsInExp (_, Unreachable, acc) = acc
 
 fun recurseCExp f
     = let fun goSimpleExp (e as PrimOp _) = e
@@ -309,7 +308,7 @@ datatype cont = REIFIED of C.CVar
 fun prependRevDecs ([], cont) = cont
   | prependRevDecs (revDecs, C.Let { decs, cont }) = C.Let { decs = Vector.fromList (List.revAppend (revDecs, Vector.foldr (op ::) [] decs)), cont = cont }
   | prependRevDecs (revDecs, cont) = C.Let { decs = Vector.fromList (List.rev revDecs), cont = cont }
-fun reify (ctx, revDecs, REIFIED k) f = prependRevDecs (revDecs, f k)
+fun reify (_, revDecs, REIFIED k) f = prependRevDecs (revDecs, f k)
   | reify (ctx, revDecs, META (hint, m)) f = let val k = genContSym ctx
                                                  val x = case hint of
                                                              NONE => genSym ctx
@@ -339,7 +338,7 @@ fun transform (ctx, env) exp { revDecs, resultHint } k = transformX (ctx, env) e
 and transformT (ctx, env) exp (revDecs, k) = transformX (ctx, env) exp (revDecs, REIFIED k)
 and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : cont) : C.CExp
     = case exp of
-           F.PrimExp (F.PrimCall Primitives.DelimCont_pushPrompt, tyargs, [p (* 'a prompt_tag *), f (* unit -> 'a *)]) =>
+           F.PrimExp (F.PrimCall Primitives.DelimCont_pushPrompt, _, [p (* 'a prompt_tag *), f (* unit -> 'a *)]) =>
            transform (ctx, env) p { revDecs = revDecs, resultHint = NONE }
                      (fn (revDecs, p) =>
                          transform (ctx, env) f { revDecs = revDecs, resultHint = NONE }
@@ -350,7 +349,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                              )
                                    )
                      )
-         | F.PrimExp (F.PrimCall Primitives.DelimCont_withSubCont, tyargs, [p (* 'b prompt_tag *), f (* ('a,'b) subcont -> 'b *)]) =>
+         | F.PrimExp (F.PrimCall Primitives.DelimCont_withSubCont, _, [p (* 'b prompt_tag *), f (* ('a,'b) subcont -> 'b *)]) =>
            transform (ctx, env) p { revDecs = revDecs, resultHint = NONE }
                      (fn (revDecs, p) =>
                          transform (ctx, env) f { revDecs = revDecs, resultHint = NONE }
@@ -361,7 +360,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                              )
                                    )
                      )
-         | F.PrimExp (F.PrimCall Primitives.DelimCont_pushSubCont, tyargs, [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]) =>
+         | F.PrimExp (F.PrimCall Primitives.DelimCont_pushSubCont, _, [subcont (* ('a,'b) subcont *), f (* unit -> 'a *)]) =>
            transform (ctx, env) subcont { revDecs = revDecs, resultHint = NONE }
                      (fn (revDecs, subcont) =>
                          transform (ctx, env) f { revDecs = revDecs, resultHint = NONE }
@@ -372,7 +371,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                              )
                                    )
                      )
-         | F.PrimExp (F.PrimCall Primitives.Unsafe_cast, tyargs, [arg]) =>
+         | F.PrimExp (F.PrimCall Primitives.Unsafe_cast, _, [arg]) =>
            transformX (ctx, env) arg (revDecs, k)
          | F.PrimExp (F.PrimCall Primitives.unreachable, _, _) =>
            C.Unreachable
@@ -552,7 +551,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                      )
          | F.TyAbsExp (_, _, exp) => transformX (ctx, env) exp (revDecs, k)
          | F.TyAppExp (exp, _) => transformX (ctx, env) exp (revDecs, k)
-         | F.PackExp { payloadTy, exp, packageTy } => transformX (ctx, env) exp (revDecs, k)
+         | F.PackExp { payloadTy = _, exp, packageTy = _ } => transformX (ctx, env) exp (revDecs, k)
          | F.BogusExp _ => raise Message.Abort
          | F.ExitProgram => (case k of
                                  REIFIED k => prependRevDecs (revDecs, C.AppCont { applied = k, args = [] })
@@ -576,7 +575,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                                                           in prependRevDecs (dec :: revDecs, C.AppCont { applied = k, args = [C.Var result] })
                                                                           end
                                                                       else
-                                                                          prependRevDecs (revDecs, C.AppCont { applied = k, args = List.foldl (fn ((name, v), acc) => v :: acc) [] items })
+                                                                          prependRevDecs (revDecs, C.AppCont { applied = k, args = List.foldl (fn ((_, v), acc) => v :: acc) [] items })
                                                                   )
                                          | META _ => raise Fail "unexpected META"
                                       )
@@ -588,8 +587,7 @@ structure CpsDeadCodeAnalysis :> sig
               val analyze : CSyntax.CExp -> usage
               val isUsed : usage * TypedSyntax.VId -> bool
           end = struct
-local structure F = FSyntax
-      structure C = CSyntax
+local structure C = CSyntax
 in
 type graph = TypedSyntax.VIdSet.set TypedSyntax.VIdTable.hash_table
 type usage = bool TypedSyntax.VIdTable.hash_table
@@ -603,11 +601,11 @@ fun addValue (C.Var v, set) = TypedSyntax.VIdSet.add (set, v)
   | addValue (C.Char16Const _, set) = set
   | addValue (C.StringConst _, set) = set
   | addValue (C.String16Const _, set) = set
-fun goSimpleExp (g, C.PrimOp { primOp, tyargs = _, args }) = List.foldl addValue TypedSyntax.VIdSet.empty args
-  | goSimpleExp (g, C.Record fields) = Syntax.LabelMap.foldl addValue TypedSyntax.VIdSet.empty fields
-  | goSimpleExp (g, C.ExnTag { name, payloadTy }) = TypedSyntax.VIdSet.empty
-  | goSimpleExp (g, C.Projection { label, record, fieldTypes }) = addValue (record, TypedSyntax.VIdSet.empty)
-  | goSimpleExp (g, C.Abs { contParam, params, body }) = goExp (g, body, TypedSyntax.VIdSet.empty) (* What to do with params? *)
+fun goSimpleExp (_, C.PrimOp { primOp = _, tyargs = _, args }) = List.foldl addValue TypedSyntax.VIdSet.empty args
+  | goSimpleExp (_, C.Record fields) = Syntax.LabelMap.foldl addValue TypedSyntax.VIdSet.empty fields
+  | goSimpleExp (_, C.ExnTag { name = _, payloadTy = _ }) = TypedSyntax.VIdSet.empty
+  | goSimpleExp (_, C.Projection { label = _, record, fieldTypes = _ }) = addValue (record, TypedSyntax.VIdSet.empty)
+  | goSimpleExp (g, C.Abs { contParam = _, params = _, body }) = goExp (g, body, TypedSyntax.VIdSet.empty) (* What to do with params? *)
 and goDec g (C.ValDec { exp, result }, acc) = let val s = goSimpleExp (g, exp)
                                               in case result of
                                                      SOME r => TypedSyntax.VIdTable.insert g (r, s)
@@ -621,17 +619,17 @@ and goDec g (C.ValDec { exp, result }, acc) = let val s = goSimpleExp (g, exp)
                                    in List.app (fn (name, _, _, _) => TypedSyntax.VIdTable.insert g (name, s)) defs
                                     ; acc
                                    end
-  | goDec g (C.ContDec { name, params, body }, acc) = goExp (g, body, acc)
+  | goDec g (C.ContDec { name = _, params = _, body }, acc) = goExp (g, body, acc)
   | goDec g (C.RecContDec defs, acc) = List.foldl (fn ((_, _, body), acc) => goExp (g, body, acc)) acc defs
-  | goDec g (C.ESImportDec { pure, specs, moduleName }, acc) = ( List.app (fn (_, vid) => TypedSyntax.VIdTable.insert g (vid, TypedSyntax.VIdSet.empty)) specs
-                                                               ; acc
-                                                               )
+  | goDec g (C.ESImportDec { pure = _, specs, moduleName = _ }, acc) = ( List.app (fn (_, vid) => TypedSyntax.VIdTable.insert g (vid, TypedSyntax.VIdSet.empty)) specs
+                                                                       ; acc
+                                                                       )
 and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, Vector.foldl (goDec g) acc decs)
-  | goExp (g, C.App { applied, cont, args }, acc) = List.foldl addValue (addValue (applied, acc)) args
-  | goExp (g, C.AppCont { applied, args }, acc) = List.foldl addValue acc args
+  | goExp (_, C.App { applied, cont = _, args }, acc) = List.foldl addValue (addValue (applied, acc)) args
+  | goExp (_, C.AppCont { applied = _, args }, acc) = List.foldl addValue acc args
   | goExp (g, C.If { cond, thenCont, elseCont }, acc) = goExp (g, elseCont, goExp (g, thenCont, addValue (cond, acc)))
-  | goExp (g, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc) = goExp (g, body, goExp (g, h, acc))
-  | goExp (g, C.Unreachable, acc) = acc
+  | goExp (g, C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ }, acc) = goExp (g, body, goExp (g, h, acc))
+  | goExp (_, C.Unreachable, acc) = acc
 (*: val makeGraph : CSyntax.CExp -> graph * TypedSyntax.VIdSet.set *)
 fun makeGraph program = let val g = TypedSyntax.VIdTable.mkTable (1, Fail "dead code analysis table lookup failed")
                         in (g, goExp (g, program, TypedSyntax.VIdSet.empty))
@@ -676,8 +674,7 @@ structure CpsUsageAnalysis :> sig
                                             , dead_code_analysis : CpsDeadCodeAnalysis.usage
                                             }
           end = struct
-local structure F = FSyntax
-      structure C = CSyntax
+local structure C = CSyntax
 in
 datatype frequency = NEVER | ONCE | MANY
 fun oneMore NEVER = ONCE
@@ -708,15 +705,15 @@ fun useValue env (C.Var v) = (case TypedSyntax.VIdTable.find env v of
                                             end
                                 | NONE => ()
                              )
-  | useValue env C.Unit = ()
-  | useValue env C.Nil = ()
-  | useValue env (C.BoolConst _) = ()
-  | useValue env (C.IntConst _) = ()
-  | useValue env (C.WordConst _) = ()
-  | useValue env (C.CharConst _) = ()
-  | useValue env (C.Char16Const _) = ()
-  | useValue env (C.StringConst _) = ()
-  | useValue env (C.String16Const _) = ()
+  | useValue _ C.Unit = ()
+  | useValue _ C.Nil = ()
+  | useValue _ (C.BoolConst _) = ()
+  | useValue _ (C.IntConst _) = ()
+  | useValue _ (C.WordConst _) = ()
+  | useValue _ (C.CharConst _) = ()
+  | useValue _ (C.Char16Const _) = ()
+  | useValue _ (C.StringConst _) = ()
+  | useValue _ (C.String16Const _) = ()
 fun useValueAsCallee (env, cont, C.Var v)
     = (case TypedSyntax.VIdTable.find env v of
            SOME r => let val { call, project, other, returnConts, labels } = !r
@@ -724,15 +721,15 @@ fun useValueAsCallee (env, cont, C.Var v)
                      end
          | NONE => ()
       )
-  | useValueAsCallee (env, cont, C.Unit) = ()
-  | useValueAsCallee (env, cont, C.Nil) = ()
-  | useValueAsCallee (env, cont, C.BoolConst _) = ()
-  | useValueAsCallee (env, cont, C.IntConst _) = ()
-  | useValueAsCallee (env, cont, C.WordConst _) = ()
-  | useValueAsCallee (env, cont, C.CharConst _) = ()
-  | useValueAsCallee (env, cont, C.Char16Const _) = ()
-  | useValueAsCallee (env, cont, C.StringConst _) = ()
-  | useValueAsCallee (env, cont, C.String16Const _) = ()
+  | useValueAsCallee (_, _, C.Unit) = ()
+  | useValueAsCallee (_, _, C.Nil) = ()
+  | useValueAsCallee (_, _, C.BoolConst _) = ()
+  | useValueAsCallee (_, _, C.IntConst _) = ()
+  | useValueAsCallee (_, _, C.WordConst _) = ()
+  | useValueAsCallee (_, _, C.CharConst _) = ()
+  | useValueAsCallee (_, _, C.Char16Const _) = ()
+  | useValueAsCallee (_, _, C.StringConst _) = ()
+  | useValueAsCallee (_, _, C.String16Const _) = ()
 fun useValueAsRecord (env, label, result, C.Var v)
     = (case TypedSyntax.VIdTable.find env v of
            SOME r => let val { call, project, other, returnConts, labels } = !r
@@ -745,15 +742,15 @@ fun useValueAsRecord (env, label, result, C.Var v)
                      end
          | NONE => ()
       )
-  | useValueAsRecord (env, label, result, C.Unit) = ()
-  | useValueAsRecord (env, label, result, C.Nil) = ()
-  | useValueAsRecord (env, label, result, C.BoolConst _) = ()
-  | useValueAsRecord (env, label, result, C.IntConst _) = ()
-  | useValueAsRecord (env, label, result, C.WordConst _) = ()
-  | useValueAsRecord (env, label, result, C.CharConst _) = ()
-  | useValueAsRecord (env, label, result, C.Char16Const _) = ()
-  | useValueAsRecord (env, label, result, C.StringConst _) = ()
-  | useValueAsRecord (env, label, result, C.String16Const _) = ()
+  | useValueAsRecord (_, _, _, C.Unit) = ()
+  | useValueAsRecord (_, _, _, C.Nil) = ()
+  | useValueAsRecord (_, _, _, C.BoolConst _) = ()
+  | useValueAsRecord (_, _, _, C.IntConst _) = ()
+  | useValueAsRecord (_, _, _, C.WordConst _) = ()
+  | useValueAsRecord (_, _, _, C.CharConst _) = ()
+  | useValueAsRecord (_, _, _, C.Char16Const _) = ()
+  | useValueAsRecord (_, _, _, C.StringConst _) = ()
+  | useValueAsRecord (_, _, _, C.String16Const _) = ()
 fun useContVarIndirect cenv (v : C.CVar) = (case C.CVarTable.find cenv v of
                                                 SOME r => let val { direct, indirect } = !r
                                                           in r := { direct = direct, indirect = oneMore indirect }
@@ -776,10 +773,10 @@ local
                          else
                              C.CVarTable.insert cenv (v, ref neverUsedCont)
 in
-fun goSimpleExp (env, renv, cenv, crenv, _, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (useValue env) args
-  | goSimpleExp (env, renv, cenv, crenv, _, C.Record fields) = Syntax.LabelMap.app (useValue env) fields
-  | goSimpleExp (env, renv, cenv, crenv, _, C.ExnTag { name = _, payloadTy = _ }) = ()
-  | goSimpleExp (env, renv, cenv, crenv, result, C.Projection { label, record, fieldTypes = _ }) = useValueAsRecord (env, label, result, record)
+fun goSimpleExp (env, _, _, _, _, C.PrimOp { primOp = _, tyargs = _, args }) = List.app (useValue env) args
+  | goSimpleExp (env, _, _, _, _, C.Record fields) = Syntax.LabelMap.app (useValue env) fields
+  | goSimpleExp (_, _, _, _, _, C.ExnTag { name = _, payloadTy = _ }) = ()
+  | goSimpleExp (env, _, _, _, result, C.Projection { label, record, fieldTypes = _ }) = useValueAsRecord (env, label, result, record)
   | goSimpleExp (env, renv, cenv, crenv, _, C.Abs { contParam, params, body })
     = ( List.app (fn p => add (env, p)) params
       ; addC (cenv, contParam)
@@ -811,14 +808,14 @@ and goDec (env, renv, cenv, crenv)
        | C.RecContDec defs =>
          let val recursiveCEnv = List.foldl (fn ((f, _, _), m) => C.CVarMap.insert (m, f, ref neverUsedCont)) C.CVarMap.empty defs
          in C.CVarMap.appi (fn (f, v) => C.CVarTable.insert cenv (f, v)) recursiveCEnv
-          ; List.app (fn (f, params, body) => ( List.app (Option.app (fn p => add (env, p))) params
+          ; List.app (fn (_, params, body) => ( List.app (Option.app (fn p => add (env, p))) params
                                               ; goCExp (env, renv, cenv, crenv, body)
                                               )
                      ) defs
           ; C.CVarMap.appi (fn (f, v) => C.CVarTable.insert crenv (f, v)) recursiveCEnv
           ; List.app (fn (f, _, _) => C.CVarTable.insert cenv (f, ref neverUsedCont)) defs
          end
-       | C.ESImportDec { pure, specs, moduleName } => List.app (fn (_, vid) => add (env, vid)) specs
+       | C.ESImportDec { pure = _, specs, moduleName = _ } => List.app (fn (_, vid) => add (env, vid)) specs
 and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (cont_usage ref) C.CVarTable.hash_table, crenv, cexp)
     = case cexp of
           C.Let { decs, cont } =>
@@ -897,7 +894,7 @@ fun sizeOfSimpleExp (e, threshold)
             | C.Record fields => threshold - Syntax.LabelMap.numItems fields
             | C.ExnTag _ => threshold - 1
             | C.Projection _ => threshold - 1
-            | C.Abs { contParam, params, body } => sizeOfCExp (body, threshold)
+            | C.Abs { contParam = _, params = _, body } => sizeOfCExp (body, threshold)
 and sizeOfDec (dec, threshold)
     = if threshold < 0 then
           threshold
@@ -905,7 +902,7 @@ and sizeOfDec (dec, threshold)
           case dec of
               C.ValDec { exp, result = _ } => sizeOfSimpleExp (exp, threshold)
             | C.RecDec defs => List.foldl (fn ((_, _, _, body), t) => sizeOfCExp (body, t)) threshold defs
-            | C.ContDec { name, params, body } => sizeOfCExp (body, threshold)
+            | C.ContDec { name = _, params = _, body } => sizeOfCExp (body, threshold)
             | C.RecContDec defs => List.foldl (fn ((_, _, body), t) => sizeOfCExp (body, t)) threshold defs
             | C.ESImportDec _ => 0
 and sizeOfCExp (e, threshold)
@@ -914,35 +911,35 @@ and sizeOfCExp (e, threshold)
       else
           case e of
               C.Let { decs, cont } => Vector.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
-            | C.App { applied, cont, args } => threshold - List.length args
-            | C.AppCont { applied, args } => threshold - List.length args
-            | C.If { cond, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
-            | C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
+            | C.App { applied = _, cont = _, args } => threshold - List.length args
+            | C.AppCont { applied = _, args } => threshold - List.length args
+            | C.If { cond = _, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
+            | C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
             | C.Unreachable => threshold
 fun substValue (subst : C.Value TypedSyntax.VIdMap.map) (x as C.Var v) = (case TypedSyntax.VIdMap.find (subst, v) of
                                                                               SOME w => w
                                                                             | NONE => x
                                                                          )
-  | substValue subst v = v
+  | substValue _ v = v
 fun substCVar (csubst : C.CVar C.CVarMap.map) v = case C.CVarMap.find (csubst, v) of
                                                       SOME w => w
                                                     | NONE => v
-fun substSimpleExp (subst, csubst, C.PrimOp { primOp, tyargs, args }) = C.PrimOp { primOp = primOp, tyargs = tyargs, args = List.map (substValue subst) args }
-  | substSimpleExp (subst, csubst, C.Record fields) = C.Record (Syntax.LabelMap.map (substValue subst) fields)
-  | substSimpleExp (subst, csubst, e as C.ExnTag _) = e
-  | substSimpleExp (subst, csubst, C.Projection { label, record, fieldTypes }) = C.Projection { label = label, record = substValue subst record, fieldTypes = fieldTypes }
+fun substSimpleExp (subst, _, C.PrimOp { primOp, tyargs, args }) = C.PrimOp { primOp = primOp, tyargs = tyargs, args = List.map (substValue subst) args }
+  | substSimpleExp (subst, _, C.Record fields) = C.Record (Syntax.LabelMap.map (substValue subst) fields)
+  | substSimpleExp (_, _, e as C.ExnTag _) = e
+  | substSimpleExp (subst, _, C.Projection { label, record, fieldTypes }) = C.Projection { label = label, record = substValue subst record, fieldTypes = fieldTypes }
   | substSimpleExp (subst, csubst, C.Abs { contParam, params, body }) = C.Abs { contParam = contParam, params = params, body = substCExp (subst, csubst, body) }
 and substDec (subst, csubst) = fn C.ValDec { exp, result } => C.ValDec { exp = substSimpleExp (subst, csubst, exp), result = result }
                                 | C.RecDec defs => C.RecDec (List.map (fn (f, k, params, body) => (f, k, params, substCExp (subst, csubst, body))) defs)
                                 | C.ContDec { name, params, body } => C.ContDec { name = name, params = params, body = substCExp (subst, csubst, body) }
                                 | C.RecContDec defs => C.RecContDec (List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs)
-                                | dec as C.ESImportDec { pure, specs, moduleName } => dec
+                                | dec as C.ESImportDec _ => dec
 and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont }) = C.Let { decs = Vector.map (substDec (subst, csubst)) decs, cont = substCExp (subst, csubst, cont) }
   | substCExp (subst, csubst, C.App { applied, cont, args }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, csubst, thenCont), elseCont = substCExp (subst, csubst, elseCont) }
   | substCExp (subst, csubst, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = C.Handle { body = substCExp (subst, csubst, body), handler = (e, substCExp (subst, csubst, h)), successfulExitIn = successfulExitIn, successfulExitOut = substCVar csubst successfulExitOut }
-  | substCExp (subst, csubst, e as C.Unreachable) = e
+  | substCExp (_, _, e as C.Unreachable) = e
 val substCExp = fn (subst, csubst, e) => if TypedSyntax.VIdMap.isEmpty subst andalso C.CVarMap.isEmpty csubst then
                                              e
                                          else
@@ -960,7 +957,7 @@ fun alphaConvertSimpleExp (ctx, subst, csubst, C.Abs { contParam, params, body }
                , body = alphaConvert (ctx, subst', csubst', body)
                }
       end
-  | alphaConvertSimpleExp (ctx, subst, csubst, e) = substSimpleExp (subst, csubst, e)
+  | alphaConvertSimpleExp (_, subst, csubst, e) = substSimpleExp (subst, csubst, e)
 and alphaConvertDec (ctx : Context) (dec, (subst, csubst, acc))
     = case dec of
           C.ValDec { exp, result = SOME result } =>
@@ -1044,12 +1041,12 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
     = let val (subst', csubst', revDecs) = Vector.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
       in C.Let { decs = Vector.fromList (List.rev revDecs), cont = alphaConvert (ctx, subst', csubst', cont) }
       end
-  | alphaConvert (ctx, subst, csubst, C.App { applied, cont, args })
+  | alphaConvert (_, subst, csubst, C.App { applied, cont, args })
     = C.App { applied = substValue subst applied
             , cont = substCVar csubst cont
             , args = List.map (substValue subst) args
             }
-  | alphaConvert (ctx, subst, csubst, C.AppCont { applied, args })
+  | alphaConvert (_, subst, csubst, C.AppCont { applied, args })
     = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
   | alphaConvert (ctx, subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = alphaConvert (ctx, subst, csubst, thenCont), elseCont = alphaConvert (ctx, subst, csubst, elseCont) }
   | alphaConvert (ctx, subst, csubst, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut })
@@ -1063,7 +1060,7 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
                   , successfulExitOut = substCVar csubst successfulExitOut
                   }
       end
-  | alphaConvert (ctx, subst, csubst, e as C.Unreachable) = e
+  | alphaConvert (_, _, _, e as C.Unreachable) = e
 datatype simplify_result = VALUE of C.Value
                          | SIMPLE_EXP of C.SimpleExp
                          | NOT_SIMPLIFIED
@@ -1082,28 +1079,28 @@ fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
                     else
                         NONE
           )
-        | C.RecDec defs => SOME env
-        | C.ContDec { name, params, body } => if isDiscardableExp (env, body) then
-                                                  SOME env
-                                              else
-                                                  NONE
+        | C.RecDec _ => SOME env
+        | C.ContDec { name = _, params = _, body } => if isDiscardableExp (env, body) then
+                                                          SOME env
+                                                      else
+                                                          NONE
         | C.RecContDec _ => NONE
-        | C.ESImportDec { pure, specs, moduleName } => SOME env
+        | C.ESImportDec { pure = _, specs = _, moduleName = _ } => SOME env
 and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, cont })
     = (case VectorUtil.foldlOption isDiscardableDec env decs of
            SOME env => isDiscardableExp (env, cont)
          | NONE => false
       )
-  | isDiscardableExp (env, C.App { applied = C.Var applied, cont, args })
+  | isDiscardableExp (env, C.App { applied = C.Var applied, cont = _, args = _ })
     = (case TypedSyntax.VIdMap.find (env, applied) of
            SOME { isDiscardableFunction = true, ... } => true
          | _ => false
       )
-  | isDiscardableExp (env, C.App _) = false (* should not occur *)
-  | isDiscardableExp (env, C.AppCont _) = true
-  | isDiscardableExp (env, C.If { cond, thenCont, elseCont }) = isDiscardableExp (env, thenCont) andalso isDiscardableExp (env, elseCont)
-  | isDiscardableExp (env, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
-  | isDiscardableExp (env, C.Unreachable) = false
+  | isDiscardableExp (_, C.App _) = false (* should not occur *)
+  | isDiscardableExp (_, C.AppCont _) = true
+  | isDiscardableExp (env, C.If { cond = _, thenCont, elseCont }) = isDiscardableExp (env, thenCont) andalso isDiscardableExp (env, elseCont)
+  | isDiscardableExp (env, C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ }) = isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
+  | isDiscardableExp (_, C.Unreachable) = false
 datatype param_transform = KEEP | ELIMINATE | UNPACK of (C.Var * Syntax.Label) list
 fun tryUnpackParam (ctx, usage) param = case CpsUsageAnalysis.getValueUsage (usage, param) of
                                             { call = NEVER, project = NEVER, other = NEVER, ... } => ELIMINATE
@@ -1133,15 +1130,15 @@ fun tryUnpackContParam (ctx, usage) (SOME param)
                                           ) [] labels)
          | _ => KEEP
       )
-  | tryUnpackContParam (ctx, usage) NONE = ELIMINATE
+  | tryUnpackContParam (_, _) NONE = ELIMINATE
 fun isInt32 (x : IntInf.int) = ~0x80000000 <= x andalso x <= 0x7fffffff
 fun isInt54 (x : IntInf.int) = ~0x20000000000000 <= x andalso x <= 0x1fffffffffffff
 fun isInt64 (x : IntInf.int) = ~0x8000000000000000 <= x andalso x <= 0x7fffffffffffffff
-fun isInt (P.INT, x) = false
+fun isInt (P.INT, _) = false
   | isInt (P.I32, x) = isInt32 x
   | isInt (P.I54, x) = isInt54 x
   | isInt (P.I64, x) = isInt64 x
-  | isInt (P.INT_INF, x) = true
+  | isInt (P.INT_INF, _) = true
 fun wraparound (P.INT, x : IntInf.int) = x
   | wraparound (P.I32, x) = (x + 0x80000000) mod 0x100000000 - 0x80000000
   | wraparound (P.I54, x) = (x + 0x20000000000000) mod 0x40000000000000 - 0x20000000000000
@@ -1149,8 +1146,8 @@ fun wraparound (P.INT, x : IntInf.int) = x
   | wraparound (P.INT_INF, x) = x
 fun min3 (x, y, z) = IntInf.min (x, IntInf.min (y, z))
 fun max3 (x, y, z) = IntInf.max (x, IntInf.max (y, z))
-fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields) = NOT_SIMPLIFIED
-  | simplifySimpleExp (env, C.PrimOp { primOp, tyargs, args })
+fun simplifySimpleExp (_ : value_info TypedSyntax.VIdMap.map, C.Record _) = NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.PrimOp { primOp, tyargs = _, args })
     = (case (primOp, args) of
            (F.ListOp, []) => VALUE C.Nil (* empty list *)
          | (F.PrimCall P.JavaScript_call, [f, C.Var args]) =>
@@ -1294,7 +1291,7 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
          | (F.PrimCall (P.Int_TIMES_wrapping w), [_, zero as C.IntConst (w', 0)]) => if w = w' then VALUE zero else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES_wrapping w), [C.IntConst (w', 1), y]) => if w = w' then VALUE y else NOT_SIMPLIFIED
          | (F.PrimCall (P.Int_TIMES_wrapping w), [x, C.IntConst (w', 1)]) => if w = w' then VALUE x else NOT_SIMPLIFIED
-         | (F.PrimCall (P.Int_TIMES_wrapping w), [x as C.IntConst (w', x'), y as C.IntConst (w'', y')]) =>
+         | (F.PrimCall (P.Int_TIMES_wrapping w), [C.IntConst (w', x'), C.IntConst (w'', y')]) =>
            if w = w' andalso w = w'' then
                VALUE (C.IntConst (w, wraparound (w, x' * y')))
            else
@@ -1406,8 +1403,8 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                NOT_SIMPLIFIED
          | _ => NOT_SIMPLIFIED
       )
-  | simplifySimpleExp (env, C.ExnTag _) = NOT_SIMPLIFIED
-  | simplifySimpleExp (env, C.Projection { label, record, fieldTypes })
+  | simplifySimpleExp (_, C.ExnTag _) = NOT_SIMPLIFIED
+  | simplifySimpleExp (env, C.Projection { label, record, fieldTypes = _ })
     = (case record of
            C.Var v => (case TypedSyntax.VIdMap.find (env, v) of
                            SOME { exp = SOME (C.Record fields), ... } => (case Syntax.LabelMap.find (fields, label) of
@@ -1418,7 +1415,7 @@ fun simplifySimpleExp (env : value_info TypedSyntax.VIdMap.map, C.Record fields)
                       )
          | _ => NOT_SIMPLIFIED
       )
-  | simplifySimpleExp (env, C.Abs { contParam, params, body }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
+  | simplifySimpleExp (_, C.Abs { contParam = _, params = _, body = _ }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
 and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, rec_usage : CpsUsageAnalysis.usage_table, cont_usage : CpsUsageAnalysis.cont_usage_table, cont_rec_usage : CpsUsageAnalysis.cont_usage_table, dead_code_analysis : CpsDeadCodeAnalysis.usage }, appliedCont : C.CVar option) (dec, (env, cenv, subst, csubst, acc : C.Dec list))
     = case dec of
           C.ValDec { exp, result } =>
@@ -1470,12 +1467,12 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                                          SOME paramTransforms =>
                                          let val () = #simplificationOccurred ctx := true
                                              val params' = ListPair.foldrEq (fn (p, KEEP, acc) => p :: acc
-                                                                            | (p, ELIMINATE, acc) => acc
-                                                                            | (p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                                            | (_, ELIMINATE, acc) => acc
+                                                                            | (_, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                             ) [] (params, paramTransforms)
                                              val env' = ListPair.foldlEq (fn (p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
-                                                                         | (p, KEEP, env) => env
-                                                                         | (p, ELIMINATE, env) => env
+                                                                         | (_, KEEP, env) => env
+                                                                         | (_, ELIMINATE, env) => env
                                                                          ) env (params, paramTransforms)
                                              val body = simplifyCExp (ctx, env', cenv, subst, csubst, usage, body)
                                              val exp = C.Abs { contParam = contParam, params = params', body = body }
@@ -1483,7 +1480,7 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                                              val wrapperBody = let val k = genContSym ctx
                                                                    val params' = List.map (fn p => renewVId (ctx, p)) params
                                                                    val (decs, args) = ListPair.foldrEq (fn (p, KEEP, (decs, args)) => (decs, C.Var p :: args)
-                                                                                                       | (p, ELIMINATE, acc) => acc
+                                                                                                       | (_, ELIMINATE, acc) => acc
                                                                                                        | (p, UNPACK fields, (decs, args)) =>
                                                                                                          List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                                         let val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
@@ -1558,18 +1555,18 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                                SOME paramTransforms =>
                                let val () = #simplificationOccurred ctx := true
                                    val params' = ListPair.foldrEq (fn (p, KEEP, acc) => p :: acc
-                                                                  | (p, ELIMINATE, acc) => acc
-                                                                  | (p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                                  | (_, ELIMINATE, acc) => acc
+                                                                  | (_, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                   ) [] (params, paramTransforms)
                                    val env = ListPair.foldlEq (fn (p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
-                                                              | (p, KEEP, env) => env
-                                                              | (p, ELIMINATE, env) => env
+                                                              | (_, KEEP, env) => env
+                                                              | (_, ELIMINATE, env) => env
                                                               ) env (params, paramTransforms)
                                    val name' = renewVId (ctx, f)
                                    val wrapper = let val k = genContSym ctx
                                                      val params' = List.map (fn p => renewVId (ctx, p)) params
                                                      val (decs, args) = ListPair.foldrEq (fn (p, KEEP, (decs, args)) => (decs, C.Var p :: args)
-                                                                                         | (p, ELIMINATE, acc) => acc
+                                                                                         | (_, ELIMINATE, acc) => acc
                                                                                          | (p, UNPACK fields, (decs, args)) =>
                                                                                            List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                           let val v = renewVId (ctx, v)
@@ -1670,20 +1667,20 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                           SOME paramTransforms =>
                           let val () = #simplificationOccurred ctx := true
                               val params' = ListPair.foldrEq (fn (SOME p, KEEP, acc) => p :: acc
-                                                             | (SOME p, ELIMINATE, acc) => acc
-                                                             | (SOME p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                             | (SOME _, ELIMINATE, acc) => acc
+                                                             | (SOME _, UNPACK fields, acc) => List.map #1 fields @ acc
                                                              | (NONE, _, acc) => acc
                                                              ) [] (params, paramTransforms)
                               val env' = ListPair.foldlEq (fn (SOME p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
-                                                          | (SOME p, KEEP, env) => env
-                                                          | (SOME p, ELIMINATE, env) => env
+                                                          | (SOME _, KEEP, env) => env
+                                                          | (SOME _, ELIMINATE, env) => env
                                                           | (NONE, _, env) => env
                                                           ) env (params, paramTransforms)
                               val body = simplifyCExp (ctx, env', cenv, subst, csubst, usage, body)
                               val name' = renewCVar (ctx, name)
                               val wrapperBody = let val params' = List.map (Option.map (fn p => renewVId (ctx, p))) params
                                                     val (decs, args) = ListPair.foldrEq (fn (SOME p, KEEP, (decs, args)) => (decs, C.Var p :: args)
-                                                                                        | (SOME p, ELIMINATE, acc) => acc
+                                                                                        | (SOME _, ELIMINATE, acc) => acc
                                                                                         | (SOME p, UNPACK fields, (decs, args)) =>
                                                                                           List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                          let val v = renewVId (ctx, v)
@@ -1750,19 +1747,19 @@ and simplifyDec (ctx : Context, usage : { usage : CpsUsageAnalysis.usage_table, 
                                SOME paramTransforms =>
                                let val () = #simplificationOccurred ctx := true
                                    val params' = ListPair.foldrEq (fn (SOME p, KEEP, acc) => p :: acc
-                                                                  | (SOME p, ELIMINATE, acc) => acc
-                                                                  | (SOME p, UNPACK fields, acc) => List.map #1 fields @ acc
+                                                                  | (SOME _, ELIMINATE, acc) => acc
+                                                                  | (SOME _, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                   | (NONE, _, acc) => acc
                                                                   ) [] (params, paramTransforms)
                                    val env' = ListPair.foldlEq (fn (SOME p, UNPACK fields, env) => TypedSyntax.VIdMap.insert (env, p, { exp = SOME (C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields)), isDiscardableFunction = false })
-                                                               | (SOME p, KEEP, env) => env
-                                                               | (SOME p, ELIMINATE, env) => env
+                                                               | (SOME _, KEEP, env) => env
+                                                               | (SOME _, ELIMINATE, env) => env
                                                                | (NONE, _, env) => env
                                                                ) env (params, paramTransforms)
                                    val name' = renewCVar (ctx, name)
                                    val wrapper = let val params' = List.map (Option.map (fn p => renewVId (ctx, p))) params
                                                      val (decs, args) = ListPair.foldrEq (fn (SOME p, KEEP, (decs, args)) => (decs, C.Var p :: args)
-                                                                                         | (SOME p, ELIMINATE, acc) => acc
+                                                                                         | (SOME _, ELIMINATE, acc) => acc
                                                                                          | (SOME p, UNPACK fields, (decs, args)) =>
                                                                                            List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                           let val v = renewVId (ctx, v)
@@ -1804,7 +1801,7 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
     = case e of
           C.Let { decs, cont } =>
           let val appliedCont = case cont of
-                                    C.AppCont { applied, args } => SOME applied
+                                    C.AppCont { applied, args = _ } => SOME applied
                                   | _ => NONE
               val (env, cenv, subst, csubst, revDecs) = Vector.foldl (simplifyDec (ctx, usage, appliedCont)) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, usage, cont))
@@ -1832,7 +1829,7 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
                          else
                              alphaConvert (ctx, subst, csubst, body)
                       end
-                    | SOME { exp, isDiscardableFunction = true } =>
+                    | SOME { exp = _, isDiscardableFunction = true } =>
                       (case C.CVarMap.find (cenv, cont) of
                            SOME (params, _) => if not (List.exists Option.isSome params) then
                                                    ( #simplificationOccurred ctx := true
@@ -1890,16 +1887,16 @@ fun prependDecs ([], cont) = cont
 (* More sophisticated analysis is wanted. *)
 fun finalizeDec ctx (dec, (decs, cont))
     = case dec of
-          C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs, args = [f, arg] }, result = SOME result } =>
+          C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs = _, args = [f, arg] }, result = SOME result } =>
           let val name = genContSym ctx
           in ([C.ContDec { name = name, params = [SOME result], body = prependDecs (decs, cont) }], C.App { applied = f, cont = name, args = [arg] })
           end
-        | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs, args = _ }, result = _ } =>
+        | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs = _, args = _ }, result = _ } =>
           raise Fail "assumeDiscardable: invalid argument"
-        | C.ValDec { exp = C.PrimOp _, result } => (dec :: decs, cont)
-        | C.ValDec { exp = C.Record _, result } => (dec :: decs, cont)
-        | C.ValDec { exp = C.ExnTag _, result } => (dec :: decs, cont)
-        | C.ValDec { exp = C.Projection _, result } => (dec :: decs, cont)
+        | C.ValDec { exp = C.PrimOp _, result = _ } => (dec :: decs, cont)
+        | C.ValDec { exp = C.Record _, result = _ } => (dec :: decs, cont)
+        | C.ValDec { exp = C.ExnTag _, result = _ } => (dec :: decs, cont)
+        | C.ValDec { exp = C.Projection _, result = _ } => (dec :: decs, cont)
         | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
           let val dec = C.ValDec { exp = C.Abs { contParam = contParam, params = params, body = finalizeCExp (ctx, body) }, result = result }
           in (dec :: decs, cont)
@@ -1919,11 +1916,11 @@ fun finalizeDec ctx (dec, (decs, cont))
         | C.ESImportDec _ => (dec :: decs, cont)
 and finalizeCExp (ctx, C.Let { decs, cont })
     = prependDecs (Vector.foldr (finalizeDec ctx) ([], finalizeCExp (ctx, cont)) decs)
-  | finalizeCExp (ctx, e as C.App _) = e
-  | finalizeCExp (ctx, e as C.AppCont _) = e
+  | finalizeCExp (_, e as C.App _) = e
+  | finalizeCExp (_, e as C.AppCont _) = e
   | finalizeCExp (ctx, C.If { cond, thenCont, elseCont }) = C.If { cond = cond, thenCont = finalizeCExp (ctx, thenCont), elseCont = finalizeCExp (ctx, elseCont) }
   | finalizeCExp (ctx, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = C.Handle { body = finalizeCExp (ctx, body), handler = (e, finalizeCExp (ctx, h)), successfulExitIn = successfulExitIn, successfulExitOut = successfulExitOut }
-  | finalizeCExp (ctx, e as C.Unreachable) = e
+  | finalizeCExp (_, e as C.Unreachable) = e
 end
 end;
 
@@ -1933,20 +1930,19 @@ structure CpsAnalyze :> sig
               val escapesTransitively : cont_map * CSyntax.CVar -> bool
               val contEscape : CSyntax.CVar * CSyntax.CExp -> cont_map
               end = struct
-local structure F = FSyntax
-      structure C = CSyntax
+local structure C = CSyntax
 in
 type cont_map = { escapes : bool, escapesTransitively : bool } CSyntax.CVarTable.hash_table
 fun escapes (t : cont_map, v) = #escapes (C.CVarTable.lookup t v)
 fun escapesTransitively (t : cont_map, v) = #escapesTransitively (C.CVarTable.lookup t v)
 type table = { escapes : bool ref, escapesTransitively : bool ref, level : int, free : CSyntax.CVarSet.set } CSyntax.CVarTable.hash_table
-fun direct (table : table, level, k, acc) = let val { escapes, escapesTransitively, level = level', free } = C.CVarTable.lookup table k
+fun direct (table : table, level, k, acc) = let val { escapes = _, escapesTransitively = _, level = level', free = _ } = C.CVarTable.lookup table k
                                             in if level' < level then
                                                    C.CVarSet.add (acc, k)
                                                else
                                                    acc
                                             end
-fun recEscape (table : table) k = let val { escapes, escapesTransitively, level, free } = C.CVarTable.lookup table k
+fun recEscape (table : table) k = let val { escapes = _, escapesTransitively, level = _, free } = C.CVarTable.lookup table k
                                   in if !escapesTransitively then
                                          ()
                                      else
@@ -1954,7 +1950,7 @@ fun recEscape (table : table) k = let val { escapes, escapesTransitively, level,
                                          ; C.CVarSet.app (recEscape table) free
                                          )
                                   end
-fun escape (table : table, level, k, acc) = let val { escapes, escapesTransitively, level = level', free } = C.CVarTable.lookup table k
+fun escape (table : table, level, k, acc) = let val { escapes, escapesTransitively = _, level = level', free = _ } = C.CVarTable.lookup table k
                                             in escapes := true
                                              ; if level' < level then
                                                    C.CVarSet.add (acc, k)
@@ -1963,24 +1959,24 @@ fun escape (table : table, level, k, acc) = let val { escapes, escapesTransitive
                                             end
 fun goDec (table, level) (dec, acc)
     = case dec of
-          C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
+          C.ValDec { exp = C.Abs { contParam, params = _, body }, result = _ } =>
           ( C.CVarTable.insert table (contParam, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
           ; go (table, 0, body, acc)
           )
-        | C.ValDec { exp, result } => acc
-        | C.RecDec defs => List.foldl (fn ((f, k, params, body), acc) =>
+        | C.ValDec { exp = _, result = _ } => acc
+        | C.RecDec defs => List.foldl (fn ((_, k, _, body), acc) =>
                                           ( C.CVarTable.insert table (k, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
                                           ; go (table, 0, body, acc)
                                           )
                                       ) acc defs
-        | C.ContDec { name, params, body } =>
+        | C.ContDec { name, params = _, body } =>
           let val free = go (table, level + 1, body, C.CVarSet.empty)
           in C.CVarTable.insert table (name, { escapes = ref false, escapesTransitively = ref false, level = level, free = free })
            ; C.CVarSet.union (acc, free)
           end
         | C.RecContDec defs =>
-          ( List.app (fn (name, params, body) => C.CVarTable.insert table (name, { escapes = ref false, escapesTransitively = ref false, level = level, free = C.CVarSet.empty })) defs
-          ; List.foldl (fn ((name, params, body), acc) =>
+          ( List.app (fn (name, _, _) => C.CVarTable.insert table (name, { escapes = ref false, escapesTransitively = ref false, level = level, free = C.CVarSet.empty })) defs
+          ; List.foldl (fn ((name, _, body), acc) =>
                          let val { escapes, escapesTransitively, level, free = _ } = C.CVarTable.lookup table name
                              val free = go (table, level + 1, body, C.CVarSet.empty)
                          in C.CVarTable.insert table (name, { escapes = escapes, escapesTransitively = escapesTransitively, level = level, free = free })
@@ -1991,16 +1987,16 @@ fun goDec (table, level) (dec, acc)
         | C.ESImportDec _ => acc
 and go (table, level, C.Let { decs, cont }, acc)
     = go (table, level, cont, Vector.foldl (goDec (table, level)) acc decs)
-  | go (table, level, C.App { applied, cont, args }, acc) = escape (table, level, cont, acc)
-  | go (table, level, C.AppCont { applied, args }, acc) = direct (table, level, applied, acc)
-  | go (table, level, C.If { cond, thenCont, elseCont }, acc) = go (table, level, elseCont, go (table, level, thenCont, acc))
-  | go (table, level, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }, acc)
+  | go (table, level, C.App { applied = _, cont, args = _ }, acc) = escape (table, level, cont, acc)
+  | go (table, level, C.AppCont { applied, args = _ }, acc) = direct (table, level, applied, acc)
+  | go (table, level, C.If { cond = _, thenCont, elseCont }, acc) = go (table, level, elseCont, go (table, level, thenCont, acc))
+  | go (table, level, C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut }, acc)
     = let val free = go (table, level + 1, h, C.CVarSet.empty)
       in C.CVarTable.insert table (successfulExitIn, { escapes = ref false, escapesTransitively = ref false, level = level, free = C.CVarSet.singleton successfulExitOut })
        ; C.CVarSet.app (fn k => ignore (escape (table, level + 1, k, C.CVarSet.empty))) free
        ; go (table, level, body, C.CVarSet.union (acc, free))
       end
-  | go (table, level, C.Unreachable, acc) = acc
+  | go (_, _, C.Unreachable, acc) = acc
 fun contEscape (cont, cexp) = let val table = C.CVarTable.mkTable (1, C.InvalidCode "unbound continuation")
                               in C.CVarTable.insert table (cont, { escapes = ref false, escapesTransitively = ref false, level = 0, free = C.CVarSet.empty })
                                ; ignore (go (table, 0, cexp, C.CVarSet.empty))

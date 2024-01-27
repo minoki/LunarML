@@ -174,13 +174,13 @@ fun ('a, 'op) resolveFixity (ctx, f) : ('op, 'a) InfixList -> 'a
               and goRightAssoc : int * SourcePos.span * ('a * SourcePos.span * 'op) list * ('op, 'a) InfixList -> ('op, 'a) InfixList
            *)
           fun go (Leaf x) = x
-            | go (t as Tree (_, assoc, span, _, rest)) = let val p0 = case assoc of
-                                                                          Syntax.LeftAssoc p0 => p0
-                                                                        | Syntax.RightAssoc p0 => p0
-                                                             val prec = maxPrec (p0, rest)
-                                                         in go (goPrec (prec, t))
-                                                         end
-          and goPrec (p, Leaf x) = Leaf x
+            | go (t as Tree (_, assoc, _, _, rest)) = let val p0 = case assoc of
+                                                                       Syntax.LeftAssoc p0 => p0
+                                                                     | Syntax.RightAssoc p0 => p0
+                                                          val prec = maxPrec (p0, rest)
+                                                      in go (goPrec (prec, t))
+                                                      end
+          and goPrec (_, Leaf x) = Leaf x
             | goPrec (p, Tree (x, assoc as Syntax.LeftAssoc q, span, op_, rest))
               = if p = q then
                     goLeftAssoc (p, x, span, op_, rest)
@@ -191,7 +191,7 @@ fun ('a, 'op) resolveFixity (ctx, f) : ('op, 'a) InfixList -> 'a
                     goRightAssoc (p, span, [(x, span, op_)], rest)
                 else (* p > q *)
                     Tree (x, assoc, span, op_, goPrec (p, rest))
-          and goLeftAssoc (p, x, span, op_, Leaf y) = Leaf (f (x, span, op_, y))
+          and goLeftAssoc (_, x, span, op_, Leaf y) = Leaf (f (x, span, op_, y))
             | goLeftAssoc (p, x, span1, op_, Tree (y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
                     goLeftAssoc (p, f (x, span1, op_, y), span2, op', rest)
@@ -202,7 +202,7 @@ fun ('a, 'op) resolveFixity (ctx, f) : ('op, 'a) InfixList -> 'a
                     emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
                 else (* p > q *)
                     Tree (f (x, span1, op_, y), assoc, span2, op', goPrec (p, rest))
-          and goRightAssoc (p, _, zs, Leaf y) = Leaf (List.foldl (fn ((x, span, op'), y) => f (x, span, op', y)) y zs)
+          and goRightAssoc (_, _, zs, Leaf y) = Leaf (List.foldl (fn ((x, span, op'), y) => f (x, span, op', y)) y zs)
             | goRightAssoc (p, span1, zs, Tree (y, assoc as Syntax.LeftAssoc q, span2, op', rest))
               = if p = q then
                     emitError (ctx, [span1, span2], "you cannot mix left-associative operators and right-associative operators of same precedence")
@@ -217,22 +217,22 @@ fun ('a, 'op) resolveFixity (ctx, f) : ('op, 'a) InfixList -> 'a
       end
 (* let open Fixity in resolveFixity (fn (a,f,b) => f(a,b)) (Tree(3,Syntax.LeftAssoc 5,op +,Tree(2,Syntax.LeftAssoc 6,op *,Leaf 7))) end; should yield 17 *)
 
-fun doOptBar (ctx : Context, Syntax.NO_BAR) = ()
+fun doOptBar (_ : Context, Syntax.NO_BAR) = ()
   | doOptBar (ctx, Syntax.HAS_BAR span) = if #allowOptBar (#languageOptions ctx) then
                                               ()
                                           else
                                               emitNonfatalError (ctx, [span], "extra bar")
 
 (*: val doPat : Context * Env * UnfixedSyntax.Pat -> Syntax.Pat *)
-fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
-  | doPat(ctx, env, UnfixedSyntax.SConPat(span, scon)) = Syntax.SConPat(span, scon)
+fun doPat (_, _ : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat span
+  | doPat (_, _, UnfixedSyntax.SConPat (span, scon)) = Syntax.SConPat (span, scon)
   | doPat(ctx, env, UnfixedSyntax.InfixOrVIdPat(span, vid)) = (case getFixityStatus(env, vid) of
                                                                    Syntax.Nonfix => ConOrVarPat(env, span, vid)
                                                                  | _ => emitError(ctx, [span], "infix operator used in non-infix position")
                                                               )
-  | doPat (ctx, env, UnfixedSyntax.InfixPat (span, _)) = emitError(ctx, [span], "infix operator used in non-infix position C")
-  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, Syntax.MkQualified([], vid))) = ConOrVarPat(env, span, vid)
-  | doPat(ctx, env, UnfixedSyntax.NonInfixVIdPat(span, longvid)) = Syntax.ConPat(span, longvid, NONE) (* TODO: Check idstatus? *)
+  | doPat (ctx, _, UnfixedSyntax.InfixPat (span, _)) = emitError (ctx, [span], "infix operator used in non-infix position C")
+  | doPat (_, env, UnfixedSyntax.NonInfixVIdPat (span, Syntax.MkQualified ([], vid))) = ConOrVarPat (env, span, vid)
+  | doPat (_, _, UnfixedSyntax.NonInfixVIdPat (span, longvid)) = Syntax.ConPat (span, longvid, NONE) (* TODO: Check idstatus? *)
   | doPat(ctx, env, UnfixedSyntax.RecordPat (span, items))
     = let val (fields, ellipsis) = List.foldr (fn (UnfixedSyntax.Field (label, pat, _), (fields, ellipsis)) => ((label, doPat (ctx, env, pat)) :: fields, ellipsis)
                                               | (UnfixedSyntax.Ellipsis pat, (fields, NONE)) => (fields, SOME (doPat (ctx, env, pat)))
@@ -247,7 +247,7 @@ fun doPat(ctx, env : Env, UnfixedSyntax.WildcardPat span) = Syntax.WildcardPat s
                                            Syntax.Nonfix => doInfix(Syntax.ConPat(SourcePos.mergeSpan(span1, span2), Syntax.MkLongVId([], vid), SOME(ConOrVarPat(env, span2, vid'))), pats)
                                          | Syntax.Infix assoc => Tree(ConOrVarPat(env, span1, vid), assoc, span2, Syntax.MkQualified ([], vid'), doPrefix(pats))
                                       )
-                   | Syntax.Infix assoc => emitError(ctx, [span1], "infix operator used in prefix position")
+                   | Syntax.Infix _ => emitError (ctx, [span1], "infix operator used in prefix position")
                 )
             | doPrefix (atpat :: UnfixedSyntax.InfixPat (span2, longvid as Syntax.MkQualified (_, shortvid)) :: pats)
               = let val assoc = getDottedFixityStatus (env, shortvid)
@@ -313,13 +313,13 @@ and doDec : Context * Env * UnfixedSyntax.Dec -> Env * Syntax.Dec list
 and doDecs : Context * Env * UnfixedSyntax.Dec list -> Env * Syntax.Dec list
 and doValBind : Context * Env * UnfixedSyntax.ValBind -> Syntax.ValBind
  *)
-fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, scon)
+fun doExp (_, _, UnfixedSyntax.SConExp (span, scon)) = Syntax.SConExp (span, scon)
   | doExp(ctx, env, UnfixedSyntax.InfixOrVIdExp(span, vid)) = (case getFixityStatus(env, vid) of
                                                                    Syntax.Nonfix => Syntax.VarExp(span, Syntax.MkLongVId([], vid))
                                                                  | _ => emitError(ctx, [span], "infix operaor used in non-infix position")
                                                               )
-  | doExp (ctx, env, UnfixedSyntax.InfixExp (span, _)) = emitError (ctx, [span], "infix operator used in non-infix position")
-  | doExp(ctx, env, UnfixedSyntax.NonInfixVIdExp(span, longvid)) = Syntax.VarExp(span, longvid)
+  | doExp (ctx, _, UnfixedSyntax.InfixExp (span, _)) = emitError (ctx, [span], "infix operator used in non-infix position")
+  | doExp (_, _, UnfixedSyntax.NonInfixVIdExp (span, longvid)) = Syntax.VarExp (span, longvid)
   | doExp(ctx, env, UnfixedSyntax.RecordExp (span, items))
     = let val (fields1, ellipsis, fields2) = List.foldr (fn (UnfixedSyntax.Field (label, exp, pun), (fields1, ellipsis as SOME _, fields2)) => ( if pun andalso not (#allowRecordPunExps (#languageOptions ctx)) then
                                                                                                                                                      emitNonfatalError (ctx, [span], "record pun in expression is not allowed")
@@ -334,7 +334,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                                                                                            ; (fields1, ellipsis, (label, doExp (ctx, env, exp)) :: fields2)
                                                                                                                                            )
                                                         | (UnfixedSyntax.Ellipsis exp, (fields1, NONE, fields2)) => (fields1, SOME (doExp (ctx, env, exp)), fields2)
-                                                        | (UnfixedSyntax.Ellipsis exp, (fields1, SOME _, fields2)) => emitError (ctx, [span], "multiple ellipses in a record expression")
+                                                        | (UnfixedSyntax.Ellipsis _, (_, SOME _, _)) => emitError (ctx, [span], "multiple ellipses in a record expression")
                                                         ) ([], NONE, []) items
       in case ellipsis of
              NONE => Syntax.RecordExp (span, fields2, NONE)
@@ -358,7 +358,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                                    ()
                                                                              ; (label, doExp (ctx, env, exp))
                                                                              )
-                                | UnfixedSyntax.Ellipsis exp => emitError (ctx, [span], "invalid record update")
+                                | UnfixedSyntax.Ellipsis _ => emitError (ctx, [span], "invalid record update")
                                 ) update
           val patrow = List.map (fn (label, _) => (label, Syntax.WildcardPat span)) update
           val vid = freshVId (ctx, "record")
@@ -444,7 +444,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
   | doExp (ctx, env, UnfixedSyntax.FnExp (span, optBar, matches)) = ( doOptBar (ctx, optBar)
                                                                     ; Syntax.FnExp (span, List.map (fn (pat, exp) => (doPat (ctx, env, pat), doExp (ctx, env, exp))) matches)
                                                                     )
-  | doExp(ctx, env, UnfixedSyntax.ProjectionExp(span, lab)) = Syntax.ProjectionExp(span, lab)
+  | doExp (_, _, UnfixedSyntax.ProjectionExp (span, lab)) = Syntax.ProjectionExp (span, lab)
   | doExp(ctx, env, UnfixedSyntax.ListExp(span, xs)) = Syntax.ListExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
   | doExp(ctx, env, UnfixedSyntax.VectorExp(span, xs)) = Syntax.VectorExp(span, Vector.map (fn e => doExp(ctx, env, e)) xs)
   | doExp(ctx, env, UnfixedSyntax.PrimExp(span, name, tyargs, args))
@@ -462,7 +462,7 @@ fun doExp(ctx, env, UnfixedSyntax.SConExp(span, scon)) = Syntax.SConExp(span, sc
                                                                                                                                emitNonfatalError (ctx, [span'], "extra semicolon")
                                                                                 ; Syntax.SequentialExp (span, Vector.map (fn e => doExp (ctx, env, e)) xs, doExp (ctx, env, y))
                                                                                 )
-and doDecs(ctx, env, nil) = (emptyEnv, nil)
+and doDecs (_, _, nil) = (emptyEnv, nil)
   | doDecs(ctx, env, dec :: decs) = let val (env', dec') = doDec(ctx, env, dec)
                                         val (env'', decs') = doDecs(ctx, mergeEnv(env, env'), decs)
                                     in (mergeEnv(env', env''), dec' @ decs')
@@ -478,14 +478,14 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
   | doDec (ctx, env, UnfixedSyntax.FValDec (span, tyvars, desc, optBar, fvalbind)) = ( doOptBar (ctx, optBar)
                                                                                      ; (emptyEnv, [Syntax.RecValDec (span, tyvars, List.map (fn (span, vid, ty) => (span, vid, [], ty)) desc, List.map (fn fvb => doFValBind (ctx, env, fvb)) fvalbind)])
                                                                                      )
-  | doDec(ctx, env, UnfixedSyntax.TypeDec(span, typbinds)) = (emptyEnv, [Syntax.TypeDec(span, typbinds)])
-  | doDec(ctx, env, UnfixedSyntax.DatatypeDec(span, datbinds, typbinds))
+  | doDec (_, _, UnfixedSyntax.TypeDec (span, typbinds)) = (emptyEnv, [Syntax.TypeDec (span, typbinds)])
+  | doDec (_, _, UnfixedSyntax.DatatypeDec (span, datbinds, typbinds))
     = let fun doConBinds (conbinds : Syntax.ConBind list) : (unit Syntax.IdStatus) Syntax.VIdMap.map
               = List.foldl (fn (Syntax.ConBind (_, vid, _), map) =>
                                (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
                                Syntax.VIdMap.insert (map, vid, Syntax.ValueConstructor ())
                            ) Syntax.VIdMap.empty conbinds
-          val tyConMap = List.foldl (fn (Syntax.DatBind (span, tyvars, tycon, _, conbinds), map) => Syntax.TyConMap.insert (map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
+          val tyConMap = List.foldl (fn (Syntax.DatBind (_, _, tycon, _, conbinds), map) => Syntax.TyConMap.insert (map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
           val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
           val idStatusMap = { valMap = valMap
                             , tyConMap = tyConMap
@@ -493,7 +493,7 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
                             }
       in (envWithIdStatusMap idStatusMap, [Syntax.DatatypeDec(span, datbinds, typbinds)])
       end
-  | doDec(ctx, env, UnfixedSyntax.DatatypeRepDec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
+  | doDec (_, env, UnfixedSyntax.DatatypeRepDec (span, tycon, longtycon)) = let val valMap = case lookupLongTyCon (env, longtycon) of
                                                                                                  SOME valMap => valMap
                                                                                                | NONE => Syntax.VIdMap.empty
                                                                                 val idStatusMap = { valMap = valMap
@@ -508,7 +508,7 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
                                (* Syntactic Restriction: vid must not be one of "true", "false", "nil", "::" or "ref". *)
                                Syntax.VIdMap.insert (map, vid, Syntax.ValueConstructor ())
                            ) Syntax.VIdMap.empty conbinds
-          val tyConMap = List.foldl (fn (Syntax.DatBind (span, tyvars, tycon, _, conbinds), map) => Syntax.TyConMap.insert (map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
+          val tyConMap = List.foldl (fn (Syntax.DatBind (_, _, tycon, _, conbinds), map) => Syntax.TyConMap.insert (map, tycon, doConBinds conbinds)) Syntax.TyConMap.empty datbinds
           val valMap = Syntax.TyConMap.foldl (Syntax.VIdMap.unionWith #2 (* should be disjoint *)) Syntax.VIdMap.empty tyConMap
           val idStatusMap = { valMap = valMap
                             , tyConMap = tyConMap
@@ -518,15 +518,15 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
           val (env, decs') = doDecs(ctx, innerEnv, decs) (* not really implemented yet *)
       in (env, [Syntax.AbstypeDec(span, datbinds, typbinds, decs')])
       end
-  | doDec(ctx, env, UnfixedSyntax.ExceptionDec(span, exbinds)) = let val valMap = List.foldl (fn (Syntax.ExBind(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor)
-                                                                                             | (Syntax.ExReplication(span, vid, _), valMap) => Syntax.VIdMap.insert(valMap, vid, Syntax.ExceptionConstructor) (* RHS should be an exception constructor *)
-                                                                                             ) Syntax.VIdMap.empty exbinds
-                                                                     val idStatusMap = { valMap = valMap
-                                                                                       , tyConMap = Syntax.TyConMap.empty
-                                                                                       , strMap = Syntax.StrIdMap.empty
-                                                                                       }
-                                                                 in (envWithIdStatusMap idStatusMap, [Syntax.ExceptionDec(span, exbinds)])
-                                                                 end
+  | doDec (_, _, UnfixedSyntax.ExceptionDec (span, exbinds)) = let val valMap = List.foldl (fn (Syntax.ExBind (_, vid, _), valMap) => Syntax.VIdMap.insert (valMap, vid, Syntax.ExceptionConstructor)
+                                                                                           | (Syntax.ExReplication (_, vid, _), valMap) => Syntax.VIdMap.insert (valMap, vid, Syntax.ExceptionConstructor) (* RHS should be an exception constructor *)
+                                                                                           ) Syntax.VIdMap.empty exbinds
+                                                                   val idStatusMap = { valMap = valMap
+                                                                                     , tyConMap = Syntax.TyConMap.empty
+                                                                                     , strMap = Syntax.StrIdMap.empty
+                                                                                     }
+                                                               in (envWithIdStatusMap idStatusMap, [Syntax.ExceptionDec(span, exbinds)])
+                                                               end
   | doDec(ctx, env, UnfixedSyntax.LocalDec(span, decs1, decs2)) = let val (env', decs1') = doDecs(ctx, env, decs1)
                                                                       val (env'', decs2') = doDecs(ctx, mergeEnv(env, env'), decs2)
                                                                   in (env'', [Syntax.LocalDec(span, decs1', decs2')])
@@ -537,15 +537,15 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
                                                                                             ) emptyIdStatusMap strids
                                                            in (envWithIdStatusMap idStatusMap, [Syntax.OpenDec(span, strids)])
                                                            end
-  | doDec (ctx, env, UnfixedSyntax.FixityDec (span, fixity as Syntax.Infix assoc, vids))
+  | doDec (_, _, UnfixedSyntax.FixityDec (_, fixity as Syntax.Infix assoc, vids))
     = let val fixityMaps = List.foldl (fn (Syntax.ShortVId vid, (m, n)) => (Syntax.VIdMap.insert (m, vid, fixity), n)
                                       | (Syntax.InfixVId vid, (m, n)) => (m, Syntax.VIdMap.insert (n, Syntax.MkVId vid, assoc))
                                       ) (Syntax.VIdMap.empty, Syntax.VIdMap.empty) vids
       in (envWithFixityMap fixityMaps, [])
       end
-  | doDec (ctx, env, UnfixedSyntax.FixityDec (span, fixity as Syntax.Nonfix, vids))
+  | doDec (ctx, _, UnfixedSyntax.FixityDec (span, fixity as Syntax.Nonfix, vids))
     = let val fixityMap = List.foldl (fn (Syntax.ShortVId vid, m) => Syntax.VIdMap.insert (m, vid, fixity)
-                                     | (Syntax.InfixVId vid, m) => (emitNonfatalError (ctx, [span], "invalid nonfix declaration for dotted identifier"); m)
+                                     | (Syntax.InfixVId _, m) => (emitNonfatalError (ctx, [span], "invalid nonfix declaration for dotted identifier"); m)
                                      ) Syntax.VIdMap.empty vids
       in (envWithFixityMap (fixityMap, Syntax.VIdMap.empty), [])
       end
@@ -649,15 +649,15 @@ and doDec (ctx, env, UnfixedSyntax.ValDec (span, tyvars, desc, valbind)) = (empt
       in (emptyEnv, [Syntax.OverloadDec(span, class, longtycon, map)])
       end
     | doDec (ctx, env, UnfixedSyntax.EqualityDec (span, typarams, longtycon, exp)) = (emptyEnv, [Syntax.EqualityDec (span, typarams, longtycon, doExp (ctx, env, exp))])
-    | doDec (ctx, env, UnfixedSyntax.ESImportDec x) = (emptyEnv, [Syntax.ESImportDec x])
+    | doDec (_, _, UnfixedSyntax.ESImportDec x) = (emptyEnv, [Syntax.ESImportDec x])
 and doValBind(ctx, env, UnfixedSyntax.PatBind(span, pat, exp)) = Syntax.PatBind(span, doPat(ctx, env, pat), doExp(ctx, env, exp))
 and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
     = let fun doFMRule (UnfixedSyntax.FMRule(_, fpat, optTy, exp)) = (doFPat(ctx, env, fpat), optTy, doExp(ctx, env, exp))
           val rules' = List.map doFMRule rules
-          fun getVIdAndArity (((span, vid, []), _, _) :: xs) = emitError(ctx, [span], "function declaration with no arguments")
+          fun getVIdAndArity (((span, _, []), _, _) :: _) = emitError (ctx, [span], "function declaration with no arguments")
             | getVIdAndArity (((span, vid, pats), _, _) :: xs) = checkVIdAndArity(span, vid, length pats, xs)
             | getVIdAndArity [] = emitError(ctx, [span], "internal error: empty 'fun' rule")
-          and checkVIdAndArity(span, vid, arity, []) = (vid, arity)
+          and checkVIdAndArity (_, vid, arity, []) = (vid, arity)
             | checkVIdAndArity(span, vid, arity, ((span', vid', pats), _, _) :: xs)
               = if vid = vid' then
                     if arity = length pats then
@@ -691,7 +691,7 @@ and doFValBind(ctx, env, UnfixedSyntax.FValBind(span, rules)) : Syntax.ValBind
       in Syntax.PatBind(span, Syntax.VarPat(span, vid), buildExp(arity, []))
       end
 (* (<pat1> <vid> <pat3>) -> <vid> is infix function name *)
-and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(span2, [pat1, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat3])])) : SourcePos.span * Syntax.VId * Syntax.Pat list
+and doFPat (ctx, env, UnfixedSyntax.FPat (span1, [UnfixedSyntax.JuxtapositionPat (_, [pat1, UnfixedSyntax.InfixOrVIdPat (span3, vid), pat3])])) : SourcePos.span * Syntax.VId * Syntax.Pat list
     = (case getFixityStatus(env, vid) of
            Syntax.Nonfix => emitError(ctx, [span3], "invalid function declaration: '" ^ Syntax.getVIdName vid ^ "' must be an infix identifier")
          | Syntax.Infix _ => doInfixFPat(ctx, env, span1, span3, vid, pat1, pat3, [])
@@ -700,7 +700,7 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
   | doFPat (ctx, env, UnfixedSyntax.FPat (span1, [pat1, UnfixedSyntax.InfixPat (span4, Syntax.MkQualified ([], vid2)), pat3]))
     = doInfixFPat (ctx, env, span1, span4, vid2, pat1, pat3, [])
   (* (<pat1> <infix vid> <pat3>) <pat>... *)
-  | doFPat (ctx, env, UnfixedSyntax.FPat (span1, (UnfixedSyntax.JuxtapositionPat (span2, [pat1, UnfixedSyntax.InfixPat (span3, Syntax.MkQualified ([], vid)), pat3]) :: pats)))
+  | doFPat (ctx, env, UnfixedSyntax.FPat (span1, (UnfixedSyntax.JuxtapositionPat (_, [pat1, UnfixedSyntax.InfixPat (span3, Syntax.MkQualified ([], vid)), pat3]) :: pats)))
     = doInfixFPat (ctx, env, span1, span3, vid, pat1, pat3, pats)
   (* (<pat11> <vid1> <pat13>) <vid2> <pat3> -> <vid1> or <vid2> is infix function name *)
   | doFPat(ctx, env, UnfixedSyntax.FPat(span1, [pat1 as UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(span3, vid1), pat13]), pat2 as UnfixedSyntax.InfixOrVIdPat(span4, vid2), pat3]))
@@ -710,7 +710,7 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
          | (_, Syntax.Infix _) => doInfixFPat(ctx, env, span1, span4, vid2, pat1, pat3, [])
       )
   (* (<pat11> <vid> <pat13>) <pat2> ... -> <vid> is infix function name *)
-  | doFPat(ctx, env, UnfixedSyntax.FPat(span1, UnfixedSyntax.JuxtapositionPat(span2, [pat11, UnfixedSyntax.InfixOrVIdPat(span3, vid), pat13]) :: pats))
+  | doFPat (ctx, env, UnfixedSyntax.FPat (span1, UnfixedSyntax.JuxtapositionPat (_, [pat11, UnfixedSyntax.InfixOrVIdPat (span3, vid), pat13]) :: pats))
     = (case getFixityStatus(env, vid) of
            Syntax.Nonfix => emitError(ctx, [span3], "invalid function declaration: '" ^ Syntax.getVIdName vid ^ "' must be an infix identifier")
          | Syntax.Infix _ => doInfixFPat(ctx, env, span1, span3, vid, pat11, pat13, pats)
@@ -737,51 +737,51 @@ and doFPat(ctx, env, UnfixedSyntax.FPat(span1, [UnfixedSyntax.JuxtapositionPat(s
            Syntax.Nonfix => doPrefixFPat(ctx, env, span, vid, pats)
          | Syntax.Infix _ => emitError(ctx, [span], "invalid function declaration: '" ^ Syntax.getVIdName vid ^ "' must be prefixed by an 'op'")
       )
-  | doFPat(ctx, env, UnfixedSyntax.FPat (span, _))
+  | doFPat (ctx, _, UnfixedSyntax.FPat (span, _))
     = emitError(ctx, [span], "invalid function declaration")
 and doInfixFPat(ctx, env, span, vidspan, vid, patL, patR, pats) = (vidspan, vid, Syntax.TuplePat(span, [doPat(ctx, env, patL), doPat(ctx, env, patR)]) :: List.map (fn p => doPat(ctx, env, p)) pats)
 and doPrefixFPat(ctx, env, span, vid, pats) = (span, vid, List.map (fn p => doPat(ctx, env, p)) pats)
-fun doSigExp(ctx, env, Syntax.BasicSigExp(span, specs)) : IdStatusMap = doSpecs(ctx, env, specs)
+fun doSigExp (ctx, env, Syntax.BasicSigExp (_, specs)) : IdStatusMap = doSpecs (ctx, env, specs)
   | doSigExp(ctx, env, Syntax.SigIdExp(span, sigid)) = (case Syntax.SigIdMap.find(#sigMap env, sigid) of
                                                             SOME m => m
                                                           | NONE => emitError(ctx, [span], "signature not found: " ^ Syntax.print_SigId sigid)
                                                        )
-  | doSigExp (ctx, env, Syntax.TypeRealisationExp (span, sigexp, tyvars, longtycon, ty, _)) = doSigExp (ctx, env, sigexp) (* does not affect idstatus *)
+  | doSigExp (ctx, env, Syntax.TypeRealisationExp (_, sigexp, _, _, _, _)) = doSigExp (ctx, env, sigexp) (* does not affect idstatus *)
 and doSpecs(ctx, env, specs) = List.foldl (fn (spec, m) => mergeIdStatusMap(m, doSpec(ctx, mergeEnv(env, envWithIdStatusMap m), spec))) emptyIdStatusMap specs
-and doSpec(ctx, env, Syntax.ValDesc(span, descs)) = emptyIdStatusMap
-  | doSpec(ctx, env, Syntax.TypeDesc(span, descs)) = emptyIdStatusMap
-  | doSpec(ctx, env, Syntax.EqtypeDesc(span, descs)) = emptyIdStatusMap
-  | doSpec (ctx, env, Syntax.DatDesc (span, descs, typbinds)) = List.foldl (fn ((tyvars, tycon, optBar, condescs), { valMap, tyConMap, strMap }) =>
-                                                                               let val valMap' = List.foldl (fn (Syntax.ConBind (_, vid, _), m) =>
-                                                                                                                Syntax.VIdMap.insert (m, vid, Syntax.ValueConstructor ())
-                                                                                                            ) Syntax.VIdMap.empty condescs
-                                                                               in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
-                                                                                  , tyConMap = Syntax.TyConMap.insert (tyConMap, tycon, valMap')
-                                                                                  , strMap = strMap }
-                                                                               end
-                                                                           ) emptyIdStatusMap descs
-  | doSpec(ctx, env, Syntax.DatatypeRepSpec(span, tycon, longtycon)) = let val valMap = case lookupLongTyCon(env, longtycon) of
-                                                                                            SOME m => m
-                                                                                          | NONE => Syntax.VIdMap.empty
-                                                                       in { valMap = valMap
-                                                                          , tyConMap = Syntax.TyConMap.singleton(tycon, valMap)
-                                                                          , strMap = Syntax.StrIdMap.empty
-                                                                          }
-                                                                       end
-  | doSpec(ctx, env, Syntax.ExDesc(span, descs)) = { valMap = List.foldl (fn ((vid, _), m) => Syntax.VIdMap.insert(m, vid, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty descs
-                                                   , tyConMap = Syntax.TyConMap.empty
-                                                   , strMap = Syntax.StrIdMap.empty
-                                                   }
-  | doSpec(ctx, env, Syntax.StrDesc(span, descs)) = let val strMap = List.foldl (fn ((strid, sigexp), strMap) => Syntax.StrIdMap.insert(strMap, strid, MkIdStatusMap (doSigExp(ctx, env, sigexp)))) Syntax.StrIdMap.empty descs
-                                                    in { valMap = Syntax.VIdMap.empty
-                                                       , tyConMap = Syntax.TyConMap.empty
-                                                       , strMap = strMap
-                                                       }
-                                                    end
-  | doSpec(ctx, env, Syntax.Include(span, sigexp)) = doSigExp(ctx, env, sigexp)
-  | doSpec(ctx, env, Syntax.Sharing(span, specs, longtycons)) = doSpecs(ctx, env, specs)
-  | doSpec(ctx, env, Syntax.SharingStructure(span, specs, longstrids)) = doSpecs(ctx, env, specs)
-  | doSpec(ctx, env, Syntax.TypeAliasDesc(span, descs)) = emptyIdStatusMap
+and doSpec (_, _, Syntax.ValDesc (_, _)) = emptyIdStatusMap
+  | doSpec (_, _, Syntax.TypeDesc (_, _)) = emptyIdStatusMap
+  | doSpec (_, _, Syntax.EqtypeDesc (_, _)) = emptyIdStatusMap
+  | doSpec (_, _, Syntax.DatDesc (_, descs, _)) = List.foldl (fn ((_, tycon, _, condescs), { valMap, tyConMap, strMap }) =>
+                                                                 let val valMap' = List.foldl (fn (Syntax.ConBind (_, vid, _), m) =>
+                                                                                                  Syntax.VIdMap.insert (m, vid, Syntax.ValueConstructor ())
+                                                                                              ) Syntax.VIdMap.empty condescs
+                                                                 in { valMap = Syntax.VIdMap.unionWith #2 (valMap, valMap')
+                                                                    , tyConMap = Syntax.TyConMap.insert (tyConMap, tycon, valMap')
+                                                                    , strMap = strMap }
+                                                                 end
+                                                             ) emptyIdStatusMap descs
+  | doSpec (_, env, Syntax.DatatypeRepSpec (_, tycon, longtycon)) = let val valMap = case lookupLongTyCon (env, longtycon) of
+                                                                                         SOME m => m
+                                                                                       | NONE => Syntax.VIdMap.empty
+                                                                    in { valMap = valMap
+                                                                       , tyConMap = Syntax.TyConMap.singleton (tycon, valMap)
+                                                                       , strMap = Syntax.StrIdMap.empty
+                                                                       }
+                                                                    end
+  | doSpec (_, _, Syntax.ExDesc (_, descs)) = { valMap = List.foldl (fn ((vid, _), m) => Syntax.VIdMap.insert (m, vid, Syntax.ExceptionConstructor)) Syntax.VIdMap.empty descs
+                                              , tyConMap = Syntax.TyConMap.empty
+                                              , strMap = Syntax.StrIdMap.empty
+                                              }
+  | doSpec (ctx, env, Syntax.StrDesc (_, descs)) = let val strMap = List.foldl (fn ((strid, sigexp), strMap) => Syntax.StrIdMap.insert (strMap, strid, MkIdStatusMap (doSigExp (ctx, env, sigexp)))) Syntax.StrIdMap.empty descs
+                                                   in { valMap = Syntax.VIdMap.empty
+                                                      , tyConMap = Syntax.TyConMap.empty
+                                                      , strMap = strMap
+                                                      }
+                                                   end
+  | doSpec (ctx, env, Syntax.Include (_, sigexp)) = doSigExp (ctx, env, sigexp)
+  | doSpec (ctx, env, Syntax.Sharing (_, specs, _)) = doSpecs (ctx, env, specs)
+  | doSpec (ctx, env, Syntax.SharingStructure (_, specs, _)) = doSpecs (ctx, env, specs)
+  | doSpec (_, _, Syntax.TypeAliasDesc (_, _)) = emptyIdStatusMap
 (*:
 val doStrExp : Context * Env * UnfixedSyntax.Dec Syntax.StrExp -> IdStatusMap * Syntax.Dec Syntax.StrExp
 and doStrDec : Context * Env * UnfixedSyntax.Dec Syntax.StrDec -> Env * (Syntax.Dec Syntax.StrDec) list
@@ -828,7 +828,7 @@ and doStrDec(ctx, env, Syntax.CoreDec(span, dec)) = let val (env', decs) = doDec
                                                                     val (env'', decs') = doStrDecs(ctx, mergeEnv(env, env'), decs')
                                                                 in (env'', [Syntax.LocalStrDec(span, decs, decs')])
                                                                 end
-and doStrDecs(ctx, env, []) = (emptyEnv, [])
+and doStrDecs (_, _, []) = (emptyEnv, [])
   | doStrDecs(ctx, env, dec :: decs) = let val (env', dec) = doStrDec(ctx, env, dec)
                                            val (env'', decs) = doStrDecs(ctx, mergeEnv(env, env'), decs)
                                        in (mergeEnv(env', env''), dec @ decs)
@@ -859,12 +859,12 @@ fun doTopDec(ctx, env, Syntax.StrDec(strdec)) = let val (env, strdecs) = doStrDe
          val env' = envWithFunMap (List.foldl (fn ((_, funid, ids, _), m) => Syntax.FunIdMap.insert(m, funid, ids)) Syntax.FunIdMap.empty funbinds')
       in (env', [Syntax.FunDec (List.map (fn (span, funid, _, exp) => (span, funid, exp)) funbinds')])
       end
-fun doTopDecs(ctx, env, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])
+fun doTopDecs (_, _, []) : Env * (Syntax.Dec Syntax.TopDec) list = (emptyEnv, [])
   | doTopDecs(ctx, env, dec :: decs) = let val (env', dec) = doTopDec(ctx, env, dec)
                                            val (env'', decs) = doTopDecs(ctx, mergeEnv(env, env'), decs)
                                        in (mergeEnv(env', env''), dec @ decs)
                                        end
-fun doProgram(ctx, env, []) : Env * ((Syntax.Dec Syntax.TopDec) list) list = (emptyEnv, [])
+fun doProgram (_, _, []) : Env * ((Syntax.Dec Syntax.TopDec) list) list = (emptyEnv, [])
   | doProgram(ctx, env, dec :: decs) = let val (env', dec) = doTopDecs(ctx, env, dec)
                                            val (env'', decs) = doProgram(ctx, mergeEnv(env, env'), decs)
                                        in (mergeEnv(env', env''), dec :: decs)
@@ -920,7 +920,7 @@ local
       | collectExp(bound, IfThenElseExp(_, x, y, z)) = union3(collectExp(bound, x), collectExp(bound, y), collectExp(bound, z))
       | collectExp(bound, CaseExp(_, x, match)) = TyVarSet.union(collectExp(bound, x), collectMatch(bound, match))
       | collectExp(bound, FnExp(_, match)) = collectMatch(bound, match)
-      | collectExp(bound, ProjectionExp(_, lab)) = TyVarSet.empty
+      | collectExp (_, ProjectionExp (_, _)) = TyVarSet.empty
       | collectExp(bound, ListExp(_, xs)) = Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
       | collectExp(bound, VectorExp(_, xs)) = Vector.foldl (fn (e, set) => TyVarSet.union(collectExp(bound, e), set)) TyVarSet.empty xs
       | collectExp(bound, PrimExp(_, _, tyargs, args)) = let val acc = Vector.foldl (fn (ty, set) => TyVarSet.union(set, TyVarSet.difference(freeTyVarsInTy(bound, ty), bound))) TyVarSet.empty tyargs
@@ -929,28 +929,22 @@ local
       | collectExp (bound, SequentialExp (_, xs, y)) = Vector.foldl (fn (x, set) => TyVarSet.union (collectExp (bound, x), set)) (collectExp (bound, y)) xs
     and collectMatch(bound, xs) = List.foldl (fn ((pat, e), set) => TyVarSet.union(freeTyVarsInPat(bound, pat), TyVarSet.union(collectExp(bound, e), set))) TyVarSet.empty xs
     and collectValBind(bound, PatBind(_, pat, e)) = TyVarSet.union(freeTyVarsInPat(bound, pat), collectExp(bound, e))
-    and collectFRule(bound, (pats, optTy, exp)) = let val tyVarsInPats = List.foldl TyVarSet.union TyVarSet.empty (List.map (fn pat => freeTyVarsInPat(bound, pat)) pats)
-                                                      val tyVarsInOptTy = case optTy of
-                                                                              NONE => TyVarSet.empty
-                                                                            | SOME expTy => TyVarSet.difference(freeTyVarsInTy(bound, expTy), bound)
-                                                  in union3(tyVarsInPats, tyVarsInOptTy, collectExp(bound, exp))
-                                                  end
-    and collectDec(bound, ValDec _) = TyVarSet.empty
-      | collectDec(bound, RecValDec _) = TyVarSet.empty
+    and collectDec (_, ValDec _) = TyVarSet.empty
+      | collectDec (_, RecValDec _) = TyVarSet.empty
       | collectDec(bound, TypeDec(_, typbinds)) = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
       | collectDec(bound, DatatypeDec(_, datbinds, typbinds)) = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) (List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds) datbinds
-      | collectDec(bound, DatatypeRepDec(_, _, _)) = TyVarSet.empty
+      | collectDec (_, DatatypeRepDec (_, _, _)) = TyVarSet.empty
       | collectDec(bound, AbstypeDec(_, datbinds, typbinds, decs)) = let val acc = List.foldl (fn (TypBind (_, tyvars, _, ty), acc) => TyVarSet.union(freeTyVarsInTy(TyVarSet.addList(bound, tyvars), ty), acc)) TyVarSet.empty typbinds
                                                                          val acc = List.foldl (fn (datbind, acc) => TyVarSet.union(collectDatBind(bound, datbind), acc)) acc datbinds
                                                                      in List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) acc decs
                                                                      end
-      | collectDec(bound, ExceptionDec(span, exbinds)) = List.foldl (fn (ExBind(span, vid, SOME ty), acc) => TyVarSet.union(freeTyVarsInTy(bound, ty), acc)
-                                                                    | (ExBind(span, vid, NONE), acc) => acc
-                                                                    | (ExReplication(_, _, _), acc) => acc) TyVarSet.empty exbinds
+      | collectDec (bound, ExceptionDec (_, exbinds)) = List.foldl (fn (ExBind (_, _, SOME ty), acc) => TyVarSet.union (freeTyVarsInTy (bound, ty), acc)
+                                                                   | (ExBind (_, _, NONE), acc) => acc
+                                                                   | (ExReplication (_, _, _), acc) => acc) TyVarSet.empty exbinds
       | collectDec(bound, LocalDec(_, decs1, decs2)) = List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) (List.foldl (fn (dec, acc) => TyVarSet.union(collectDec(bound, dec), acc)) TyVarSet.empty decs1) decs2
-      | collectDec(bound, OpenDec _) = TyVarSet.empty
+      | collectDec (_, OpenDec _) = TyVarSet.empty
       | collectDec(bound, OverloadDec(_, _, _, map)) = OverloadKeyMap.foldl (fn (exp, acc) => TyVarSet.union(acc, collectExp(bound, exp))) TyVarSet.empty map
-      | collectDec (bound, EqualityDec (_, typarams, longtycon, exp)) = collectExp (TyVarSet.addList (bound, typarams), exp)
+      | collectDec (bound, EqualityDec (_, typarams, _, exp)) = collectExp (TyVarSet.addList (bound, typarams), exp)
       | collectDec (bound, ESImportDec { sourceSpan = _, pure = _, specs, moduleName = _ })
         = List.foldl (fn ((_, _, SOME ty), acc) => TyVarSet.union (freeTyVarsInTy (bound, ty), acc) | ((_, _, NONE), acc) => acc) TyVarSet.empty specs
     and collectDatBind (bound, DatBind (_, tyvars, _, _, conbinds)) = let val bound = TyVarSet.addList (bound, tyvars)
@@ -959,7 +953,6 @@ local
                                                                       in List.foldl (fn (conbind, acc) => TyVarSet.union (doConBind conbind, acc)) TyVarSet.empty conbinds
                                                                       end
 in
-val unguardedTyVarsInExp : TyVarSet.set * Exp -> TyVarSet.set = collectExp
 val unguardedTyVarsInValBind : TyVarSet.set * ValBind list -> TyVarSet.set = fn (bound, valbinds) => List.foldl (fn (valbind, set) => TyVarSet.union(set, collectValBind(bound, valbind))) TyVarSet.empty valbinds
 end (* local *)
 
@@ -978,21 +971,21 @@ local
                                                                        val bound'' = TyVarSet.union (bound', unguarded)
                                                                    in RecValDec (span, expbound', List.map (scopeTyVarsInValDesc bound'') desc, List.map (fn vb => doValBind (bound'', vb)) valbind)
                                                                    end
-      | doDec(bound, dec as TypeDec _) = dec
-      | doDec(bound, dec as DatatypeDec _) = dec
-      | doDec(bound, dec as DatatypeRepDec _) = dec
+      | doDec (_, dec as TypeDec _) = dec
+      | doDec (_, dec as DatatypeDec _) = dec
+      | doDec (_, dec as DatatypeRepDec _) = dec
       | doDec(bound, AbstypeDec(span, datbinds, typbinds, decs)) = AbstypeDec(span, datbinds, typbinds, doDecList(bound, decs))
-      | doDec(bound, dec as ExceptionDec _) = dec
+      | doDec (_, dec as ExceptionDec _) = dec
       | doDec(bound, LocalDec(span, xs, ys)) = LocalDec(span, doDecList(bound, xs), doDecList(bound, ys))
-      | doDec(bound, dec as OpenDec _) = dec
-      | doDec(bound, dec as OverloadDec _) = dec
+      | doDec (_, dec as OpenDec _) = dec
+      | doDec (_, dec as OverloadDec _) = dec
       | doDec (bound, EqualityDec (span, typarams, longtycon, exp)) = EqualityDec (span, typarams, longtycon, doExp (TyVarSet.addList (bound, typarams), exp))
-      | doDec (bound, dec as ESImportDec _) = dec
+      | doDec (_, dec as ESImportDec _) = dec
     and doDecList(bound, decls) = List.map (fn x => doDec(bound, x)) decls
     and doValBind(bound, PatBind(span, pat, e)) = PatBind(span, pat, doExp(bound, e))
-    and doExp(bound, exp as SConExp _) = exp
-      | doExp(bound, exp as VarExp _) = exp
-      | doExp(bound, exp as RecordExp _) = exp
+    and doExp (_, exp as SConExp _) = exp
+      | doExp (_, exp as VarExp _) = exp
+      | doExp (_, exp as RecordExp _) = exp
       | doExp(bound, LetInExp(span, decls, exp)) = LetInExp(span, doDecList(bound, decls), doExp(bound, exp))
       | doExp(bound, AppExp(span, x, y)) = AppExp(span, doExp(bound, x), doExp(bound, y))
       | doExp(bound, TypedExp(span, x, ty)) = TypedExp(span, doExp(bound, x), ty)
@@ -1001,7 +994,7 @@ local
       | doExp(bound, IfThenElseExp(span, x, y, z)) = IfThenElseExp(span, doExp(bound, x), doExp(bound, y), doExp(bound, z))
       | doExp(bound, CaseExp(span, x, match)) = CaseExp(span, doExp(bound, x), doMatch(bound, match))
       | doExp(bound, FnExp(span, match)) = FnExp(span, doMatch(bound, match))
-      | doExp(bound, exp as ProjectionExp _) = exp
+      | doExp (_, exp as ProjectionExp _) = exp
       | doExp(bound, ListExp(span, xs)) = ListExp(span, Vector.map (fn x => doExp(bound, x)) xs)
       | doExp(bound, VectorExp(span, xs)) = VectorExp(span, Vector.map (fn x => doExp(bound, x)) xs)
       | doExp(bound, PrimExp(span, name, tyargs, args)) = PrimExp(span, name, tyargs, Vector.map (fn x => doExp(bound, x)) args)
@@ -1045,7 +1038,7 @@ type context = { messageHandler : Message.handler
 
 fun emitError ({ messageHandler, ... } : context, spans, message) = Message.error (messageHandler, spans, "syntax", message)
 
-fun checkOptBar (ctx, Syntax.NO_BAR) = ()
+fun checkOptBar (_, Syntax.NO_BAR) = ()
   | checkOptBar (ctx, Syntax.HAS_BAR span) = if #allowOptBar (#languageOptions ctx) then
                                                  ()
                                              else
@@ -1053,7 +1046,7 @@ fun checkOptBar (ctx, Syntax.NO_BAR) = ()
 
 (*: val checkRow : (S.Label * 'a) list -> bool (* returns true if the same label is bound twice *) *)
 fun checkRow (row : (S.Label * 'a) list) = doCheckRow (S.LabelSet.empty, row)
-and doCheckRow (seen, []) = false
+and doCheckRow (_, []) = false
   | doCheckRow (seen, (label, _) :: xs) = if S.LabelSet.member (seen, label) then
                                               true
                                           else
@@ -1061,7 +1054,7 @@ and doCheckRow (seen, []) = false
 
 (*: val checkTyVarSeq : context * SourcePos.span * S.TyVar list -> unit *)
 fun checkTyVarSeq (ctx, span, xs: S.TyVar list) = doCheckTyVarSeq (ctx, span, S.TyVarSet.empty, xs)
-and doCheckTyVarSeq (ctx, span, seen, []) = ()
+and doCheckTyVarSeq (_, _, _, []) = ()
   | doCheckTyVarSeq (ctx, span, seen, tv :: xs) = ( if S.TyVarSet.member (seen, tv) then
                                                         emitError (ctx, [span], "no tyvarseq may contain the same tyvar twice")
                                                     else
@@ -1070,13 +1063,13 @@ and doCheckTyVarSeq (ctx, span, seen, []) = ()
                                                   )
 
 (*: val doTy : context -> S.Ty -> unit *)
-fun doTy ctx (S.TyVar span) = ()
+fun doTy _ (S.TyVar _) = ()
   | doTy ctx (S.RecordType (span, fields, optBaseTy)) = if checkRow fields then
                                                             emitError (ctx, [span], "no type-expression row may bind the same label twice")
                                                         else
                                                             Option.app (doTy ctx) optBaseTy
-  | doTy ctx (S.TyCon (span, tyargs, longtycon)) = List.app (doTy ctx) tyargs
-  | doTy ctx (S.FnType (span, s, t)) = ( doTy ctx s ; doTy ctx t )
+  | doTy ctx (S.TyCon (_, tyargs, _)) = List.app (doTy ctx) tyargs
+  | doTy ctx (S.FnType (_, s, t)) = ( doTy ctx s ; doTy ctx t )
 
 (*: val freeTyVarsInTypeDec : S.TyVar list -> S.Ty -> SourcePos.span list *)
 fun freeTyVarsInTypeDec tyvarseq
@@ -1101,9 +1094,9 @@ fun invalidConstructorNames (ctx : context) = if #allowBindEqual (#languageOptio
                                                   invalidConstructorNames1
 
 (*: val doPat : context -> S.Pat -> unit *)
-fun doPat ctx (S.WildcardPat _) = ()
+fun doPat _ (S.WildcardPat _) = ()
   | doPat ctx (S.SConPat (span, S.RealConstant _)) = emitError (ctx, [span], "no real constant may occur in a pattern")
-  | doPat ctx (S.SConPat _) = ()
+  | doPat _ (S.SConPat _) = ()
   | doPat ctx (S.VarPat (span, vid)) = if S.VIdSet.member (invalidBoundNames ctx, vid) then
                                            emitError (ctx, [span], "invalid bound name")
                                        else
@@ -1114,8 +1107,8 @@ fun doPat ctx (S.WildcardPat _) = ()
                                                                      ()
                                                                ; Option.app (doPat ctx) ellipsis
                                                                )
-  | doPat ctx (S.ConPat (_, _, NONE)) = ()
-  | doPat ctx (S.ConPat (_, longvid, SOME pat)) = doPat ctx pat
+  | doPat _ (S.ConPat (_, _, NONE)) = ()
+  | doPat ctx (S.ConPat (_, _, SOME pat)) = doPat ctx pat
   | doPat ctx (S.TypedPat (_, pat, ty)) = ( doTy ctx ty ; doPat ctx pat )
   | doPat ctx (S.LayeredPat (span, vid, optTy, pat)) = ( if S.VIdSet.member (invalidBoundNames ctx, vid) then
                                                              emitError (ctx, [span], "invalid bound name")
@@ -1131,8 +1124,8 @@ fun doPat ctx (S.WildcardPat _) = ()
                                               ; Vector.app (doPat ctx) pats
                                               )
 
-fun doValSpec (ctx, env, spec : (SourcePos.span * S.VId * S.TyVar list * S.Ty) list) : unit
-    = ignore (List.foldl (fn ((span, vid, tyvars, ty), set) =>
+fun doValSpec (ctx, _, spec : (SourcePos.span * S.VId * S.TyVar list * S.Ty) list) : unit
+    = ignore (List.foldl (fn ((span, vid, _, ty), set) =>
                              ( doTy ctx ty
                              ; if S.VIdSet.member (set, vid) then
                                    emitError (ctx, [span], "duplicate identifier in signature comment")
@@ -1147,34 +1140,34 @@ val doExp : context * S.TyVarSet.set -> S.Exp -> unit
 and doDec : context * S.TyVarSet.set -> S.Dec -> unit
 and doValBinds : context * S.TyVarSet.set -> S.ValBind list -> unit
  *)
-fun doExp (ctx : context, env : S.TyVarSet.set) (S.SConExp span) = ()
-  | doExp (ctx, env) (S.VarExp span) = ()
+fun doExp (_ : context, _ : S.TyVarSet.set) (S.SConExp _) = ()
+  | doExp (_, _) (S.VarExp _) = ()
   | doExp (ctx, env) (S.RecordExp (span, fields, optBase))
     = ( if checkRow fields then
             emitError (ctx, [span], "no expression row may bind the same label twice")
         else
             ()
-      ; List.app (fn (label, exp) => doExp (ctx, env) exp) fields
+      ; List.app (fn (_, exp) => doExp (ctx, env) exp) fields
       ; Option.app (doExp (ctx, env)) optBase
       )
-  | doExp (ctx, env) (S.LetInExp (span, decls, exp)) = ( List.app (doDec (ctx, env)) decls ; doExp (ctx, env) exp )
-  | doExp (ctx, env) (S.AppExp (span, e1, e2)) = ( doExp (ctx, env) e1 ; doExp (ctx, env) e2 )
-  | doExp (ctx, env) (S.TypedExp (span, exp, ty)) = ( doExp (ctx, env) exp ; doTy ctx ty )
-  | doExp (ctx, env) (S.HandleExp (span, exp, matches)) = ( doExp (ctx, env) exp ; doMatches (ctx, env) matches )
-  | doExp (ctx, env) (S.RaiseExp (span, exp)) = doExp (ctx, env) exp
-  | doExp (ctx, env) (S.IfThenElseExp (span, exp1, exp2, exp3)) = ( doExp (ctx, env) exp1 ; doExp (ctx, env) exp2 ; doExp (ctx, env) exp3 )
-  | doExp (ctx, env) (S.CaseExp (span, exp, matches)) = ( doExp (ctx, env) exp ; doMatches (ctx, env) matches )
-  | doExp (ctx, env) (S.FnExp (span, matches)) = doMatches (ctx, env) matches
-  | doExp (ctx, env) (S.ProjectionExp (span, label)) = ()
-  | doExp (ctx, env) (S.ListExp (span, exps)) = Vector.app (fn exp => doExp (ctx, env) exp) exps
+  | doExp (ctx, env) (S.LetInExp (_, decls, exp)) = ( List.app (doDec (ctx, env)) decls ; doExp (ctx, env) exp )
+  | doExp (ctx, env) (S.AppExp (_, e1, e2)) = ( doExp (ctx, env) e1 ; doExp (ctx, env) e2 )
+  | doExp (ctx, env) (S.TypedExp (_, exp, ty)) = ( doExp (ctx, env) exp ; doTy ctx ty )
+  | doExp (ctx, env) (S.HandleExp (_, exp, matches)) = ( doExp (ctx, env) exp ; doMatches (ctx, env) matches )
+  | doExp (ctx, env) (S.RaiseExp (_, exp)) = doExp (ctx, env) exp
+  | doExp (ctx, env) (S.IfThenElseExp (_, exp1, exp2, exp3)) = ( doExp (ctx, env) exp1 ; doExp (ctx, env) exp2 ; doExp (ctx, env) exp3 )
+  | doExp (ctx, env) (S.CaseExp (_, exp, matches)) = ( doExp (ctx, env) exp ; doMatches (ctx, env) matches )
+  | doExp (ctx, env) (S.FnExp (_, matches)) = doMatches (ctx, env) matches
+  | doExp (_, _) (S.ProjectionExp (_, _)) = ()
+  | doExp (ctx, env) (S.ListExp (_, exps)) = Vector.app (fn exp => doExp (ctx, env) exp) exps
   | doExp (ctx, env) (S.VectorExp (span, exps)) = ( if #allowVectorExps (#languageOptions ctx) then
                                                         ()
                                                     else
                                                         emitError (ctx, [span], "vector expression is not allowed here; you may want to set \"allowVectorExps true\"")
                                                   ; Vector.app (fn exp => doExp (ctx, env) exp) exps
                                                   )
-  | doExp (ctx, env) (S.PrimExp (span, primOp, tyargs, args)) = ( Vector.app (doTy ctx) tyargs ; Vector.app (doExp (ctx, env)) args )
-  | doExp (ctx, env) (S.SequentialExp (span, xs, y)) = ( Vector.app (doExp (ctx, env)) xs ; doExp (ctx, env) y )
+  | doExp (ctx, env) (S.PrimExp (_, _, tyargs, args)) = ( Vector.app (doTy ctx) tyargs ; Vector.app (doExp (ctx, env)) args )
+  | doExp (ctx, env) (S.SequentialExp (_, xs, y)) = ( Vector.app (doExp (ctx, env)) xs ; doExp (ctx, env) y )
 and doMatches (ctx, env) matches = List.app (fn (pat, exp) => ( doPat ctx pat ; doExp (ctx, env) exp) ) matches
 and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc, valbinds))
     = let val tyvars = S.TyVarSet.fromList tyvarseq
@@ -1194,7 +1187,7 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
        ; doValSpec (ctx, env, desc)
        ; doValBinds (ctx, S.TyVarSet.union (env, tyvars)) valbinds
       end
-  | doDec (ctx, env) (S.TypeDec (span, typbinds))
+  | doDec (ctx, _) (S.TypeDec (_, typbinds))
     = ignore (List.foldl (fn (S.TypBind (span, tyvarseq, tycon, ty), set) =>
                              ( checkTyVarSeq (ctx, span, tyvarseq)
                              ; doTy ctx ty
@@ -1211,7 +1204,7 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                              ; S.TyConSet.add (set, tycon)
                              )
                          ) S.TyConSet.empty typbinds)
-  | doDec (ctx, env) (S.DatatypeDec (span, datbinds, withtypebinds))
+  | doDec (ctx, _) (S.DatatypeDec (_, datbinds, withtypebinds))
     = let val set = #ty (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, optBar, conbinds), { v, ty }) =>
                                         ( checkTyVarSeq (ctx, span, tyvarseq)
                                         ; checkOptBar (ctx, optBar)
@@ -1263,8 +1256,8 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                                 )
                             ) set withtypebinds)
       end
-  | doDec (ctx, env) (S.DatatypeRepDec (span, tycon, longtycon)) = ()
-  | doDec (ctx, env) (S.AbstypeDec (span, datbinds, withtypebinds, decs))
+  | doDec (_, _) (S.DatatypeRepDec (_, _, _)) = ()
+  | doDec (ctx, env) (S.AbstypeDec (_, datbinds, withtypebinds, decs))
     = let val set = #ty (List.foldl (fn (S.DatBind (span, tyvarseq, tycon, optBar, conbinds), { v, ty }) =>
                                         ( checkTyVarSeq (ctx, span, tyvarseq)
                                         ; checkOptBar (ctx, optBar)
@@ -1298,7 +1291,7 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                              ) set withtypebinds
       in List.app (doDec (ctx, env)) decs
       end
-  | doDec (ctx, env) (S.ExceptionDec (span, exbinds))
+  | doDec (ctx, _) (S.ExceptionDec (_, exbinds))
     = ignore (List.foldl (fn (S.ExBind (span, vid, optTy), set) =>
                              ( Option.app (doTy ctx) optTy
                              ; if Syntax.VIdSet.member (invalidConstructorNames ctx, vid) then
@@ -1311,7 +1304,7 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                                    ()
                              ; Syntax.VIdSet.add (set, vid)
                              )
-                         | (S.ExReplication (span, vid, longvid), set) =>
+                         | (S.ExReplication (span, vid, _), set) =>
                            ( if Syntax.VIdSet.member (invalidConstructorNames ctx, vid) then
                                  emitError (ctx, [span], "invalid constructor name")
                              else
@@ -1323,13 +1316,13 @@ and doDec (ctx : context, env : S.TyVarSet.set) (S.ValDec (span, tyvarseq, desc,
                            ; Syntax.VIdSet.add (set, vid)
                            )
                          ) Syntax.VIdSet.empty exbinds)
-  | doDec (ctx, env) (S.LocalDec (span, decs1, decs2)) = ( List.app (doDec (ctx, env)) decs1
-                                                         ; List.app (doDec (ctx, env)) decs2
-                                                         )
-  | doDec (ctx, env) (S.OpenDec (span, longstrids)) = ()
-  | doDec (ctx, env) (S.OverloadDec _) = ()
-  | doDec (ctx, env) (S.EqualityDec (span, typarams, longtycon, exp)) = doExp (ctx, env) exp
-  | doDec (ctx, env) (S.ESImportDec { sourceSpan, pure = _, specs, moduleName = _ })
+  | doDec (ctx, env) (S.LocalDec (_, decs1, decs2)) = ( List.app (doDec (ctx, env)) decs1
+                                                      ; List.app (doDec (ctx, env)) decs2
+                                                      )
+  | doDec (_, _) (S.OpenDec (_, _)) = ()
+  | doDec (_, _) (S.OverloadDec _) = ()
+  | doDec (ctx, env) (S.EqualityDec (_, _, _, exp)) = doExp (ctx, env) exp
+  | doDec (ctx, _) (S.ESImportDec { sourceSpan, pure = _, specs, moduleName = _ })
     = let fun checkVId vid = if S.VIdSet.member (invalidBoundNames ctx, vid) then
                                  emitError (ctx, [sourceSpan], "invalid bound name")
                              else
@@ -1409,7 +1402,7 @@ fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), se
                                 )
                             ) set withtypedescs)
       end
-  | doSpec ctx (S.DatatypeRepSpec (span, tycon, longtycon)) = ()
+  | doSpec _ (S.DatatypeRepSpec (_, _, _)) = ()
   | doSpec ctx (S.ExDesc (span, descs)) = ignore (List.foldl (fn ((vid, optTy), set) =>
                                                                  ( Option.app (doTy ctx) optTy
                                                                  ; if Syntax.VIdSet.member (invalidConstructorNames ctx, vid) then
@@ -1432,9 +1425,9 @@ fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), se
                                                                      ; Syntax.StrIdSet.add (set, strid)
                                                                      )
                                                                  ) Syntax.StrIdSet.empty strdescs)
-  | doSpec ctx (S.Include (span, sigexp)) = doSigExp ctx sigexp
-  | doSpec ctx (S.Sharing (span, specs, longtycons)) = doSpecs ctx (span, specs)
-  | doSpec ctx (S.SharingStructure (span, specs, longstrids)) = doSpecs ctx (span, specs)
+  | doSpec ctx (S.Include (_, sigexp)) = doSigExp ctx sigexp
+  | doSpec ctx (S.Sharing (span, specs, _)) = doSpecs ctx (span, specs)
+  | doSpec ctx (S.SharingStructure (span, specs, _)) = doSpecs ctx (span, specs)
   | doSpec ctx (S.TypeAliasDesc (span, descs)) = ignore (List.foldl (fn ((tyvarseq, tycon, ty), set) =>
                                                                         ( checkTyVarSeq (ctx, span, tyvarseq)
                                                                         ; doTy ctx ty
@@ -1445,10 +1438,10 @@ fun doSpec ctx (S.ValDesc (span, descs)) = ignore (List.foldl (fn ((vid, ty), se
                                                                         ; Syntax.TyConSet.add (set, tycon)
                                                                         )
                                                                     ) Syntax.TyConSet.empty descs)
-and doSpecs ctx (span, specs) = List.app (doSpec ctx) specs
+and doSpecs ctx (_ (* span *), specs) = List.app (doSpec ctx) specs
 and doSigExp ctx (S.BasicSigExp (span, specs)) = doSpecs ctx (span, specs)
-  | doSigExp ctx (S.SigIdExp (_, _)) = ()
-  | doSigExp ctx (S.TypeRealisationExp (span, sigexp, tyvarseq, longtycon, ty, andType))
+  | doSigExp _ (S.SigIdExp (_, _)) = ()
+  | doSigExp ctx (S.TypeRealisationExp (span, _, tyvarseq, _, ty, andType))
     = ( if andType andalso not (#allowWhereAndType (#languageOptions ctx)) then
             emitError (ctx, [span], "'and type' is removed in Successor ML; use nested 'where type'")
         else
@@ -1457,13 +1450,13 @@ and doSigExp ctx (S.BasicSigExp (span, specs)) = doSpecs ctx (span, specs)
       ; doTy ctx ty
       )
 
-fun doStrExp ctx (S.StructExp (span, strdecs)) = List.app (doStrDec ctx) strdecs
-  | doStrExp ctx (S.StrIdExp (span, longstrid)) = ()
-  | doStrExp ctx (S.TransparentConstraintExp (span, strexp, sigexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
-  | doStrExp ctx (S.OpaqueConstraintExp (span, strexp, sigexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
-  | doStrExp ctx (S.FunctorAppExp (span, funid, strexp)) = doStrExp ctx strexp
-  | doStrExp ctx (S.LetInStrExp (span, strdecs, strexp)) = ( List.app (doStrDec ctx) strdecs ; doStrExp ctx strexp )
-and doStrDec ctx (S.CoreDec (span, dec)) = doDec (ctx, S.TyVarSet.empty) dec
+fun doStrExp ctx (S.StructExp (_, strdecs)) = List.app (doStrDec ctx) strdecs
+  | doStrExp _ (S.StrIdExp (_, _)) = ()
+  | doStrExp ctx (S.TransparentConstraintExp (_, strexp, sigexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
+  | doStrExp ctx (S.OpaqueConstraintExp (_, strexp, sigexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
+  | doStrExp ctx (S.FunctorAppExp (_, _, strexp)) = doStrExp ctx strexp
+  | doStrExp ctx (S.LetInStrExp (_, strdecs, strexp)) = ( List.app (doStrDec ctx) strdecs ; doStrExp ctx strexp )
+and doStrDec ctx (S.CoreDec (_, dec)) = doDec (ctx, S.TyVarSet.empty) dec
   | doStrDec ctx (S.StrBindDec (span, strbinds)) = ignore (List.foldl (fn ((strid, strexp), set) =>
                                                                           ( doStrExp ctx strexp
                                                                           ; if Syntax.StrIdSet.member (set, strid) then
@@ -1473,9 +1466,9 @@ and doStrDec ctx (S.CoreDec (span, dec)) = doDec (ctx, S.TyVarSet.empty) dec
                                                                           ; Syntax.StrIdSet.add (set, strid)
                                                                           )
                                                                       ) Syntax.StrIdSet.empty strbinds)
-  | doStrDec ctx (S.LocalStrDec (span, strdecs1, strdecs2)) = ( List.app (doStrDec ctx) strdecs1 ; List.app (doStrDec ctx) strdecs2 )
+  | doStrDec ctx (S.LocalStrDec (_, strdecs1, strdecs2)) = ( List.app (doStrDec ctx) strdecs1 ; List.app (doStrDec ctx) strdecs2 )
 
-fun doFunExp ctx (S.NamedFunExp (strid, sigexp, strexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
+fun doFunExp ctx (S.NamedFunExp (_, sigexp, strexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
   | doFunExp ctx (S.AnonymousFunExp (sigexp, strexp)) = ( doSigExp ctx sigexp ; doStrExp ctx strexp )
 
 fun doTopDec ctx (S.StrDec strdec) = doStrDec ctx strdec
@@ -1488,7 +1481,7 @@ fun doTopDec ctx (S.StrDec strdec) = doStrDec ctx strdec
                                                               ; Syntax.SigIdSet.add (set, sigid)
                                                               )
                                                           ) Syntax.SigIdSet.empty sigbinds)
-  | doTopDec ctx (S.FunDec funbinds) = ignore (List.foldl (fn ((span, funid, funexp), set) =>
+  | doTopDec ctx (S.FunDec funbinds) = ignore (List.foldl (fn ((_, funid, funexp), set) =>
                                                               ( doFunExp ctx funexp
                                                               ; if Syntax.FunIdSet.member (set, funid) then
                                                                     emitError (ctx, [], "duplicate functor binding") (* TODO: location info *)

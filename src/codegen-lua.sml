@@ -187,7 +187,7 @@ type Env = { continuations : cont_type C.CVarMap.map
 
 datatype purity = PURE | DISCARDABLE | IMPURE
 
-fun applyCont (ctx : Context, env : Env, defaultCont : C.CVar option, cont : C.CVar, args : L.Exp list)
+fun applyCont (_ : Context, env : Env, defaultCont : C.CVar option, cont : C.CVar, args : L.Exp list)
     = case C.CVarMap.find (#continuations env, cont) of
           SOME (GOTO { label, params = [] }) => if defaultCont = SOME cont then
                                                     []
@@ -215,25 +215,25 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                  | L.PredefinedId "true" => L.ConstExp L.True
                                  | id => L.VarExp id
                               )
-  | doValue ctx C.Unit = L.ConstExp L.Nil
-  | doValue ctx C.Nil = L.ConstExp L.Nil (* empty list *)
-  | doValue ctx (C.BoolConst false) = L.ConstExp L.False
-  | doValue ctx (C.BoolConst true) = L.ConstExp L.True
-  | doValue ctx (C.IntConst (Primitives.INT, x)) = if x < 0 then
-                                                       if x = ~0x8000000000000000 then
-                                                           L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
-                                                       else
-                                                           L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
-                                                   else
-                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
-  | doValue ctx (C.IntConst (Primitives.I32, x)) = if x < 0 then
-                                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
-                                                   else
-                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
-  | doValue ctx (C.IntConst (Primitives.I54, x)) = if x < 0 then
-                                                       L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
-                                                   else
-                                                       L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue _ C.Unit = L.ConstExp L.Nil
+  | doValue _ C.Nil = L.ConstExp L.Nil (* empty list *)
+  | doValue _ (C.BoolConst false) = L.ConstExp L.False
+  | doValue _ (C.BoolConst true) = L.ConstExp L.True
+  | doValue _ (C.IntConst (Primitives.INT, x)) = if x < 0 then
+                                                     if x = ~0x8000000000000000 then
+                                                         L.BinExp (L.MINUS, L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ (x + 1))))), L.ConstExp (L.Numeral "1"))
+                                                     else
+                                                         L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                 else
+                                                     L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue _ (C.IntConst (Primitives.I32, x)) = if x < 0 then
+                                                     L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                 else
+                                                     L.ConstExp (L.Numeral (LargeInt.toString x))
+  | doValue _ (C.IntConst (Primitives.I54, x)) = if x < 0 then
+                                                     L.UnaryExp (L.NEGATE, L.ConstExp (L.Numeral (LargeInt.toString (~ x))))
+                                                 else
+                                                     L.ConstExp (L.Numeral (LargeInt.toString x))
   | doValue ctx (C.IntConst (Primitives.I64, x)) = let val suffix = case #targetLuaVersion ctx of
                                                                         LUA5_3 => ""
                                                                       | LUAJIT => "LL"
@@ -245,18 +245,18 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
                                                       else
                                                           L.ConstExp (L.Numeral (LargeInt.toString x ^ suffix))
                                                    end
-  | doValue ctx (C.IntConst (Primitives.INT_INF, x)) = raise CodeGenError "IntInf is not natively supported by Lua backend"
-  | doValue ctx (C.WordConst (Primitives.WORD, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
-  | doValue ctx (C.WordConst (Primitives.W32, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doValue _ (C.IntConst (Primitives.INT_INF, _)) = raise CodeGenError "IntInf is not natively supported by Lua backend"
+  | doValue _ (C.WordConst (Primitives.WORD, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
+  | doValue _ (C.WordConst (Primitives.W32, x)) = L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x))
   | doValue ctx (C.WordConst (Primitives.W64, x)) = let val suffix = case #targetLuaVersion ctx of
                                                                          LUA5_3 => ""
                                                                        | LUAJIT => "ULL"
                                                     in L.ConstExp (L.Numeral ("0x" ^ LargeInt.fmt StringCvt.HEX x ^ suffix))
                                                     end
-  | doValue ctx (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
-  | doValue ctx (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
-  | doValue ctx (C.StringConst s) = L.ConstExp (L.LiteralString s)
-  | doValue ctx (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
+  | doValue _ (C.CharConst c) = L.ConstExp (L.Numeral (Int.toString (Char.ord c)))
+  | doValue _ (C.Char16Const _) = raise CodeGenError "Char16Const is not supported by Lua backend"
+  | doValue _ (C.StringConst s) = L.ConstExp (L.LiteralString s)
+  | doValue _ (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
 (*:
 val doDecs : Context * Env * C.CVar option * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list
@@ -266,9 +266,9 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
     = (case VectorSlice.getItem decs of
            NONE => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))
          | SOME (dec, decs) =>
-           let fun pure (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
+           let fun pure (NONE, _) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
                  | pure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
-               fun discardable (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
+               fun discardable (NONE, _) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
                  | discardable (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
                fun impure (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (ExpStat exp, revStats))
                  | impure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
@@ -287,12 +287,12 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                 | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result } =>
                   pure (result, L.ConstExp L.Nil)
                 | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result } =>
-                  let fun doFields (i, []) = []
+                  let fun doFields (_, []) = []
                         | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
                   in pure (result, L.CallExp (L.VarExp (L.PredefinedId "_list"), vector [L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs)))]))
                   end
                 | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result } =>
-                  let fun doFields (i, []) = []
+                  let fun doFields (_, []) = []
                         | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
                   in pure (result, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs))))
                   end
@@ -335,7 +335,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                       val payload = doValue ctx payload
                   in pure (result, L.TableExp (vector [(L.StringKey "tag", tag), (L.StringKey "payload", payload)]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (span as { start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp ({ start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result = _ } =>
                   let val exp = doValue ctx exp
                       val locationInfo = if start = SourcePos.nullPos then
                                              L.ConstExp L.Nil
@@ -343,7 +343,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                              L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
                   in List.rev (L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo]) :: revStats) (* discard continuation *)
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs, args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, result } =>
                   let fun doUnary f = case args of
                                           [a] => f (doValue ctx a)
                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
@@ -520,7 +520,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                             | (LUAJIT, Primitives.I64, Primitives.I54) => doUnaryExp (fn a => L.CallExp (L.VarExp (L.PredefinedId "tonumber"), vector [a]), PURE)
                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on this target")
                          )
-                       | Primitives.Word_EQUAL w => doBinaryOp (L.EQUAL, PURE)
+                       | Primitives.Word_EQUAL _ => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Word_PLUS w =>
                          (case (#targetLuaVersion ctx, w) of
                               (LUA5_3, Primitives.WORD) => doBinaryOp (L.PLUS, PURE)
@@ -834,21 +834,21 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])) :: revStats)
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError "JsCallOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError "JsMethodOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = _ }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError "JsNewOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")
                 | C.ValDec { exp = C.Record fields, result } => (* non-empty record *)
                   let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (LabelToTableKey label, doValue ctx v) :: acc) [] fields
                   in pure (result, L.TableExp (vector fields))
                   end
-                | C.ValDec { exp = C.ExnTag { name, payloadTy }, result } =>
+                | C.ValDec { exp = C.ExnTag { name, payloadTy = _ }, result } =>
                   discardable (result, L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))]))
-                | C.ValDec { exp = C.Projection { label, record, fieldTypes }, result } =>
+                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, result } =>
                   let val label = case label of
                                       Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
                                     | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
@@ -899,10 +899,10 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                    | _ => NO_INIT
                       val maxParams = List.foldl (fn ((_, params, _), n) => Int.max (n, List.length (List.filter Option.isSome params))) 0 defs
                       val commonParams = List.tabulate (maxParams, fn _ => genSym ctx)
-                      fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME p, (c :: rest, acc)) => (rest, SOME c :: acc)
+                      fun mapCommonParams params = List.rev (#2 (List.foldl (fn (SOME _, (c :: rest, acc)) => (rest, SOME c :: acc)
                                                                             | (_, (rest, acc)) => (rest, NONE :: acc)
                                                                             ) (commonParams, []) params))
-                      val env' = { continuations = List.foldl (fn ((name, params, body), m) =>
+                      val env' = { continuations = List.foldl (fn ((name, params, _), m) =>
                                                                   C.CVarMap.insert (m, name, GOTO { label = doLabel name
                                                                                                   , params = List.map (Option.map L.UserDefinedId) (mapCommonParams params)
                                                                                                   }
@@ -945,7 +945,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
       )
 and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs, cont })
     = doDecs (ctx, env, defaultCont, VectorSlice.full decs, cont, [])
-  | doCExp (ctx, env, defaultCont, C.App { applied, cont, args })
+  | doCExp (ctx, env, _, C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO { label, params }) =>
            let val callAndAssign = if List.exists Option.isSome params then
@@ -1001,7 +1001,7 @@ and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs,
                     )
          ]
       end
-  | doCExp (ctx, env, defaultCont, C.Unreachable) = []
+  | doCExp (_, _, _, C.Unreachable) = []
 
 fun doProgram ctx cont cexp
     = let val env = { continuations = C.CVarMap.singleton (cont, RETURN) }

@@ -143,12 +143,12 @@ fun makeDoStat { loopLike : bool, body : Stat list }
       else
           body
 
-fun freeVarsInExp (bound : IdSet.set, ConstExp _, acc : IdSet.set) = acc
+fun freeVarsInExp (_ : IdSet.set, ConstExp _, acc : IdSet.set) = acc
   | freeVarsInExp (bound, VarExp v, acc) = if IdSet.member (bound, v) then
                                                acc
                                            else
                                                IdSet.add (acc, v)
-  | freeVarsInExp (bound, TableExp fields, acc) = Vector.foldl (fn ((k, x), acc) => freeVarsInExp (bound, x, acc)) acc fields
+  | freeVarsInExp (bound, TableExp fields, acc) = Vector.foldl (fn ((_, x), acc) => freeVarsInExp (bound, x, acc)) acc fields
   | freeVarsInExp (bound, CallExp (f, args), acc) = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) (freeVarsInExp (bound, f, acc)) args
   | freeVarsInExp (bound, MethodExp (obj, _, args), acc) = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) (freeVarsInExp (bound, obj, acc)) args
   | freeVarsInExp (bound, FunctionExp (params, body), acc) = freeVarsInBlock (Vector.foldl IdSet.add' bound params, body, acc)
@@ -180,9 +180,9 @@ and freeVarsInStat (LocalStat (lhs, rhs), (bound, acc)) = let val acc = List.fol
   | freeVarsInStat (ReturnStat xs, (bound, acc)) = let val acc = Vector.foldl (fn (x, acc) => freeVarsInExp (bound, x, acc)) acc xs
                                                    in (bound, acc)
                                                    end
-  | freeVarsInStat (DoStat { loopLike, body }, (bound, acc)) = let val acc = freeVarsInBlock (bound, body, acc)
-                                                               in (bound, acc)
-                                                               end
+  | freeVarsInStat (DoStat { loopLike = _, body }, (bound, acc)) = let val acc = freeVarsInBlock (bound, body, acc)
+                                                                   in (bound, acc)
+                                                                   end
   | freeVarsInStat (GotoStat _, bound_acc) = bound_acc
   | freeVarsInStat (LabelStat _, bound_acc) = bound_acc
 and freeVarsInBlock (bound, block, acc) = #2 (Vector.foldl freeVarsInStat (bound, acc) block)
@@ -322,7 +322,7 @@ fun findNextFragment [] = NONE
   | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
   | findNextFragment (Fragment s :: _) = SOME s
   | findNextFragment (_ :: fragments) = findNextFragment fragments
-fun processIndent (revAcc, indent, []) = List.rev revAcc
+fun processIndent (revAcc, _, []) = List.rev revAcc
   | processIndent (revAcc, indent, Fragment s :: fragments) = processIndent (s :: revAcc, indent, fragments)
   | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 2, fragments)
   | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 2, fragments)
@@ -468,7 +468,7 @@ and doStat ([], acc) = acc
                                                           doStat (rest, Indent :: Fragment "return" :: LineTerminator :: acc)
                                                       else
                                                           doStat (rest, Indent :: Fragment "return " :: commaSepV (Vector.map (#exp o doExp) exps) @ OptSemicolon :: acc)
-  | doStat (LuaSyntax.DoStat { loopLike, body } :: rest, acc) = doStat (rest, Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent :: doBlock body @ DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator :: acc)
+  | doStat (LuaSyntax.DoStat { loopLike = _, body } :: rest, acc) = doStat (rest, Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent :: doBlock body @ DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator :: acc)
   | doStat (LuaSyntax.GotoStat label :: rest, acc) = doStat (rest, Indent :: Fragment "goto " :: idToFragment label @ LineTerminator :: acc)
   | doStat (LuaSyntax.LabelStat label :: rest, acc) = doStat (rest, Indent :: Fragment "::" :: idToFragment label @ Fragment "::" :: LineTerminator :: acc)
 and doBlock stats = let val revStats = Vector.foldl (op ::) [] stats

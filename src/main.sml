@@ -5,7 +5,6 @@
 structure Main : sig
               val main : string * string list -> unit
           end = struct
-structure M = MLBSyntax;
 structure S = CommandLineSettings;
 
 datatype OutputMode = ExecutableMode | LibraryMode
@@ -82,7 +81,7 @@ fun getTargetInfo (opts : options) : TargetInfo.target_info
                            , wordSize = 32
                            }
       )
-fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
+fun optimizeCps (_ : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
   | optimizeCps ctx cexp n = let val () = if #printTimings ctx then
                                               print ("[TIME] optimizeCps " ^ Int.toString n ^ "...")
                                           else
@@ -100,7 +99,7 @@ fun optimizeCps (ctx : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                 else
                                     cexp
                              end
-fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo fileName cont nextId cexp _
+fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) (_ (* targetInfo *)) fileName cont nextId cexp _
     = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -134,7 +133,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_LUAJIT, ... }) targetInfo fileName cont nextId cexp _
+  | emit (opts as { backend = BACKEND_LUAJIT, ... }) _ fileName cont nextId cexp _
     = let val timer = Timer.startCPUTimer ()
           val base = OS.Path.base fileName
           val mlinit_lua = OS.Path.joinDirFile { dir = #libDir opts
@@ -165,7 +164,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) targetInfo f
                        ()
       in ()
       end
-  | emit (opts as { backend = BACKEND_JS style, ... }) targetInfo fileName cont nextId cexp export
+  | emit (opts as { backend = BACKEND_JS style, ... }) _ fileName cont nextId cexp export
     = let val timer = Timer.startCPUTimer ()
           val contEscapeMap = CpsAnalyze.contEscape (cont, cexp)
           val base = OS.Path.base fileName
@@ -224,7 +223,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                                    ]
           val targetInfo = getTargetInfo opts
           val errorCounter = Message.newCounter { errorTolerance = 10 }
-          fun printMessage { spans, domain, message, type_ }
+          fun printMessage { spans, domain = _, message, type_ }
               = let val t = case type_ of
                                 Message.WARNING => "warning: "
                               | Message.ERROR => "error: "
@@ -251,8 +250,8 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                                       , messageHandler = messageHandler
                                       }
           val timer = Timer.startCPUTimer ()
-          val (env, { tynameset, toFEnv, fdecs, cache }) = f ctx
-          val toFContext = let fun printMessage { spans, domain, message, type_ }
+          val (env, { tynameset = _, toFEnv, fdecs, cache = _ }) = f ctx
+          val toFContext = let fun printMessage { spans, domain = _, message, type_ }
                                    = let val t = case type_ of
                                                      Message.WARNING => "warning: "
                                                    | Message.ERROR => "error: "
@@ -281,7 +280,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                        ()
           val fexp = #doExp (DesugarPatternMatches.desugarPatternMatches toFContext) fexp
           val fexp = DecomposeValRec.doExp fexp
-          val (_, fdecs) = DeadCodeElimination.doExp fexp TypedSyntax.VIdSet.empty
+          val (_, fexp) = DeadCodeElimination.doExp fexp TypedSyntax.VIdSet.empty
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #dump opts = DUMP_FINAL then
                        print (Printer.build (FPrinter.doExp 0 fexp) ^ "\n")
@@ -326,7 +325,7 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                  ( print ("internal error: " ^ message ^ "\n")
                  ; OS.Process.exit OS.Process.failure
                  )
-               | DesugarPatternMatches.DesugarError (spans as ({start=p1 as {file=f1,line=l1,column=c1},end_=p2 as {file=f2,line=l2,column=c2}} :: _), message) =>
+               | DesugarPatternMatches.DesugarError ({start = p1 as { file = f1, line = l1, column = c1 }, end_ = p2 as { file = f2, line = l2, column = c2 }} :: _, message) =>
                  ( if f1 = f2 then
                        if p1 = p2 then
                            print (f1 ^ ":" ^ Int.toString l1 ^ ":" ^ Int.toString c1 ^ ": " ^ message ^ "\n")
@@ -351,8 +350,8 @@ fun handleInputFile opts [file] = if String.isSuffix ".sml" file then
                                       doCompile opts file (fn ctx => MLBEval.doMlbSource ctx MLBEval.emptyEnv file MLBEval.initialCode)
                                   else
                                       showMessageAndFail "Input filename must end with '.sml'\n"
-  | handleInputFile opts [] = showMessageAndFail "No input given.\n"
-  | handleInputFile opts _ = showMessageAndFail "Multiple input is not supported.\n"
+  | handleInputFile _ [] = showMessageAndFail "No input given.\n"
+  | handleInputFile _ _ = showMessageAndFail "Multiple input is not supported.\n"
 datatype 'a option_action = SIMPLE of 'a
                           | WITH_ARG of string -> 'a
 datatype option_desc = SHORT of string
@@ -386,7 +385,7 @@ fun testOption (_, []) = NONE
                                                          end
                                                      else
                                                          NONE
-fun parseOption (descs, []) = NONE
+fun parseOption (_, []) = NONE
   | parseOption (descs, args) = let fun go [] = NONE
                                       | go (desc :: descs) = case testOption (desc, args) of
                                                                  SOME r => SOME r
@@ -459,8 +458,8 @@ fun parseArgs (opts : options) args
         | SOME (OPT_TARGET_LUAJIT, args) => parseArgs (S.set.backend BACKEND_LUAJIT opts) args
         | SOME (OPT_TARGET_NODEJS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.DIRECT_STYLE) opts) args
         | SOME (OPT_TARGET_NODEJS_CPS, args) => parseArgs (S.set.backend (BACKEND_JS CodeGenJs.CPS) opts) args
-        | SOME (OPT_HELP, args) => ( showHelp (); OS.Process.exit OS.Process.success )
-        | SOME (OPT_VERSION, args) => ( showVersion (); OS.Process.exit OS.Process.success )
+        | SOME (OPT_HELP, _) => ( showHelp (); OS.Process.exit OS.Process.success )
+        | SOME (OPT_VERSION, _) => ( showVersion (); OS.Process.exit OS.Process.success )
         | SOME (OPT_STOP, args) => handleInputFile opts args
         | SOME (OPT_DUMP, args) => parseArgs (S.set.dump DUMP_INITIAL opts) args
         | SOME (OPT_DUMP_FINAL, args) => parseArgs (S.set.dump DUMP_FINAL opts) args

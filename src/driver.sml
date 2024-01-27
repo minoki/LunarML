@@ -82,9 +82,9 @@ type Env = { fixity : Fixity.Env
            , toFEnv : ToFSyntax.Env
            }
 
-fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt : LanguageOptions.options, origEnv as { fixity, typingEnv, tynameset, toFEnv } : Env, name, source)
+fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt : LanguageOptions.options, { fixity, typingEnv, tynameset, toFEnv } : Env, name, source)
     = let val lines = Vector.fromList (String.fields (fn x => x = #"\n") source)
-          fun printMessage { spans, domain, message, type_ }
+          fun printMessage { spans, domain = _, message, type_ }
               = let val t = case type_ of
                                 Message.WARNING => "warning: "
                               | Message.ERROR => "error: "

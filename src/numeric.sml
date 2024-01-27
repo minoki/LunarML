@@ -156,10 +156,10 @@ fun notationToRatio (DecimalNotation { sign, intPart, fracPart, exponent })
                            (IntInf.<< (x, Word.fromInt e), 1)
       in (sign, n, d)
       end
-fun checkExactness (format : float_format) (DecimalNotation _) = true (* OK *)
-  | checkExactness format (notation as HexadecimalNotation { sign, intPart, fracPart, exponent }) = let val { exact, value } = ratioToFloat format (notationToRatio notation)
-                                                                                                    in exact
-                                                                                                    end
+fun checkExactness (_ : float_format) (DecimalNotation _) = true (* OK *)
+  | checkExactness format (notation as HexadecimalNotation _) = let val { exact, value = _ } = ratioToFloat format (notationToRatio notation)
+                                                                in exact
+                                                                end
 
 (*
  * Based on (FPP)^2 of [Dragon4], with modification to support subnormal
@@ -227,7 +227,7 @@ fun positiveBinaryFloatToDecimal { precision, maxExponent } { value, exponent }
       end
 
 (* Assumption: #radix nominal_format = #radix target_format, #precision nominal_format <= #precision target_format, #maxExponent nominal_format <= #maxExponent target_format *)
-fun toDecimal { nominal_format : float_format, target_format : float_format } (notation as DecimalNotation _) = SOME notation (* TODO: Convert to shorter representation if input is too long *)
+fun toDecimal { nominal_format = _ : float_format, target_format = _ : float_format } (notation as DecimalNotation _) = SOME notation (* TODO: Convert to shorter representation if input is too long *)
   | toDecimal { nominal_format, target_format } (notation as HexadecimalNotation _)
     = let val { exact, value = x } = ratioToFloat nominal_format (notationToRatio notation)
       in case x of

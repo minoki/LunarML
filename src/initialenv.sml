@@ -116,7 +116,7 @@ fun newVId name = let val n = !vidCounter
                   end
 
 (* Ref *)
-val VId_ref = Typing.VId_ref
+(* val VId_ref = Typing.VId_ref *)
 
 (* Bool *)
 val VId_true = newVId "true"
@@ -124,7 +124,7 @@ val VId_false = newVId "false"
 
 (* List *)
 val VId_nil = newVId "nil"
-val VId_DCOLON = Typing.VId_DCOLON
+(* val VId_DCOLON = Typing.VId_DCOLON *)
 
 (* Exception *)
 val VId_Match = newVId "Match"
@@ -225,8 +225,6 @@ val VId_DelimCont_topLevel = newVId "_Prim.DelimCont.topLevel"
 
 val initialEnv : Typing.Env
     = let open Typing
-          val mkTyMap = List.foldl Syntax.TyConMap.insert' Syntax.TyConMap.empty
-          val mkValMap = List.foldl (fn ((vid, tysc), m) => Syntax.VIdMap.insert(m, Syntax.MkVId vid, (tysc, Syntax.ValueVariable))) Syntax.VIdMap.empty
           fun mkValConMap (cons, rep) = let val allConstructors = List.foldl (fn ((vid, _), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid)) Syntax.VIdSet.empty cons
                                             val constructorsWithPayload = List.foldl (fn ((vid, TypedSyntax.TypeScheme (_, TypedSyntax.FnType _)), set) => Syntax.VIdSet.add (set, Syntax.MkVId vid) | (_, set) => set) Syntax.VIdSet.empty cons
                                         in List.foldl (fn ((vid, tysc), m) => let val idstatus = Syntax.ValueConstructor { tag = vid, allConstructors = allConstructors, constructorsWithPayload = constructorsWithPayload, representation = rep }
@@ -257,7 +255,6 @@ val initialEnv : Typing.Env
           fun mkFnType (a, b) = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
           val op --> = mkFnType
           fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)
-          fun mkTupleType xs = TypedSyntax.TupleType (SourcePos.nullSpan, xs)
           fun mkTyCon (a, b) = TypedSyntax.TyCon (SourcePos.nullSpan, a, b)
           fun refOf(t) = mkTyCon([t], primTyName_ref)
           fun listOf(t) = mkTyCon([t], primTyName_list)
@@ -419,9 +416,7 @@ val primOverloadEnv : Typing.Env
           val TypeScheme = TypedSyntax.TypeScheme
           fun mkTyVar tv = TypedSyntax.TyVar (SourcePos.nullSpan, tv)
           val tyVarA = TypedSyntax.MkTyVar ("'a", 0)
-          val tyVarEqA = TypedSyntax.MkTyVar ("''a", 0)
           val tyA = mkTyVar tyVarA
-          val tyEqA = mkTyVar tyVarEqA
           infixr -->
           fun a --> b = TypedSyntax.FnType (SourcePos.nullSpan, a, b)
           fun mkPairType (a, b) = TypedSyntax.PairType (SourcePos.nullSpan, a, b)

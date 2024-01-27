@@ -64,7 +64,7 @@ sources = \
   src/main-default.sml
 
 typecheck: src/lunarml.mlb $(sources)
-	mlton -stop tc $<
+	mlton -stop tc -default-ann "warnUnused true" $<
 
 bin/lunarml: src/lunarml.mlb $(sources)
 	mlton -output $@ $<

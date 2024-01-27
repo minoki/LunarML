@@ -95,7 +95,7 @@ fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
   | compare (UserDefinedId x, UserDefinedId y) = TypedSyntax.VIdKey.compare (x, y)
 end : ORD_KEY
 structure IdSet = RedBlackSetFn (IdKey)
-structure IdMap = RedBlackMapFn (IdKey)
+(* structure IdMap = RedBlackMapFn (IdKey) *)
 datatype JsConst = Null
                  | False
                  | True
@@ -327,7 +327,7 @@ val LogicalORExpression = 15
 val UnaryExpression = 4
 val CallExpression = 2
 val MemberExpression = 1
-val PrimaryExpression = 0
+(* val PrimaryExpression = 0 *)
 end
 
 datatype Fragment = Fragment of string
@@ -339,7 +339,7 @@ fun findNextFragment [] = NONE
   | findNextFragment (Fragment "" :: fragments) = findNextFragment fragments
   | findNextFragment (Fragment s :: _) = SOME s
   | findNextFragment (_ :: fragments) = findNextFragment fragments
-fun processIndent (revAcc, indent, []) = List.rev revAcc
+fun processIndent (revAcc, _, []) = List.rev revAcc
   | processIndent (revAcc, indent, Fragment s :: fragments) = processIndent (s :: revAcc, indent, fragments)
   | processIndent (revAcc, indent, IncreaseIndent :: fragments) = processIndent (revAcc, indent + 1, fragments)
   | processIndent (revAcc, indent, DecreaseIndent :: fragments) = processIndent (revAcc, indent - 1, fragments)
@@ -410,15 +410,15 @@ fun doConst S.Null = (fn rest => Fragment "null" :: rest)
   | doConst S.True = (fn rest => Fragment "true" :: rest)
   | doConst (S.Numeral s) = (fn rest => Fragment s :: rest)
   | doConst (S.WideString s) = (fn rest => Fragment (toWideStringLit s) :: rest)
-fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
-  | doExp (prec, S.ThisExp) = (fn rest => Fragment "this" :: rest)
-  | doExp (prec, S.VarExp id) = (fn rest => Fragment (idToJs id) :: rest)
-  | doExp (prec, S.ObjectExp fields) = (fn rest => Fragment "{" :: commaSepV (Vector.map (fn (key, value) => fn rest => Fragment (doKey key) :: Fragment ": " :: doExp (Precedence.AssignmentExpression, value) rest) fields) (Fragment "}" :: rest))
-  | doExp (prec, S.ArrayExp elements) = (fn rest => Fragment "[" :: doCommaSepExp elements (Fragment "]" :: rest))
+fun doExp (_, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
+  | doExp (_, S.ThisExp) = (fn rest => Fragment "this" :: rest)
+  | doExp (_, S.VarExp id) = (fn rest => Fragment (idToJs id) :: rest)
+  | doExp (_, S.ObjectExp fields) = (fn rest => Fragment "{" :: commaSepV (Vector.map (fn (key, value) => fn rest => Fragment (doKey key) :: Fragment ": " :: doExp (Precedence.AssignmentExpression, value) rest) fields) (Fragment "}" :: rest))
+  | doExp (_, S.ArrayExp elements) = (fn rest => Fragment "[" :: doCommaSepExp elements (Fragment "]" :: rest))
   | doExp (prec, S.CallExp (fnExp, arguments)) = paren (prec < Precedence.CallExpression) (fn rest => doExp (Precedence.CallExpression, fnExp) (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
   | doExp (prec, S.MethodExp (objectExp, methodName, arguments)) = paren (prec < Precedence.CallExpression) (fn rest => doExp (Precedence.MemberExpression, objectExp) (Fragment "." :: Fragment methodName :: Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
   | doExp (prec, S.NewExp (constructorExp, arguments)) = paren (prec < Precedence.MemberExpression) (fn rest => Fragment "new " :: doExp (Precedence.MemberExpression, constructorExp) (Fragment "(" :: doCommaSepExp arguments (Fragment ")" :: rest)))
-  | doExp (prec, S.FunctionExp (parameters, body)) = (fn rest => Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => fn rest => Fragment (idToJs id) :: rest) parameters) (Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body (DecreaseIndent :: Indent :: Fragment "}" :: rest)))
+  | doExp (_, S.FunctionExp (parameters, body)) = (fn rest => Fragment "function" :: Fragment "(" :: commaSepV (Vector.map (fn id => fn rest => Fragment (idToJs id) :: rest) parameters) (Fragment ") {" :: IncreaseIndent :: LineTerminator :: doBlock body (DecreaseIndent :: Indent :: Fragment "}" :: rest)))
   | doExp (prec, S.BinExp (binOp, x, y)) = (case binOpInfo binOp of
                                                 InfixOp (prec', symbol) => paren (prec < prec') (fn rest => doExp (prec', x) (Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec' - 1, y) rest))
                                               | InfixOpR (prec', symbol) => paren (prec < prec') (fn rest => doExp (prec' - 1, x) (Fragment " " :: Fragment symbol :: Fragment " " :: doExp (prec', y) rest))
@@ -436,7 +436,7 @@ fun doExp (prec, S.ConstExp ct) : Fragment list -> Fragment list = doConst ct
   | doExp (prec, S.IndexExp (objectExp, indexExp))
     = let val tryIdentifierName = case indexExp of
                                       S.ConstExp (S.WideString name) =>
-                                      let val name = Vector.foldr (fn (c, NONE) => NONE
+                                      let val name = Vector.foldr (fn (_, NONE) => NONE
                                                                   | (c, SOME xs) => if c < 128 then
                                                                                         SOME (chr c :: xs)
                                                                                     else

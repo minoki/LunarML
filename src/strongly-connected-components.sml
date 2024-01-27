@@ -36,7 +36,7 @@ fun components (destinations, graph)
                 end
           val list : t list = Map.foldli (fn (x, _, acc) => acc @ dfs1 (NONE, x)) [] map
           fun dfs2 (x : t) : Set.set
-              = let val { refs, invrefs = ref invrefs, seen2, ... } = Map.lookup (map, x)
+              = let val { refs = _, invrefs = ref invrefs, seen2, ... } = Map.lookup (map, x)
                 in if !seen2 then
                        Set.empty
                    else

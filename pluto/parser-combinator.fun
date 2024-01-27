@@ -23,14 +23,14 @@ fun showError ({ pos, messages } : parseError) = S.showPos pos ^ ": " ^ String.c
                                                                                                          | Expected s => "expected " ^ s
                                                                                                          | Unexpected s => "unexpected " ^ s
                                                                                                          ) messages)
-datatype 'a parserResult = Ok' of 'a * bool * internalState
-                         | Err of bool * parseError
+datatype 'a parserResult = Ok' of 'a * (* consumed? *) bool * internalState
+                         | Err of (* consumed? *) bool * parseError
 type 'a parser = internalState -> 'a parserResult
 datatype 'a result = ParseError of string
                    | Ok of 'a * state
 fun runParser p state0 name stream = case p { stream = stream, pos = Stream.initialPos name, user = state0 } of
-                                         Ok' (result, consumed, { stream, pos, user }) => Ok (result, user)
-                                       | Err (consumed, e) => ParseError (showError e)
+                                         Ok' (result, _, { stream = _, pos = _, user }) => Ok (result, user)
+                                       | Err (_, e) => ParseError (showError e)
 fun delay p = fn s => p () s
 fun fix f = let fun p s = f p s
             in p
@@ -114,7 +114,7 @@ fun many p = fn s => case p s of
                                                   Ok' (xs, _, s) => Ok' (x :: xs, true, s)
                                                 | Err (_, e) => Err (true, e)
                                              )
-                       | Ok' (x, false, s) => Err (false, { pos = #pos s, messages = [Message "many: combinator 'many' is applied to a parser that accepts an empty string"] })
+                       | Ok' (_, false, s) => Err (false, { pos = #pos s, messages = [Message "many: combinator 'many' is applied to a parser that accepts an empty string"] })
                        | Err (false, _) => Ok' ([], false, s)
                        | Err (true, e) => Err (true, e)
 (* fun many p = (p >>= (fn x => many p >>= (fn xs => pure (x :: xs)))) <|> pure [] *)
@@ -133,7 +133,7 @@ fun optional_ p = fn s => case p s of
                             | Err (false, _) => Ok' ((), false, s)
                             | Err (true, e) => Err (true, e)
 fun notFollowedBy p = fn s => case p s of
-                                  Ok' (x, _, _) => Err (false, { pos = #pos s, messages = [Unexpected "token"] }) (* unexpected 'x' *)
+                                  Ok' (_, _, _) => Err (false, { pos = #pos s, messages = [Unexpected "token"] }) (* unexpected 'x' *)
                                 | Err (_, _) => Ok' ((), false, s)
 val eof = notFollowedBy anyToken <?> "end of input"
 fun between (open_, close) p = (open_ >> p) <* close
