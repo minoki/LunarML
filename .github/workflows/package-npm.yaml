@@ -19,7 +19,7 @@ jobs:
       - name: Pack
         run: cd package/npm && npm pack
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: npm-package
           path: package/npm/lunarml-*.tgz
