@@ -824,6 +824,15 @@ and unifyTyVarAndTy (ctx : InferenceContext, env : Env, span : SourcePos.span, t
            end
      )
 fun addConstraint (ctx : InferenceContext, env : Env, ct : T.Constraint) = solve (ctx, env, [ct])
+(*: val commonType : InferenceContext * Env * SourcePos.span * T.Ty * T.Ty -> T.Ty *)
+(* Used by list exps, vector pats/exps, if-then-else, match *)
+fun commonType (ctx : InferenceContext, env : Env, span, previousTy, currentTy)
+    = ( addConstraint (ctx, env, T.EqConstr (span, previousTy, currentTy))
+      ; previousTy
+      )
+(*: val checkSubsumption : InferenceContext * Env * SourcePos.span * T.Ty * T.Ty -> unit *)
+fun checkSubsumption (ctx : InferenceContext, env : Env, span, actualTy, expectedTy)
+    = addConstraint (ctx, env, T.EqConstr (span, actualTy, expectedTy))
 
 (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
 fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
@@ -980,23 +989,15 @@ fun synthTypeOfPat (ctx : InferenceContext, _ : Env, S.WildcardPat span) : T.Ty 
       in (ty, Syntax.VIdMap.insert (vars, vid, (vid', ty)), T.LayeredPat (span, vid', ty, pat))
       end
   | synthTypeOfPat (ctx, env, S.VectorPat (span, pats, ellipsis))
-    = (case VectorSlice.getItem (VectorSlice.full pats) of
-           NONE =>
-           let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-           in (T.TyCon (span, [elemTy], primTyName_vector), Syntax.VIdMap.empty, T.VectorPat (span, vector [], ellipsis, elemTy))
-           end
-         | SOME (x0, x1) =>
-           let val (elemTy, vars0, x0) = synthTypeOfPat (ctx, env, x0)
-               val vx1 = VectorSlice.map (fn pat => let val (elemTy', vars, pat) = synthTypeOfPat (ctx, env, pat)
-                                                    in addConstraint (ctx, env, T.EqConstr (span, elemTy, elemTy'))
-                                                     ; (vars, pat)
-                                                    end
-                                         ) x1
-               val vars = Vector.foldr (fn ((vars, _), vars') => Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [], "duplicate identifier in a pattern"); y)) (vars, vars')) vars0 vx1
-               val pats = Vector.concat [vector [x0], Vector.map #2 vx1]
-           in (T.TyCon (span, [elemTy], primTyName_vector), vars, T.VectorPat (span, pats, ellipsis, elemTy))
-           end
-      )
+    = let val results = Vector.map (fn pat => synthTypeOfPat (ctx, env, pat)) pats
+          val elemTy = case VectorSlice.getItem (VectorSlice.full results) of
+                           NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                         | SOME ((elemTy0, _, _), xs) =>
+                           VectorSlice.foldl (fn ((elemTy, _, _), ty) => commonType (ctx, env, span, ty, elemTy)) elemTy0 xs
+          val vars = Vector.foldr (fn ((_, vars, _), vars') => Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [], "duplicate identifier in a pattern"); y)) (vars, vars')) Syntax.VIdMap.empty results
+          val pats = Vector.map (fn (_, _, pat) => pat) results
+      in (T.TyCon (span, [elemTy], primTyName_vector), vars, T.VectorPat (span, pats, ellipsis, elemTy))
+      end
 and checkTypeOfPat (_ : InferenceContext, _ : Env, S.WildcardPat span, _) : (T.VId * T.Ty) S.VIdMap.map * T.Pat
     = (S.VIdMap.empty, T.WildcardPat span)
   | checkTypeOfPat (ctx, env, S.SConPat (span, scon), expectedTy)
@@ -1017,17 +1018,17 @@ and checkTypeOfPat (_ : InferenceContext, _ : Env, S.WildcardPat span, _) : (T.V
       )
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.ref"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in checkSubsumption (ctx, env, span, actualTy, expectedTy)
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.::"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in checkSubsumption (ctx, env, span, actualTy, expectedTy)
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, pat as S.VarPat (span, S.MkVId "_Prim.unit.equal"), expectedTy)
     = let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in checkSubsumption (ctx, env, span, actualTy, expectedTy)
        ; (map, pat)
       end
   | checkTypeOfPat (ctx, env, S.VarPat (span, vid), expectedTy)
@@ -1070,7 +1071,7 @@ and checkTypeOfPat (_ : InferenceContext, _ : Env, S.WildcardPat span, _) : (T.V
          | _ =>
            let val span = S.getSourceSpanOfPat pat
                val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-           in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in checkSubsumption (ctx, env, span, actualTy, expectedTy)
             ; (map, pat)
            end
       )
@@ -1093,19 +1094,19 @@ and checkTypeOfPat (_ : InferenceContext, _ : Env, S.WildcardPat span, _) : (T.V
                end
            else
                let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-               in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               in checkSubsumption (ctx, env, span, actualTy, expectedTy)
                 ; (map, pat)
                end
          | _ =>
            let val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-           in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+           in checkSubsumption (ctx, env, span, actualTy, expectedTy)
             ; (map, pat)
            end
       )
   | checkTypeOfPat (ctx, env, pat, expectedTy)
     = let val span = S.getSourceSpanOfPat pat
           val (actualTy, map, pat) = synthTypeOfPat (ctx, env, pat)
-      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+      in checkSubsumption (ctx, env, span, actualTy, expectedTy)
        ; (map, pat)
       end
 
@@ -1306,7 +1307,7 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
            | funTy =>
              let val (argTy, arg) = synthTypeOfExp (ctx, env, arg)
                  val resultTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-                 val () = solve (ctx, env, [T.EqConstr (span, funTy, T.FnType (span, argTy, resultTy))])
+                 val () = checkSubsumption (ctx, env, span, funTy, T.FnType (span, argTy, resultTy))
              in (resultTy, T.AppExp (span, f, arg))
              end
       end
@@ -1330,8 +1331,8 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
     = let val cond = checkTypeOfExp (ctx, env, cond, primTy_bool)
           val (thenTy, thenPart) = synthTypeOfExp (ctx, env, thenPart)
           val (elseTy, elsePart) = synthTypeOfExp (ctx, env, elsePart)
-      in addConstraint (ctx, env, T.EqConstr (span, thenTy, elseTy))
-       ; (thenTy, T.IfThenElseExp (span, cond, thenPart, elsePart))
+          val resultTy = commonType (ctx, env, span, thenTy, elseTy)
+      in (resultTy, T.IfThenElseExp (span, cond, thenPart, elsePart))
       end
   | synthTypeOfExp (ctx, env, S.CaseExp (span, exp, matches))
     = let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
@@ -1354,35 +1355,23 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
       in (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
   | synthTypeOfExp (ctx, env, S.ListExp (span, xs))
-    = (case VectorSlice.getItem (VectorSlice.full xs) of
-           NONE =>
-           let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-           in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, vector [], elemTy))
-           end
-         | SOME (x0, x1) =>
-           let val (elemTy, x0) = synthTypeOfExp (ctx, env, x0)
-               val x1 = VectorSlice.map (fn exp => let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
-                                                   in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
-                                                    ; exp
-                                                   end) x1
-           in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, Vector.concat [vector [x0], x1], elemTy))
-           end
-      )
+    = let val ys = Vector.map (fn exp => synthTypeOfExp (ctx, env, exp)) xs
+          val elemTy = case VectorSlice.getItem (VectorSlice.full ys) of
+                           NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                         | SOME ((elemTy0, _), rest) =>
+                           VectorSlice.foldl (fn ((elemTy, _), ty) => commonType (ctx, env, span, ty, elemTy)) elemTy0 rest
+          val xs' = Vector.map #2 ys
+      in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, xs', elemTy))
+      end
   | synthTypeOfExp (ctx, env, S.VectorExp (span, xs))
-    = (case VectorSlice.getItem (VectorSlice.full xs) of
-           NONE =>
-           let val elemTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-           in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, vector [], elemTy))
-           end
-         | SOME (x0, x1) =>
-           let val (elemTy, x0) = synthTypeOfExp (ctx, env, x0)
-               val x1 = VectorSlice.map (fn exp => let val (expTy, exp) = synthTypeOfExp (ctx, env, exp)
-                                                   in addConstraint (ctx, env, T.EqConstr (span, expTy, elemTy))
-                                                    ; exp
-                                                   end) x1
-           in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, Vector.concat [vector [x0], x1], elemTy))
-           end
-      )
+    = let val ys = Vector.map (fn exp => synthTypeOfExp (ctx, env, exp)) xs
+          val elemTy = case VectorSlice.getItem (VectorSlice.full ys) of
+                           NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
+                         | SOME ((elemTy0, _), rest) =>
+                           VectorSlice.foldl (fn ((elemTy, _), ty) => commonType (ctx, env, span, ty, elemTy)) elemTy0 rest
+          val xs' = Vector.map #2 ys
+      in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, xs', elemTy))
+      end
   | synthTypeOfExp (ctx, env, S.PrimExp (span, primOp, tyargs, args))
     = let val () = if Vector.length tyargs = 0 then
                        ()
@@ -1421,7 +1410,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
     = ( case scon of
             Syntax.IntegerConstant _   => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsInt))
           | Syntax.WordConstant _      => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsWord))
-          | Syntax.RealConstant _      => solve (ctx, env, [T.EqConstr (span, primTy_real, expectedTy)]) (* TODO: overloaded literals *)
+          | Syntax.RealConstant _      => checkSubsumption (ctx, env, span, primTy_real, expectedTy) (* TODO: overloaded literals *)
           | Syntax.CharacterConstant _ => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsChar))
           | Syntax.StringConstant _    => addConstraint (ctx, env, T.UnaryConstraint (span, expectedTy, T.IsString))
       ; T.SConExp (span, scon, expectedTy)
@@ -1446,7 +1435,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1469,7 +1458,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1511,7 +1500,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
            end
          | expectedTy =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1522,7 +1511,7 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                 T.RecordType (_, fieldTypes) =>
                 (case Syntax.LabelMap.find (fieldTypes, label) of
                      SOME fieldTy' =>
-                     ( solve (ctx, env, [T.EqConstr (span, fieldTy', fieldTy)])
+                     ( checkSubsumption (ctx, env, span, fieldTy', fieldTy)
                      ; T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy }
                      )
                    | NONE => ( emitTypeError (ctx, [span], "invalid projection")
@@ -1531,13 +1520,13 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                 )
               | _ =>
                 let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                    val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                    val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
                 in exp
                 end
            )
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1550,12 +1539,12 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                end
            else
                let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                   val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                   val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
                in exp
                end
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1568,12 +1557,12 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
                end
            else
                let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-                   val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+                   val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
                in exp
                end
          | _ =>
            let val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-               val () = solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
+               val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
            in exp
            end
       )
@@ -1593,8 +1582,8 @@ and checkTypeOfExp (ctx, env, S.SConExp (span, scon), expectedTy : T.Ty) : T.Exp
   | checkTypeOfExp (ctx, env, exp, expectedTy)
     = let val span = S.getSourceSpanOfExp exp
           val (actualTy, exp) = synthTypeOfExp (ctx, env, exp)
-      in solve (ctx, env, [T.EqConstr (span, actualTy, expectedTy)])
-       ; exp
+          val () = checkSubsumption (ctx, env, span, actualTy, expectedTy)
+      in exp
       end
 and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, descs, valbinds))
     = let val ctx' = enterLevel ctx
@@ -2120,61 +2109,61 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
           val map : (T.Ty * T.Exp) Syntax.OverloadKeyMap.map = Syntax.OverloadKeyMap.map (fn exp => synthTypeOfExp (ctx, env, exp)) map
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_abs) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, ty, ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, ty, ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_TILDE) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, ty, ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, ty, ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_div) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_mod) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_TIMES) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_DIVIDE) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_PLUS) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_MINUS) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_LT) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_LE) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_GT) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_GE) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, T.PairType (span, ty, ty), primTy_bool))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_fromInt) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, primTy_int, ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, primTy_int, ty))
           val () = case Syntax.OverloadKeyMap.find(map, Syntax.OVERLOAD_fromWord) of
                        NONE => ()
-                     | SOME (ty', _) => addConstraint (ctx, env, T.EqConstr (span, ty', T.FnType (span, primTy_word, ty)))
+                     | SOME (ty', _) => checkSubsumption (ctx, env, span, ty', T.FnType (span, primTy_word, ty))
           val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_minInt) of
                        NONE => ()
-                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_intInf))
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => checkSubsumption (ctx, env, span, ty', primTy_intInf)
                      | SOME (_, _) => emitTypeError (ctx, [span], "overload: minInt must be literal")
           val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxInt) of
                        NONE => ()
-                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_intInf))
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => checkSubsumption (ctx, env, span, ty', primTy_intInf)
                      | SOME (_, _) => emitTypeError (ctx, [span], "overload: maxInt must be literal")
           val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_wordSize) of
                        NONE => ()
-                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_int))
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => checkSubsumption (ctx, env, span, ty', primTy_int)
                      | SOME (_, _) => emitTypeError (ctx, [span], "overload: wordSize must be literal")
           val () = case Syntax.OverloadKeyMap.find (map, Syntax.OVERLOAD_maxOrd) of
                        NONE => ()
-                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => addConstraint (ctx, env, T.EqConstr (span, ty', primTy_intInf))
+                     | SOME (ty', T.SConExp (_, Syntax.IntegerConstant _, _)) => checkSubsumption (ctx, env, span, ty', primTy_intInf)
                      | SOME (_, _) => emitTypeError (ctx, [span], "overload: maxOrd must be literal")
           val attr = lookupTyNameInEnv (#context ctx, env, span, tyname)
           val attr = { arity = #arity attr
@@ -2260,15 +2249,10 @@ and synthTypeOfMatch (ctx, env, span, (pat0, exp0) :: rest) : T.Ty * T.Ty * (T.P
                     val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
                 in (patTy, expTy, pat', exp')
                 end
-          val (patTy, expTy, pat0', exp0') = doBranch (pat0, exp0)
-          fun doBranch' (pat, exp)
-              = let val (patTy', expTy', pat', exp') = doBranch (pat, exp)
-                in addConstraint (ctx, env, T.EqConstr (span, patTy, patTy'))
-                 ; addConstraint (ctx, env, T.EqConstr (span, expTy, expTy'))
-                 ; (pat', exp')
-                end
-          val rest' = List.map doBranch' rest
-      in (patTy, expTy, (pat0', exp0') :: rest')
+          val (patTy0, expTy0, pat0', exp0') = doBranch (pat0, exp0)
+          val rest' = List.map doBranch rest
+          val (patTy, expTy) = List.foldl (fn ((patTy, expTy, _, _), (patTy', expTy')) => (commonType (ctx, env, span, patTy', patTy), commonType (ctx, env, span, expTy', expTy))) (patTy0, expTy0) rest'
+      in (patTy, expTy, (pat0', exp0') :: List.map (fn (_, _, pat, exp) => (pat, exp)) rest')
       end
   | synthTypeOfMatch (ctx, _, span, nil) = emitFatalTypeError (ctx, [span], "invalid syntax tree: match is empty")
 and checkAndSynthTypeOfMatch (ctx, env, span, (pat0, exp0) :: rest, expectedPatTy) : T.Ty * (T.Pat * T.Exp) list
@@ -2278,14 +2262,10 @@ and checkAndSynthTypeOfMatch (ctx, env, span, (pat0, exp0) :: rest, expectedPatT
                     val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
                 in (expTy, pat', exp')
                 end
-          val (expTy, pat0', exp0') = doBranch (pat0, exp0)
-          fun doBranch' (pat, exp)
-              = let val (expTy', pat', exp') = doBranch (pat, exp)
-                in addConstraint (ctx, env, T.EqConstr (span, expTy, expTy'))
-                 ; (pat', exp')
-                end
-          val rest' = List.map doBranch' rest
-      in (expTy, (pat0', exp0') :: rest')
+          val (expTy0, pat0', exp0') = doBranch (pat0, exp0)
+          val rest' = List.map doBranch rest
+          val expTy = List.foldl (fn ((expTy, _, _), expTy') => commonType (ctx, env, span, expTy', expTy)) expTy0 rest'
+      in (expTy, (pat0', exp0') :: List.map (fn (_, pat, exp) => (pat, exp)) rest')
       end
   | checkAndSynthTypeOfMatch (ctx, _, span, nil, _) = emitFatalTypeError (ctx, [span], "invalid syntax tree: match is empty")
 and checkTypeOfMatch (ctx, env, patsAndExps : (S.Pat * S.Exp) list, expectedPatTy : T.Ty, expectedExpTy : T.Ty) : (T.Pat * T.Exp) list
@@ -3364,7 +3344,7 @@ and matchValDesc (ctx, env, span, expected : T.TypeScheme, longvid : T.LongVId, 
                      , level = 0
                      }
           val (tyA, tyargsA) = instantiate (ictx, span, actual)
-          val () = addConstraint (ictx, env, T.EqConstr (span, tyE, tyA))
+          val () = checkSubsumption (ictx, env, span, tyA, tyE)
           val vid = newVId (ctx, case longvid of
                                      T.MkShortVId (T.MkVId (name, _)) => Syntax.MkVId name
                                    | T.MkLongVId (_, _, vid) => vid
