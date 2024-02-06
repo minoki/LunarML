@@ -51,9 +51,6 @@ structure TypedSyntax :> sig
               type AnonymousTyVar = TyVarData ref
               val PairType : SourcePos.span * Ty * Ty -> Ty
               val TupleType : SourcePos.span * Ty list -> Ty
-              datatype Constraint
-                = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
-                | UnaryConstraint of SourcePos.span * Ty * UnaryConstraint
               datatype TypeFunction = TypeFunction of TyVar list * Ty
               datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
               type ValEnv = (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
@@ -267,10 +264,6 @@ datatype Ty = TyVar of SourcePos.span * TyVar (* named type variable *)
 type AnonymousTyVar = TyVarData ref
 
 fun PairType (span, a, b) = RecordType (span, Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
-
-datatype Constraint
-  = EqConstr of SourcePos.span * Ty * Ty (* ty1 = ty2 *)
-  | UnaryConstraint of SourcePos.span * Ty * UnaryConstraint
 
 datatype TypeFunction = TypeFunction of TyVar list * Ty
 datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
