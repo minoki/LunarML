@@ -566,7 +566,7 @@ fun unify (ctx : InferenceContext, env : Env, span1, T.AnonymousTyVar (_, tv), t
            | (true, false) => unify (ctx, env, span1, baseTy, T.RecordExtType (span3, uniqueFields', baseTy')) (* fields is a proper submap of fields' *)
            | (false, true) => unify (ctx, env, span1, T.RecordExtType (span3, uniqueFields, baseTy), baseTy') (* fields' is a proper submap of fields *)
            | (false, false) => let val unionFields = Syntax.LabelSet.toList (Syntax.LabelMap.foldli (fn (label, _, acc) => Syntax.LabelSet.add (acc, label)) (Syntax.LabelMap.foldli (fn (label, _, acc) => Syntax.LabelSet.add (acc, label)) Syntax.LabelSet.empty fields) fields')
-                                   val commonBaseTy = T.AnonymousTyVar (span1, freshTyVar (ctx, span1, T.IsRecord :: List.map T.NoField unionFields))
+                                   val commonBaseTy = T.AnonymousTyVar (span1, freshTyVar (ctx, span1, [T.IsRecord unionFields]))
                                in unify (ctx, env, span1, baseTy, T.RecordExtType (span3, uniqueFields', commonBaseTy))
                                 ; unify (ctx, env, span1, baseTy', T.RecordExtType (span2, uniqueFields, commonBaseTy))
                                end
@@ -585,24 +585,25 @@ fun unify (ctx : InferenceContext, env : Env, span1, T.AnonymousTyVar (_, tv), t
     = emitTypeError (ctx, [span], "unification failed: not match (" ^ TypedSyntax.PrettyPrint.print_Ty ty1 ^ " vs " ^ TypedSyntax.PrettyPrint.print_Ty ty2 ^ ")")
 and solveUnary (ctx : InferenceContext, env : Env, span1, ty, ct)
     = (case (ty, ct) of
-           (T.RecordType (span2, fields), T.NoField label) =>
-           (case Syntax.LabelMap.find (fields, label) of
-                NONE => ()
-              | SOME _ => emitTypeError (ctx, [span1, span2], "duplicate record field")
-           )
-         | (T.RecordExtType (span2, fields, baseTy), T.NoField label) =>
-           (case Syntax.LabelMap.find (fields, label) of
-                NONE => solveUnary (ctx, env, span1, baseTy, T.NoField label)
-              | SOME _ => emitTypeError (ctx, [span1, span2], "duplicate record field")
-           )
-         | (T.TyCon (span2, _, _), T.NoField label) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
-         | (T.FnType (span2, _, _), T.NoField label) => emitTypeError (ctx, [span1, span2], "record field for a function type")
-         | (T.TyVar (span2, _), T.NoField label) => emitTypeError (ctx, [span1, span2], "record field for an named type variable")
-         | (T.RecordType (_, _), T.IsRecord) => ()
-         | (T.RecordExtType (_, _, baseTy), T.IsRecord) => solveUnary (ctx, env, span1, baseTy, T.IsRecord)
-         | (T.TyCon (span2, _, _), T.IsRecord) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
-         | (T.FnType (span2, _, _), T.IsRecord) => emitTypeError (ctx, [span1, span2], "record field for a function type")
-         | (T.TyVar (span2, _), T.IsRecord) => emitTypeError (ctx, [span1, span2], "record field for an named type variable")
+           (T.RecordType (span2, fields), T.IsRecord labels) =>
+           List.app (fn label => case Syntax.LabelMap.find (fields, label) of
+                                     NONE => ()
+                                   | SOME _ => emitTypeError (ctx, [span1, span2], "duplicate record field")
+                    ) labels
+         | (T.RecordExtType (span2, fields, baseTy), T.IsRecord labels) =>
+           let val baseExcludedLabels = List.filter (fn label => case Syntax.LabelMap.find (fields, label) of
+                                                                     NONE => true
+                                                                   | SOME _ => false
+                                                    ) labels
+               val () = List.app (fn label => case Syntax.LabelMap.find (fields, label) of
+                                                  NONE => ()
+                                                | SOME _ => emitTypeError (ctx, [span1, span2], "duplicate record field")
+                                 ) labels
+           in solveUnary (ctx, env, span1, baseTy, T.IsRecord baseExcludedLabels)
+           end
+         | (T.TyCon (span2, _, _), T.IsRecord _) => emitTypeError (ctx, [span1, span2], "record field for a non-record type")
+         | (T.FnType (span2, _, _), T.IsRecord _) => emitTypeError (ctx, [span1, span2], "record field for a function type")
+         | (T.TyVar (span2, _), T.IsRecord _) => emitTypeError (ctx, [span1, span2], "record field for an named type variable")
          | (T.RecordType (_, fields), T.IsEqType) => Syntax.LabelMap.app (fn ty => solveUnary (ctx, env, span1, ty, T.IsEqType)) fields
          | (T.RecordType (span2, _), T.IsIntegral) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
          | (T.RecordType (span2, _), T.IsSignedReal) => emitTypeError (ctx, [span1, span2], "cannot apply arithmetic operator on record type")
@@ -891,8 +892,7 @@ fun synthTypeOfPat (ctx : InferenceContext, _ : Env, S.WildcardPat span) : T.Ty 
              SOME basePat =>
              let val (baseTy, vars', basePat) = synthTypeOfPat (ctx, env, basePat)
                  val recordTy = T.RecordExtType (sourceSpan, fieldTypes, baseTy)
-                 val () = solveUnary (ctx, env, sourceSpan, baseTy, T.IsRecord)
-                 val () = List.app (fn (label, _) => solveUnary (ctx, env, sourceSpan, baseTy, T.NoField label)) fields
+                 val () = solveUnary (ctx, env, sourceSpan, baseTy, T.IsRecord (List.map #1 fields))
              in (recordTy, Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [sourceSpan], "duplicate identifier in a pattern"); y)) (vars, vars'), T.RecordPat { sourceSpan = sourceSpan, fields = fieldPats, ellipsis = SOME basePat, wholeRecordType = recordTy })
              end
            | NONE => let val recordTy = T.RecordType (sourceSpan, fieldTypes)
@@ -1243,10 +1243,9 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
       end
   | synthTypeOfExp (ctx, env, S.RecordExp (span, fields, SOME baseExp))
     = let val (baseTy, baseExp) = synthTypeOfExp (ctx, env, baseExp)
-          val () = solveUnary (ctx, env, span, baseTy, T.IsRecord)
+          val () = solveUnary (ctx, env, span, baseTy, T.IsRecord (List.map #1 fields))
           fun doField ((label, exp), (typeMap, expList))
               = let val (ty, exp) = synthTypeOfExp (ctx, env, exp)
-                    val () = solveUnary (ctx, env, span, baseTy, T.NoField label)
                 in (Syntax.LabelMap.insert (typeMap, label, ty), (label, exp) :: expList)
                 end
           val (fieldTypes, revFields) = List.foldl doField (Syntax.LabelMap.empty, []) fields
@@ -1312,7 +1311,7 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
       end
   | synthTypeOfExp (ctx, _, S.ProjectionExp (span, label))
     = let val fieldTy = TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, []))
-          val baseTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, [T.NoField label, T.IsRecord]))
+          val baseTy = T.AnonymousTyVar (span, freshTyVar (ctx, span, [T.IsRecord [label]]))
           val recordTy = T.RecordExtType (span, Syntax.LabelMap.insert (Syntax.LabelMap.empty, label, fieldTy), baseTy)
       in (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
@@ -2257,8 +2256,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
           | findClass (_ :: xs) = findClass xs
         fun doInt (span1, xs)
             = ( List.app (fn (span2, c) => case c of
-                                               TypedSyntax.NoField _ => emitError (ctx, [span1, span2], "invalid record syntax for int")
-                                             | TypedSyntax.IsRecord => emitError (ctx, [span1, span2], "invalid record syntax for int")
+                                               TypedSyntax.IsRecord _ => emitError (ctx, [span1, span2], "invalid record syntax for int")
                                              | TypedSyntax.IsEqType => ()
                                              | TypedSyntax.IsIntegral => ()
                                              | TypedSyntax.IsSignedReal => ()
@@ -2274,8 +2272,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
               )
         fun doWord (span1, xs)
             = ( List.app (fn (span2, c) => case c of
-                                               TypedSyntax.NoField _ => emitError (ctx, [span1, span2], "invalid record syntax for word")
-                                             | TypedSyntax.IsRecord => emitError (ctx, [span1, span2], "invalid record syntax for word")
+                                               TypedSyntax.IsRecord _ => emitError (ctx, [span1, span2], "invalid record syntax for word")
                                              | TypedSyntax.IsEqType => ()
                                              | TypedSyntax.IsIntegral => ()
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "abs is invalid for word")
@@ -2291,8 +2288,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
               )
         fun doReal (span1, xs)
             = ( List.app (fn (span2, c) => case c of
-                                               TypedSyntax.NoField _ => emitError (ctx, [span1, span2], "invalid record syntax for real")
-                                             | TypedSyntax.IsRecord => emitError (ctx, [span1, span2], "invalid record syntax for real")
+                                               TypedSyntax.IsRecord _ => emitError (ctx, [span1, span2], "invalid record syntax for real")
                                              | TypedSyntax.IsEqType => emitError (ctx, [span1, span2], "real does not admit equality")
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "div, mod are invalid for real")
                                              | TypedSyntax.IsSignedReal => ()
@@ -2308,8 +2304,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
               )
         fun doChar (span1, xs)
             = ( List.app (fn (span2, c) => case c of
-                                               TypedSyntax.NoField _ => emitError (ctx, [span1, span2], "invalid record syntax for char")
-                                             | TypedSyntax.IsRecord => emitError (ctx, [span1, span2], "invalid record syntax for char")
+                                               TypedSyntax.IsRecord _ => emitError (ctx, [span1, span2], "invalid record syntax for char")
                                              | TypedSyntax.IsEqType => ()
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on char")
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on char")
@@ -2325,8 +2320,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
               )
         fun doString (span1, xs)
             = ( List.app (fn (span2, c) => case c of
-                                               TypedSyntax.NoField _ => emitError (ctx, [span1, span2], "invalid record syntax for string")
-                                             | TypedSyntax.IsRecord => emitError (ctx, [span1, span2], "invalid record syntax for string")
+                                               TypedSyntax.IsRecord _ => emitError (ctx, [span1, span2], "invalid record syntax for string")
                                              | TypedSyntax.IsEqType => ()
                                              | TypedSyntax.IsIntegral => emitError (ctx, [span1, span2], "invalid operation on string")
                                              | TypedSyntax.IsSignedReal => emitError (ctx, [span1, span2], "invalid operation on string")
@@ -2343,8 +2337,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
         fun doIntOrReal (_, []) = primTy_int
           | doIntOrReal (span1, (span2, c) :: xs)
             = case c of
-                  TypedSyntax.NoField _ => (emitError (ctx, [span1, span2], "unresolved flex record"); doIntOrReal (span1, xs))
-                | TypedSyntax.IsRecord => (emitError (ctx, [span1, span2], "unresolved flex record"); doIntOrReal (span1, xs))
+                  TypedSyntax.IsRecord _ => (emitError (ctx, [span1, span2], "unresolved flex record"); doIntOrReal (span1, xs))
                 | TypedSyntax.IsEqType => doInt (span1, xs)
                 | TypedSyntax.IsIntegral => doInt (span1, xs)
                 | TypedSyntax.IsSignedReal => doIntOrReal (span1, xs)
@@ -2358,8 +2351,7 @@ fun applyDefaultTypes (ctx, decs : T.Dec list) : unit =
         fun defaultTyForConstraints (_, _, []) = primTy_unit
           | defaultTyForConstraints (eq, spans, (span1, c) :: xs)
             = case c of
-                  TypedSyntax.NoField _ => (emitError (ctx, [span1], "unresolved flex record"); defaultTyForConstraints (eq, spans, xs))
-                | TypedSyntax.IsRecord => (emitError (ctx, [span1], "unresolved flex record"); defaultTyForConstraints (eq, spans, xs))
+                  TypedSyntax.IsRecord _ => (emitError (ctx, [span1], "unresolved flex record"); defaultTyForConstraints (eq, spans, xs))
                 | TypedSyntax.IsEqType => defaultTyForConstraints (true, if List.null spans then [span1] else spans, xs)
                 | TypedSyntax.IsIntegral => doInt (span1, xs)
                 | TypedSyntax.IsSignedReal => if eq then doInt (span1, xs) else doIntOrReal (span1, xs)

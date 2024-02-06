@@ -28,8 +28,7 @@ structure TypedSyntax :> sig
               structure TyNameMap : ORD_MAP where type Key.ord_key = TyName
               type level = int
               datatype UnaryConstraint
-                = NoField of Syntax.Label
-                | IsRecord
+                = IsRecord of (* excluded fields *) Syntax.Label list
                 | IsEqType
                 | IsIntegral (* Int, Word; div, mod; defaults to int *)
                 | IsSignedReal (* Int, Real; abs; defaults to int *)
@@ -239,8 +238,7 @@ end : ORD_KEY
 type level = int
 
 datatype UnaryConstraint
-  = NoField of Syntax.Label
-  | IsRecord
+  = IsRecord of (* excluded fields *) Syntax.Label list
   | IsEqType
   | IsIntegral (* Int, Word; div, mod; defaults to int *)
   | IsSignedReal (* Int, Real; abs; defaults to int *)
@@ -494,8 +492,7 @@ and print_ValBind (TupleBind (_, xs, exp)) = "TupleBind(" ^ Syntax.print_list (S
   | print_ValBind (PolyVarBind (_, name, tysc, exp)) = "PolyVarBind(" ^ print_VId name ^ "," ^ print_TypeScheme tysc ^ "," ^ print_Exp exp ^ ")"
 (* and print_TyVarMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyVar,print_elem)) (TyVarMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
 (* and print_VIdMap print_elem x = Syntax.print_list (Syntax.print_pair (print_VId,print_elem)) (VIdMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
-and print_UnaryConstraint (NoField label) = "NoField(" ^ Syntax.print_Label label ^ ")"
-  | print_UnaryConstraint IsRecord = "IsEqType"
+and print_UnaryConstraint (IsRecord labels) = "IsEqType(" ^ Syntax.print_list Syntax.print_Label labels ^ ")"
   | print_UnaryConstraint IsEqType = "IsEqType"
   | print_UnaryConstraint IsIntegral = "IsIntegral"
   | print_UnaryConstraint IsSignedReal = "IsSignedReal"
