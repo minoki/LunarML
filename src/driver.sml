@@ -112,6 +112,10 @@ fun compile ({ nextTyVar, nextVId, targetInfo, errorCounter } : Context, langopt
           val typingContext = { nextTyVar = nextTyVar, nextVId = nextVId, messageHandler = messageHandler, matchContext = [], languageOptions = langopt }
           val (typingEnv', decs) = Typing.typeCheckProgram (typingContext, typingEnv, decs)
           val tynameset = Typing.checkTyScopeOfProgram (typingContext, tynameset, decs)
+          val () = if Message.anyError errorCounter then
+                       raise Message.Abort
+                   else
+                       ()
           val (toFEnv, fdecs) = ToFSyntax.programToFDecs ({ nextVId = nextVId, nextTyVar = nextTyVar, targetInfo = targetInfo, messageHandler = messageHandler }, toFEnv, List.concat decs)
           val () = let val patternMatchContext = { options = langopt, messageHandler = messageHandler }
                    in List.app (fn dec => CheckPatternMatch.goDec (patternMatchContext, dec)) fdecs
