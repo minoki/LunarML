@@ -981,7 +981,7 @@ fun commonType (ctx : InferenceContext, env : Env, place, span, previousTy, curr
       )
 (*: val checkSubsumption : InferenceContext * Env * SourcePos.span * T.Ty * T.Ty -> unit *)
 fun checkSubsumption (ctx : InferenceContext, env : Env, span, actualTy, expectedTy)
-    = unify (ctx, env, ConstraintInfo.EXPECTED_ACTUAL, span, actualTy, expectedTy)
+    = unify (ctx, env, ConstraintInfo.ACTUAL_EXPECTED, span, actualTy, expectedTy)
 
 (*: val evalTy : Context * ('val, 'str) Env' * S.Ty -> T.Ty *)
 fun evalTy (ctx : Context, env : ('val,'str) Env', S.TyVar (span, tv)) : T.Ty
@@ -1138,13 +1138,13 @@ fun synthTypeOfPat (ctx : InferenceContext, _ : Env, S.WildcardPat span) : T.Ty 
       in (ty, Syntax.VIdMap.insert (vars, vid, (vid', ty)), T.LayeredPat (span, vid', ty, pat))
       end
   | synthTypeOfPat (ctx, env, S.VectorPat (span, pats, ellipsis))
-    = let val results = Vector.map (fn pat => synthTypeOfPat (ctx, env, pat)) pats
+    = let val results = Vector.map (fn pat => (Syntax.getSourceSpanOfPat pat, synthTypeOfPat (ctx, env, pat))) pats
           val elemTy = case VectorSlice.getItem (VectorSlice.full results) of
                            NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, false, NONE))
-                         | SOME ((elemTy0, _, _), xs) =>
-                           VectorSlice.foldl (fn ((elemTy, _, _), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, span, ty, elemTy)) elemTy0 xs
-          val vars = Vector.foldr (fn ((_, vars, _), vars') => Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [], "duplicate identifier in a pattern"); y)) (vars, vars')) Syntax.VIdMap.empty results
-          val pats = Vector.map (fn (_, _, pat) => pat) results
+                         | SOME ((_, (elemTy0, _, _)), xs) =>
+                           VectorSlice.foldl (fn ((elemSpan, (elemTy, _, _)), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, elemSpan, ty, elemTy)) elemTy0 xs
+          val vars = Vector.foldr (fn ((_, (_, vars, _)), vars') => Syntax.VIdMap.unionWith (fn (_, y) => (emitTypeError (ctx, [], "duplicate identifier in a pattern"); y)) (vars, vars')) Syntax.VIdMap.empty results
+          val pats = Vector.map (fn (_, (_, _, pat)) => pat) results
       in (T.TyCon (span, [elemTy], primTyName_vector), vars, T.VectorPat (span, pats, ellipsis, elemTy))
       end
 and checkTypeOfPat (_ : InferenceContext, _ : Env, S.WildcardPat span, _) : (T.VId * T.Ty) S.VIdMap.map * T.Pat
@@ -1509,21 +1509,21 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
       in (T.FnType (span, recordTy, fieldTy), T.ProjectionExp { sourceSpan = span, label = label, recordTy = recordTy, fieldTy = fieldTy })
       end
   | synthTypeOfExp (ctx, env, S.ListExp (span, xs))
-    = let val ys = Vector.map (fn exp => synthTypeOfExp (ctx, env, exp)) xs
+    = let val ys = Vector.map (fn exp => (Syntax.getSourceSpanOfExp exp, synthTypeOfExp (ctx, env, exp))) xs
           val elemTy = case VectorSlice.getItem (VectorSlice.full ys) of
                            NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, false, NONE))
-                         | SOME ((elemTy0, _), rest) =>
-                           VectorSlice.foldl (fn ((elemTy, _), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, span, ty, elemTy)) elemTy0 rest
-          val xs' = Vector.map #2 ys
+                         | SOME ((_, (elemTy0, _)), rest) =>
+                           VectorSlice.foldl (fn ((elemSpan, (elemTy, _)), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, elemSpan, ty, elemTy)) elemTy0 rest
+          val xs' = Vector.map (#2 o #2) ys
       in (T.TyCon (span, [elemTy], primTyName_list), T.ListExp (span, xs', elemTy))
       end
   | synthTypeOfExp (ctx, env, S.VectorExp (span, xs))
-    = let val ys = Vector.map (fn exp => synthTypeOfExp (ctx, env, exp)) xs
+    = let val ys = Vector.map (fn exp => (Syntax.getSourceSpanOfExp exp, synthTypeOfExp (ctx, env, exp))) xs
           val elemTy = case VectorSlice.getItem (VectorSlice.full ys) of
                            NONE => TypedSyntax.AnonymousTyVar (span, freshTyVar (ctx, span, false, NONE))
-                         | SOME ((elemTy0, _), rest) =>
-                           VectorSlice.foldl (fn ((elemTy, _), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, span, ty, elemTy)) elemTy0 rest
-          val xs' = Vector.map #2 ys
+                         | SOME ((_, (elemTy0, _)), rest) =>
+                           VectorSlice.foldl (fn ((elemSpan, (elemTy, _)), ty) => commonType (ctx, env, ConstraintInfo.SEQUENCE, elemSpan, ty, elemTy)) elemTy0 rest
+          val xs' = Vector.map (#2 o #2) ys
       in (T.TyCon (span, [elemTy], primTyName_vector), T.VectorExp (span, xs', elemTy))
       end
   | synthTypeOfExp (ctx, env, S.PrimExp (span, primOp, tyargs, args))
@@ -2393,30 +2393,33 @@ and typeCheckDecs (_, _, []) : Env * T.Dec list = (emptyEnv, [])
                                                val (env'', decs) = typeCheckDecs(ctx, mergeEnv(env, env'), decs)
                                            in (mergeEnv(env', env''), dec @ decs)
                                            end
-and synthTypeOfMatch (ctx, env, span, (pat0, exp0) :: rest) : T.Ty * T.Ty * (T.Pat * T.Exp) list
+and synthTypeOfMatch (ctx, env, _, (pat0, exp0) :: rest) : T.Ty * T.Ty * (T.Pat * T.Exp) list
     = let fun doBranch (pat, exp)
-              = let val (patTy, vars, pat') = synthTypeOfPat (ctx, env, pat)
+              = let val patSpan = Syntax.getSourceSpanOfPat pat
+                    val (patTy, vars, pat') = synthTypeOfPat (ctx, env, pat)
                     val env' = mergeEnv (env, envWithValEnv (Syntax.VIdMap.map (fn (vid, ty) => (T.TypeScheme ([], ty), Syntax.ValueVariable, T.MkShortVId vid)) vars))
+                    val expSpan = Syntax.getSourceSpanOfExp exp
                     val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
-                in (patTy, expTy, pat', exp')
+                in (patSpan, expSpan, patTy, expTy, pat', exp')
                 end
-          val (patTy0, expTy0, pat0', exp0') = doBranch (pat0, exp0)
+          val (_, _, patTy0, expTy0, pat0', exp0') = doBranch (pat0, exp0)
           val rest' = List.map doBranch rest
-          val (patTy, expTy) = List.foldl (fn ((patTy, expTy, _, _), (patTy', expTy')) => (commonType (ctx, env, ConstraintInfo.BRANCH, span, patTy', patTy), commonType (ctx, env, ConstraintInfo.BRANCH, span, expTy', expTy))) (patTy0, expTy0) rest'
-      in (patTy, expTy, (pat0', exp0') :: List.map (fn (_, _, pat, exp) => (pat, exp)) rest')
+          val (patTy, expTy) = List.foldl (fn ((patSpan, expSpan, patTy, expTy, _, _), (patTy', expTy')) => (commonType (ctx, env, ConstraintInfo.BRANCH, patSpan, patTy', patTy), commonType (ctx, env, ConstraintInfo.BRANCH, expSpan, expTy', expTy))) (patTy0, expTy0) rest'
+      in (patTy, expTy, (pat0', exp0') :: List.map (fn (_, _, _, _, pat, exp) => (pat, exp)) rest')
       end
   | synthTypeOfMatch (ctx, _, span, nil) = emitFatalTypeError (ctx, [span], "invalid syntax tree: match is empty")
-and checkAndSynthTypeOfMatch (ctx, env, span, (pat0, exp0) :: rest, expectedPatTy) : T.Ty * (T.Pat * T.Exp) list
+and checkAndSynthTypeOfMatch (ctx, env, _, (pat0, exp0) :: rest, expectedPatTy) : T.Ty * (T.Pat * T.Exp) list
     = let fun doBranch (pat, exp)
               = let val (vars, pat') = checkTypeOfPat (ctx, env, pat, expectedPatTy)
                     val env' = mergeEnv (env, envWithValEnv (Syntax.VIdMap.map (fn (vid, ty) => (T.TypeScheme ([], ty), Syntax.ValueVariable, T.MkShortVId vid)) vars))
+                    val expSpan = Syntax.getSourceSpanOfExp exp
                     val (expTy, exp') = synthTypeOfExp (ctx, env', exp)
-                in (expTy, pat', exp')
+                in (expSpan, expTy, pat', exp')
                 end
-          val (expTy0, pat0', exp0') = doBranch (pat0, exp0)
+          val (_, expTy0, pat0', exp0') = doBranch (pat0, exp0)
           val rest' = List.map doBranch rest
-          val expTy = List.foldl (fn ((expTy, _, _), expTy') => commonType (ctx, env, ConstraintInfo.BRANCH, span, expTy', expTy)) expTy0 rest'
-      in (expTy, (pat0', exp0') :: List.map (fn (_, pat, exp) => (pat, exp)) rest')
+          val expTy = List.foldl (fn ((expSpan, expTy, _, _), expTy') => commonType (ctx, env, ConstraintInfo.BRANCH, expSpan, expTy', expTy)) expTy0 rest'
+      in (expTy, (pat0', exp0') :: List.map (fn (_, _, pat, exp) => (pat, exp)) rest')
       end
   | checkAndSynthTypeOfMatch (ctx, _, span, nil, _) = emitFatalTypeError (ctx, [span], "invalid syntax tree: match is empty")
 and checkTypeOfMatch (ctx, env, patsAndExps : (S.Pat * S.Exp) list, expectedPatTy : T.Ty, expectedExpTy : T.Ty) : (T.Pat * T.Exp) list
