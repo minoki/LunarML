@@ -1750,7 +1750,12 @@ and typeCheckDec (ctx : InferenceContext, env : Env, S.ValDec (span, tyvarseq, d
                                        , boundTyVars = List.foldl (fn (tv, m) => Syntax.TyVarMap.insert (m, tv, genTyVar (#context ctx', tv))) (#boundTyVars env) tyvarseq
                                        }
                          in List.map (fn S.PatBind(span, pat, exp) =>
-                                         let val (expTy, exp) = synthTypeOfExp (ctx', env, exp)
+                                         let val (expTy, exp) = case pat of
+                                                                    S.TypedPat (_, _, ty) =>
+                                                                    let val ty = evalTy (#context ctx', env, ty)
+                                                                    in (ty, checkTypeOfExp (ctx', env, exp, ty))
+                                                                    end
+                                                                  | _ => synthTypeOfExp (ctx', env, exp)
                                              val (newValEnv, pat) = checkTypeOfPat (ctx', env, pat, expTy)
                                              val generalizable = isExhaustive (ctx', env, pat) andalso isNonexpansive (env, exp)
                                          in { sourceSpan = span, pat = pat, exp = exp, expTy = expTy, valEnv = newValEnv, generalizable = generalizable }
