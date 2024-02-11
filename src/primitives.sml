@@ -1434,21 +1434,22 @@ functor TypeOfPrimitives (type ty
                           val function3Of : ty * ty * ty * ty -> ty
                           val promptTagOf : ty -> ty
                           val subcontOf : ty * ty -> ty
+                          val Unconstrained : constraint
                           val IsEqType : constraint
                          ) : sig
-                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint list) list, args : ty vector, result : ty }
+                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, result : ty }
                              end = struct
-fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [tyEqA, tyEqA], result = bool }
-  | typeOf Primitives.call2 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, [])], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], result = tyA }
-  | typeOf Primitives.call3 = { vars = [(tyVarA, []), (tyVarB, []), (tyVarC, []), (tyVarD, [])], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], result = tyA }
-  | typeOf Primitives.List_cons = { vars = [(tyVarA, [])], args = vector [tyA, listOf (tyA)], result = listOf (tyA) }
-  | typeOf Primitives.List_null = { vars = [(tyVarA, [])], args = vector [listOf (tyA)], result = bool }
-  | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, [])], args = vector [listOf (tyA)], result = tyA }
-  | typeOf Primitives.List_unsafeTail = { vars = [(tyVarA, [])], args = vector [listOf (tyA)], result = listOf (tyA) }
-  | typeOf Primitives.Ref_ref = { vars = [(tyVarA, [])], args = vector [tyA], result = refOf (tyA) }
-  | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, [])], args = vector [refOf (tyA), refOf (tyA)], result = bool }
-  | typeOf Primitives.Ref_set = { vars = [(tyVarA, [])], args = vector [refOf (tyA), tyA], result = unit }
-  | typeOf Primitives.Ref_read = { vars = [(tyVarA, [])], args = vector [refOf (tyA)], result = tyA }
+fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [tyEqA, tyEqA], result = bool }
+  | typeOf Primitives.call2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], result = tyA }
+  | typeOf Primitives.call3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], result = tyA }
+  | typeOf Primitives.List_cons = { vars = [(tyVarA, Unconstrained)], args = vector [tyA, listOf (tyA)], result = listOf (tyA) }
+  | typeOf Primitives.List_null = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = bool }
+  | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = tyA }
+  | typeOf Primitives.List_unsafeTail = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = listOf (tyA) }
+  | typeOf Primitives.Ref_ref = { vars = [(tyVarA, Unconstrained)], args = vector [tyA], result = refOf (tyA) }
+  | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), refOf (tyA)], result = bool }
+  | typeOf Primitives.Ref_set = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), tyA], result = unit }
+  | typeOf Primitives.Ref_read = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA)], result = tyA }
   | typeOf Primitives.Bool_EQUAL = { vars = [], args = vector [bool, bool], result = bool }
   | typeOf Primitives.Bool_not = { vars = [], args = vector [bool], result = bool }
   | typeOf (Primitives.Int_EQUAL Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
@@ -1727,45 +1728,45 @@ fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, [IsEqType])], args = vector [
   | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], result = intInf }
   | typeOf Primitives.IntInf_notb = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Vector_length Primitives.INT) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int }
-  | typeOf (Primitives.Vector_length Primitives.I32) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int32 }
-  | typeOf (Primitives.Vector_length Primitives.I54) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int54 }
-  | typeOf (Primitives.Vector_length Primitives.I64) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = int64 }
-  | typeOf (Primitives.Vector_length Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA)], result = intInf }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT) = { vars = [(tyVarA, [])], args = vector [int, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I32) = { vars = [(tyVarA, [])], args = vector [int32, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I54) = { vars = [(tyVarA, [])], args = vector [int54, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I64) = { vars = [(tyVarA, [])], args = vector [int64, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [intInf, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
-  | typeOf (Primitives.Array_length Primitives.INT) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int }
-  | typeOf (Primitives.Array_length Primitives.I32) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int32 }
-  | typeOf (Primitives.Array_length Primitives.I54) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int54 }
-  | typeOf (Primitives.Array_length Primitives.I64) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = int64 }
-  | typeOf (Primitives.Array_length Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA)], result = intInf }
-  | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [tyA], result = tyB }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int32], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I54) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int54], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I64) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), int64], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [vectorOf (tyA), intInf], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I32) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int32], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I54) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int54], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I64) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int64], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), intInf], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.INT) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I32) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int32, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I54) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int54, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I64) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), int64, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, [])], args = vector [arrayOf (tyA), intInf, tyA], result = unit }
+  | typeOf (Primitives.Vector_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int }
+  | typeOf (Primitives.Vector_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int32 }
+  | typeOf (Primitives.Vector_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int54 }
+  | typeOf (Primitives.Vector_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int64 }
+  | typeOf (Primitives.Vector_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = intInf }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int, listOf (tyA)], result = vectorOf (tyA) }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32, listOf (tyA)], result = vectorOf (tyA) }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, listOf (tyA)], result = vectorOf (tyA) }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64, listOf (tyA)], result = vectorOf (tyA) }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf, listOf (tyA)], result = vectorOf (tyA) }
+  | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
+  | typeOf (Primitives.Array_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int }
+  | typeOf (Primitives.Array_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int32 }
+  | typeOf (Primitives.Array_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int54 }
+  | typeOf (Primitives.Array_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int64 }
+  | typeOf (Primitives.Array_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = intInf }
+  | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [tyA], result = tyB }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int], result = tyA }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int32], result = tyA }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int54], result = tyA }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int64], result = tyA }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), intInf], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf], result = tyA }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int, tyA], result = unit }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32, tyA], result = unit }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54, tyA], result = unit }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64, tyA], result = unit }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf, tyA], result = unit }
   | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
-  | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, [])], args = vector [], result = promptTagOf (tyA) }
-  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, [])], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], result = tyA }
-  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
-  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
-  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, []), (tyVarB, [])], args = vector [function1Of (tyB, tyA), tyA], result = tyB }
-  | typeOf Primitives.unreachable = { vars = [(tyVarA, [])], args = vector [], result = tyA }
+  | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], result = promptTagOf (tyA) }
+  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], result = tyA }
+  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
+  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
+  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyB, tyA), tyA], result = tyB }
+  | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], result = tyA }
   | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
   | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
   | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }

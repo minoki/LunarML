@@ -1118,7 +1118,7 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
   | toFExp (ctx, env, T.SConExp (span, Syntax.RealConstant value, ty)) = cookRealConstant (ctx, env, span, value, ty)
   | toFExp (ctx, env, T.SConExp (span, Syntax.StringConstant value, ty)) = #2 (cookStringConstant (ctx, env, span, value, ty))
   | toFExp (ctx, env, T.SConExp (span, Syntax.CharacterConstant value, ty)) = #2 (cookCharacterConstant (ctx, env, span, value, ty))
-  | toFExp (ctx, env, T.VarExp (span, longvid as TypedSyntax.MkShortVId vid, _, [(tyarg, cts)]))
+  | toFExp (ctx, env, T.VarExp (span, longvid as TypedSyntax.MkShortVId vid, _, [(tyarg, ct)]))
     = (case TypedSyntax.VIdMap.find (overloads, vid) of
            SOME key => (case tyarg of
                             T.TyCon (_, [], tycon) => (case TypedSyntax.TyNameMap.find (#overloadMap env, tycon) of
@@ -1130,17 +1130,18 @@ and toFExp (ctx : Context, env : Env, T.SConExp (span, Syntax.IntegerConstant va
                                                       )
                           | _ => emitFatalError (ctx, [span], "invalid use of " ^ TypedSyntax.print_VId vid)
                        )
-         | NONE => if List.exists (fn TypedSyntax.IsEqType => true | _ => false) cts then
-                       F.AppExp (F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg)), getEquality (ctx, env, tyarg))
-                   else
-                       F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg))
+         | NONE => (case ct of
+                        SOME TypedSyntax.IsEqType =>
+                        F.AppExp (F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg)), getEquality (ctx, env, tyarg))
+                      | _ =>
+                        F.TyAppExp (#1 (LongVarExp (ctx, env, [span], longvid)), toFTy (ctx, env, tyarg))
+                   )
       )
   | toFExp (ctx, env, T.VarExp (span, longvid, _, tyargs))
-    = List.foldl (fn ((ty, cts), e) =>
-                     if List.exists (fn TypedSyntax.IsEqType => true | _ => false) cts then
-                         F.AppExp(F.TyAppExp(e, toFTy(ctx, env, ty)), getEquality(ctx, env, ty))
-                     else
-                         F.TyAppExp(e, toFTy(ctx, env, ty))
+    = List.foldl (fn ((ty, SOME TypedSyntax.IsEqType), e) =>
+                     F.AppExp (F.TyAppExp (e, toFTy (ctx, env, ty)), getEquality (ctx, env, ty))
+                 | ((ty, _), e) =>
+                   F.TyAppExp (e, toFTy (ctx, env, ty))
                  ) (#1 (LongVarExp (ctx, env, [span], longvid))) tyargs
   | toFExp (ctx, env, T.RecordExp (_, fields)) = let fun doField (label, e) = (label, toFExp (ctx, env, e))
                                                  in F.RecordExp (List.map doField fields)
@@ -1251,35 +1252,35 @@ and doValBind ctx env (T.TupleBind (span, vars, exp))
       end
   | doValBind ctx env (T.PolyVarBind (span, vid, T.TypeScheme (tvs, ty), exp))
     = let val ty0 = toFTy (ctx, env, ty)
-          val ty' = List.foldr (fn ((tv,cts),ty1) =>
-                                   case cts of
-                                       [] => F.ForallType (tv, F.TypeKind, ty1)
-                                     | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
-                                     | _ => emitFatalError (ctx, [span], "invalid type constraint")
+          val ty' = List.foldr (fn ((tv, ct),ty1) =>
+                                   case ct of
+                                       NONE => F.ForallType (tv, F.TypeKind, ty1)
+                                     | SOME T.IsEqType => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
+                                     | SOME _ => emitFatalError (ctx, [span], "invalid type constraint")
                                ) ty0 tvs
           fun doExp (env', [])
               = toFExp(ctx, env', exp)
-            | doExp (env', (tv,cts) :: rest)
-              = (case cts of
-                     [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
-                   | [T.IsEqType] => let val vid = freshVId (ctx, "eq")
-                                         val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
-                                     in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, F.EqualityType (F.TyVar tv), doExp (env'', rest)))
-                                     end
-                   | _ => emitFatalError (ctx, [span], "invalid type constraint")
+            | doExp (env', (tv, ct) :: rest)
+              = (case ct of
+                     NONE => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
+                   | SOME T.IsEqType => let val vid = freshVId (ctx, "eq")
+                                            val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
+                                        in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, F.EqualityType (F.TyVar tv), doExp (env'', rest)))
+                                        end
+                   | SOME _ => emitFatalError (ctx, [span], "invalid type constraint")
                 )
           val env' = updateValMap (fn m => T.VIdMap.insert (m, vid, ty'), env)
       in (env', [F.ValDec (vid, SOME ty', doExp (env, tvs))])
       end
 and typeSchemeToTy (ctx, env : 'dummy2, TypedSyntax.TypeScheme (vars, ty))
     = let fun go env [] = toFTy(ctx, env, ty)
-            | go env ((tv, []) :: xs) = let val env' = env (* TODO *)
-                                        in F.ForallType(tv, F.TypeKind, go env' xs)
-                                        end
-            | go env ((tv, [T.IsEqType]) :: xs) = let val env' = env (* TODO *)
-                                                  in F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go env' xs))
-                                                  end
-            | go _ ((_, _) :: _) = emitFatalError (ctx, [T.getSourceSpanOfTy ty], "invalid type constraint")
+            | go env ((tv, NONE) :: xs) = let val env' = env (* TODO *)
+                                          in F.ForallType(tv, F.TypeKind, go env' xs)
+                                          end
+            | go env ((tv, SOME T.IsEqType) :: xs) = let val env' = env (* TODO *)
+                                                     in F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go env' xs))
+                                                     end
+            | go _ ((_, SOME _) :: _) = emitFatalError (ctx, [T.getSourceSpanOfTy ty], "invalid type constraint")
       in go env vars
       end
 and getEquality (ctx, env, T.TyCon (span, tyargs, tyname))
@@ -1338,11 +1339,11 @@ and toFDecs (_, env, []) = (env, [])
     = let val valbinds' = List.map (fn T.TupleBind (span, _, _) => emitFatalError (ctx, [span], "unexpected TupleBind in RecValDec")
                                    | T.PolyVarBind (span, vid, T.TypeScheme (tvs, ty), exp) =>
                                      let val ty0 = toFTy (ctx, env, ty)
-                                         val ty' = List.foldr (fn ((tv, cts), ty1) =>
-                                                                  case cts of
-                                                                      [] => F.ForallType (tv, F.TypeKind, ty1)
-                                                                    | [T.IsEqType] => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
-                                                                    | _ => emitFatalError (ctx, [span], "invalid type constraint")
+                                         val ty' = List.foldr (fn ((tv, ct), ty1) =>
+                                                                  case ct of
+                                                                      NONE => F.ForallType (tv, F.TypeKind, ty1)
+                                                                    | SOME T.IsEqType => F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), ty1))
+                                                                    | SOME _ => emitFatalError (ctx, [span], "invalid type constraint")
                                                               ) ty0 tvs
                                      in (span, vid, ty', tvs, ty, exp)
                                      end
@@ -1353,14 +1354,14 @@ and toFDecs (_, env, []) = (env, [])
                                        let fun doExp (env', []) = toFExp (ctx, env', exp)
                                              | doExp (env', (tv, cts) :: rest)
                                                = (case cts of
-                                                      [] => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
-                                                    | [T.IsEqType] => let val vid = freshVId (ctx, "eq")
-                                                                          val eqTy = F.EqualityType (F.TyVar tv)
-                                                                          val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
-                                                                          val env'' = updateValMap (fn m => T.VIdMap.insert (m, vid, eqTy), env'')
-                                                                      in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, eqTy, doExp (env'', rest)))
-                                                                      end
-                                                    | _ => emitFatalError (ctx, [span], "invalid type constraint")
+                                                      NONE => F.TyAbsExp (tv, F.TypeKind, doExp (env', rest))
+                                                    | SOME T.IsEqType => let val vid = freshVId (ctx, "eq")
+                                                                             val eqTy = F.EqualityType (F.TyVar tv)
+                                                                             val env'' = updateEqualityForTyVarMap (fn m => TypedSyntax.TyVarMap.insert (m, tv, vid), env')
+                                                                             val env'' = updateValMap (fn m => T.VIdMap.insert (m, vid, eqTy), env'')
+                                                                         in F.TyAbsExp (tv, F.TypeKind, F.FnExp (vid, eqTy, doExp (env'', rest)))
+                                                                         end
+                                                    | SOME _ => emitFatalError (ctx, [span], "invalid type constraint")
                                                  )
                                        in (vid, ty', doExp (env, tvs))
                                        end) valbinds'
@@ -1794,9 +1795,9 @@ val initialEnv : Env = { equalityForTyVarMap = TypedSyntax.TyVarMap.empty
                                         | toFTy (T.FnType (_, paramTy, resultTy)) = F.FnType (toFTy paramTy, toFTy resultTy)
                                       fun typeSchemeToTy (TypedSyntax.TypeScheme (vars, ty))
                                           = let fun go [] = toFTy ty
-                                                  | go ((tv, []) :: xs) = F.ForallType (tv, F.TypeKind, go xs)
-                                                  | go ((tv, [T.IsEqType]) :: xs) = F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go xs))
-                                                  | go ((_, _) :: _) = raise Fail "invalid type scheme"
+                                                  | go ((tv, NONE) :: xs) = F.ForallType (tv, F.TypeKind, go xs)
+                                                  | go ((tv, SOME T.IsEqType) :: xs) = F.ForallType (tv, F.TypeKind, F.FnType (F.EqualityType (F.TyVar tv), go xs))
+                                                  | go ((_, SOME _) :: _) = raise Fail "invalid type scheme"
                                             in go vars
                                             end
                                       val initialValMap = Syntax.VIdMap.foldl (fn ((tysc, _, vid), m) => case vid of

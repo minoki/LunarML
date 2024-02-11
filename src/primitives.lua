@@ -1585,9 +1585,10 @@ functor TypeOfPrimitives (type ty
                           val function3Of : ty * ty * ty * ty -> ty
                           val promptTagOf : ty -> ty
                           val subcontOf : ty * ty -> ty
+                          val Unconstrained : constraint
                           val IsEqType : constraint
                          ) : sig
-                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint list) list, args : ty vector, result : ty }
+                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, result : ty }
                              end = struct
 ]]
 
@@ -1600,11 +1601,11 @@ for i, p in ipairs(PRIMITIVES) do
   end
   local typeVariables = {}
   for _, t in ipairs(p.type.vars) do
-    local ct = ""
+    local ct = "Unconstrained"
     if t[3] then
       ct = t[3]
     end
-    table.insert(typeVariables, "(" .. t[2] .. ", [" .. ct .. "])")
+    table.insert(typeVariables, "(" .. t[2] .. ", " .. ct .. ")")
   end
   local params = {}
   for m in p.name:gmatch("{%.?%a}") do

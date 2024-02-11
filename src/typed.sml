@@ -39,19 +39,30 @@ structure TypedSyntax :> sig
                 | IsReal (* Real; defaults to real *)
                 | IsChar (* Char; defaults to char *)
                 | IsString (* String; defaults to string *)
+              datatype class = Record of (* excluded fields *) Syntax.LabelSet.set
+                             | NumTxt (* Int, Word, Real, Char, String *)
+                             | IntWordReal (* Int, Word, Real *)
+                             | IntWord (* Int, Word *)
+                             | IntReal (* Int, Real *)
+                             | Int
+                             | Word
+                             | Real
+                             | Char
+                             | String
+              type tyvar_constraint = { sourceSpan : SourcePos.span, equalityRequired : bool, class : class option }
               datatype Ty = TyVar of SourcePos.span * TyVar (* named type variable *)
                           | AnonymousTyVar of SourcePos.span * TyVarData ref (* anonymous type variable; only used during type checking *)
                           | RecordType of SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
                           | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
                           | FnType of SourcePos.span * Ty * Ty (* function type expression *)
                           | RecordExtType of SourcePos.span * Ty Syntax.LabelMap.map * Ty (* only used during type checking *)
-                   and TyVarData = Unbound of (SourcePos.span * UnaryConstraint) list * level
+                   and TyVarData = Unbound of tyvar_constraint * level
                                  | Link of Ty
               type AnonymousTyVar = TyVarData ref
               val PairType : SourcePos.span * Ty * Ty -> Ty
               val TupleType : SourcePos.span * Ty list -> Ty
               datatype TypeFunction = TypeFunction of TyVar list * Ty
-              datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
+              datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint option) list * Ty
               type ValEnv = (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
               val emptyValEnv : ValEnv
               type TypeStructure = { typeFunction : TypeFunction
@@ -96,7 +107,7 @@ structure TypedSyntax :> sig
               datatype match_type = CASE | VAL | HANDLE
               datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
               datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
-                           | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
+                           | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint option) list (* identifiers with type arguments *)
                            | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
                            | RecordExtExp of { sourceSpan : SourcePos.span
                                              , fields : (Syntax.Label * Exp) list
@@ -168,7 +179,7 @@ structure TypedSyntax :> sig
               val freeAnonymousTyVarsInTy : Ty -> AnonymousTyVar list
               val applySubstTy : Ty TyVarMap.map -> Ty -> Ty
               val applySubstTyInExpOrDec : Ty TyVarMap.map -> { doExp : Exp -> Exp, doDec : Dec -> Dec }
-              val substVId : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list -> Exp) VIdMap.map -> { doExp : Exp -> Exp, doDec : Dec -> VIdSet.set * Dec, doDecs : Dec list -> VIdSet.set * Dec list }
+              val substVId : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint option) list -> Exp) VIdMap.map -> { doExp : Exp -> Exp, doDec : Dec -> VIdSet.set * Dec, doDecs : Dec list -> VIdSet.set * Dec list }
               val forceTy : Ty -> Ty
               val forceTyIn : { nextTyVar : int ref, nextVId : 'a, matchContext : 'b, messageHandler : 'c, languageOptions : 'd } -> { doExp : Exp -> Exp, doDec : Dec -> Dec, doDecs : Dec list -> Dec list, doTopDec : TopDec -> TopDec, doTopDecs : TopDec list -> TopDec list }
               val freeTyVarsInDecs : 'a * Dec list -> AnonymousTyVar list
@@ -250,13 +261,26 @@ datatype UnaryConstraint
   | IsChar (* Char; defaults to char *)
   | IsString (* String; defaults to string *)
 
+datatype class = Record of (* excluded fields *) Syntax.LabelSet.set
+               | NumTxt (* Int, Word, Real, Char, String *)
+               | IntWordReal (* Int, Word, Real *)
+               | IntWord (* Int, Word *)
+               | IntReal (* Int, Real *)
+               | Int
+               | Word
+               | Real
+               | Char
+               | String
+
+type tyvar_constraint = { sourceSpan : SourcePos.span, equalityRequired : bool, class : class option }
+
 datatype Ty = TyVar of SourcePos.span * TyVar (* named type variable *)
             | AnonymousTyVar of SourcePos.span * TyVarData ref (* anonymous type variable; only used during type checking *)
             | RecordType of SourcePos.span * Ty Syntax.LabelMap.map (* record type expression *)
             | TyCon of SourcePos.span * Ty list * TyName (* type construction *)
             | FnType of SourcePos.span * Ty * Ty (* function type expression *)
             | RecordExtType of SourcePos.span * Ty Syntax.LabelMap.map * Ty (* only used during type checking *)
-     and TyVarData = Unbound of (SourcePos.span * UnaryConstraint) list * level
+     and TyVarData = Unbound of tyvar_constraint * level
                    | Link of Ty
 
 type AnonymousTyVar = TyVarData ref
@@ -264,7 +288,7 @@ type AnonymousTyVar = TyVarData ref
 fun PairType (span, a, b) = RecordType (span, Syntax.LabelMapFromList [(Syntax.NumericLabel 1, a), (Syntax.NumericLabel 2, b)])
 
 datatype TypeFunction = TypeFunction of TyVar list * Ty
-datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint list) list * Ty
+datatype TypeScheme = TypeScheme of (TyVar * UnaryConstraint option) list * Ty
 type ValEnv = (TypeScheme * Syntax.ValueConstructorInfo Syntax.IdStatus) Syntax.VIdMap.map
 val emptyValEnv : ValEnv = Syntax.VIdMap.empty
 
@@ -312,7 +336,7 @@ datatype match_type = CASE | VAL | HANDLE
 datatype valdesc_origin = VALDESC_COMMENT | VALDESC_SEQUENCE
 
 datatype Exp = SConExp of SourcePos.span * Syntax.SCon * Ty (* special constant *)
-             | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list (* identifiers with type arguments *)
+             | VarExp of SourcePos.span * LongVId * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint option) list (* identifiers with type arguments *)
              | RecordExp of SourcePos.span * (Syntax.Label * Exp) list (* record *)
              | RecordExtExp of { sourceSpan : SourcePos.span
                                , fields : (Syntax.Label * Exp) list
@@ -455,7 +479,7 @@ fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (VectorPat _) = "VectorPat"
 (* | print_Pat _ = "<Pat>" *)
 fun print_Exp (SConExp (_, x, _)) = "SConExp(" ^ Syntax.print_SCon x ^ ")"
-  | print_Exp (VarExp(_, x, idstatus, tyargs)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Ty, Syntax.print_list print_UnaryConstraint)) tyargs ^ ")"
+  | print_Exp (VarExp(_, x, idstatus, tyargs)) = "VarExp(" ^ print_LongVId x ^ "," ^ Syntax.print_IdStatus idstatus ^ "," ^ Syntax.print_list (Syntax.print_pair (print_Ty, Syntax.print_option print_UnaryConstraint)) tyargs ^ ")"
   | print_Exp (RecordExp(_, x)) = (case Syntax.extractTuple (1, x) of
                                        NONE => "RecordExp " ^ Syntax.print_list (Syntax.print_pair (Syntax.print_Label, print_Exp)) x
                                      | SOME ys => "TupleExp " ^ Syntax.print_list print_Exp ys
@@ -503,7 +527,7 @@ and print_UnaryConstraint (IsRecord labels) = "IsEqType(" ^ Syntax.print_list Sy
   | print_UnaryConstraint IsReal = "IsReal"
   | print_UnaryConstraint IsChar = "IsChar"
   | print_UnaryConstraint IsString = "IsString"
-and print_TypeScheme (TypeScheme(tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_list print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
+and print_TypeScheme (TypeScheme (tyvars, ty)) = "TypeScheme(" ^ Syntax.print_list (Syntax.print_pair (print_TyVar, Syntax.print_option print_UnaryConstraint)) tyvars ^ "," ^ print_Ty ty ^ ")"
 (* and print_ValEnv env = print_VIdMap (Syntax.print_pair (print_TypeScheme,Syntax.print_IdStatus)) env *)
 (* fun print_TyVarSet x = Syntax.print_list print_TyVar (TyVarSet.foldr (fn (x,ys) => x :: ys) [] x) *)
 (* fun print_TyNameMap print_elem x = Syntax.print_list (Syntax.print_pair (print_TyName,print_elem)) (TyNameMap.foldri (fn (k,x,ys) => (k,x) :: ys) [] x) *)
@@ -648,7 +672,7 @@ fun boundVIdsInPat (WildcardPat _) = VIdSet.empty
   | boundVIdsInPat (LayeredPat (_, vid, _, pat)) = VIdSet.add (boundVIdsInPat pat, vid)
   | boundVIdsInPat (VectorPat (_, pats, _, _)) = Vector.foldl (fn (pat, acc) => VIdSet.union (boundVIdsInPat pat, acc)) VIdSet.empty pats
 
-fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint list) list -> Exp) VIdMap.map)
+fun substVId (subst : (SourcePos.span * Syntax.ValueConstructorInfo Syntax.IdStatus * (Ty * UnaryConstraint option) list -> Exp) VIdMap.map)
     = let fun remove' (map, key) = if VIdMap.inDomain (map, key) then
                                        #1 (VIdMap.remove (map, key))
                                    else
