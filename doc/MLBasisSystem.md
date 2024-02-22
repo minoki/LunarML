@@ -85,6 +85,7 @@ The default value for an annotation could be specified by `--default-ann` option
 * `$(SML_LIB)/basis/lunarml.mlb`: The [LunarML](LunarMLStructure.md) structure
 * `$(SML_LIB)/basis/lua.mlb`: The [Lua](LuaInterface.md) structure
 * `$(SML_LIB)/basis/javascript.mlb`: The [JavaScript](JavaScriptInterface.md) structure
+* `$(SML_LIB)/basis/pipeline.mlb`: The pipeline operator `|>`. See [OtherLibraries](OtherLibraries.md).
 
 The following libraries are available if `make -C thirdparty install` is run:
 

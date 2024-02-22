@@ -103,3 +103,4 @@ Output type:
 * [Interface to Lua](doc/LuaInterface.md)
 * [Interface to JavaScript](doc/JavaScriptInterface.md)
 * [Delimited continuations](doc/DelimitedContinuations.md) (experimental)
+* [Other libraries](doc/OtherLibraries.md)
