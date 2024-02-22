@@ -117,7 +117,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) (_ (* target
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessUpvalue.initialEnv lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 255 } LuaTransform.ProcessLocal.initialEnv lua
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val usedLib = LuaSyntax.StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, LuaSyntax.StringSet.empty))
+          val usedLib = StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, StringSet.empty))
           val lua = LuaWriter.doChunk lua
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
@@ -148,7 +148,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) (_ (* target
           val lua = #2 (LuaTransform.ProcessUpvalue.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessUpvalue.initialEnvForLuaJIT lua)
           val lua = LuaTransform.ProcessLocal.doBlock { nextId = nextId, maxUpvalue = 60 } LuaTransform.ProcessLocal.initialEnvForLuaJIT lua
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
-          val usedLib = LuaSyntax.StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, LuaSyntax.StringSet.empty))
+          val usedLib = StringSet.toList (LuaSyntax.predefinedIdsInBlock (lua, StringSet.empty))
           val lua = LuaWriter.doChunk lua
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
@@ -185,7 +185,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) (_ (* target
           val codetransTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val hasImports = not (List.null (!(#imports jsctx)))
           val imports = JsWriter.doImports (!(#imports jsctx))
-          val usedLib = JsSyntax.StringSet.toList (JsSyntax.predefinedIdsInBlock (js, JsSyntax.StringSet.empty))
+          val usedLib = StringSet.toList (JsSyntax.predefinedIdsInBlock (js, StringSet.empty))
           val js = JsWriter.doProgram js
           val writeTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val mlinit = InitFile.eliminateUnusedChunks (mlinit, usedLib)
@@ -207,7 +207,7 @@ fun emit (opts as { backend = BACKEND_LUA runtime, ... } : options) (_ (* target
       in ()
       end
 fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * MLBEval.Code)
-    = let val pathMap = List.foldl MLBSyntax.StringMap.insert' MLBSyntax.StringMap.empty
+    = let val pathMap = List.foldl StringMap.insert' StringMap.empty
                                    [("SML_LIB", OS.Path.mkAbsolute { path = OS.Path.joinDirFile { dir = #libDir opts, file = "ml" }, relativeTo = OS.FileSys.getDir () })
                                    ,("TARGET_LANG", case #backend opts of
                                                         BACKEND_LUA _ => "lua"

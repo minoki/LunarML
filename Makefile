@@ -23,6 +23,8 @@ sources = \
   src/compat/red-black-map-fn.sml \
   src/list-util.sml \
   src/vector-util.sml \
+  src/string-set.sml \
+  src/string-map.sml \
   src/numeric.sml \
   src/text.sml \
   src/strongly-connected-components.sml \

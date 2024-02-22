@@ -8,7 +8,6 @@ structure LuaSyntax :> sig
               datatype Id = PredefinedId of string
                           | UserDefinedId of TypedSyntax.VId
               type Label = Id
-              structure StringSet : ORD_SET where type Key.ord_key = string
               structure IdSet : ORD_SET where type Key.ord_key = Id
               structure IdMap : ORD_MAP where type Key.ord_key = Id
               datatype VarAttr = CONST | LATE_INIT | MUTABLE
@@ -71,7 +70,6 @@ datatype TableKey = IntKey of int
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
 type Label = Id
-structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -250,7 +248,6 @@ fun smlNameToLuaChar #"_" = "__"
   | smlNameToLuaChar #"*" = "_ASTER"
   | smlNameToLuaChar x = if Char.isAlphaNum x then String.str x else raise Fail "smlNameToLua: invalid character"
 fun smlNameToLua(name) = String.translate smlNameToLuaChar name
-structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
 val LuaKeywords = StringSet.fromList
                       ["and", "break", "do", "else", "elseif", "end",
                        "false", "for", "function", "goto", "if", "in",

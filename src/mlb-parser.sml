@@ -28,9 +28,6 @@ structure P = ParserCombinator (structure Stream = StringStream
                                )
 val initialState : P.state = ()
 structure CP = CharParser (P)
-structure StringSet = RedBlackSetFn (open String
-                                     type ord_key = string
-                                    )
 open P.Operators
 infix 4 <$> <$ <*> <*
 infix 1 >> >>=

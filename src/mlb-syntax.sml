@@ -18,7 +18,6 @@ structure MLBSyntax :> sig
                    and BasExp = BasisExp of BasDec list
                               | BasIdExp of BasId
                               | LetExp of BasDec list * BasExp
-              structure StringMap : ORD_MAP where type Key.ord_key = string
               structure BasMap : ORD_MAP where type Key.ord_key = BasId
               val evalPath : string StringMap.map -> string -> string
           end = struct
@@ -37,9 +36,6 @@ datatype BasDec = BasisDec of (BasId * BasExp) list
      and BasExp = BasisExp of BasDec list
                 | BasIdExp of BasId
                 | LetExp of BasDec list * BasExp
-structure StringMap = RedBlackMapFn (open String
-                                     type ord_key = string
-                                    )
 structure BasMap = StringMap
 (*
  * built-in path map:

@@ -7,7 +7,6 @@ structure JsSyntax :> sig
                                  | StringKey of string
               datatype Id = PredefinedId of string
                           | UserDefinedId of TypedSyntax.VId
-              structure StringSet : ORD_SET where type Key.ord_key = string
               structure IdSet : ORD_SET where type Key.ord_key = Id
               datatype JsConst = Null
                                | False
@@ -86,7 +85,6 @@ datatype ObjectKey = IntKey of int
                    | StringKey of string
 datatype Id = PredefinedId of string
             | UserDefinedId of TypedSyntax.VId
-structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
 structure IdKey = struct
 type ord_key = Id
 fun compare (PredefinedId x, PredefinedId y) = String.compare (x, y)
@@ -231,7 +229,6 @@ fun smlNameToJsChar #"_" = "_"
   | smlNameToJsChar #"*" = "$ASTER"
   | smlNameToJsChar x = if Char.isAlphaNum x then String.str x else raise Fail "smlNameToJs: invalid character"
 fun smlNameToJs name = String.translate smlNameToJsChar name
-structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
 val JsReservedWords = StringSet.fromList
                           ["await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
                            "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import", "in",

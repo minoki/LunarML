@@ -12,7 +12,6 @@ structure InitFile : sig
               val eliminateUnusedChunks : chunk list * string list -> chunk list
               val output : TextIO.outstream * chunk list -> unit
           end = struct
-structure StringSet = RedBlackSetFn (struct open String; type ord_key = string end)
 datatype language = LUA | JS
 type chunk = { provides : string list
              , requires : string list

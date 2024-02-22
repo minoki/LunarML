@@ -10,6 +10,8 @@ compat/red-black-map-fn.sml
 (* end *)
 list-util.sml
 vector-util.sml
+string-set.sml
+string-map.sml
 ../pluto/pluto.mlb
 numeric.sml
 text.sml

@@ -5,7 +5,7 @@
 structure MLBEval :> sig
               type Context = { driverContext : Driver.Context
                              , baseDir : string
-                             , pathMap : string MLBSyntax.StringMap.map
+                             , pathMap : string StringMap.map
                              , targetInfo : TargetInfo.target_info
                              , defaultLanguageOptions : LanguageOptions.options
                              , messageHandler : Message.handler
@@ -22,7 +22,7 @@ structure MLBEval :> sig
               type Code = { tynameset : TypedSyntax.TyNameSet.set
                           , toFEnv : ToFSyntax.Env
                           , fdecs : FSyntax.Dec list
-                          , cache : Env MLBSyntax.StringMap.map
+                          , cache : Env StringMap.map
                           }
               val initialCode : Code
               val applyAnnotation : Message.handler -> string * LanguageOptions.options -> LanguageOptions.options
@@ -30,12 +30,12 @@ structure MLBEval :> sig
               val doMlbSource : Context -> Env -> string -> Code -> Env * Code
               datatype path_setting = PATH_MAP of string
                                     | PATH_VAR of string
-              val loadPathVar : Message.handler -> path_setting * string MLBSyntax.StringMap.map -> string MLBSyntax.StringMap.map
+              val loadPathVar : Message.handler -> path_setting * string StringMap.map -> string StringMap.map
           end = struct
 local structure M = MLBSyntax in
 type Context = { driverContext : Driver.Context
                , baseDir : string
-               , pathMap : string M.StringMap.map
+               , pathMap : string StringMap.map
                , targetInfo : TargetInfo.target_info
                , defaultLanguageOptions : LanguageOptions.options
                , messageHandler : Message.handler
@@ -60,12 +60,12 @@ fun mergeEnv (e1 : Env, e2 : Env) = { bas = M.BasMap.unionWith #2 (#bas e1, #bas
 type Code = { tynameset : TypedSyntax.TyNameSet.set
             , toFEnv : ToFSyntax.Env
             , fdecs : FSyntax.Dec list
-            , cache : Env M.StringMap.map
+            , cache : Env StringMap.map
             }
 val initialCode = { tynameset = InitialEnv.initialTyNameSet
                   , toFEnv = ToFSyntax.initialEnv
                   , fdecs = []
-                  , cache = M.StringMap.empty
+                  , cache = StringMap.empty
                   }
 (* MLton annotations:
  * allowFFI {false|true}
@@ -254,7 +254,7 @@ and doSmlSource ctx langopt env path acc = let val path = OS.Path.mkAbsolute { p
                                    end
 and doMlbSource ctx _ path acc = let val baseDir = #baseDir ctx
                                      val path = OS.Path.mkAbsolute { path = M.evalPath (#pathMap ctx) path, relativeTo = baseDir }
-                                 in case M.StringMap.find (#cache acc, path) of
+                                 in case StringMap.find (#cache acc, path) of
                                         NONE => let val content = let val ins = TextIO.openIn path (* may raise Io *)
                                                                   in TextIO.inputAll ins before TextIO.closeIn ins
                                                                   end
@@ -267,7 +267,7 @@ and doMlbSource ctx _ path acc = let val baseDir = #baseDir ctx
                                                                                                   , messageHandler = #messageHandler ctx
                                                                                                   }
                                                                                        val (env', acc) = doDecs ctx' (#defaultLanguageOptions ctx) emptyEnv decs acc
-                                                                                       val cache = M.StringMap.insert (#cache acc, path, env')
+                                                                                       val cache = StringMap.insert (#cache acc, path, env')
                                                                                    in (env', { tynameset = #tynameset acc, toFEnv = #toFEnv acc, fdecs = #fdecs acc, cache = cache })
                                                                                    end
                                                      | MLBParser.P.ParseError e => ( TextIO.output (TextIO.stdErr, e ^ "\n") ; raise Message.Abort )
@@ -281,7 +281,7 @@ fun loadPathVar messageHandler (PATH_MAP file, pathMap)
                                             NONE => (TextIO.closeIn ins; pathMap)
                                           | SOME line => (case String.tokens Char.isSpace line of
                                                               [name, value] => let val path = M.evalPath pathMap value
-                                                                                   val pathMap = M.StringMap.insert (pathMap, name, path)
+                                                                                   val pathMap = StringMap.insert (pathMap, name, path)
                                                                                in loop (ins, n + 1, pathMap)
                                                                                end
                                                             | unrecognized => let val pos = { file = file, line = n, column = 1 }
@@ -297,7 +297,7 @@ fun loadPathVar messageHandler (PATH_MAP file, pathMap)
       end
   | loadPathVar messageHandler (PATH_VAR setting, pathMap)
     = (case String.tokens (fn c => c = #"=") setting of
-           [name, value] => M.StringMap.insert (pathMap, name, M.evalPath pathMap value)
+           [name, value] => StringMap.insert (pathMap, name, M.evalPath pathMap value)
          | _ => (Message.error (messageHandler, [], "MLB path map", "invalid --mlb-path-var option"); pathMap)
       )
 end (* local *)
