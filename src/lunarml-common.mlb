@@ -1,6 +1,8 @@
+local
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
 $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
+in
 ann "sequenceNonUnit warn" in
 (* ann "warnUnused false" in *)
 compat/ord_set.sig
@@ -51,5 +53,5 @@ command-line-settings.sml
 version.sml
 initfile.sml
 main.sml
-main-default.sml
+end
 end
