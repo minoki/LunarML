@@ -11,6 +11,12 @@ Welcome to LunarML's documentation!
    :caption: Contents:
 
    intro
+   usage
+   language
+   library
+   ml-basis-system
+   lua
+   javascript
 
 Indices and tables
 ==================
