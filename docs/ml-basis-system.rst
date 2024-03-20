@@ -97,7 +97,7 @@ Available libraries
 * ``$(SML_LIB)/basis/lunarml.mlb``: :ref:`lunarml-structure`
 * ``$(SML_LIB)/basis/lua.mlb``: :ref:`lua-structure`
 * ``$(SML_LIB)/basis/javascript.mlb``: :ref:`javascript-structure`
-* ``$(SML_LIB)/basis/pipeline.mlb``: :ref:`pipeline-operator`
+* ``$(SML_LIB)/basis/pipe.mlb``: :ref:`pipe-operator`
 * ``$(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb``
 * ``$(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb``
 

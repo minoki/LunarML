@@ -1801,12 +1801,12 @@ JavaScript features are accessible via the ``JavaScript`` structure in ``$(SML_L
      val toUint32 : value -> Word32.word
    end
 
-.. _pipeline-operator:
+.. _pipe-operator:
 
-Pipeline operator
------------------
+Pipe operator
+-------------
 
-``$(SML_LIB)/basis/pipeline.mlb`` contains the following declarations:
+``$(SML_LIB)/basis/pipe.mlb`` contains the following declarations:
 
 .. code-block:: sml
 
