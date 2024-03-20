@@ -2,6 +2,8 @@
 
 The Standard ML compiler that produces Lua/JavaScript.
 
+The documentation is available at <https://lunarml.readthedocs.io/en/latest/>.
+
 ## Trying pre-built binaries
 
 Docker image is available.
@@ -96,11 +98,11 @@ Output type:
 
 * Full SML '97 language, including signatures and functors
     * Note that some features conform to Successor ML rather than SML '97.
-* [Successor ML features](doc/SuccessorML.md)
-* [Other language extensions](doc/Extensions.md)
-* [A subset of SML Basis Library](doc/BasisLibrary.md)
-* [ML Basis system](doc/MLBasisSystem.md) for multi-file project
-* [Interface to Lua](doc/LuaInterface.md)
-* [Interface to JavaScript](doc/JavaScriptInterface.md)
-* [Delimited continuations](doc/DelimitedContinuations.md) (experimental)
-* [Other libraries](doc/OtherLibraries.md)
+* Successor ML features
+* Other language extensions
+* A subset of SML Basis Library
+* ML Basis system for multi-file project
+* Interface to Lua
+* Interface to JavaScript
+* Delimited continuations
+* Other libraries
