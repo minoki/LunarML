@@ -14,6 +14,7 @@ structure OS :> sig
                             val rename : { old : string, new : string } -> unit
                         end
               structure IO : sig
+                            eqtype iodesc
                         end
               structure Path : OS_PATH
               structure Process : sig
@@ -165,7 +166,9 @@ val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_
 val remove : string -> unit = fn filename => Lua.call0 Lua.Lib.os.remove #[Lua.fromString filename]
 val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 Lua.Lib.os.rename #[Lua.fromString old, Lua.fromString new]
 end (* structure FileSys *)
-structure IO = struct end
+structure IO = struct
+type iodesc = int (* tentative *)
+end
 structure Path = struct
 exception Path
 exception InvalidArc

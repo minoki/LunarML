@@ -1456,6 +1456,91 @@ structure Timer
 
 The GC time returned by this structure is always zero.
 
+signature PRIM_IO
+^^^^^^^^^^^^^^^^^
+
+.. code-block:: sml
+
+   signature PRIM_IO = sig
+     type elem
+     type vector
+     type vector_slice
+     type array
+     type array_slice
+     eqtype pos
+     val compare : pos * pos -> order
+     datatype reader = RD of { name : string
+                             , chunkSize : int
+                             , readVec : (int -> vector) option
+                             , readArr : (array_slice -> int) option
+                             , readVecNB : (int -> vector option) option
+                             , readArrNB : (array_slice -> int option) option
+                             , block : (unit -> unit) option
+                             , canInput : (unit -> bool) option
+                             , avail : unit -> Position.int option (* https://github.com/SMLFamily/BasisLibrary/wiki/2019-001-Correction-to-PRIM_IO *)
+                             , getPos : (unit -> pos) option
+                             , setPos : (pos -> unit) option
+                             , endPos : (unit -> pos) option
+                             , verifyPos : (unit -> pos) option
+                             , close : unit -> unit
+                             , ioDesc : OS.IO.iodesc option
+                             }
+     datatype writer = WR of { name : string
+                             , chunkSize : int
+                             , writeVec : (vector_slice -> int) option
+                             , writeArr : (array_slice -> int) option
+                             , writeVecNB : (vector_slice -> int option) option
+                             , writeArrNB : (array_slice -> int option) option
+                             , block : (unit -> unit) option
+                             , canOutput : (unit -> bool) option
+                             , getPos : (unit -> pos) option
+                             , setPos : (pos -> unit) option
+                             , endPos : (unit -> pos) option
+                             , verifyPos : (unit -> pos) option
+                             , close : unit -> unit
+                             , ioDesc : OS.IO.iodesc option
+                             }
+     val openVector : vector -> reader
+     val nullRd : unit -> reader
+     val nullWr : unit -> writer
+     val augmentReader : reader -> reader
+     val augmentWriter : writer -> writer
+   end
+   structure BinPrimIO :> PRIM_IO where type elem = Word8.word
+                                  where type vector = Word8Vector.vector
+                                  where type vector_slice = Word8VectorSlice.slice (* extension *)
+                                  where type array = Word8Array.array
+                                  where type array_slice = Word8ArraySlice.slice (* extension *)
+                                  where type pos = Position.int
+   structure TextPrimIO :> PRIM_IO where type elem = char
+                                   where type vector = CharVector.vector
+                                   where type vector_slice = CharVectorSlice.slice (* extension *)
+                                   where type array = CharArray.array
+                                   where type array_slice = CharArraySlice.slice (* extension *)
+
+functor PrimIO
+^^^^^^^^^^^^^^
+
+.. code-block:: sml
+
+   functor PrimIO (structure Vector : MONO_VECTOR
+                   structure VectorSlice : MONO_VECTOR_SLICE
+                   structure Array : MONO_ARRAY
+                   structure ArraySlice : MONO_ARRAY_SLICE
+                   sharing type Vector.elem = VectorSlice.elem = Array.elem = ArraySlice.elem
+                   sharing type Vector.vector = VectorSlice.vector = Array.vector = ArraySlice.vector
+                   sharing type VectorSlice.slice = ArraySlice.vector_slice
+                   sharing type Array.array = ArraySlice.array
+                   val someElem : Vector.elem
+                   eqtype pos
+                   val compare : pos * pos -> order
+                  ) :> PRIM_IO where type elem = Vector.elem
+                               where type vector = Vector.vector
+                               where type vector_slice = VectorSlice.slice
+                               where type array = Array.array
+                               where type array_slice = ArraySlice.slice
+                               where type pos = pos
+
 Not implemented yet
 ^^^^^^^^^^^^^^^^^^^
 
@@ -1463,9 +1548,6 @@ Not implemented yet
 
    signature BIN_IO
    signature IMPERATIVE_IO
-   signature PRIM_IO
-   structure BinPrimIO :> PRIM_IO where ...
-   structure TextPrimIO :> PRIM_IO where ...
    signature STREAM_IO
    signature TEXT_IO
    structure WideTextIO :> TEXT_IO

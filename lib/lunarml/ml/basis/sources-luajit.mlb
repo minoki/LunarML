@@ -71,6 +71,7 @@ os-path-sig.sml
 os-path-unix.sml
 os-path-windows.sml
 lua/os.sml
+prim-io.sml
 lua/command-line.sml
 end
 in
@@ -93,6 +94,7 @@ signature MONO_VECTOR_SLICE
 signature OPTION
 signature OS_PATH
 signature PACK_WORD
+signature PRIM_IO
 signature REAL
 signature STRING
 signature STRING_CVT
@@ -111,6 +113,7 @@ structure LunarML (* extension *)
 structure Array
 structure ArraySlice
 structure BinIO
+structure BinPrimIO
 structure Bool
 structure BoolArray
 structure BoolArraySlice
@@ -181,6 +184,7 @@ structure StringCvt
 structure Substring
 structure Text
 structure TextIO
+structure TextPrimIO
 structure Time
 structure Timer
 structure Vector
@@ -218,6 +222,7 @@ structure WordArray
 structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
+functor PrimIO
 functor UnixPath (* extension *)
 functor WindowsPath (* extension *)
 top-level.sml

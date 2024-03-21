@@ -11,6 +11,7 @@ structure OS :> sig
                             val rename : { old : string, new : string } -> unit
                         end
               structure IO : sig
+                            eqtype iodesc
                         end
               structure Path : OS_PATH
               structure Process : sig
@@ -83,7 +84,9 @@ fun rename { old : string, new : string } = ( JavaScript.call fs.renameSync #[Ja
                                             ; ()
                                             )
 end (* structure FileSys *)
-structure IO = struct end
+structure IO = struct
+type iodesc = int (* tentative *)
+end
 structure Path = struct
 exception Path
 exception InvalidArc
