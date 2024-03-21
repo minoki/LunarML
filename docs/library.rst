@@ -1129,21 +1129,20 @@ signature PACK_WORD
 structure IO
 ^^^^^^^^^^^^
 
-Status: partial.
-
 .. code-block:: sml
 
-   structure IO : sig
+   signature IO = sig
      exception Io of { name : string
                      , function : string
                      , cause : exn
                      }
-     (* exception BlockingNotSupported *)
-     (* exception NonblockingNotSupported *)
-     (* exception RandomAccessNotSupported *)
-     (* exception ClosedStream *)
-     (* datatype buffer_mode = NO_BUF | LINE_BUF | BLOCK_BUF *)
+     exception BlockingNotSupported
+     exception NonblockingNotSupported
+     exception RandomAccessNotSupported
+     exception ClosedStream
+     datatype buffer_mode = NO_BUF | LINE_BUF | BLOCK_BUF
    end
+   structure IO :> IO
 
 structure TextIO
 ^^^^^^^^^^^^^^^^
@@ -1179,7 +1178,7 @@ Status: partial.
      (* val setOutstream : outstream * StreamIO.outstream -> unit *)
      (* val getPosOut : outstream -> StreamIO.out_pos *)
      (* val setPosOut : outstream * StreamIO.out_pos -> unit *)
-   
+
      (* TEXT_IO *)
      (* structure StreamIO : TEXT_STREAM_IO where ... *)
      val inputLine : instream -> string option
@@ -1228,7 +1227,7 @@ Status: partial.
      (* val setOutstream : outstream * StreamIO.outstream -> unit *)
      (* val getPosOut : outstream -> StreamIO.out_pos *)
      (* val setPosOut : outstream * StreamIO.out_pos -> unit *)
-   
+
      (* BIN_IO *)
      val openIn : string -> instream
      val openOut : string -> outstream

@@ -24,6 +24,7 @@ signature CHAR
 signature DATE
 signature INTEGER
 signature INT_INF
+signature IO
 signature LIST
 signature LIST_PAIR
 signature MATH

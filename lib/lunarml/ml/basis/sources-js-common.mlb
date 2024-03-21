@@ -77,6 +77,7 @@ signature DATE
 signature IEEE_REAL
 signature INTEGER
 signature INT_INF
+signature IO
 signature LIST
 signature LIST_PAIR
 signature MATH
@@ -141,9 +142,9 @@ structure Int8Vector
 structure Int8VectorSlice
 structure IntArray
 structure IntArraySlice
+structure IntInf
 structure IntVector
 structure IntVectorSlice
-structure IntInf
 structure LargeInt
 structure LargeReal
 structure LargeWord
