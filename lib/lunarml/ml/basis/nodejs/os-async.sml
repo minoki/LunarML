@@ -29,7 +29,7 @@ structure OS :> sig
                         end
               eqtype syserror
               exception SysErr of string * syserror option
-          end = struct
+          end where type IO.iodesc = IODesc.iodesc = struct
 type syserror = string
 exception SysErr of string * syserror option
 local
@@ -99,9 +99,7 @@ fun rename { old : string, new : string } = ( JavaScript.call fs.renameSync #[Ja
                                             ; ()
                                             )
 end (* structure FileSys *)
-structure IO = struct
-type iodesc = int (* tentative *)
-end
+structure IO = IODesc
 structure Path = struct
 exception Path
 exception InvalidArc

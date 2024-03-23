@@ -7,13 +7,14 @@ ann "sequenceNonUnit ignore"
 delim-cont.sml
 js-cps/javascript-callback.sml
 nodejs/timer.sml
-nodejs/text-io-async.sml
-nodejs/bin-io-async.sml
 os-path-sig.sml
 os-path-unix.sml
 os-path-windows.sml
+nodejs/iodesc.sml
 nodejs/os-async.sml
 prim-io.sml
+nodejs/text-io-async.sml
+nodejs/bin-io-async.sml
 nodejs/command-line.sml
 end
 in
