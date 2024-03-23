@@ -117,6 +117,10 @@ structure JavaScript : sig
                             structure Date : sig
                                           val now : value
                                       end
+                            val Map : value
+                            val Set : value
+                            val WeakMap : value
+                            val WeakSet : value
                         end
           end = struct
 type value = _Prim.JavaScript.value
@@ -237,6 +241,10 @@ val Date = LunarML.assumeDiscardable global "Date"
 structure Date = struct
 val now = LunarML.assumeDiscardable field (Date, "now")
 end
+val Map = LunarML.assumeDiscardable global "Map"
+val Set = LunarML.assumeDiscardable global "Set"
+val WeakMap = LunarML.assumeDiscardable global "WeakMap"
+val WeakSet = LunarML.assumeDiscardable global "WeakSet"
 end
 fun newObject () = new Lib.Object #[]
 end;
