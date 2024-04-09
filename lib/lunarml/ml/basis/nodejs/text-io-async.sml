@@ -345,7 +345,7 @@ structure TextIO :> sig
               val mkInstream : StreamIO.instream -> instream
               val getInstream : instream -> StreamIO.instream
               val setInstream : instream * StreamIO.instream -> unit
-              (* val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option *)
+              val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
 
               type outstream
               val output : outstream * vector -> unit
@@ -378,7 +378,6 @@ local
                   val openIn : string -> instream
                   val openString : string -> instream
                   val stdIn : instream
-                                  (* val scanStream *)
                   structure StreamIO : sig
                                 type instream
                                 type elem = char
@@ -399,6 +398,7 @@ local
                   val mkInstream : StreamIO.instream -> instream
                   val getInstream : instream -> StreamIO.instream
                   val setInstream : instream * StreamIO.instream -> unit
+                  val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
               end = struct
     type vector = string
     type elem = char
@@ -438,6 +438,11 @@ local
     fun openIn path = ref (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)]))
     fun openString content = ref (StreamIO.openVector content)
     val stdIn = LunarML.assumeDiscardable (fn () => ref (StreamIO.openReadable stdin)) ()
+    fun scanStream scan ins = case scan StreamIO.input1 (!ins) of
+                                  NONE => NONE
+                                | SOME (x, ins') => ( ins := ins'
+                                                    ; SOME x
+                                                    )
     end
     structure Outstream :> sig
                   type outstream
