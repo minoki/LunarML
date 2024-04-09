@@ -6,7 +6,7 @@ local
               val readSome : readable -> vector list
               val rawEnded : readable -> bool
               val destroy : readable -> unit
-              val getReader : readable -> TextPrimIO.reader
+              val getReader : readable * string -> TextPrimIO.reader
               val fromValue : JavaScript.value -> readable
               val toValue : readable -> JavaScript.value
               end = struct
@@ -80,9 +80,8 @@ local
               )
     fun rawEnded (stream : readable) : bool = JavaScript.unsafeFromValue (JavaScript.field (stream, "readableEnded"))
     fun destroy (stream : readable) : unit = (JavaScript.method (stream, "destroy") #[]; ())
-    fun getReader (stream : readable)
-        = let val name = "<readable>"
-              val ioDesc = IODesc.toDesc stream
+    fun getReader (stream : readable, name : string)
+        = let val ioDesc = IODesc.toDesc stream
               (* TODO: Should we register 'close' event handler to release the descriptor? *)
           in TextPrimIO.RD { name = name
                            , chunkSize = 1024 (* tentative *)
@@ -122,20 +121,20 @@ local
                   val getReader : instream -> reader * vector
                   (* val filePosIn : instream -> pos *)
                   val openVector : vector -> instream
-                  val openReadable : JavaScript.value -> instream
+                  val openReadable : JavaScript.value * string -> instream
               end = struct
     type elem = char
     type vector = string
     type reader = TextPrimIO.reader
-    datatype state = READABLE of Readable.readable (* Readable / paused mode / Buffer *)
+    datatype state = READABLE of { readable : Readable.readable, name : string } (* Readable / paused mode / Buffer *)
                    | PRIM_READER of reader
                    | BUFFERED of { buffer : vector, position : int, next : instream } (* invariant: 0 <= position < String.size buffer *) (* name? *)
-                   | CLOSED
+                   | CLOSED of string (* name *)
     withtype instream = state ref
-    fun openVector content = ref (BUFFERED { buffer = content, position = 0, next = ref CLOSED })
-    fun openReadable stream = ref (READABLE (Readable.fromValue stream))
+    fun openVector content = ref (BUFFERED { buffer = content, position = 0, next = ref (CLOSED "<vector>") })
+    fun openReadable (stream, name) = ref (READABLE { readable = Readable.fromValue stream, name = name })
     fun mkInstream (rd, content) = let val tip = case rd of
-                                                     TextPrimIO.RD { ioDesc = SOME ioDesc, ... } => ref (READABLE (Readable.fromValue (IODesc.fromDesc ioDesc)))
+                                                     TextPrimIO.RD { name, ioDesc = SOME ioDesc, ... } => ref (READABLE { readable = Readable.fromValue (IODesc.fromDesc ioDesc), name = name })
                                                    | _ => ref (PRIM_READER rd)
                                    in if CharVector.length content > 0 then
                                           ref (BUFFERED { buffer = content, position = 0, next = tip })
@@ -144,26 +143,26 @@ local
                                    end
     local
         fun doGetReader (ins, acc) = case !ins of
-                                         READABLE stream => (ins := CLOSED; (Readable.getReader stream, CharVectorSlice.concat (List.rev acc)))
-                                       | PRIM_READER rd => (ins := CLOSED; (rd, CharVectorSlice.concat (List.rev acc)))
+                                         READABLE { readable, name } => (ins := CLOSED name; (Readable.getReader (readable, name), CharVectorSlice.concat (List.rev acc)))
+                                       | PRIM_READER (rd as TextPrimIO.RD { name, ... }) => (ins := CLOSED name; (rd, CharVectorSlice.concat (List.rev acc)))
                                        | BUFFERED { buffer, position, next } => doGetReader (next, CharVectorSlice.slice (buffer, position, NONE) :: acc)
-                                       | CLOSED => raise IO.Io { name = "<unknown>", function = "getReader", cause = IO.ClosedStream }
+                                       | CLOSED name => raise IO.Io { name = name, function = "getReader", cause = IO.ClosedStream }
     in
     fun getReader ins = doGetReader (ins, [])
     end
     (*
     fun filePosIn ins = case !ins of
-                            READABLE _ => raise IO.Io { name = "<unknown>", function = "filePosIn", cause = IO.RandomAccessNotSupported }
+                            READABLE { name, ... } => raise IO.Io { name = name, function = "filePosIn", cause = IO.RandomAccessNotSupported }
                           | PRIM_READER (RD { getPos = NONE, ... }) => raise IO.Io { name = "<unknown>", function = "filePosIn", cause = IO.RandomAccessNotSupported }
                           | PRIM_READER (RD { getPos = SOME getPos, ... }) => getPos ()
                           | BUFFERED { buffer, position, next } => TODO
-                          | CLOSED => raise IO.Io { name = "<unknown>", function = "filePosIn", cause = IO.ClosedStream }
+                          | CLOSED name => raise IO.Io { name = name, function = "filePosIn", cause = IO.ClosedStream }
      *)
-    fun fillBuffer (stream : Readable.readable, f : instream)
-        = let val chunks = Readable.readSome stream
+    fun fillBuffer (stream as { readable, ... } : { readable : Readable.readable, name : string }, f : instream)
+        = let val chunks = Readable.readSome readable
           in f := List.foldr (fn (chunk, rest) => BUFFERED { buffer = chunk, position = 0, next = ref rest }) (READABLE stream) chunks
           end
-    fun fillBufferWithReader (rd as TextPrimIO.RD { readVec, readArr, readVecNB, readArrNB, block, ... } : reader, f : instream, n)
+    fun fillBufferWithReader (rd as TextPrimIO.RD { name, readVec, readArr, readVecNB, readArrNB, block, ... } : reader, f : instream, n)
         = let val chunk = case readVec of
                               SOME rv => rv n
                             | NONE => case readArr of
@@ -192,34 +191,34 @@ local
                                                                          | NONE => "" (* should not occur *)
                                                                      )
                                                       end
-                                                    | _ => raise IO.Io { name = "<unknown>", function = "<unknown>", cause = IO.BlockingNotSupported }
+                                                    | _ => raise IO.Io { name = name, function = "<unknown>", cause = IO.BlockingNotSupported }
           in f := BUFFERED { buffer = chunk, position = 0, next = ref (PRIM_READER rd) }
           end
     fun input (f : instream) = case !f of
-                                   READABLE stream => if Readable.rawEnded stream then
-                                                          ("", f)
-                                                      else
-                                                          (fillBuffer (stream, f); input f)
+                                   READABLE (s as { readable, name = _ }) => if Readable.rawEnded readable then
+                                                                                 ("", f)
+                                                                             else
+                                                                                 (fillBuffer (s, f); input f)
                                  | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... }) => (fillBufferWithReader (rd, f, chunkSize); input f)
                                  | BUFFERED { buffer, position, next } => (String.extract (buffer, position, NONE), next)
-                                 | CLOSED => ("", f)
+                                 | CLOSED _ => ("", f)
     fun newStreamWithBufferAndPosition (buffer, position, next) = if position >= String.size buffer then
                                                                       next
                                                                   else
                                                                       ref (BUFFERED { buffer = buffer, position = position, next = next })
     fun input1 (f : instream) = case !f of
-                                    READABLE stream => if Readable.rawEnded stream then
-                                                           NONE
-                                                       else
-                                                           (fillBuffer (stream, f); input1 f)
-                                  | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... })=> (fillBufferWithReader (rd, f, chunkSize); input1 f)
+                                    READABLE (s as { readable, name = _ }) => if Readable.rawEnded readable then
+                                                                                  NONE
+                                                                              else
+                                                                                  (fillBuffer (s, f); input1 f)
+                                  | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... }) => (fillBufferWithReader (rd, f, chunkSize); input1 f)
                                   | BUFFERED { buffer, position, next } => SOME (String.sub (buffer, position), newStreamWithBufferAndPosition (buffer, position + 1, next))
-                                  | CLOSED => NONE
+                                  | CLOSED _ => NONE
     fun inputN (f : instream, n) = case !f of
-                                       READABLE stream => if Readable.rawEnded stream then
-                                                              ("", f)
-                                                          else
-                                                              (fillBuffer (stream, f); inputN (f, n))
+                                       READABLE (s as { readable, name = _ }) => if Readable.rawEnded readable then
+                                                                                     ("", f)
+                                                                                 else
+                                                                                     (fillBuffer (s, f); inputN (f, n))
                                      | PRIM_READER rd => (fillBufferWithReader (rd, f, n); inputN (f, n))
                                      | BUFFERED { buffer, position, next } => let val newPosition = position + n
                                                                               in if newPosition <= String.size buffer then
@@ -230,12 +229,12 @@ local
                                                                                      in (buffer0 ^ buffer1, next)
                                                                                      end
                                                                               end
-                                     | CLOSED => ("", f)
+                                     | CLOSED _ => ("", f)
     fun inputLine (f : instream) = case !f of
-                                       READABLE stream => if Readable.rawEnded stream then
-                                                              NONE
-                                                          else
-                                                              (fillBuffer (stream, f); inputLine f)
+                                       READABLE (s as { readable, name = _ }) => if Readable.rawEnded readable then
+                                                                                     NONE
+                                                                                 else
+                                                                                     (fillBuffer (s, f); inputLine f)
                                      | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... }) => (fillBufferWithReader (rd, f, chunkSize); inputLine f)
                                      | BUFFERED { buffer, position, next } => let fun findNewline i = if i >= String.size buffer then
                                                                                                           case inputLine next of
@@ -249,7 +248,7 @@ local
                                                                                                           findNewline (i + 1)
                                                                               in findNewline position
                                                                               end
-                                     | CLOSED => NONE
+                                     | CLOSED _ => NONE
     fun inputAll (f : instream) = let fun go (contentsRev, f) = case input f of
                                                                     ("", f) => (String.concat (List.rev contentsRev), f)
                                                                   | (content, f) => go (content :: contentsRev, f)
@@ -259,29 +258,29 @@ local
                                          raise Size
                                      else
                                          case !f of
-                                             READABLE stream => if Readable.rawEnded stream then
-                                                                    SOME 0
-                                                                else
-                                                                    NONE
+                                             READABLE { readable, name = _ } => if Readable.rawEnded readable then
+                                                                                    SOME 0
+                                                                                else
+                                                                                    NONE
                                            | PRIM_READER (TextPrimIO.RD { canInput = SOME canInput, ... }) => if canInput () then
                                                                                                                   SOME 1 (* Is this OK? *)
                                                                                                               else
                                                                                                                   NONE
                                            | PRIM_READER (TextPrimIO.RD { name, canInput = NONE, ... }) => raise IO.Io { name = name, function = "canInput", cause = IO.NonblockingNotSupported }
                                            | BUFFERED { buffer, position, next } => SOME (Int.min (n, String.size buffer - position))
-                                           | CLOSED => SOME 0
+                                           | CLOSED _ => SOME 0
     fun closeIn (f : instream) = case !f of
-                                     READABLE stream => ( Readable.destroy stream (* TODO: release descriptor if there is one *)
-                                                        ; f := CLOSED
-                                                        )
-                                   | PRIM_READER (TextPrimIO.RD { close, ... }) => ( close (); f := CLOSED )
+                                     READABLE { readable, name } => ( Readable.destroy readable (* TODO: release descriptor if there is one *)
+                                                                    ; f := CLOSED name
+                                                                    )
+                                   | PRIM_READER (TextPrimIO.RD { name, close, ... }) => ( close (); f := CLOSED name )
                                    | BUFFERED { buffer, position, next } => closeIn next
-                                   | CLOSED => ()
+                                   | CLOSED _ => ()
     fun endOfStream (f : instream) = case !f of
-                                         READABLE stream => Readable.rawEnded stream
+                                         READABLE { readable, name = _ } => Readable.rawEnded readable
                                        | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... }) => (fillBufferWithReader (rd, f, chunkSize); endOfStream f)
                                        | BUFFERED { buffer, position, next } => false
-                                       | CLOSED => true
+                                       | CLOSED _ => true
     end (* structure Instream *)
     structure Writable :> sig
                   type writable
@@ -289,7 +288,7 @@ local
                   val output : writable * vector -> unit
                   val outputAndFlush : writable * vector -> unit
                   val closeOut : writable -> unit
-                  val getWriter : writable -> TextPrimIO.writer
+                  val getWriter : writable * string -> TextPrimIO.writer
                   val fromValue : JavaScript.value -> writable
                   val toValue : writable -> JavaScript.value
               end = struct
@@ -317,9 +316,8 @@ local
                                                                         in ignore (JavaScript.method (stream, "end") #[JavaScript.unsafeToValue callback])
                                                                         end
                                                 )
-    fun getWriter (stream : writable)
-        = let val name = "<writable>"
-              val ioDesc = IODesc.toDesc stream
+    fun getWriter (stream : writable, name : string)
+        = let val ioDesc = IODesc.toDesc stream
               (* TODO: Should we register 'close' event handler to release the descriptor? *)
           in TextPrimIO.WR { name = name
                            , chunkSize = 1024 (* Should we see 'writableHighWaterMark' property? *)
@@ -361,7 +359,7 @@ local
                   val filePosOut : out_pos -> pos
                   val outputSubstr : outstream * substring -> unit
                   val outputAndFlush : outstream * vector -> unit (* for implementing print *)
-                  val fromWritable : Writable.writable * IO.buffer_mode -> outstream
+                  val fromWritable : Writable.writable * IO.buffer_mode * string -> outstream
               end = struct
     type elem = char
     type vector = string
@@ -369,7 +367,7 @@ local
     datatype buffer = NO_BUF
                     | LINE_BUF of vector list ref
                     | BLOCK_BUF of vector list ref
-    datatype outstream = JS_WRITABLE of { writable : Writable.writable, buffer_mode : IO.buffer_mode ref }
+    datatype outstream = JS_WRITABLE of { writable : Writable.writable, buffer_mode : IO.buffer_mode ref, name : string }
                        | PRIM_WRITER of { writer : writer
                                         , buffer_mode : IO.buffer_mode ref
                                         , buffer : vector list ref (* the last-written item is the first in the list *)
@@ -380,8 +378,8 @@ local
                    , buffer : vector list ref (* the last-written item is the first in the list *)
                    , pos : pos
                    }
-    fun fromWritable (w, mode) = JS_WRITABLE { writable = w, buffer_mode = ref mode }
-    fun output (JS_WRITABLE { writable, buffer_mode }, content)
+    fun fromWritable (w, mode, name) = JS_WRITABLE { writable = w, buffer_mode = ref mode, name = name }
+    fun output (JS_WRITABLE { writable, buffer_mode, name = _ }, content)
         = (case !buffer_mode of
                IO.NO_BUF => Writable.outputAndFlush (writable, content)
              | IO.LINE_BUF => if CharVector.exists (fn c => c = #"\n") content then
@@ -419,7 +417,7 @@ local
                               end
     fun output1 (stream, elem) = output (stream, String.str elem)
     fun outputSubstr (stream, substring) = output (stream, Substring.string substring)
-    fun outputAndFlush (JS_WRITABLE { writable, buffer_mode }, content) = Writable.outputAndFlush (writable, content)
+    fun outputAndFlush (JS_WRITABLE { writable, buffer_mode, name = _ }, content) = Writable.outputAndFlush (writable, content)
       | outputAndFlush (PRIM_WRITER { writer = TextPrimIO.WR { name, chunkSize, writeVec, ... }, buffer_mode, buffer }, content)
         = let val content' = String.concat (List.rev (content :: !buffer))
           in case writeVec of
@@ -445,7 +443,7 @@ local
         = ( flushOutPrim (name, writeVec, buffer)
           ; close ()
           ) (* TODO: Make idempotent *)
-    fun setBufferMode (JS_WRITABLE { writable, buffer_mode }, mode)
+    fun setBufferMode (JS_WRITABLE { writable, buffer_mode, name = _ }, mode)
         = ( if mode = IO.NO_BUF then
                 Writable.outputAndFlush (writable, "")
             else
@@ -461,23 +459,25 @@ local
           )
     fun getBufferMode (JS_WRITABLE { buffer_mode, ... }) = !buffer_mode
       | getBufferMode (PRIM_WRITER { buffer_mode, ... }) = !buffer_mode
-    fun mkOutstream (TextPrimIO.WR { ioDesc = SOME ioDesc, ... }, mode)
+    fun mkOutstream (TextPrimIO.WR { name, ioDesc = SOME ioDesc, ... }, mode)
         = let val writable = Writable.fromValue (IODesc.fromDesc ioDesc) (* TODO: type check? *)
-          in JS_WRITABLE { writable = writable, buffer_mode = ref mode }
+          in JS_WRITABLE { writable = writable, buffer_mode = ref mode, name = name }
           end
       | mkOutstream (w, mode) = PRIM_WRITER { writer = w, buffer_mode = ref mode, buffer = ref [] }
-    fun getWriter (JS_WRITABLE { writable, buffer_mode })
-        = (Writable.outputAndFlush (writable, ""); (Writable.getWriter writable, !buffer_mode))
+    fun getWriter (JS_WRITABLE { writable, buffer_mode, name })
+        = (Writable.outputAndFlush (writable, ""); (Writable.getWriter (writable, name), !buffer_mode))
       | getWriter (PRIM_WRITER { writer as TextPrimIO.WR { name, writeVec, ... }, buffer_mode, buffer })
         = ( flushOutPrim (name, writeVec, buffer)
                          (* TODO: Mark the stream as terminated *)
           ; (writer, !buffer_mode)
           )
-    fun getPosOut (PRIM_WRITER { writer as TextPrimIO.WR { name, writeVec, getPos = SOME getPos, ... }, buffer_mode, buffer })
-        = ( flushOutPrim (name, writeVec, buffer)
-          ; { writer = writer, buffer_mode = buffer_mode, buffer = buffer, pos = getPos () }
-          )
-      | getPosOut _ = raise IO.Io { name = "<unknown>", function = "getPosOut", cause = IO.RandomAccessNotSupported }
+    fun getPosOut (JS_WRITABLE { name, ... }) = raise IO.Io { name = name, function = "getPosOut", cause = IO.RandomAccessNotSupported }
+      | getPosOut (PRIM_WRITER { writer as TextPrimIO.WR { name, writeVec, getPos = getPos, ... }, buffer_mode, buffer })
+        = case getPos of
+              SOME getPos => ( flushOutPrim (name, writeVec, buffer)
+                             ; { writer = writer, buffer_mode = buffer_mode, buffer = buffer, pos = getPos () }
+                             )
+            | NONE => raise IO.Io { name = name, function = "getPosOut", cause = IO.RandomAccessNotSupported }
     fun setPosOut { writer as TextPrimIO.WR { name, setPos, ... }, buffer_mode, buffer, pos }
         = case setPos of
               SOME setPos => ( setPos pos
@@ -651,9 +651,9 @@ local
     fun mkInstream stream = ref stream
     fun getInstream stream = !stream
     fun setInstream (stream, stream') = stream := stream'
-    fun openIn path = ref (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)]))
+    fun openIn path = ref (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)], path))
     fun openString content = ref (StreamIO.openVector content)
-    val stdIn = LunarML.assumeDiscardable (fn () => ref (StreamIO.openReadable stdin)) ()
+    val stdIn = LunarML.assumeDiscardable (fn () => ref (StreamIO.openReadable (stdin, "<stdin>"))) ()
     fun scanStream scan ins = case scan StreamIO.input1 (!ins) of
                                   NONE => NONE
                                 | SOME (x, ins') => ( ins := ins'
@@ -715,15 +715,15 @@ local
     fun flushOut stream = StreamIO.flushOut (!stream)
     fun closeOut stream = StreamIO.closeOut (!stream)
     fun openOut path = let val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
-                       in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF))
+                       in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
                        end
     fun openAppend path = let val options = JavaScript.newObject ()
                               val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
                               val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
-                          in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF))
+                          in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
                           end
-    val stdOut = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF))) ()
-    val stdErr = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF))) ()
+    val stdOut = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF, "<stdout>"))) ()
+    val stdErr = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF, "<stderr>"))) ()
     fun print s = Outstream.outputAndFlush (!stdOut, s)
     end (* structure Outstream *)
 in
