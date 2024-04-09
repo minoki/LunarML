@@ -282,36 +282,224 @@ local
                                        | PRIM_READER (rd as TextPrimIO.RD { chunkSize, ... }) => (fillBufferWithReader (rd, f, chunkSize); endOfStream f)
                                        | BUFFERED { buffer, position, next } => false
                                        | CLOSED => true
-    end
+    end (* structure Instream *)
+    structure Writable :> sig
+                  type writable
+                  type vector = string
+                  val output : writable * vector -> unit
+                  val outputAndFlush : writable * vector -> unit
+                  val closeOut : writable -> unit
+                  val getWriter : writable -> TextPrimIO.writer
+                  val fromValue : JavaScript.value -> writable
+                  val toValue : writable -> JavaScript.value
+              end = struct
+    type writable = JavaScript.value
+    type vector = string
+    fun output (stream, chunk) = let val result = JavaScript.method (stream, "write") #[JavaScript.unsafeToValue chunk (* as Uint8Array *)]
+                                 in if JavaScript.isFalsy result then
+                                        DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
+                                                                                      let val onDrain = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
+                                                                                      in JavaScript.method (stream, "once") #[JavaScript.fromWideString "drain", onDrain]
+                                                                                       ; ()
+                                                                                      end
+                                                              )
+                                    else
+                                        ()
+                                 end
+    fun outputAndFlush (stream, chunk) = DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
+                                                                                       let val callback = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
+                                                                                       in JavaScript.method (stream, "write") #[JavaScript.unsafeToValue chunk (* as Uint8Array *), JavaScript.null, callback]
+                                                                                        ; ()
+                                                                                       end
+                                                               )
+    fun closeOut stream = DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
+                                                                        let val callback = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
+                                                                        in ignore (JavaScript.method (stream, "end") #[JavaScript.unsafeToValue callback])
+                                                                        end
+                                                )
+    fun getWriter (stream : writable)
+        = let val name = "<writable>"
+              val ioDesc = IODesc.toDesc stream
+              (* TODO: Should we register 'close' event handler to release the descriptor? *)
+          in TextPrimIO.WR { name = name
+                           , chunkSize = 1024 (* Should we see 'writableHighWaterMark' property? *)
+                           , writeVec = SOME (fn slice => (outputAndFlush (stream, CharVectorSlice.vector slice); CharVectorSlice.length slice)) (* TODO: Avoid copying *)
+                           , writeArr = NONE (* TODO *)
+                           , writeVecNB = NONE (* TODO *)
+                           , writeArrNB = NONE (* TODO *)
+                           , block = NONE
+                           , canOutput = NONE (* 'writableNeedDrain' property? *)
+                           , getPos = NONE
+                           , setPos = NONE
+                           , endPos = NONE
+                           , verifyPos = NONE
+                           , close = fn () => (IODesc.release ioDesc; closeOut stream)
+                           , ioDesc = SOME ioDesc
+                           }
+          end
+    fun fromValue (stream : JavaScript.value) = stream
+    val toValue = fromValue
+    end (* structure Writable *)
+    structure Outstream : sig
+                  (* outstream-related part of TEXT_STREAM_IO *)
+                  type elem = char
+                  type vector = string
+                  type outstream
+                  type out_pos
+                  type pos = TextPrimIO.pos
+                  type writer = TextPrimIO.writer
+                  val output : outstream * vector -> unit
+                  val output1 : outstream * elem -> unit
+                  val flushOut : outstream -> unit
+                  val closeOut : outstream -> unit
+                  val setBufferMode : outstream * IO.buffer_mode -> unit
+                  val getBufferMode : outstream -> IO.buffer_mode
+                  val mkOutstream : writer * IO.buffer_mode -> outstream
+                  val getWriter : outstream -> writer * IO.buffer_mode
+                  val getPosOut : outstream -> out_pos
+                  val setPosOut : out_pos -> outstream
+                  val filePosOut : out_pos -> pos
+                  val outputSubstr : outstream * substring -> unit
+                  val outputAndFlush : outstream * vector -> unit (* for implementing print *)
+                  val fromWritable : Writable.writable * IO.buffer_mode -> outstream
+              end = struct
+    type elem = char
+    type vector = string
+    type writer = TextPrimIO.writer
+    datatype buffer = NO_BUF
+                    | LINE_BUF of vector list ref
+                    | BLOCK_BUF of vector list ref
+    datatype outstream = JS_WRITABLE of { writable : Writable.writable, buffer_mode : IO.buffer_mode ref }
+                       | PRIM_WRITER of { writer : writer
+                                        , buffer_mode : IO.buffer_mode ref
+                                        , buffer : vector list ref (* the last-written item is the first in the list *)
+                                        }
+    type pos = TextPrimIO.pos
+    type out_pos = { writer : writer
+                   , buffer_mode : IO.buffer_mode ref
+                   , buffer : vector list ref (* the last-written item is the first in the list *)
+                   , pos : pos
+                   }
+    fun fromWritable (w, mode) = JS_WRITABLE { writable = w, buffer_mode = ref mode }
+    fun output (JS_WRITABLE { writable, buffer_mode }, content)
+        = (case !buffer_mode of
+               IO.NO_BUF => Writable.outputAndFlush (writable, content)
+             | IO.LINE_BUF => if CharVector.exists (fn c => c = #"\n") content then
+                                  Writable.outputAndFlush (writable, content)
+                              else
+                                  Writable.output (writable, content)
+             | IO.BLOCK_BUF => Writable.output (writable, content)
+          )
+      | output (PRIM_WRITER { writer = TextPrimIO.WR { name, chunkSize, writeVec, ... }, buffer_mode, buffer }, content)
+        = case !buffer_mode of
+              IO.NO_BUF => (case writeVec of
+                                SOME writeVec => ignore (writeVec (CharVectorSlice.full content)) (* TODO: should we retry if partially written? *)
+                              | NONE => raise IO.Io { name = name, function = "output", cause = IO.BlockingNotSupported }
+                           )
+            | IO.LINE_BUF => if CharVector.exists (fn c => c = #"\n") content then
+                                 let val content' = String.concat (List.rev (content :: !buffer))
+                                 in case writeVec of
+                                        SOME writeVec => ignore (writeVec (CharVectorSlice.full content')) (* TODO: should we retry if partially written? *)
+                                      | NONE => raise IO.Io { name = name, function = "output", cause = IO.BlockingNotSupported }
+                                  ; buffer := []
+                                 end
+                             else
+                                 buffer := content :: !buffer
+            | IO.BLOCK_BUF => let val b = !buffer
+                                  val bufSize = List.foldl (fn (z, acc) => acc + String.size z) (String.size content) b
+                              in if bufSize >= chunkSize then
+                                     let val content' = String.concat (List.rev (content :: !buffer))
+                                     in case writeVec of
+                                            SOME writeVec => ignore (writeVec (CharVectorSlice.full content')) (* TODO: should we retry if partially written? *)
+                                          | NONE => raise IO.Io { name = name, function = "output", cause = IO.BlockingNotSupported }
+                                      ; buffer := []
+                                     end
+                                 else
+                                     buffer := content :: !buffer
+                              end
+    fun output1 (stream, elem) = output (stream, String.str elem)
+    fun outputSubstr (stream, substring) = output (stream, Substring.string substring)
+    fun outputAndFlush (JS_WRITABLE { writable, buffer_mode }, content) = Writable.outputAndFlush (writable, content)
+      | outputAndFlush (PRIM_WRITER { writer = TextPrimIO.WR { name, chunkSize, writeVec, ... }, buffer_mode, buffer }, content)
+        = let val content' = String.concat (List.rev (content :: !buffer))
+          in case writeVec of
+                 SOME writeVec => ignore (writeVec (CharVectorSlice.full content')) (* TODO: should we retry if partially written? *)
+               | NONE => raise IO.Io { name = name, function = "output", cause = IO.BlockingNotSupported }
+           ; buffer := []
+          end
+    fun flushOutPrim (name, writeVec, buffer)
+        = let val content = String.concat (List.rev (!buffer))
+              val () = buffer := []
+          in if content <> "" then
+                 case writeVec of
+                     SOME writeVec => ignore (writeVec (CharVectorSlice.full content)) (* TODO: should we retry if partially written? *)
+                   | NONE => raise IO.Io { name = name, function = "flushOut", cause = IO.BlockingNotSupported }
+             else
+                 ()
+          end
+    fun flushOut (JS_WRITABLE { writable, ... }) = Writable.outputAndFlush (writable, "")
+      | flushOut (PRIM_WRITER { writer = TextPrimIO.WR { name, writeVec, ... }, buffer_mode = _, buffer })
+        = flushOutPrim (name, writeVec, buffer)
+    fun closeOut (JS_WRITABLE { writable, ... }) = Writable.closeOut writable (* TODO: See 'writableEnded'? *)
+      | closeOut (PRIM_WRITER { writer = TextPrimIO.WR { name, writeVec, close, ... }, buffer_mode = _, buffer })
+        = ( flushOutPrim (name, writeVec, buffer)
+          ; close ()
+          ) (* TODO: Make idempotent *)
+    fun setBufferMode (JS_WRITABLE { writable, buffer_mode }, mode)
+        = ( if mode = IO.NO_BUF then
+                Writable.outputAndFlush (writable, "")
+            else
+                ()
+          ; buffer_mode := mode
+          )
+      | setBufferMode (PRIM_WRITER { writer = TextPrimIO.WR { name, writeVec, ... }, buffer_mode, buffer }, mode)
+        = ( if mode = IO.NO_BUF then
+                flushOutPrim (name, writeVec, buffer)
+            else
+                ()
+          ; buffer_mode := mode
+          )
+    fun getBufferMode (JS_WRITABLE { buffer_mode, ... }) = !buffer_mode
+      | getBufferMode (PRIM_WRITER { buffer_mode, ... }) = !buffer_mode
+    fun mkOutstream (TextPrimIO.WR { ioDesc = SOME ioDesc, ... }, mode)
+        = let val writable = Writable.fromValue (IODesc.fromDesc ioDesc) (* TODO: type check? *)
+          in JS_WRITABLE { writable = writable, buffer_mode = ref mode }
+          end
+      | mkOutstream (w, mode) = PRIM_WRITER { writer = w, buffer_mode = ref mode, buffer = ref [] }
+    fun getWriter (JS_WRITABLE { writable, buffer_mode })
+        = (Writable.outputAndFlush (writable, ""); (Writable.getWriter writable, !buffer_mode))
+      | getWriter (PRIM_WRITER { writer as TextPrimIO.WR { name, writeVec, ... }, buffer_mode, buffer })
+        = ( flushOutPrim (name, writeVec, buffer)
+                         (* TODO: Mark the stream as terminated *)
+          ; (writer, !buffer_mode)
+          )
+    fun getPosOut (PRIM_WRITER { writer as TextPrimIO.WR { name, writeVec, getPos = SOME getPos, ... }, buffer_mode, buffer })
+        = ( flushOutPrim (name, writeVec, buffer)
+          ; { writer = writer, buffer_mode = buffer_mode, buffer = buffer, pos = getPos () }
+          )
+      | getPosOut _ = raise IO.Io { name = "<unknown>", function = "getPosOut", cause = IO.RandomAccessNotSupported }
+    fun setPosOut { writer as TextPrimIO.WR { name, setPos, ... }, buffer_mode, buffer, pos }
+        = case setPos of
+              SOME setPos => ( setPos pos
+                             ; PRIM_WRITER { writer = writer, buffer_mode = buffer_mode, buffer = buffer }
+                             )
+            | NONE => raise IO.Io { name = name, function = "setPosOut", cause = IO.RandomAccessNotSupported }
+    fun filePosOut ({ pos, ... } : out_pos) = pos
+    end (* structure Outstream *)
 in
 structure TextIO :> sig
-              type instream
-              type vector = string
-              type elem = char
-              val input : instream -> vector
-              val input1 : instream -> elem option
-              val inputN : instream * int -> vector
-              val inputAll : instream -> vector
-              val canInput : instream * int -> int option
-              val lookahead : instream -> elem option
-              val closeIn : instream -> unit
-              val endOfStream : instream -> bool
-              val inputLine : instream -> string option
-              val openIn : string -> instream
-              val openString : string -> instream
-              val stdIn : instream
               structure StreamIO : sig
                             (* STREAM_IO *)
                             type elem = Char.char
                             type vector = CharVector.vector
 
                             type instream
-                            (* type outstream *)
-                            (* type out_pos *)
+                            type outstream
+                            type out_pos
 
                             type reader = TextPrimIO.reader
-                            (* type writer = TextPrimIO.writer *)
-                            (* type pos = TextPrimIO.pos *)
+                            type writer = TextPrimIO.writer
+                            type pos = TextPrimIO.pos
 
                             val input : instream -> vector * instream
                             val input1 : instream -> (elem * instream) option
@@ -321,43 +509,71 @@ structure TextIO :> sig
                             val closeIn : instream -> unit
                             val endOfStream : instream -> bool
 
-                            (* val output : outstream * vector -> unit *)
-                            (* val output1 : outstream * elem -> unit *)
-                            (* val flushOut : outstream -> unit *)
-                            (* val closeOut : outstream -> unit *)
+                            val output : outstream * vector -> unit
+                            val output1 : outstream * elem -> unit
+                            val flushOut : outstream -> unit
+                            val closeOut : outstream -> unit
 
                             val mkInstream : reader * vector -> instream
                             val getReader : instream -> reader * vector
                             (* val filePosIn : instream -> pos *)
 
-                            (* val setBufferMode : outstream * IO.buffer_mode -> unit *)
-                            (* val getBufferMode : outstream -> IO.buffer_mode *)
-                            (* val mkOutstream : writer * IO.buffer_mode -> outstream *)
-                            (* val getWriter : outstream -> writer * IO.buffer_mode *)
-                            (* val getPosOut : outstream -> out_pos *)
-                            (* val setPosOut : out_pos -> outstream *)
-                            (* val filePosOut : out_pos -> pos *)
+                            val setBufferMode : outstream * IO.buffer_mode -> unit
+                            val getBufferMode : outstream -> IO.buffer_mode
+                            val mkOutstream : writer * IO.buffer_mode -> outstream
+                            val getWriter : outstream -> writer * IO.buffer_mode
+                            val getPosOut : outstream -> out_pos
+                            val setPosOut : out_pos -> outstream
+                            val filePosOut : out_pos -> pos
 
                             (* TEXT_STREAM_IO: vector = CharVector.vector, elem = Char.char *)
                             val inputLine : instream -> (string * instream) option
-                            (* val outputSubstr : outstream * substring -> unit *)
+                            val outputSubstr : outstream * substring -> unit
                         end
+              (* IMPERATIVE_IO *)
+              type vector = CharVector.vector
+              type elem = Char.char
+
+              type instream
+              type outstream
+
+              val input : instream -> vector
+              val input1 : instream -> elem option
+              val inputN : instream * int -> vector
+              val inputAll : instream -> vector
+              val canInput : instream * int -> int option
+              val lookahead : instream -> elem option
+              val closeIn : instream -> unit
+              val endOfStream : instream -> bool
+
+              val output : outstream * vector -> unit
+              val output1 : outstream * elem -> unit
+              val flushOut : outstream -> unit
+              val closeOut : outstream -> unit
+
               val mkInstream : StreamIO.instream -> instream
               val getInstream : instream -> StreamIO.instream
               val setInstream : instream * StreamIO.instream -> unit
-              val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
 
-              type outstream
-              val output : outstream * vector -> unit
-              val output1 : outstream * elem -> unit
-              val outputSubstr : outstream * Substring.substring -> unit
-              val flushOut : outstream -> unit
-              val closeOut : outstream -> unit
+              val mkOutstream : StreamIO.outstream -> outstream
+              val getOutstream : outstream -> StreamIO.outstream
+              val setOutstream : outstream * StreamIO.outstream -> unit
+              val getPosOut : outstream -> StreamIO.out_pos
+              val setPosOut : outstream * StreamIO.out_pos -> unit
+
+              (* TEXT_IO *)
+              val inputLine : instream -> string option
+              val outputSubstr : outstream * substring -> unit
+
+              val openIn : string -> instream
               val openOut : string -> outstream
               val openAppend : string -> outstream
+              val openString : string -> instream
+              val stdIn : instream
               val stdOut : outstream
               val stdErr : outstream
               val print : string -> unit
+              val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
           end = struct
 local
     _esImport [pure] { stdin, stdout, stderr } from "node:process";
@@ -443,11 +659,36 @@ local
                                 | SOME (x, ins') => ( ins := ins'
                                                     ; SOME x
                                                     )
-    end
+    end (* structure Instream *)
     structure Outstream :> sig
+                  structure StreamIO : sig
+                                type elem = Char.char
+                                type vector = CharVector.vector
+                                type outstream
+                                type out_pos
+                                type writer = TextPrimIO.writer
+                                type pos = TextPrimIO.pos
+                                val output : outstream * vector -> unit
+                                val output1 : outstream * elem -> unit
+                                val flushOut : outstream -> unit
+                                val closeOut : outstream -> unit
+                                val setBufferMode : outstream * IO.buffer_mode -> unit
+                                val getBufferMode : outstream -> IO.buffer_mode
+                                val mkOutstream : writer * IO.buffer_mode -> outstream
+                                val getWriter : outstream -> writer * IO.buffer_mode
+                                val getPosOut : outstream -> out_pos
+                                val setPosOut : out_pos -> outstream
+                                val filePosOut : out_pos -> pos
+                                val outputSubstr : outstream * substring -> unit
+                            end
                   type outstream
                   type vector = string
                   type elem = char
+                  val mkOutstream : StreamIO.outstream -> outstream
+                  val getOutstream : outstream -> StreamIO.outstream
+                  val setOutstream : outstream * StreamIO.outstream -> unit
+                  val getPosOut : outstream -> StreamIO.out_pos
+                  val setPosOut : outstream * StreamIO.out_pos -> unit
                   val output : outstream * vector -> unit
                   val output1 : outstream * elem -> unit
                   val outputSubstr : outstream * Substring.substring -> unit
@@ -459,49 +700,38 @@ local
                   val stdErr : outstream
                   val print : string -> unit
               end = struct
-    type outstream = JavaScript.value (* Writable *)
-    type vector = string
-    type elem = char
-    fun output (stream, chunk) = let val result = JavaScript.method (stream, "write") #[JavaScript.unsafeToValue chunk (* as Uint8Array *)]
-                                 in if JavaScript.isFalsy result then
-                                        DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
-                                                                                      let val onDrain = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
-                                                                                      in JavaScript.method (stream, "once") #[JavaScript.fromWideString "drain", onDrain]
-                                                                                       ; ()
-                                                                                      end
-                                                              )
-                                    else
-                                        ()
-                                 end
-    fun outputAndFlush (stream, chunk) = DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
-                                                                                       let val callback = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
-                                                                                       in JavaScript.method (stream, "write") #[JavaScript.unsafeToValue chunk (* as Uint8Array *), JavaScript.null, callback]
-                                                                                        ; ()
-                                                                                       end
-                                                               )
-    fun output1 (stream, elem) = output (stream, String.str elem)
-    fun outputSubstr (stream, substring) = output (stream, Substring.string substring)
-    fun flushOut stream = outputAndFlush (stream, "")
-    fun closeOut stream = DelimCont.withSubCont (DelimCont.topLevel, fn cont : (unit, unit) DelimCont.subcont =>
-                                                                        let val callback = JavaScript.callback (fn _ => DelimCont.pushSubCont (cont, fn () => ()))
-                                                                        in ignore (JavaScript.method (stream, "end") #[JavaScript.unsafeToValue callback])
-                                                                        end
-                                                )
-    fun openOut path = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
+    structure StreamIO = Outstream
+    type outstream = StreamIO.outstream ref
+    type vector = StreamIO.vector
+    type elem = StreamIO.elem
+    val mkOutstream = ref : StreamIO.outstream -> outstream
+    val getOutstream = ! : outstream -> StreamIO.outstream
+    val setOutstream = op := : outstream * StreamIO.outstream -> unit
+    fun getPosOut stream = StreamIO.getPosOut (!stream)
+    fun setPosOut (stream, p) = stream := StreamIO.setPosOut p
+    fun output (stream, chunk) = StreamIO.output (!stream, chunk)
+    fun output1 (stream, elem) = StreamIO.output1 (!stream, elem)
+    fun outputSubstr (stream, substring) = StreamIO.outputSubstr (!stream, substring)
+    fun flushOut stream = StreamIO.flushOut (!stream)
+    fun closeOut stream = StreamIO.closeOut (!stream)
+    fun openOut path = let val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
+                       in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF))
+                       end
     fun openAppend path = let val options = JavaScript.newObject ()
                               val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
-                          in JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
+                              val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
+                          in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF))
                           end
-    val stdOut = stdout
-    val stdErr = stderr
-    fun print s = outputAndFlush (stdOut, s)
-    end
+    val stdOut = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF))) ()
+    val stdErr = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF))) ()
+    fun print s = Outstream.outputAndFlush (!stdOut, s)
+    end (* structure Outstream *)
 in
 open Instream
 open Outstream
 structure StreamIO = struct
 open Instream.StreamIO
-(* open Outstream.StreamIO *)
+open Outstream.StreamIO
 end
 end (* local *)
 end (* structure TextIO *)
