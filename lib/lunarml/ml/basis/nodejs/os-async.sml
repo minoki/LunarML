@@ -15,6 +15,8 @@ structure OS :> sig
                         end
               structure IO : sig
                             eqtype iodesc
+                            val hash : iodesc -> word
+                            val compare : iodesc * iodesc -> order
                         end
               structure Path : OS_PATH
               structure Process : sig
