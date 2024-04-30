@@ -15,6 +15,8 @@ structure OS :> sig
                         end
               structure IO : sig
                             eqtype iodesc
+                            val hash : iodesc -> word
+                            val compare : iodesc * iodesc -> order
                         end
               structure Path : OS_PATH
               structure Process : sig
@@ -29,7 +31,7 @@ structure OS :> sig
                         end
               eqtype syserror
               exception SysErr of string * syserror option
-          end = struct
+          end where type IO.iodesc = IODesc.iodesc = struct
 type syserror = string
 exception SysErr of string * syserror option
 structure FileSys = struct
@@ -166,9 +168,7 @@ val setTime : string * Time.time option -> unit = LunarML.assumeDiscardable use_
 val remove : string -> unit = fn filename => Lua.call0 Lua.Lib.os.remove #[Lua.fromString filename]
 val rename : { old : string, new : string } -> unit = fn { old, new } => Lua.call0 Lua.Lib.os.rename #[Lua.fromString old, Lua.fromString new]
 end (* structure FileSys *)
-structure IO = struct
-type iodesc = int (* tentative *)
-end
+structure IO = IODesc
 structure Path = struct
 exception Path
 exception InvalidArc

@@ -65,13 +65,14 @@ text.sml
 widetext-8.sml
 lua/time.sml
 lua/timer.sml
-lua/text-io.sml
-lua/bin-io.sml
 os-path-sig.sml
 os-path-unix.sml
 os-path-windows.sml
+lua/iodesc.sml
 lua/os.sml
 prim-io.sml
+lua/text-io.sml
+lua/bin-io.sml
 lua/command-line.sml
 delim-cont-$(DELIMITED_CONTINUATIONS).sml
 end
