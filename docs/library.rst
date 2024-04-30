@@ -1152,37 +1152,83 @@ Status: partial.
 .. code-block:: sml
 
    structure TextIO : sig
+     structure StreamIO : sig
+       (* STREAM_IO *)
+       type elem = Char.char
+       type vector = CharVector.vector
+
+       type instream
+       type outstream
+       type out_pos
+
+       type reader = TextPrimIO.reader
+       type writer = TextPrimIO.writer
+       type pos = TextPrimIO.pos
+
+       val input : instream -> vector * instream
+       val input1 : instream -> (elem * instream) option
+       val inputN : instream * int -> vector * instream
+       val inputAll : instream -> vector * instream
+       val canInput : instream * int -> int option
+       val closeIn : instream -> unit
+       val endOfStream : instream -> bool
+
+       val output : outstream * vector -> unit
+       val output1 : outstream * elem -> unit
+       val flushOut : outstream -> unit
+       val closeOut : outstream -> unit
+
+       val mkInstream : reader * vector -> instream
+       val getReader : instream -> reader * vector
+       (* val filePosIn : instream -> pos *)
+
+       val setBufferMode : outstream * IO.buffer_mode -> unit
+       val getBufferMode : outstream -> IO.buffer_mode
+       val mkOutstream : writer * IO.buffer_mode -> outstream
+       val getWriter : outstream -> writer * IO.buffer_mode
+       val getPosOut : outstream -> out_pos
+       val setPosOut : out_pos -> outstream
+       val filePosOut : out_pos -> pos
+
+       (* TEXT_STREAM_IO: vector = CharVector.vector, elem = Char.char *)
+       val inputLine : instream -> (string * instream) option
+       val outputSubstr : outstream * Substring.substring -> unit
+     end
      (* IMPERATIVE_IO *)
-     (* structure StreamIO : STREAM_IO *)
      type vector = string
      type elem = char
+
      type instream
      type outstream
+
      val input : instream -> vector
      val input1 : instream -> elem option
      val inputN : instream * int -> vector
      val inputAll : instream -> vector
-     (* val canInput : instream * int -> int option *)
-     (* val lookahead : instream -> elem option *)
+     val canInput : instream * int -> int option
+     val lookahead : instream -> elem option
      val closeIn : instream -> unit
      val endOfStream : instream -> bool
+
      val output : outstream * vector -> unit
      val output1 : outstream * elem -> unit
      val flushOut : outstream -> unit
      val closeOut : outstream -> unit
-     (* val mkInstream : StreamIO.instream -> instream *)
-     (* val getInstream : instream -> StreamIO.instream *)
-     (* val setInstream : instream * StreamIO.instream -> unit *)
-     (* val mkOutstream : StreamIO.outstream -> outstream *)
-     (* val getOutstream : outstream -> StreamIO.outstream *)
-     (* val setOutstream : outstream * StreamIO.outstream -> unit *)
-     (* val getPosOut : outstream -> StreamIO.out_pos *)
-     (* val setPosOut : outstream * StreamIO.out_pos -> unit *)
+
+     val mkInstream : StreamIO.instream -> instream
+     val getInstream : instream -> StreamIO.instream
+     val setInstream : instream * StreamIO.instream -> unit
+
+     val mkOutstream : StreamIO.outstream -> outstream
+     val getOutstream : outstream -> StreamIO.outstream
+     val setOutstream : outstream * StreamIO.outstream -> unit
+     val getPosOut : outstream -> StreamIO.out_pos
+     val setPosOut : outstream * StreamIO.out_pos -> unit
 
      (* TEXT_IO *)
-     (* structure StreamIO : TEXT_STREAM_IO where ... *)
      val inputLine : instream -> string option
-     (* val outputSubstr : outstream * substring -> unit *)
+     val outputSubstr : outstream * substring -> unit
+
      val openIn : string -> instream
      val openOut : string -> outstream
      val openAppend : string -> outstream
@@ -1190,7 +1236,7 @@ Status: partial.
      val stdOut : outstream
      val stdErr : outstream
      val print : string -> unit
-     (* val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option *)
+     val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
    end
 
 structure BinIO
