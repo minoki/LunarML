@@ -1317,9 +1317,9 @@ Status: partial.
        (* val compare : file_id * file_id -> order *)
      end
      structure IO : sig
-       (* eqtype iodesc *)
-       (* val hash : iodesc -> word *)
-       (* val compare : iodesc * iodesc -> order *)
+       eqtype iodesc
+       val hash : iodesc -> word
+       val compare : iodesc * iodesc -> order
        (* eqtype iodesc_kind *)
        (* val kind : iodesc -> iodesc_kind *)
        (* structure Kind *)
