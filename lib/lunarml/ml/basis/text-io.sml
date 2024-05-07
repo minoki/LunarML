@@ -37,7 +37,7 @@ signature TEXT_IO = sig
 
     (* TEXT_IO *)
     val inputLine : instream -> string option
-    val outputSubstr : outstream * substring -> unit
+    val outputSubstr : outstream * Substring.substring -> unit
 
     val openIn : string -> instream
     val openOut : string -> outstream

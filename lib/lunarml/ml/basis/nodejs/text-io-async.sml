@@ -516,162 +516,42 @@ structure TextIO :> TEXT_IO = struct
 local
     _esImport [pure] { stdin, stdout, stderr } from "node:process";
     _esImport [pure] { createReadStream, createWriteStream } from "node:fs";
-    structure Instream :> sig
-                  type instream
-                  type vector = string
-                  type elem = char
-                  val input : instream -> vector
-                  val input1 : instream -> elem option
-                  val inputN : instream * int -> vector
-                  val inputAll : instream -> vector
-                  val canInput : instream * int -> int option
-                  val lookahead : instream -> elem option
-                  val closeIn : instream -> unit
-                  val endOfStream : instream -> bool
-                  val inputLine : instream -> string option
-                  val openIn : string -> instream
-                  val openString : string -> instream
-                  val stdIn : instream
-                  structure StreamIO : sig
-                                type instream
-                                type elem = char
-                                type vector = string
-                                type reader = TextPrimIO.reader
-                                type pos = TextPrimIO.pos
-                                val input : instream -> vector * instream
-                                val input1 : instream -> (elem * instream) option
-                                val inputN : instream * int -> vector * instream
-                                val inputLine : instream -> (string * instream) option
-                                val inputAll : instream -> vector * instream
-                                val canInput : instream * int -> int option
-                                val closeIn : instream -> unit
-                                val endOfStream : instream -> bool
-                                val mkInstream : reader * vector -> instream
-                                val getReader : instream -> reader * vector
-                                val filePosIn : instream -> pos
-                                end
-                  val mkInstream : StreamIO.instream -> instream
-                  val getInstream : instream -> StreamIO.instream
-                  val setInstream : instream * StreamIO.instream -> unit
-                  val scanStream : ((Char.char, StreamIO.instream) StringCvt.reader -> ('a, StreamIO.instream) StringCvt.reader) -> instream -> 'a option
-              end = struct
-    type vector = string
-    type elem = char
-    structure StreamIO = Instream
-    type instream = Instream.instream ref
-    fun input stream = case StreamIO.input (!stream) of
-                           (chunk, stream') => ( stream := stream'
-                                               ; chunk
-                                               )
-    fun input1 stream = case StreamIO.input1 (!stream) of
-                            NONE => NONE
-                          | SOME (e, stream') => ( stream := stream'
-                                                 ; SOME e
-                                                 )
-    fun inputN (stream, n) = case StreamIO.inputN (!stream, n) of
-                                 (chunk, stream') => ( stream := stream'
-                                                     ; chunk
-                                                     )
-    fun inputLine stream = case StreamIO.inputLine (!stream) of
-                               NONE => NONE
-                             | SOME (line, stream') => ( stream := stream'
-                                                       ; SOME line
-                                                       )
-    fun inputAll stream = case StreamIO.inputAll (!stream) of
-                              (chunk, stream') => ( stream := stream'
-                                                  ; chunk
-                                                  )
-    fun canInput (stream, n) = StreamIO.canInput (!stream, n)
-    fun lookahead stream = case StreamIO.input1 (!stream) of
-                               NONE => NONE
-                             | SOME (e, _) => SOME e
-    fun closeIn stream = StreamIO.closeIn (!stream)
-    fun endOfStream stream = StreamIO.endOfStream (!stream)
-    fun mkInstream stream = ref stream
-    fun getInstream stream = !stream
-    fun setInstream (stream, stream') = stream := stream'
-    fun openIn path = ref (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)], path))
-    fun openString content = ref (StreamIO.openVector content)
-    val stdIn = LunarML.assumeDiscardable (fn () => ref (StreamIO.openReadable (stdin, "<stdin>"))) ()
-    fun scanStream scan ins = case scan StreamIO.input1 (!ins) of
-                                  NONE => NONE
-                                | SOME (x, ins') => ( ins := ins'
-                                                    ; SOME x
-                                                    )
-    end (* structure Instream *)
-    structure Outstream :> sig
-                  structure StreamIO : sig
-                                type elem = Char.char
-                                type vector = CharVector.vector
-                                type outstream
-                                type out_pos
-                                type writer = TextPrimIO.writer
-                                type pos = TextPrimIO.pos
-                                val output : outstream * vector -> unit
-                                val output1 : outstream * elem -> unit
-                                val flushOut : outstream -> unit
-                                val closeOut : outstream -> unit
-                                val setBufferMode : outstream * IO.buffer_mode -> unit
-                                val getBufferMode : outstream -> IO.buffer_mode
-                                val mkOutstream : writer * IO.buffer_mode -> outstream
-                                val getWriter : outstream -> writer * IO.buffer_mode
-                                val getPosOut : outstream -> out_pos
-                                val setPosOut : out_pos -> outstream
-                                val filePosOut : out_pos -> pos
-                                val outputSubstr : outstream * substring -> unit
-                            end
-                  type outstream
-                  type vector = string
-                  type elem = char
-                  val mkOutstream : StreamIO.outstream -> outstream
-                  val getOutstream : outstream -> StreamIO.outstream
-                  val setOutstream : outstream * StreamIO.outstream -> unit
-                  val getPosOut : outstream -> StreamIO.out_pos
-                  val setPosOut : outstream * StreamIO.out_pos -> unit
-                  val output : outstream * vector -> unit
-                  val output1 : outstream * elem -> unit
-                  val outputSubstr : outstream * Substring.substring -> unit
-                  val flushOut : outstream -> unit
-                  val closeOut : outstream -> unit
-                  val openOut : string -> outstream
-                  val openAppend : string -> outstream
-                  val stdOut : outstream
-                  val stdErr : outstream
-                  val print : string -> unit
-              end = struct
-    structure StreamIO = Outstream
-    type outstream = StreamIO.outstream ref
-    type vector = StreamIO.vector
-    type elem = StreamIO.elem
-    val mkOutstream = ref : StreamIO.outstream -> outstream
-    val getOutstream = ! : outstream -> StreamIO.outstream
-    val setOutstream = op := : outstream * StreamIO.outstream -> unit
-    fun getPosOut stream = StreamIO.getPosOut (!stream)
-    fun setPosOut (stream, p) = stream := StreamIO.setPosOut p
-    fun output (stream, chunk) = StreamIO.output (!stream, chunk)
-    fun output1 (stream, elem) = StreamIO.output1 (!stream, elem)
-    fun outputSubstr (stream, substring) = StreamIO.outputSubstr (!stream, substring)
-    fun flushOut stream = StreamIO.flushOut (!stream)
-    fun closeOut stream = StreamIO.closeOut (!stream)
-    fun openOut path = let val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
-                       in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
-                       end
-    fun openAppend path = let val options = JavaScript.newObject ()
-                              val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
-                              val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
-                          in ref (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
-                          end
-    val stdOut = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF, "<stdout>"))) ()
-    val stdErr = LunarML.assumeDiscardable (fn () => ref (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF, "<stderr>"))) ()
-    fun print s = Outstream.outputAndFlush (!stdOut, s)
-    end (* structure Outstream *)
+    structure StreamIOImpl = struct
+    open Instream
+    open Outstream
+    end
+    structure Base = ImperativeIO (structure StreamIO = StreamIOImpl
+                                   structure Vector = CharVector
+                                   structure Array = CharArray
+                                  )
 in
-open Instream
-open Outstream
-structure StreamIO = struct
-open Instream.StreamIO
-open Outstream.StreamIO
-end
+open Base
+structure StreamIO = StreamIOImpl
+fun inputLine stream = case StreamIO.inputLine (getInstream stream) of
+                           NONE => NONE
+                         | SOME (line, stream') => ( setInstream (stream, stream')
+                                                   ; SOME line
+                                                   )
+fun openIn path = mkInstream (StreamIO.openReadable (JavaScript.call createReadStream #[JavaScript.unsafeToValue path (* as Buffer? *)], path))
+fun openString content = mkInstream (StreamIO.openVector content)
+val stdIn = LunarML.assumeDiscardable (fn () => mkInstream (StreamIO.openReadable (stdin, "<stdin>"))) ()
+fun scanStream scan ins = case scan StreamIO.input1 (getInstream ins) of
+                              NONE => NONE
+                            | SOME (x, ins') => ( setInstream (ins, ins')
+                                                ; SOME x
+                                                )
+fun outputSubstr (outs, s) = StreamIO.outputSubstr (getOutstream outs, s)
+fun openOut path = let val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *)]
+                   in mkOutstream (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
+                   end
+fun openAppend path = let val options = JavaScript.newObject ()
+                          val () = JavaScript.set (options, JavaScript.fromWideString "flags", JavaScript.fromWideString "a")
+                          val writable = JavaScript.call createWriteStream #[JavaScript.unsafeToValue path (* as Buffer? *), options]
+                      in mkOutstream (Outstream.fromWritable (Writable.fromValue writable, IO.BLOCK_BUF, path))
+                      end
+val stdOut = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue stdout, IO.BLOCK_BUF, "<stdout>"))) ()
+val stdErr = LunarML.assumeDiscardable (fn () => mkOutstream (Outstream.fromWritable (Writable.fromValue stderr, IO.NO_BUF, "<stderr>"))) ()
+fun print s = Outstream.outputAndFlush (getOutstream stdOut, s)
 end (* local *)
 end (* structure TextIO *)
 end; (* local *)
