@@ -15,6 +15,7 @@ nodejs/os.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
+text-io.sml
 nodejs/command-line.sml
 end
 in
@@ -45,6 +46,7 @@ signature STRING
 signature STRING_CVT
 signature SUBSTRING
 signature TEXT
+signature TEXT_IO
 signature TEXT_STREAM_IO
 signature TIME
 signature TIMER

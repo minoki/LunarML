@@ -15,6 +15,7 @@ nodejs/os-async.sml
 prim-io.sml
 stream-io.sml
 imperative-io.sml
+text-io.sml
 nodejs/text-io-async.sml
 nodejs/bin-io-async.sml
 nodejs/command-line.sml
@@ -47,6 +48,7 @@ signature STRING
 signature STRING_CVT
 signature SUBSTRING
 signature TEXT
+signature TEXT_IO
 signature TEXT_STREAM_IO
 signature TIME
 signature TIMER
