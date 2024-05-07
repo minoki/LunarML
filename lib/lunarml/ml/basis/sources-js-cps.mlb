@@ -13,6 +13,8 @@ os-path-windows.sml
 nodejs/iodesc.sml
 nodejs/os-async.sml
 prim-io.sml
+stream-io.sml
+imperative-io.sml
 nodejs/text-io-async.sml
 nodejs/bin-io-async.sml
 nodejs/command-line.sml
@@ -24,6 +26,7 @@ signature BOOL
 signature BYTE
 signature CHAR
 signature DATE
+signature IMPERATIVE_IO
 signature INTEGER
 signature INT_INF
 signature IO
@@ -39,10 +42,12 @@ signature OS_PATH
 signature PACK_WORD
 signature PRIM_IO
 signature REAL
+signature STREAM_IO
 signature STRING
 signature STRING_CVT
 signature SUBSTRING
 signature TEXT
+signature TEXT_STREAM_IO
 signature TIME
 signature TIMER
 signature UNSAFE_MONO_ARRAY (* extension *)
@@ -164,6 +169,7 @@ structure WordArray
 structure WordArraySlice
 structure WordVector
 structure WordVectorSlice
+functor ImperativeIO
 functor PrimIO
 functor UnixPath (* extension *)
 functor WindowsPath (* extension *)

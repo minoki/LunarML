@@ -1586,17 +1586,121 @@ functor PrimIO
                                where type array_slice = ArraySlice.slice
                                where type pos = pos
 
+signature STREAM_IO
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: sml
+
+   signature STREAM_IO = sig
+     type elem
+     type vector
+
+     type instream
+     type outstream
+     type out_pos
+
+     type reader
+     type writer
+     type pos
+
+     val input : instream -> vector * instream
+     val input1 : instream -> (elem * instream) option
+     val inputN : instream * int -> vector * instream
+     val inputAll : instream -> vector * instream
+     val canInput : instream * int -> int option
+     val closeIn : instream -> unit
+     val endOfStream : instream -> bool
+
+     val output : outstream * vector -> unit
+     val output1 : outstream * elem -> unit
+     val flushOut : outstream -> unit
+     val closeOut : outstream -> unit
+
+     val mkInstream : reader * vector -> instream
+     val getReader : instream -> reader * vector
+     val filePosIn : instream -> pos
+
+     val setBufferMode : outstream * IO.buffer_mode -> unit
+     val getBufferMode : outstream -> IO.buffer_mode
+
+     val mkOutstream : writer * IO.buffer_mode -> outstream
+     val getWriter : outstream -> writer * IO.buffer_mode
+     val getPosOut : outstream -> out_pos
+     val setPosOut : out_pos -> outstream
+     val filePosOut : out_pos -> pos
+   end
+
+signature TEXT_STREAM_IO
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: sml
+
+   signature TEXT_STREAM_IO = sig
+     include STREAM_IO
+               where type vector = CharVector.vector
+               where type elem = Char.char
+     val inputLine : instream -> (string * instream) option
+     val outputSubstr : outstream * Substring.substring -> unit
+   end
+
+signature IMPERATIVE_IO
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: sml
+
+   signature IMPERATIVE_IO = sig
+     structure StreamIO : STREAM_IO
+
+     type vector = StreamIO.vector
+     type elem = StreamIO.elem
+
+     type instream
+     type outstream
+
+     val input : instream -> vector
+     val input1 : instream -> elem option
+     val inputN : instream * int -> vector
+     val inputAll : instream -> vector
+     val canInput : instream * int -> int option
+     val lookahead : instream -> elem option
+     val closeIn : instream -> unit
+     val endOfStream : instream -> bool
+
+     val output : outstream * vector -> unit
+     val output1 : outstream * elem -> unit
+     val flushOut : outstream -> unit
+     val closeOut : outstream -> unit
+
+     val mkInstream : StreamIO.instream -> instream
+     val getInstream : instream -> StreamIO.instream
+     val setInstream : instream * StreamIO.instream -> unit
+
+     val mkOutstream : StreamIO.outstream -> outstream
+     val getOutstream : outstream -> StreamIO.outstream
+     val setOutstream : outstream * StreamIO.outstream -> unit
+     val getPosOut : outstream -> StreamIO.out_pos
+     val setPosOut : outstream * StreamIO.out_pos -> unit
+   end
+
+functor ImperativeIO
+~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: sml
+
+   functor ImperativeIO (structure StreamIO : STREAM_IO
+                         structure Vector : MONO_VECTOR
+                         structure Array : MONO_ARRAY
+                         sharing type StreamIO.elem = Vector.elem = Array.elem
+                         sharing type StreamIO.vector = Vector.vector = Array.vector
+                        ) : IMPERATIVE_IO
+
 Not implemented yet
 ^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: sml
 
    signature BIN_IO
-   signature IMPERATIVE_IO
-   signature STREAM_IO
    signature TEXT_IO
-   structure WideTextIO :> TEXT_IO
-   signature TEXT_STREAM_IO
 
 .. _lua-structure:
 
