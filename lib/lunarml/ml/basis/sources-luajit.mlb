@@ -75,12 +75,14 @@ stream-io.sml
 imperative-io.sml
 text-io.sml
 lua/text-io.sml
+bin-io.sml
 lua/bin-io.sml
 lua/command-line.sml
 end
 in
 signature ARRAY
 signature ARRAY_SLICE
+signature BIN_IO
 signature BOOL
 signature BYTE
 signature CHAR
