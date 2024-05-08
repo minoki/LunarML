@@ -12,19 +12,19 @@ local
               end = struct
     type vector = Word8Vector.vector
     type readable = Lua.value
-    fun read (stream, n) = let val result = Vector.sub (Lua.method (stream, "read") #[Lua.fromInt n], 0)
+    fun read (stream, n) = let val result = Lua.method1 (stream, "read") #[Lua.fromInt n]
                            in if Lua.isFalsy result then
                                   NONE (* EOF *)
                               else
                                   SOME (Lua.unsafeFromValue result : vector)
                            end
-    fun readAll stream = let val result = Vector.sub (Lua.method (stream, "read") #[Lua.fromString "a"], 0)
+    fun readAll stream = let val result = Lua.method1 (stream, "read") #[Lua.fromString "a"]
                          in Lua.unsafeFromValue result : vector
                          end
-    fun endOfStream stream = let val result = Vector.sub (Lua.method (stream, "read") #[Lua.fromInt 0], 0)
+    fun endOfStream stream = let val result = Lua.method1 (stream, "read") #[Lua.fromInt 0]
                              in Lua.isFalsy result
                              end
-    fun close stream = ignore (Lua.method (stream, "close") #[])
+    fun close stream = Lua.method0 (stream, "close") #[]
     fun readVec stream n = case read (stream, n) of
                                NONE => Word8Vector.fromList []
                              | SOME s => s
@@ -243,21 +243,19 @@ local
     type writable = Lua.value
     type vector = Word8Vector.vector
     fun output (stream, name, s : vector)
-        = let val result = Lua.method (stream, "write") #[Lua.unsafeToValue s]
-          in if Lua.isFalsy (Vector.sub (result, 0)) then
-                 let val message = Vector.sub (result, 1)
-                 in raise IO.Io { name = name, function = "output", cause = Fail (Lua.unsafeFromValue message) }
-                 end
+        = let val (ok, message) = Lua.method2 (stream, "write") #[Lua.unsafeToValue s]
+          in if Lua.isFalsy ok then
+                 raise IO.Io { name = name, function = "output", cause = Fail (Lua.unsafeFromValue message) }
              else
                  ()
           end
-    fun flush stream = ignore (Lua.method (stream, "flush") #[])
+    fun flush stream = Lua.method0 (stream, "flush") #[]
     fun setBufferMode (stream, mode) = let val modeString = case mode of
                                                                 IO.NO_BUF => "no"
                                                               | _ (* IO.BLOCK_BUF | IO.LINE_BUF *) => "full"
-                                       in ignore (Lua.method (stream, "setvbuf") #[Lua.fromString modeString])
+                                       in Lua.method0 (stream, "setvbuf") #[Lua.fromString modeString]
                                        end
-    fun closeOut stream = ignore (Lua.method (stream, "close") #[])
+    fun closeOut stream = Lua.method0 (stream, "close") #[]
     fun getWriter (stream : writable, name : string)
         = let val ioDesc = IODesc.toDesc stream
           in BinPrimIO.WR { name = name
