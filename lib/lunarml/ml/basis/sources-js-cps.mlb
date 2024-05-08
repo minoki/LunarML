@@ -17,12 +17,14 @@ stream-io.sml
 imperative-io.sml
 text-io.sml
 nodejs/text-io-async.sml
+bin-io.sml
 nodejs/bin-io-async.sml
 nodejs/command-line.sml
 end
 in
 signature ARRAY
 signature ARRAY_SLICE
+signature BIN_IO
 signature BOOL
 signature BYTE
 signature CHAR

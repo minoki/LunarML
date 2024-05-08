@@ -389,9 +389,6 @@ local
     type elem = char
     type vector = string
     type writer = TextPrimIO.writer
-    datatype buffer = NO_BUF
-                    | LINE_BUF of vector list ref
-                    | BLOCK_BUF of vector list ref
     datatype outstream = JS_WRITABLE of { writable : Writable.writable, buffer_mode : IO.buffer_mode ref, name : string }
                        | PRIM_WRITER of { writer : writer
                                         , buffer_mode : IO.buffer_mode ref
