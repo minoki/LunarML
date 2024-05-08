@@ -40,6 +40,7 @@ structure FSyntax :> sig
                               | LuaCallOp (* value argument: function, arguments *)
                               | LuaCall1Op (* value argument: function, arguments *)
                               | LuaMethodOp of string (* value argument: object, arguments *)
+                              | LuaMethod1Op of string (* value argument: object, arguments *)
               datatype PatternSCon = IntegerConstant of IntInf.int
                                    | WordConstant of IntInf.int
                                    | CharConstant of char
@@ -151,6 +152,7 @@ datatype PrimOp = IntConstOp of IntInf.int (* 1 type argument *)
                 | LuaCallOp (* value argument: function, arguments *)
                 | LuaCall1Op (* value argument: function, arguments *)
                 | LuaMethodOp of string (* value argument: object, arguments *)
+                | LuaMethod1Op of string (* value argument: object, arguments *)
 datatype PatternSCon = IntegerConstant of IntInf.int
                      | WordConstant of IntInf.int
                      | CharConstant of char
@@ -557,6 +559,7 @@ fun print_PrimOp (IntConstOp x) = "IntConstOp " ^ IntInf.toString x
   | print_PrimOp LuaCallOp = "LuaCallOp"
   | print_PrimOp LuaCall1Op = "LuaCall1Op"
   | print_PrimOp (LuaMethodOp _) = "LuaMethodOp"
+  | print_PrimOp (LuaMethod1Op _) = "LuaMethod1Op"
 fun print_Pat (WildcardPat _) = "WildcardPat"
   | print_Pat (SConPat { sourceSpan = _, scon = IntegerConstant x, equality = _, cookedValue = _ }) = "SConPat(IntegerConstant " ^ IntInf.toString x ^ ")"
   | print_Pat (SConPat { sourceSpan = _, scon = WordConstant x, equality = _, cookedValue = _ }) = "SConPat(WordConstant " ^ IntInf.toString x ^ ")"

@@ -134,6 +134,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.LuaCallOp, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaCall1Op, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaMethodOp _, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaMethod1Op _, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true
@@ -164,6 +165,7 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
                                            | F.LuaCallOp => true
                                            | F.LuaCall1Op => true
                                            | F.LuaMethodOp _ => true
+                                           | F.LuaMethod1Op _ => true
                                         )
   | mayRaise (Record _) = false
   | mayRaise (ExnTag _) = false
@@ -1179,6 +1181,13 @@ fun simplifySimpleExp (_ : value_info TypedSyntax.VIdMap.map, C.Record _) = NOT_
            if LuaWriter.isLuaIdentifier name then
                case TypedSyntax.VIdMap.find (env, args) of
                    SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethodOp name, tyargs = [], args = ctor :: args })
+                 | _ => NOT_SIMPLIFIED
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall P.Lua_method1, [ctor, C.StringConst name, C.Var args]) =>
+           if LuaWriter.isLuaIdentifier name then
+               case TypedSyntax.VIdMap.find (env, args) of
+                   SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethod1Op name, tyargs = [], args = ctor :: args })
                  | _ => NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED

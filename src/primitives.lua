@@ -1084,6 +1084,27 @@ do
       discardable = false,
     },
     {
+      name = "Lua.method1",
+      srcname = "Lua_method1",
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = LuaValue },
+      mayraise = true,
+      discardable = false,
+    },
+    {
+      name = "Lua.method2",
+      srcname = "Lua_method2",
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = pair(LuaValue, LuaValue) },
+      mayraise = true,
+      discardable = false,
+    },
+    {
+      name = "Lua.method3",
+      srcname = "Lua_method3",
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = tuple{LuaValue, LuaValue, LuaValue} },
+      mayraise = true,
+      discardable = false,
+    },
+    {
       name = "Lua.global",
       srcname = "Lua_global",
       type = { vars = {}, args = {string}, result = LuaValue },
