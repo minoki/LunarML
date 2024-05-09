@@ -9,7 +9,27 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install mlton lua5.3 luajit
+          sudo apt-get install mlton luajit
+      # ubuntu-20.04 has Lua 5.3.3 as lua5.3, which is buggy.
+      - name: Cache Lua 5.3 binary
+        id: cache-lua53
+        uses: actions/cache@v3
+        env:
+          cache-name: cache-lua5.3.6
+        with:
+          path: ~/.local/bin
+          key: ${{ runner.os }}-build-${{ env.cache-name }}
+          restore-keys: ${{ runner.os }}-build-${{ env.cache-name }}
+      - if: ${{ steps.cache-lua53.outputs.cache-hit != 'true' }}
+        name: Build Lua 5.3.6
+        run: |
+          curl -LO https://www.lua.org/ftp/lua-5.3.6.tar.gz
+          tar xf lua-5.3.6.tar.gz
+          cd lua-5.3.6
+          make -j linux
+          mkdir -p ~/.local/bin
+          cp src/lua ~/.local/bin/
+          cp src/luac ~/.local/bin/
       - name: Build
         run: make
       - name: Test (Lua)
