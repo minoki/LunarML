@@ -946,12 +946,12 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                     | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
                   in pure (result, L.IndexExp (doValue ctx record, label))
                   end
-                | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
+                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, result } =>
                   let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
                   in pure (result, L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp (ctx, env', SOME contParam, body))))
                   end
                 | C.RecDec defs =>
-                  let val (decs', assignments) = List.foldr (fn ((name, contParam, params, body), (decs, assignments)) =>
+                  let val (decs', assignments) = List.foldr (fn ({ name, contParam, params, body, attr = _ }, (decs, assignments)) =>
                                                                 let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
                                                                     val dec = (name, L.LATE_INIT)
                                                                     val assignment = L.AssignStat ([L.VarExp (VIdToLua (ctx, name))], [L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp (ctx, env', SOME contParam, body)))])

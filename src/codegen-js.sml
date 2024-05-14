@@ -561,7 +561,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                     | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
                   in pure (result, J.IndexExp (doValue (ctx, env) record, label))
                   end
-                | C.ValDec { exp = C.Abs { contParam, params, body }, result } =>
+                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, result } =>
                   (case #style ctx of
                        DIRECT_STYLE => if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
                                             let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE), subst = #subst env }
@@ -580,24 +580,24 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                 | C.RecDec defs =>
                   (case #style ctx of
                        DIRECT_STYLE =>
-                       let val (decs', assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
-                                                                     if CpsAnalyze.escapes (#contEscapeMap ctx, k) then
-                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_TRAMPOLINE), subst = #subst env }
-                                                                         in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
+                       let val (decs', assignments) = List.foldr (fn ({ name, contParam, params, body, attr = _ }, (decs, assignments)) =>
+                                                                     if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
+                                                                         let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE), subst = #subst env }
+                                                                         in (J.LetStat (vector [(name, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId name), J.CallExp (J.VarExp (J.PredefinedId "_wrap"), vector [J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))])) :: assignments)
                                                                          end
                                                                      else
-                                                                         let val env' = { continuations = C.CVarMap.singleton (k, RETURN_SIMPLE), subst = #subst env }
-                                                                         in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
+                                                                         let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_SIMPLE), subst = #subst env }
+                                                                         in (J.LetStat (vector [(name, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId name), J.FunctionExp (Vector.map (VIdToJs ctx) (vector params), vector (doCExp ctx env' body))) :: assignments)
                                                                          end
                                                                  ) ([], []) defs
                        in doDecs (ctx, env, decs, finalExp, List.revAppend (decs' @ assignments, revStats))
                        end
                      | CPS =>
-                       let val (decs', assignments) = List.foldr (fn ((vid, k, params, body), (decs, assignments)) =>
-                                                                     let val env' = { continuations = C.CVarMap.singleton (k, TAILCALL k)
+                       let val (decs', assignments) = List.foldr (fn ({ name, contParam, params, body, attr = _ }, (decs, assignments)) =>
+                                                                     let val env' = { continuations = C.CVarMap.singleton (contParam, TAILCALL contParam)
                                                                                     , subst = #subst env
                                                                                     }
-                                                                     in (J.LetStat (vector [(vid, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId vid), J.FunctionExp (vector (CVarToJs k :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
+                                                                     in (J.LetStat (vector [(name, NONE)]) :: decs, J.AssignStat (J.VarExp (J.UserDefinedId name), J.FunctionExp (vector (CVarToJs contParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body))) :: assignments) (* in fact, ConstStat can be used *)
                                                                      end
                                                                  ) ([], []) defs
                        in doDecs (ctx, env, decs, finalExp, List.revAppend (decs' @ assignments, revStats))
