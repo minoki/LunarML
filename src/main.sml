@@ -88,8 +88,15 @@ fun optimizeCps (_ : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                               ()
                                  val timer = Timer.startCPUTimer ()
                                  val usage = CpsUsageAnalysis.analyze cexp
-                                 val ctx' = { nextVId = #nextVId ctx, simplificationOccurred = ref false }
-                                 val cexp = CpsSimplify.simplifyCExp (ctx', TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, usage, cexp)
+                                 val ctx' = { nextVId = #nextVId ctx
+                                            , simplificationOccurred = ref false
+                                            , usage = #usage usage
+                                            , rec_usage = #rec_usage usage
+                                            , cont_usage = #cont_usage usage
+                                            , cont_rec_usage = #cont_rec_usage usage
+                                            , dead_code_analysis = #dead_code_analysis usage
+                                            }
+                                 val cexp = CpsSimplify.simplifyCExp (ctx', TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, TypedSyntax.VIdMap.empty, CSyntax.CVarMap.empty, cexp)
                              in if #printTimings ctx then
                                     print (" " ^ LargeInt.toString (Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))) ^ " us\n")
                                 else
@@ -308,7 +315,16 @@ fun doCompile (opts : options) fileName (f : MLBEval.Context -> MLBEval.Env * ML
                    else
                        ()
           val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
-          val cexp = CpsSimplify.finalizeCExp ({ nextVId = nextId, simplificationOccurred = ref false }, cexp)
+          val cexp = let val context = { nextVId = nextId
+                                       , simplificationOccurred = ref false
+                                       , usage = CpsUsageAnalysis.emptyUsageTable
+                                       , rec_usage = CpsUsageAnalysis.emptyUsageTable
+                                       , cont_usage = CpsUsageAnalysis.emptyContUsageTable
+                                       , cont_rec_usage = CpsUsageAnalysis.emptyContUsageTable
+                                       , dead_code_analysis = CpsDeadCodeAnalysis.emptyUsage
+                                       }
+                     in CpsSimplify.finalizeCExp (context, cexp)
+                     end
           val cexp = optimizeCps { nextVId = nextId, printTimings = #printTimings opts } cexp (3 * (#optimizationLevel opts + 3))
           val optTime = Time.toMicroseconds (#usr (Timer.checkCPUTimer timer))
           val () = if #printTimings opts then
