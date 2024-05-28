@@ -135,8 +135,12 @@ fun isDiscardable (PrimOp { primOp = F.IntConstOp _, ... }) = true
   | isDiscardable (PrimOp { primOp = F.JsNewOp, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaCallOp, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaCall1Op, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaCall2Op, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaCall3Op, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaMethodOp _, ... }) = false
   | isDiscardable (PrimOp { primOp = F.LuaMethod1Op _, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaMethod2Op _, ... }) = false
+  | isDiscardable (PrimOp { primOp = F.LuaMethod3Op _, ... }) = false
   | isDiscardable (Record _) = true
   | isDiscardable (ExnTag _) = true
   | isDiscardable (Projection _) = true

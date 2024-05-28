@@ -916,6 +916,29 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: revStats)
                   )
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall2Op, tyargs = _, args = f :: args }, result } =>
+                  let val stmts = case result of
+                                      NONE => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
+                                    | SOME result => let val r0 = genSym ctx
+                                                         val r1 = genSym ctx
+                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])
+                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
+                                                        ]
+                                                     end
+                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
+                  end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall3Op, tyargs = _, args = f :: args }, result } =>
+                  let val stmts = case result of
+                                      NONE => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
+                                    | SOME result => let val r0 = genSym ctx
+                                                         val r1 = genSym ctx
+                                                         val r2 = genSym ctx
+                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])
+                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
+                                                        ]
+                                                     end
+                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
+                  end
                 | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethodOp name, tyargs = _, args = obj :: args }, result } =>
                   (case result of
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
@@ -926,6 +949,29 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))) :: revStats)
                   )
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod2Op name, tyargs = _, args = obj :: args }, result } =>
+                  let val stmts = case result of
+                                      NONE => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
+                                    | SOME result => let val r0 = genSym ctx
+                                                         val r1 = genSym ctx
+                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])
+                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
+                                                        ]
+                                                     end
+                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
+                  end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod3Op name, tyargs = _, args = obj :: args }, result } =>
+                  let val stmts = case result of
+                                      NONE => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
+                                    | SOME result => let val r0 = genSym ctx
+                                                         val r1 = genSym ctx
+                                                         val r2 = genSym ctx
+                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])
+                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
+                                                        ]
+                                                     end
+                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
+                  end
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result = _ } =>
                   raise CodeGenError "JsCallOp is not supported on Lua backend"
                 | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result = _ } =>
