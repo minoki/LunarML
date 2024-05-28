@@ -238,11 +238,11 @@ fun applyCont (_ : Context, env : Env, cont, args)
                                    | _ => raise CodeGenError "invalid return arity"
                                 )
         | NONE => raise CodeGenError "undefined continuation"
-(*: val doDecs : Context * Env * C.Dec VectorSlice.slice * C.CExp * J.Stat list -> J.Stat list *)
+(*: val doDecs : Context * Env * C.Dec list * C.CExp * J.Stat list -> J.Stat list *)
 fun doDecs (ctx, env, decs, finalExp, revStats)
-    = (case VectorSlice.getItem decs of
-           NONE => List.revAppend (revStats, doCExp ctx env finalExp)
-         | SOME (dec, decs) =>
+    = (case decs of
+           [] => List.revAppend (revStats, doCExp ctx env finalExp)
+         | dec :: decs =>
            let fun pure (NONE, _) = doDecs (ctx, env, decs, finalExp, revStats)
                  | pure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
                fun discardable (NONE, _) = doDecs (ctx, env, decs, finalExp, revStats)
@@ -615,8 +615,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                          in doDecs (ctx, env', decs, finalExp, dec :: revStats)
                          end
                      else
-                         case (VectorSlice.isEmpty decs, finalExp, params) of
-                             (true, C.App { applied, cont, args }, [SOME result]) =>
+                         case (decs, finalExp, params) of
+                             ([], C.App { applied, cont, args }, [SOME result]) =>
                              if cont = name then
                                  List.revAppend (revStats, ConstStat (result, J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args))) :: doCExp ctx env body)
                              else
@@ -650,8 +650,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                      else
                          let datatype init = INIT_WITH_VALUES of int * (C.Var option list) * C.Value list
                                            | NO_INIT
-                             val init = case (VectorSlice.isEmpty decs, finalExp) of
-                                            (true, C.AppCont { applied, args }) =>
+                             val init = case (decs, finalExp) of
+                                            ([], C.AppCont { applied, args }) =>
                                             let fun find (_, []) = NO_INIT
                                                   | find (i, (name, params, _) :: xs) = if name = applied then
                                                                                             INIT_WITH_VALUES (i, params, args)
@@ -770,7 +770,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
            end
       )
 and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
-    = doDecs (ctx, env, VectorSlice.full decs, cont, [])
+    = doDecs (ctx, env, decs, cont, [])
   | doCExp ctx env (C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue (ctx, env) applied, J.ArrayExp (vector (doCVar k :: List.map (doValue (ctx, env)) args))]))) ] (* continuation passing style *)

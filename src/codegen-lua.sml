@@ -259,13 +259,13 @@ fun doValue ctx (C.Var vid) = (case VIdToLua (ctx, vid) of
   | doValue _ (C.String16Const _) = raise CodeGenError "String16Const is not supported by Lua backend"
 
 (*:
-val doDecs : Context * Env * C.CVar option * C.Dec VectorSlice.slice * C.CExp * L.Stat list -> L.Stat list
+val doDecs : Context * Env * C.CVar option * C.Dec list * C.CExp * L.Stat list -> L.Stat list
 and doCExp : Context * Env * C.CVar option * C.CExp -> L.Stat list
  *)
 fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
-    = (case VectorSlice.getItem decs of
-           NONE => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))
-         | SOME (dec, decs) =>
+    = (case decs of
+           [] => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))
+         | dec :: decs =>
            let fun pure (NONE, _) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
                  | pure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
                fun discardable (NONE, _) = doDecs (ctx, env, defaultCont, decs, finalExp, revStats)
@@ -1007,12 +1007,12 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                   in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (assignments, L.LocalStat (decs', []) :: revStats))
                   end
                 | C.ContDec { name, params, body } =>
-                  (case (VectorSlice.isEmpty decs, finalExp) of
-                       (true, C.App { applied, cont, args }) => if cont = name then
-                                                                    List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
-                                                                                              :: doCExp (ctx, env, defaultCont, body))
-                                                                else
-                                                                    List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp)) (* dead continuation elimination *)
+                  (case (decs, finalExp) of
+                       ([], C.App { applied, cont, args }) => if cont = name then
+                                                                  List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+                                                                                            :: doCExp (ctx, env, defaultCont, body))
+                                                              else
+                                                                  List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp)) (* dead continuation elimination *)
                      | _ => let val label = doLabel name
                                 val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (Option.map (fn p => VIdToLua (ctx, p))) params })
                                            }
@@ -1028,8 +1028,8 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                 | C.RecContDec defs =>
                   let datatype init = INIT_WITH_VALUES of C.CVar * C.Value list
                                     | NO_INIT
-                      val init = case (VectorSlice.isEmpty decs, finalExp) of
-                                     (true, C.AppCont { applied, args }) =>
+                      val init = case (decs, finalExp) of
+                                     ([], C.AppCont { applied, args }) =>
                                      if List.exists (fn (name, params, _) => name = applied andalso List.all Option.isSome params) defs then
                                          INIT_WITH_VALUES (applied, args)
                                      else
@@ -1082,7 +1082,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
            end
       )
 and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs, cont })
-    = doDecs (ctx, env, defaultCont, VectorSlice.full decs, cont, [])
+    = doDecs (ctx, env, defaultCont, decs, cont, [])
   | doCExp (ctx, env, _, C.App { applied, cont, args })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO { label, params }) =>
@@ -1102,7 +1102,7 @@ and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs,
       )
   | doCExp (ctx, env, defaultCont, C.AppCont { applied, args }) = applyCont (ctx, env, defaultCont, applied, List.map (doValue ctx) args)
   | doCExp (ctx, env, defaultCont, C.If { cond, thenCont, elseCont })
-    = let fun containsNestedBlock (C.Let { decs, cont }) = Vector.exists containsNestedBlockDec decs orelse containsNestedBlock cont
+    = let fun containsNestedBlock (C.Let { decs, cont }) = List.exists containsNestedBlockDec decs orelse containsNestedBlock cont
             | containsNestedBlock (C.App _) = false
             | containsNestedBlock (C.AppCont _) = false
             | containsNestedBlock (C.If _) = true

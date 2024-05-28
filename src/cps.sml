@@ -38,7 +38,7 @@ structure CSyntax :> sig
                            | ContDec of { name : CVar, params : (Var option) list, body : CExp }
                            | RecContDec of (CVar * (Var option) list * CExp) list
                            | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
-                   and CExp = Let of { decs : Dec vector, cont : CExp }
+                   and CExp = Let of { decs : Dec list, cont : CExp }
                             | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
                             | AppCont of { applied : CVar, args : Value list }
                             | If of { cond : Value
@@ -101,7 +101,7 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
              | ContDec of { name : CVar, params : (Var option) list, body : CExp }
              | RecContDec of (CVar * (Var option) list * CExp) list
              | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
-     and CExp = Let of { decs : Dec vector, cont : CExp }
+     and CExp = Let of { decs : Dec list, cont : CExp }
               | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
               | AppCont of { applied : CVar, args : Value list }
               | If of { cond : Value
@@ -183,7 +183,7 @@ fun containsAppDec (ValDec _) = false
   | containsAppDec (ContDec { name = _, params = _, body }) = containsApp body
   | containsAppDec (RecContDec defs) = List.exists (fn (_, _, body) => containsApp body) defs
   | containsAppDec (ESImportDec _) = false
-and containsApp (Let { decs, cont }) = containsApp cont orelse Vector.exists containsAppDec decs
+and containsApp (Let { decs, cont }) = containsApp cont orelse List.exists containsAppDec decs
   | containsApp (App _) = true
   | containsApp (AppCont _) = false
   | containsApp (If { cond = _, thenCont, elseCont }) = containsApp thenCont orelse containsApp elseCont
@@ -243,7 +243,7 @@ and freeVarsInDec (ValDec { exp, result }, (bound, acc))
       in (bound, acc)
       end
   | freeVarsInDec (ESImportDec { pure = _, specs, moduleName = _ }, (bound, acc)) = (List.foldl (fn ((_, v), bound) => TypedSyntax.VIdSet.add (bound, v)) bound specs, acc)
-and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = Vector.foldl freeVarsInDec (bound, acc) decs
+and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = List.foldl freeVarsInDec (bound, acc) decs
                                                      in freeVarsInExp (bound, cont, acc)
                                                      end
   | freeVarsInExp (bound, App { applied, cont = _, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
@@ -264,7 +264,7 @@ fun recurseCExp f
             | goDec (RecContDec defs) = RecContDec (List.map (fn (name, params, body) => (name, params, goExp body)) defs)
             | goDec (dec as ESImportDec _) = dec
           and goExp e = f (case e of
-                               Let { decs, cont } => Let { decs = Vector.map goDec decs, cont = goExp cont }
+                               Let { decs, cont } => Let { decs = List.map goDec decs, cont = goExp cont }
                              | App _ => e
                              | AppCont _ => e
                              | If { cond, thenCont, elseCont } => If { cond = cond, thenCont = goExp thenCont, elseCont = goExp elseCont }
@@ -315,8 +315,8 @@ fun stripTyAbs (F.TyAbsExp (_, _, e)) = stripTyAbs e
 datatype cont = REIFIED of C.CVar
               | META of C.Var option * (C.Dec list * C.Value -> C.CExp)
 fun prependRevDecs ([], cont) = cont
-  | prependRevDecs (revDecs, C.Let { decs, cont }) = C.Let { decs = Vector.fromList (List.revAppend (revDecs, Vector.foldr (op ::) [] decs)), cont = cont }
-  | prependRevDecs (revDecs, cont) = C.Let { decs = Vector.fromList (List.rev revDecs), cont = cont }
+  | prependRevDecs (revDecs, C.Let { decs, cont }) = C.Let { decs = List.revAppend (revDecs, decs), cont = cont }
+  | prependRevDecs (revDecs, cont) = C.Let { decs = List.rev revDecs, cont = cont }
 fun reify (_, revDecs, REIFIED k) f = prependRevDecs (revDecs, f k)
   | reify (ctx, revDecs, META (hint, m)) f = let val k = genContSym ctx
                                                  val x = case hint of
@@ -634,7 +634,7 @@ and goDec g (C.ValDec { exp, result }, acc) = let val s = goSimpleExp (g, exp)
   | goDec g (C.ESImportDec { pure = _, specs, moduleName = _ }, acc) = ( List.app (fn (_, vid) => TypedSyntax.VIdTable.insert g (vid, TypedSyntax.VIdSet.empty)) specs
                                                                        ; acc
                                                                        )
-and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, Vector.foldl (goDec g) acc decs)
+and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, List.foldl (goDec g) acc decs)
   | goExp (_, C.App { applied, cont = _, args }, acc) = List.foldl addValue (addValue (applied, acc)) args
   | goExp (_, C.AppCont { applied = _, args }, acc) = List.foldl addValue acc args
   | goExp (g, C.If { cond, thenCont, elseCont }, acc) = goExp (g, elseCont, goExp (g, thenCont, addValue (cond, acc)))
@@ -875,7 +875,7 @@ and goDec (env, renv, cenv, crenv)
 and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (cont_usage ref) C.CVarTable.hash_table, crenv, cexp)
     = case cexp of
           C.Let { decs, cont } =>
-          ( Vector.app (goDec (env, renv, cenv, crenv)) decs
+          ( List.app (goDec (env, renv, cenv, crenv)) decs
           ; goCExp (env, renv, cenv, crenv, cont)
           )
         | C.App { applied, cont, args } =>
@@ -980,7 +980,7 @@ and sizeOfCExp (e, threshold)
           threshold
       else
           case e of
-              C.Let { decs, cont } => Vector.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
+              C.Let { decs, cont } => List.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
             | C.App { applied = _, cont = _, args } => threshold - List.length args
             | C.AppCont { applied = _, args } => threshold - List.length args
             | C.If { cond = _, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
@@ -1004,7 +1004,7 @@ and substDec (subst, csubst) = fn C.ValDec { exp, result } => C.ValDec { exp = s
                                 | C.ContDec { name, params, body } => C.ContDec { name = name, params = params, body = substCExp (subst, csubst, body) }
                                 | C.RecContDec defs => C.RecContDec (List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs)
                                 | dec as C.ESImportDec _ => dec
-and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont }) = C.Let { decs = Vector.map (substDec (subst, csubst)) decs, cont = substCExp (subst, csubst, cont) }
+and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont }) = C.Let { decs = List.map (substDec (subst, csubst)) decs, cont = substCExp (subst, csubst, cont) }
   | substCExp (subst, csubst, C.App { applied, cont, args }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, csubst, thenCont), elseCont = substCExp (subst, csubst, elseCont) }
@@ -1109,8 +1109,8 @@ and alphaConvertDec (ctx : Context) (dec, (subst, csubst, acc))
           in (subst', csubst, dec' :: acc)
           end
 and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont })
-    = let val (subst', csubst', revDecs) = Vector.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
-      in C.Let { decs = Vector.fromList (List.rev revDecs), cont = alphaConvert (ctx, subst', csubst', cont) }
+    = let val (subst', csubst', revDecs) = List.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
+      in C.Let { decs = List.rev revDecs, cont = alphaConvert (ctx, subst', csubst', cont) }
       end
   | alphaConvert (_, subst, csubst, C.App { applied, cont, args })
     = C.App { applied = substValue subst applied
@@ -1158,7 +1158,7 @@ fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
         | C.RecContDec _ => NONE
         | C.ESImportDec { pure = _, specs = _, moduleName = _ } => SOME env
 and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, cont })
-    = (case VectorUtil.foldlOption isDiscardableDec env decs of
+    = (case ListUtil.foldlOption isDiscardableDec env decs of
            SOME env => isDiscardableExp (env, cont)
          | NONE => false
       )
@@ -1173,8 +1173,8 @@ and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, con
   | isDiscardableExp (env, C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ }) = isDiscardableExp (env, body) andalso isDiscardableExp (env, h)
   | isDiscardableExp (_, C.Unreachable) = false
 fun prependDecs ([], cont) = cont
-  | prependDecs (decs, C.Let { decs = decs', cont }) = C.Let { decs = Vector.fromList (decs @ Vector.foldr (op ::) [] decs'), cont = cont }
-  | prependDecs (decs, cont) = C.Let { decs = Vector.fromList decs, cont = cont }
+  | prependDecs (decs, C.Let { decs = decs', cont }) = C.Let { decs = decs @ decs', cont = cont }
+  | prependDecs (decs, cont) = C.Let { decs = decs, cont = cont }
 (* Eliminate assumeDiscardable *)
 (* More sophisticated analysis is wanted. *)
 fun finalizeDec ctx (dec, (decs, cont))
@@ -1207,7 +1207,7 @@ fun finalizeDec ctx (dec, (decs, cont))
           end
         | C.ESImportDec _ => (dec :: decs, cont)
 and finalizeCExp (ctx, C.Let { decs, cont })
-    = prependDecs (Vector.foldr (finalizeDec ctx) ([], finalizeCExp (ctx, cont)) decs)
+    = prependDecs (List.foldr (finalizeDec ctx) ([], finalizeCExp (ctx, cont)) decs)
   | finalizeCExp (_, e as C.App _) = e
   | finalizeCExp (_, e as C.AppCont _) = e
   | finalizeCExp (ctx, C.If { cond, thenCont, elseCont }) = C.If { cond = cond, thenCont = finalizeCExp (ctx, thenCont), elseCont = finalizeCExp (ctx, elseCont) }
@@ -1278,7 +1278,7 @@ fun goDec (table, level) (dec, acc)
           )
         | C.ESImportDec _ => acc
 and go (table, level, C.Let { decs, cont }, acc)
-    = go (table, level, cont, Vector.foldl (goDec (table, level)) acc decs)
+    = go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
   | go (table, level, C.App { applied = _, cont, args = _ }, acc) = escape (table, level, cont, acc)
   | go (table, level, C.AppCont { applied, args = _ }, acc) = direct (table, level, applied, acc)
   | go (table, level, C.If { cond = _, thenCont, elseCont }, acc) = go (table, level, elseCont, go (table, level, thenCont, acc))

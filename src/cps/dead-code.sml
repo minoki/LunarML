@@ -132,7 +132,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                          ) [] (params, paramTransforms)
                                              val body = case decs of
                                                             [] => body
-                                                          | _ => C.Let { decs = vector decs, cont = body }
+                                                          | _ => C.Let { decs = decs, cont = body }
                                              val body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
                                              val exp = C.Abs { contParam = contParam, params = params', body = body, attr = attr }
                                              val result' = CpsSimplify.renewVId (#base ctx, result)
@@ -151,7 +151,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                                        ) ([], []) (params', paramTransforms)
                                                                in C.Abs { contParam = k
                                                                         , params = params'
-                                                                        , body = C.Let { decs = vector decs
+                                                                        , body = C.Let { decs = decs
                                                                                        , cont = C.App { applied = C.Var result'
                                                                                                       , cont = k
                                                                                                       , args = args
@@ -221,7 +221,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                ) [] (params, paramTransforms)
                                    val body = case decs of
                                                   [] => body
-                                                | _ => C.Let { decs = vector decs, cont = body }
+                                                | _ => C.Let { decs = decs, cont = body }
                                    val name' = CpsSimplify.renewVId (#base ctx, name)
                                    val wrapper = let val k = CpsSimplify.genContSym (#base ctx)
                                                      val params' = List.map (fn p => CpsSimplify.renewVId (#base ctx, p)) params
@@ -239,7 +239,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                          ) ([], []) (params', paramTransforms)
                                                  in C.Abs { contParam = k
                                                           , params = params'
-                                                          , body = C.Let { decs = vector decs
+                                                          , body = C.Let { decs = decs
                                                                          , cont = C.App { applied = C.Var name'
                                                                                         , cont = k
                                                                                         , args = args
@@ -266,7 +266,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                   call
                                                           | c => c
                                                           ) body
-                                val body'' = C.Let { decs = vector [C.RecContDec [(loop, List.map SOME params, body')]]
+                                val body'' = C.Let { decs = [C.RecContDec [(loop, List.map SOME params, body')]]
                                                    , cont = C.AppCont { applied = loop, args = List.map C.Var params' }
                                                    }
                             in { name = name, contParam = contParam, params = params', body = body'', attr = attr }
@@ -337,7 +337,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                           ) [] (params, paramTransforms)
                               val body = case decs of
                                              [] => body
-                                           | _ => C.Let { decs = vector decs, cont = body }
+                                           | _ => C.Let { decs = decs, cont = body }
                               val body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
                               val name' = CpsSimplify.renewCVar (#base ctx, name)
                               val wrapperBody = let val params' = List.map (Option.map (fn p => CpsSimplify.renewVId (#base ctx, p))) params
@@ -354,7 +354,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                                      ) (decs, args) fields
                                                                                         | (NONE, _, acc) => acc
                                                                                         ) ([], []) (params', paramTransforms)
-                                                in (params', SOME (C.Let { decs = vector decs
+                                                in (params', SOME (C.Let { decs = decs
                                                                          , cont = C.AppCont { applied = name'
                                                                                             , args = args
                                                                                             }
@@ -416,7 +416,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                ) [] (params, paramTransforms)
                                    val body = case decs of
                                                   [] => body
-                                                | _ => C.Let { decs = vector decs, cont = body }
+                                                | _ => C.Let { decs = decs, cont = body }
                                    val name' = CpsSimplify.renewCVar (#base ctx, name)
                                    val wrapper = let val params' = List.map (Option.map (fn p => CpsSimplify.renewVId (#base ctx, p))) params
                                                      val (decs, args) = ListPair.foldrEq (fn (SOME p, KEEP, (decs, args)) => (decs, C.Var p :: args)
@@ -432,7 +432,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                                       ) (decs, args) fields
                                                                                          | (NONE, _, acc) => acc
                                                                                          ) ([], []) (params', paramTransforms)
-                                                 in (params', SOME (C.Let { decs = vector decs
+                                                 in (params', SOME (C.Let { decs = decs
                                                                           , cont = C.AppCont { applied = name'
                                                                                              , args = args
                                                                                              }
@@ -464,7 +464,7 @@ and simplifyCExp (ctx : Context, env : CpsSimplify.value_info TypedSyntax.VIdMap
           let val appliedCont = case cont of
                                     C.AppCont { applied, args = _ } => SOME applied
                                   | _ => NONE
-              val (env, cenv, subst, csubst, revDecs) = Vector.foldl (simplifyDec (ctx, appliedCont)) (env, cenv, subst, csubst, []) decs
+              val (env, cenv, subst, csubst, revDecs) = List.foldl (simplifyDec (ctx, appliedCont)) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, cont))
           end
         | C.App { applied, cont, args } =>

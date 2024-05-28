@@ -64,6 +64,16 @@ fun simplifySimpleExp (_ : env, C.Record _) = NOT_SIMPLIFIED
                 SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaCall1Op, tyargs = [], args = ctor :: args })
               | _ => NOT_SIMPLIFIED
            )
+         | (F.PrimCall P.Lua_call2, [ctor, C.Var args]) =>
+           (case TypedSyntax.VIdMap.find (env, args) of
+                SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaCall2Op, tyargs = [], args = ctor :: args })
+              | _ => NOT_SIMPLIFIED
+           )
+         | (F.PrimCall P.Lua_call3, [ctor, C.Var args]) =>
+           (case TypedSyntax.VIdMap.find (env, args) of
+                SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaCall3Op, tyargs = [], args = ctor :: args })
+              | _ => NOT_SIMPLIFIED
+           )
          | (F.PrimCall P.Lua_method, [ctor, C.StringConst name, C.Var args]) =>
            if LuaWriter.isLuaIdentifier name then
                case TypedSyntax.VIdMap.find (env, args) of
@@ -75,6 +85,20 @@ fun simplifySimpleExp (_ : env, C.Record _) = NOT_SIMPLIFIED
            if LuaWriter.isLuaIdentifier name then
                case TypedSyntax.VIdMap.find (env, args) of
                    SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethod1Op name, tyargs = [], args = ctor :: args })
+                 | _ => NOT_SIMPLIFIED
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall P.Lua_method2, [ctor, C.StringConst name, C.Var args]) =>
+           if LuaWriter.isLuaIdentifier name then
+               case TypedSyntax.VIdMap.find (env, args) of
+                   SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethod2Op name, tyargs = [], args = ctor :: args })
+                 | _ => NOT_SIMPLIFIED
+           else
+               NOT_SIMPLIFIED
+         | (F.PrimCall P.Lua_method3, [ctor, C.StringConst name, C.Var args]) =>
+           if LuaWriter.isLuaIdentifier name then
+               case TypedSyntax.VIdMap.find (env, args) of
+                   SOME { exp = SOME (C.PrimOp { primOp = F.VectorOp, tyargs = _, args }), ... } => SIMPLE_EXP (C.PrimOp { primOp = F.LuaMethod3Op name, tyargs = [], args = ctor :: args })
                  | _ => NOT_SIMPLIFIED
            else
                NOT_SIMPLIFIED
@@ -393,7 +417,7 @@ and simplifyDec (ctx : Context) (dec, (env, cenv, subst, csubst, acc : C.Dec lis
 and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv : ((C.Var option) list * C.CExp option) C.CVarMap.map, subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, e)
     = case e of
           C.Let { decs, cont } =>
-          let val (env, cenv, subst, csubst, revDecs) = Vector.foldl (simplifyDec ctx) (env, cenv, subst, csubst, []) decs
+          let val (env, cenv, subst, csubst, revDecs) = List.foldl (simplifyDec ctx) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, cont))
           end
         | C.App { applied, cont, args } =>

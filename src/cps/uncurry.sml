@@ -11,18 +11,16 @@ local structure F = FSyntax
 in
 (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.CExp) option *)
 fun tryUncurry (exp as C.Abs { contParam, params, body as C.Let { decs, cont = C.AppCont { applied = k, args = [C.Var v] } }, attr = { isWrapper = false } })
-    = if Vector.length decs = 1 andalso contParam = k then
-          case Vector.sub (decs, 0) of
-              C.ValDec { exp, result = SOME f } =>
-              if v = f then
-                  case tryUncurry exp of
-                      SOME (pp, k, b) => SOME (params :: pp, k, b)
-                    | NONE => SOME ([params], contParam, body)
-              else
-                  SOME ([params], contParam, body)
-            | _ => SOME ([params], contParam, body)
-      else
-          SOME ([params], contParam, body)
+    = (case decs of
+           [C.ValDec { exp, result = SOME f }] =>
+           if contParam = k andalso v = f then
+               case tryUncurry exp of
+                   SOME (pp, k, b) => SOME (params :: pp, k, b)
+                 | NONE => SOME ([params], contParam, body)
+           else
+               SOME ([params], contParam, body)
+         | _ => SOME ([params], contParam, body)
+      )
   | tryUncurry _ = NONE
 fun doUncurry (ctx, name, exp, acc)
     = case tryUncurry exp of
@@ -35,7 +33,7 @@ fun doUncurry (ctx, name, exp, acc)
               fun mkWrapper (k, []) = C.App { applied = C.Var workerName, cont = k, args = List.map C.Var (params' @ List.concat pp') }
                 | mkWrapper (k, params :: pp) = let val name = CpsSimplify.renewVId (ctx, name)
                                                     val l = CpsSimplify.genContSym ctx
-                                                in C.Let { decs = vector [C.ValDec { exp = C.Abs { contParam = l, params = params, body = mkWrapper (l, pp), attr = { isWrapper = true } }, result = SOME name }]
+                                                in C.Let { decs = [C.ValDec { exp = C.Abs { contParam = l, params = params, body = mkWrapper (l, pp), attr = { isWrapper = true } }, result = SOME name }]
                                                          , cont = C.AppCont { applied = k, args = [C.Var name] }
                                                          }
                                                 end
@@ -68,7 +66,7 @@ and simplifyDec ctx (dec, acc)
         | C.ESImportDec _ => dec :: acc
 and simplifyCExp (ctx : CpsSimplify.Context, exp)
     = case exp of
-          C.Let { decs, cont } => C.Let { decs = vector (List.rev (Vector.foldl (simplifyDec ctx) [] decs)), cont = simplifyCExp (ctx, cont) }
+          C.Let { decs, cont } => C.Let { decs = List.rev (List.foldl (simplifyDec ctx) [] decs), cont = simplifyCExp (ctx, cont) }
         | C.App _ => exp
         | C.AppCont _ => exp
         | C.If { cond, thenCont, elseCont } => C.If { cond = cond
