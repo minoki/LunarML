@@ -90,6 +90,15 @@ fun simplifySimpleExp (_ : env, C.Record _) = NOT_SIMPLIFIED
               | SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag, ... }, ... }), ... } => VALUE (C.String16Const (Vector.tabulate (String.size tag, fn i => ord (String.sub (tag, i))))) (* Assume tag is ASCII *)
               | _ => NOT_SIMPLIFIED
            )
+         | (F.DataPayloadOp { tag, ... }, [C.Var x]) =>
+           (case TypedSyntax.VIdMap.find (env, x) of
+                SOME { exp = SOME (C.PrimOp { primOp = F.ConstructValWithPayloadOp { tag = tag', ... }, args = [payload], ... }), ... } =>
+                if tag = tag' then
+                    VALUE payload
+                else
+                    NOT_SIMPLIFIED
+              | _ => NOT_SIMPLIFIED
+           )
          | (F.PrimCall P.Bool_EQUAL, [x, C.BoolConst true]) => VALUE x
          | (F.PrimCall P.Bool_EQUAL, [C.BoolConst true, x]) => VALUE x
          | (F.PrimCall P.Bool_EQUAL, [x, C.BoolConst false]) => SIMPLE_EXP (C.PrimOp { primOp = F.PrimCall P.Bool_not, tyargs = [], args = [x] })
