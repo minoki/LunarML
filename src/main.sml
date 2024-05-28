@@ -90,6 +90,7 @@ fun optimizeCps (_ : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                  val ctx' = { nextVId = #nextVId ctx
                                             , simplificationOccurred = ref false
                                             }
+                                 val cexp = CpsUncurry.goCExp (ctx', cexp)
                                  val cexp = CpsInline.goCExp (ctx', cexp)
                                  val cexp = CpsDeadCodeElimination.goCExp (ctx', cexp)
                              in if #printTimings ctx then

@@ -49,6 +49,7 @@ sources = \
   src/pattern-match.sml \
   src/ftransform.sml \
   src/cps.sml \
+  src/cps/uncurry.sml \
   src/cps/inline.sml \
   src/cps/dead-code.sml \
   src/lua-syntax.sml \
