@@ -40,6 +40,8 @@ pattern-match.sml
 ftransform.sml
 lua-syntax.sml
 cps.sml
+cps/inline.sml
+cps/dead-code.sml
 lua-transform.sml
 codegen-lua.sml
 js-syntax.sml
