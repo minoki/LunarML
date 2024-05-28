@@ -594,7 +594,6 @@ end;
 
 structure CpsDeadCodeAnalysis :> sig
               type usage
-              val emptyUsage : usage
               val analyze : CSyntax.CExp -> usage
               val isUsed : usage * TypedSyntax.VId -> bool
           end = struct
@@ -602,7 +601,6 @@ local structure C = CSyntax
 in
 type graph = TypedSyntax.VIdSet.set TypedSyntax.VIdTable.hash_table
 type usage = bool TypedSyntax.VIdTable.hash_table
-val emptyUsage = TypedSyntax.VIdTable.mkTable (0, Fail "")
 fun addValue (C.Var v, set) = TypedSyntax.VIdSet.add (set, v)
   | addValue (C.Unit, set) = set
   | addValue (C.Nil, set) = set
@@ -679,8 +677,6 @@ structure CpsUsageAnalysis :> sig
               val neverUsedCont : cont_usage
               type usage_table
               type cont_usage_table
-              val emptyUsageTable : usage_table
-              val emptyContUsageTable : cont_usage_table
               val getValueUsage : usage_table * TypedSyntax.VId -> usage
               val getContUsage : cont_usage_table * CSyntax.CVar -> cont_usage
               val analyze : CSyntax.CExp -> { usage : usage_table
@@ -716,8 +712,6 @@ val neverUsed : usage = { call = NEVER
 val neverUsedCont : cont_usage = { direct = NEVER, indirect = NEVER }
 type usage_table = (usage ref) TypedSyntax.VIdTable.hash_table
 type cont_usage_table = (cont_usage ref) CSyntax.CVarTable.hash_table
-val emptyUsageTable = TypedSyntax.VIdTable.mkTable (0, Fail "")
-val emptyContUsageTable = CSyntax.CVarTable.mkTable (0, Fail "")
 fun getValueUsage (table : usage_table, v)
     = case TypedSyntax.VIdTable.find table v of
           SOME r => !r
