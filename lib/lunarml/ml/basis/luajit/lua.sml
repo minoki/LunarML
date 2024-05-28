@@ -345,7 +345,6 @@ val wrap = LunarML.assumeDiscardable field (coroutine, "wrap")
 val yield = LunarML.assumeDiscardable field (coroutine, "yield")
 end
 structure debug = struct
-val debug = LunarML.assumeDiscardable field (debug, "debug")
 val getfenv = LunarML.assumeDiscardable field (debug, "getfenv")
 val gethook = LunarML.assumeDiscardable field (debug, "gethook")
 val getinfo = LunarML.assumeDiscardable field (debug, "getinfo")
@@ -361,6 +360,7 @@ val setupvalue = LunarML.assumeDiscardable field (debug, "setupvalue")
 val traceback = LunarML.assumeDiscardable field (debug, "traceback")
 val upvalueid = LunarML.assumeDiscardable field (debug, "upvalueid")
 val upvaluejoin = LunarML.assumeDiscardable field (debug, "upvaluejoin")
+val debug = LunarML.assumeDiscardable field (debug, "debug")
 end
 structure io = struct
 val close = LunarML.assumeDiscardable field (io, "close")
