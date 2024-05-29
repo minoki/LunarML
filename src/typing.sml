@@ -409,7 +409,7 @@ structure TypeOfPrimitives = TypeOfPrimitives (type ty = TypedSyntax.Ty
                                                val Unconstrained = false
                                                val IsEqType = true
                                               ) : sig
-                                 val typeOf : Primitives.PrimOp -> { vars : (TypedSyntax.TyVar * bool) list, args : TypedSyntax.Ty vector, result : TypedSyntax.Ty }
+                                 val typeOf : Primitives.PrimOp -> { vars : (TypedSyntax.TyVar * bool) list, args : TypedSyntax.Ty vector, results : TypedSyntax.Ty list }
                                  end
 
 fun newTyVarCounter () : int ref = ref 100
@@ -1531,7 +1531,10 @@ fun synthTypeOfExp (ctx : InferenceContext, _ : Env, S.SConExp (span, scon)) : T
                        ()
                    else
                        emitTypeError (ctx, [span], "type arguments to _primCall is not supported currently")
-          val { vars = typeVariables, args = argTypes, result = resultType } = TypeOfPrimitives.typeOf primOp
+          val { vars = typeVariables, args = argTypes, results = resultTypes } = TypeOfPrimitives.typeOf primOp
+          val resultType = case resultTypes of
+                               [t] => t
+                             | _ => TypedSyntax.TupleType (SourcePos.nullSpan, resultTypes)
           val () = if Vector.length args = Vector.length argTypes then
                        ()
                    else

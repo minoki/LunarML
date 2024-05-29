@@ -12,7 +12,7 @@ in
 (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.CExp) option *)
 fun tryUncurry (exp as C.Abs { contParam, params, body as C.Let { decs, cont = C.AppCont { applied = k, args = [C.Var v] } }, attr = { isWrapper = false } })
     = (case decs of
-           [C.ValDec { exp, result = SOME f }] =>
+           [C.ValDec { exp, results = [SOME f] }] =>
            if contParam = k andalso v = f then
                case tryUncurry exp of
                    SOME (pp, k, b) => SOME (params :: pp, k, b)
@@ -27,26 +27,26 @@ fun doUncurry (ctx, name, exp, acc)
           SOME (params :: (pp as _ :: _), k, body) =>
           let val workerName = CpsSimplify.renewVId (ctx, name)
               val body = simplifyCExp (ctx, body)
-              val workerDec = C.ValDec { exp = C.Abs { contParam = k, params = params @ List.concat pp, body = body, attr = { isWrapper = false } }, result = SOME workerName }
+              val workerDec = C.ValDec { exp = C.Abs { contParam = k, params = params @ List.concat pp, body = body, attr = { isWrapper = false } }, results = [SOME workerName] }
               val params' = List.map (fn p => CpsSimplify.renewVId (ctx, p)) params
               val pp' = List.map (List.map (fn p => CpsSimplify.renewVId (ctx, p))) pp
               fun mkWrapper (k, []) = C.App { applied = C.Var workerName, cont = k, args = List.map C.Var (params' @ List.concat pp') }
                 | mkWrapper (k, params :: pp) = let val name = CpsSimplify.renewVId (ctx, name)
                                                     val l = CpsSimplify.genContSym ctx
-                                                in C.Let { decs = [C.ValDec { exp = C.Abs { contParam = l, params = params, body = mkWrapper (l, pp), attr = { isWrapper = true } }, result = SOME name }]
+                                                in C.Let { decs = [C.ValDec { exp = C.Abs { contParam = l, params = params, body = mkWrapper (l, pp), attr = { isWrapper = true } }, results = [SOME name] }]
                                                          , cont = C.AppCont { applied = k, args = [C.Var name] }
                                                          }
                                                 end
               val l = CpsSimplify.genContSym ctx
-          in C.ValDec { exp = C.Abs { contParam = l, params = params', body = mkWrapper (l, pp'), attr = { isWrapper = true } }, result = SOME name } :: workerDec :: acc
+          in C.ValDec { exp = C.Abs { contParam = l, params = params', body = mkWrapper (l, pp'), attr = { isWrapper = true } }, results = [SOME name] } :: workerDec :: acc
           end
-        | _ => C.ValDec { exp = exp, result = SOME name } :: acc
+        | _ => C.ValDec { exp = exp, results = [SOME name] } :: acc
 and simplifyDec ctx (dec, acc)
     = case dec of
-          C.ValDec { exp as C.Abs _, result = SOME name } =>
+          C.ValDec { exp as C.Abs _, results = [SOME name] } =>
           doUncurry (ctx, name, exp, acc)
-        | C.ValDec { exp = C.Abs _, result = NONE } => acc
-        | C.ValDec { exp = _, result = _ } => dec :: acc
+        | C.ValDec { exp = C.Abs _, results = [NONE] } => acc
+        | C.ValDec { exp = _, results = _ } => dec :: acc
         | C.RecDec defs =>
           let val defs = List.map (fn { name, contParam, params, body, attr } =>
                                       { name = name

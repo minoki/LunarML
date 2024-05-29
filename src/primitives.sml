@@ -1404,6 +1404,186 @@ fun fixIntWord { int, word }
         | Unsafe_Array_update a1 => Unsafe_Array_update (fixInt a1)
         | p => p
     end
+fun returnArity EQUAL = 1
+  | returnArity call2 = 1
+  | returnArity call3 = 1
+  | returnArity List_cons = 1
+  | returnArity List_null = 1
+  | returnArity List_unsafeHead = 1
+  | returnArity List_unsafeTail = 1
+  | returnArity Ref_ref = 1
+  | returnArity Ref_EQUAL = 1
+  | returnArity Ref_set = 0
+  | returnArity Ref_read = 1
+  | returnArity Bool_EQUAL = 1
+  | returnArity Bool_not = 1
+  | returnArity (Int_EQUAL _) = 1
+  | returnArity (Int_PLUS _) = 1
+  | returnArity (Int_PLUS_wrapping _) = 1
+  | returnArity (Int_MINUS _) = 1
+  | returnArity (Int_MINUS_wrapping _) = 1
+  | returnArity (Int_TIMES _) = 1
+  | returnArity (Int_TIMES_wrapping _) = 1
+  | returnArity (Int_div _) = 1
+  | returnArity (Int_div_unchecked _) = 1
+  | returnArity (Int_mod _) = 1
+  | returnArity (Int_mod_unchecked _) = 1
+  | returnArity (Int_quot _) = 1
+  | returnArity (Int_quot_unchecked _) = 1
+  | returnArity (Int_rem _) = 1
+  | returnArity (Int_rem_unchecked _) = 1
+  | returnArity (Int_TILDE _) = 1
+  | returnArity (Int_TILDE_unchecked _) = 1
+  | returnArity (Int_TILDE_wrapping _) = 1
+  | returnArity (Int_abs _) = 1
+  | returnArity (Int_LT _) = 1
+  | returnArity (Int_LE _) = 1
+  | returnArity (Int_GT _) = 1
+  | returnArity (Int_GE _) = 1
+  | returnArity (Int_toInt_unchecked _) = 1
+  | returnArity (Word_EQUAL _) = 1
+  | returnArity (Word_PLUS _) = 1
+  | returnArity (Word_MINUS _) = 1
+  | returnArity (Word_TIMES _) = 1
+  | returnArity (Word_TILDE _) = 1
+  | returnArity (Word_div _) = 1
+  | returnArity (Word_mod _) = 1
+  | returnArity (Word_div_unchecked _) = 1
+  | returnArity (Word_mod_unchecked _) = 1
+  | returnArity (Word_LT _) = 1
+  | returnArity (Word_LE _) = 1
+  | returnArity (Word_GT _) = 1
+  | returnArity (Word_GE _) = 1
+  | returnArity (Word_notb _) = 1
+  | returnArity (Word_andb _) = 1
+  | returnArity (Word_orb _) = 1
+  | returnArity (Word_xorb _) = 1
+  | returnArity (Word_LSHIFT_unchecked _) = 1
+  | returnArity (Word_RSHIFT_unchecked _) = 1
+  | returnArity Real_PLUS = 1
+  | returnArity Real_MINUS = 1
+  | returnArity Real_TIMES = 1
+  | returnArity Real_DIVIDE = 1
+  | returnArity Real_TILDE = 1
+  | returnArity Real_LT = 1
+  | returnArity Real_LE = 1
+  | returnArity Real_GT = 1
+  | returnArity Real_GE = 1
+  | returnArity Char_EQUAL = 1
+  | returnArity Char_LT = 1
+  | returnArity Char_LE = 1
+  | returnArity Char_GT = 1
+  | returnArity Char_GE = 1
+  | returnArity (Char_ord _) = 1
+  | returnArity (Char_chr_unchecked _) = 1
+  | returnArity Char16_EQUAL = 1
+  | returnArity Char16_LT = 1
+  | returnArity Char16_LE = 1
+  | returnArity Char16_GT = 1
+  | returnArity Char16_GE = 1
+  | returnArity (Char16_ord _) = 1
+  | returnArity (Char16_chr_unchecked _) = 1
+  | returnArity String_EQUAL = 1
+  | returnArity String_LT = 1
+  | returnArity String_LE = 1
+  | returnArity String_GT = 1
+  | returnArity String_GE = 1
+  | returnArity String_HAT = 1
+  | returnArity (String_size _) = 1
+  | returnArity String_str = 1
+  | returnArity String16_EQUAL = 1
+  | returnArity String16_LT = 1
+  | returnArity String16_LE = 1
+  | returnArity String16_GT = 1
+  | returnArity String16_GE = 1
+  | returnArity String16_HAT = 1
+  | returnArity (String16_size _) = 1
+  | returnArity String16_str = 1
+  | returnArity IntInf_andb = 1
+  | returnArity IntInf_orb = 1
+  | returnArity IntInf_xorb = 1
+  | returnArity IntInf_notb = 1
+  | returnArity (Vector_length _) = 1
+  | returnArity (Vector_unsafeFromListRevN _) = 1
+  | returnArity Array_EQUAL = 1
+  | returnArity (Array_length _) = 1
+  | returnArity Unsafe_cast = 1
+  | returnArity (Unsafe_Vector_sub _) = 1
+  | returnArity (Unsafe_Array_sub _) = 1
+  | returnArity (Unsafe_Array_update _) = 0
+  | returnArity Exception_instanceof = 1
+  | returnArity DelimCont_newPromptTag = 1
+  | returnArity DelimCont_pushPrompt = 1
+  | returnArity DelimCont_withSubCont = 1
+  | returnArity DelimCont_pushSubCont = 1
+  | returnArity assumeDiscardable = 1
+  | returnArity unreachable = 1
+  | returnArity Lua_sub = 1
+  | returnArity Lua_set = 0
+  | returnArity Lua_isNil = 1
+  | returnArity Lua_EQUAL = 1
+  | returnArity Lua_NOTEQUAL = 1
+  | returnArity Lua_LT = 1
+  | returnArity Lua_LE = 1
+  | returnArity Lua_GT = 1
+  | returnArity Lua_GE = 1
+  | returnArity Lua_PLUS = 1
+  | returnArity Lua_MINUS = 1
+  | returnArity Lua_TIMES = 1
+  | returnArity Lua_DIVIDE = 1
+  | returnArity Lua_INTDIV = 1
+  | returnArity Lua_MOD = 1
+  | returnArity Lua_pow = 1
+  | returnArity Lua_negate = 1
+  | returnArity Lua_andb = 1
+  | returnArity Lua_orb = 1
+  | returnArity Lua_xorb = 1
+  | returnArity Lua_notb = 1
+  | returnArity Lua_LSHIFT = 1
+  | returnArity Lua_RSHIFT = 1
+  | returnArity Lua_concat = 1
+  | returnArity Lua_length = 1
+  | returnArity Lua_isFalsy = 1
+  | returnArity Lua_call = 1
+  | returnArity Lua_call1 = 1
+  | returnArity Lua_call2 = 2
+  | returnArity Lua_call3 = 3
+  | returnArity Lua_method = 1
+  | returnArity Lua_method1 = 1
+  | returnArity Lua_method2 = 2
+  | returnArity Lua_method3 = 3
+  | returnArity Lua_global = 1
+  | returnArity Lua_setGlobal = 0
+  | returnArity Lua_newTable = 1
+  | returnArity JavaScript_sub = 1
+  | returnArity JavaScript_set = 0
+  | returnArity JavaScript_EQUAL = 1
+  | returnArity JavaScript_NOTEQUAL = 1
+  | returnArity JavaScript_LT = 1
+  | returnArity JavaScript_LE = 1
+  | returnArity JavaScript_GT = 1
+  | returnArity JavaScript_GE = 1
+  | returnArity JavaScript_PLUS = 1
+  | returnArity JavaScript_MINUS = 1
+  | returnArity JavaScript_TIMES = 1
+  | returnArity JavaScript_DIVIDE = 1
+  | returnArity JavaScript_MOD = 1
+  | returnArity JavaScript_negate = 1
+  | returnArity JavaScript_andb = 1
+  | returnArity JavaScript_orb = 1
+  | returnArity JavaScript_xorb = 1
+  | returnArity JavaScript_notb = 1
+  | returnArity JavaScript_LSHIFT = 1
+  | returnArity JavaScript_RSHIFT = 1
+  | returnArity JavaScript_URSHIFT = 1
+  | returnArity JavaScript_EXP = 1
+  | returnArity JavaScript_isFalsy = 1
+  | returnArity JavaScript_typeof = 1
+  | returnArity JavaScript_global = 1
+  | returnArity JavaScript_setGlobal = 0
+  | returnArity JavaScript_call = 1
+  | returnArity JavaScript_method = 1
+  | returnArity JavaScript_new = 1
 end;
 
 functor TypeOfPrimitives (type ty
@@ -1452,400 +1632,400 @@ functor TypeOfPrimitives (type ty
                           val Unconstrained : constraint
                           val IsEqType : constraint
                          ) : sig
-                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, result : ty }
+                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, results : ty list }
                              end = struct
-fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [tyEqA, tyEqA], result = bool }
-  | typeOf Primitives.call2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], result = tyA }
-  | typeOf Primitives.call3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], result = tyA }
-  | typeOf Primitives.List_cons = { vars = [(tyVarA, Unconstrained)], args = vector [tyA, listOf (tyA)], result = listOf (tyA) }
-  | typeOf Primitives.List_null = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = bool }
-  | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = tyA }
-  | typeOf Primitives.List_unsafeTail = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], result = listOf (tyA) }
-  | typeOf Primitives.Ref_ref = { vars = [(tyVarA, Unconstrained)], args = vector [tyA], result = refOf (tyA) }
-  | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), refOf (tyA)], result = bool }
-  | typeOf Primitives.Ref_set = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), tyA], result = unit }
-  | typeOf Primitives.Ref_read = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA)], result = tyA }
-  | typeOf Primitives.Bool_EQUAL = { vars = [], args = vector [bool, bool], result = bool }
-  | typeOf Primitives.Bool_not = { vars = [], args = vector [bool], result = bool }
-  | typeOf (Primitives.Int_EQUAL Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
-  | typeOf (Primitives.Int_EQUAL Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
-  | typeOf (Primitives.Int_EQUAL Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
-  | typeOf (Primitives.Int_EQUAL Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
-  | typeOf (Primitives.Int_EQUAL Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
-  | typeOf (Primitives.Int_PLUS Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_PLUS Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_PLUS Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_PLUS Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_PLUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_MINUS Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_MINUS Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_MINUS Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_MINUS Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_MINUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_TIMES Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_TIMES Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_TIMES Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_TIMES Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_TIMES Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_div Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_div Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_div Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_div Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_div Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_div_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_div_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_div_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_div_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_div_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_mod Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_mod Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_mod Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_mod Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_mod Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_mod_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_mod_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_mod_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_mod_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_mod_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_quot Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_quot Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_quot Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_quot Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_quot Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_quot_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_quot_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_quot_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_quot_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_quot_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_rem Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_rem Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_rem Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_rem Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_rem Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_rem_unchecked Primitives.INT) = { vars = [], args = vector [int, int], result = int }
-  | typeOf (Primitives.Int_rem_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], result = int32 }
-  | typeOf (Primitives.Int_rem_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], result = int54 }
-  | typeOf (Primitives.Int_rem_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], result = int64 }
-  | typeOf (Primitives.Int_rem_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf (Primitives.Int_TILDE Primitives.INT) = { vars = [], args = vector [int], result = int }
-  | typeOf (Primitives.Int_TILDE Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
-  | typeOf (Primitives.Int_TILDE Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
-  | typeOf (Primitives.Int_TILDE Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
-  | typeOf (Primitives.Int_TILDE Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT) = { vars = [], args = vector [int], result = int }
-  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
-  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
-  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
-  | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT) = { vars = [], args = vector [int], result = int }
-  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
-  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
-  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
-  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Int_abs Primitives.INT) = { vars = [], args = vector [int], result = int }
-  | typeOf (Primitives.Int_abs Primitives.I32) = { vars = [], args = vector [int32], result = int32 }
-  | typeOf (Primitives.Int_abs Primitives.I54) = { vars = [], args = vector [int54], result = int54 }
-  | typeOf (Primitives.Int_abs Primitives.I64) = { vars = [], args = vector [int64], result = int64 }
-  | typeOf (Primitives.Int_abs Primitives.INT_INF) = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Int_LT Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
-  | typeOf (Primitives.Int_LT Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
-  | typeOf (Primitives.Int_LT Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
-  | typeOf (Primitives.Int_LT Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
-  | typeOf (Primitives.Int_LT Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
-  | typeOf (Primitives.Int_LE Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
-  | typeOf (Primitives.Int_LE Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
-  | typeOf (Primitives.Int_LE Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
-  | typeOf (Primitives.Int_LE Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
-  | typeOf (Primitives.Int_LE Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
-  | typeOf (Primitives.Int_GT Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
-  | typeOf (Primitives.Int_GT Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
-  | typeOf (Primitives.Int_GT Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
-  | typeOf (Primitives.Int_GT Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
-  | typeOf (Primitives.Int_GT Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
-  | typeOf (Primitives.Int_GE Primitives.INT) = { vars = [], args = vector [int, int], result = bool }
-  | typeOf (Primitives.Int_GE Primitives.I32) = { vars = [], args = vector [int32, int32], result = bool }
-  | typeOf (Primitives.Int_GE Primitives.I54) = { vars = [], args = vector [int54, int54], result = bool }
-  | typeOf (Primitives.Int_GE Primitives.I64) = { vars = [], args = vector [int64, int64], result = bool }
-  | typeOf (Primitives.Int_GE Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], result = bool }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT)) = { vars = [], args = vector [int], result = int }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I32)) = { vars = [], args = vector [int], result = int32 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I54)) = { vars = [], args = vector [int], result = int54 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I64)) = { vars = [], args = vector [int], result = int64 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT_INF)) = { vars = [], args = vector [int], result = intInf }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT)) = { vars = [], args = vector [int32], result = int }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I32)) = { vars = [], args = vector [int32], result = int32 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I54)) = { vars = [], args = vector [int32], result = int54 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I64)) = { vars = [], args = vector [int32], result = int64 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT_INF)) = { vars = [], args = vector [int32], result = intInf }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT)) = { vars = [], args = vector [int54], result = int }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I32)) = { vars = [], args = vector [int54], result = int32 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I54)) = { vars = [], args = vector [int54], result = int54 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I64)) = { vars = [], args = vector [int54], result = int64 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT_INF)) = { vars = [], args = vector [int54], result = intInf }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT)) = { vars = [], args = vector [int64], result = int }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I32)) = { vars = [], args = vector [int64], result = int32 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I54)) = { vars = [], args = vector [int64], result = int54 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I64)) = { vars = [], args = vector [int64], result = int64 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT_INF)) = { vars = [], args = vector [int64], result = intInf }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT)) = { vars = [], args = vector [intInf], result = int }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I32)) = { vars = [], args = vector [intInf], result = int32 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I54)) = { vars = [], args = vector [intInf], result = int54 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I64)) = { vars = [], args = vector [intInf], result = int64 }
-  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT_INF)) = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Word_EQUAL Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
-  | typeOf (Primitives.Word_EQUAL Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
-  | typeOf (Primitives.Word_EQUAL Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }
-  | typeOf (Primitives.Word_PLUS Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_PLUS Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_PLUS Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_MINUS Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_MINUS Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_MINUS Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_TIMES Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_TIMES Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_TIMES Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_TILDE Primitives.WORD) = { vars = [], args = vector [word], result = word }
-  | typeOf (Primitives.Word_TILDE Primitives.W32) = { vars = [], args = vector [word32], result = word32 }
-  | typeOf (Primitives.Word_TILDE Primitives.W64) = { vars = [], args = vector [word64], result = word64 }
-  | typeOf (Primitives.Word_div Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_div Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_div Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_mod Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_mod Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_mod Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_div_unchecked Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_div_unchecked Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_div_unchecked Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_mod_unchecked Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_mod_unchecked Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_mod_unchecked Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_LT Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
-  | typeOf (Primitives.Word_LT Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
-  | typeOf (Primitives.Word_LT Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }
-  | typeOf (Primitives.Word_LE Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
-  | typeOf (Primitives.Word_LE Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
-  | typeOf (Primitives.Word_LE Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }
-  | typeOf (Primitives.Word_GT Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
-  | typeOf (Primitives.Word_GT Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
-  | typeOf (Primitives.Word_GT Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }
-  | typeOf (Primitives.Word_GE Primitives.WORD) = { vars = [], args = vector [word, word], result = bool }
-  | typeOf (Primitives.Word_GE Primitives.W32) = { vars = [], args = vector [word32, word32], result = bool }
-  | typeOf (Primitives.Word_GE Primitives.W64) = { vars = [], args = vector [word64, word64], result = bool }
-  | typeOf (Primitives.Word_notb Primitives.WORD) = { vars = [], args = vector [word], result = word }
-  | typeOf (Primitives.Word_notb Primitives.W32) = { vars = [], args = vector [word32], result = word32 }
-  | typeOf (Primitives.Word_notb Primitives.W64) = { vars = [], args = vector [word64], result = word64 }
-  | typeOf (Primitives.Word_andb Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_andb Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_andb Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_orb Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_orb Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_orb Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_xorb Primitives.WORD) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_xorb Primitives.W32) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_xorb Primitives.W64) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word, word32], result = word }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word, word64], result = word }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32, word], result = word32 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32, word64], result = word32 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], result = word64 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], result = word64 }
-  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word, word], result = word }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word, word32], result = word }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word, word64], result = word }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32, word], result = word32 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32, word32], result = word32 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32, word64], result = word32 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], result = word64 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], result = word64 }
-  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], result = word64 }
-  | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], result = real }
-  | typeOf Primitives.Real_MINUS = { vars = [], args = vector [real, real], result = real }
-  | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], result = real }
-  | typeOf Primitives.Real_DIVIDE = { vars = [], args = vector [real, real], result = real }
-  | typeOf Primitives.Real_TILDE = { vars = [], args = vector [real], result = real }
-  | typeOf Primitives.Real_LT = { vars = [], args = vector [real, real], result = bool }
-  | typeOf Primitives.Real_LE = { vars = [], args = vector [real, real], result = bool }
-  | typeOf Primitives.Real_GT = { vars = [], args = vector [real, real], result = bool }
-  | typeOf Primitives.Real_GE = { vars = [], args = vector [real, real], result = bool }
-  | typeOf Primitives.Char_EQUAL = { vars = [], args = vector [char, char], result = bool }
-  | typeOf Primitives.Char_LT = { vars = [], args = vector [char, char], result = bool }
-  | typeOf Primitives.Char_LE = { vars = [], args = vector [char, char], result = bool }
-  | typeOf Primitives.Char_GT = { vars = [], args = vector [char, char], result = bool }
-  | typeOf Primitives.Char_GE = { vars = [], args = vector [char, char], result = bool }
-  | typeOf (Primitives.Char_ord Primitives.INT) = { vars = [], args = vector [char], result = int }
-  | typeOf (Primitives.Char_ord Primitives.I32) = { vars = [], args = vector [char], result = int32 }
-  | typeOf (Primitives.Char_ord Primitives.I54) = { vars = [], args = vector [char], result = int54 }
-  | typeOf (Primitives.Char_ord Primitives.I64) = { vars = [], args = vector [char], result = int64 }
-  | typeOf (Primitives.Char_ord Primitives.INT_INF) = { vars = [], args = vector [char], result = intInf }
-  | typeOf (Primitives.Char_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], result = char }
-  | typeOf (Primitives.Char_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = char }
-  | typeOf (Primitives.Char_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = char }
-  | typeOf (Primitives.Char_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = char }
-  | typeOf (Primitives.Char_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = char }
-  | typeOf Primitives.Char16_EQUAL = { vars = [], args = vector [char16, char16], result = bool }
-  | typeOf Primitives.Char16_LT = { vars = [], args = vector [char16, char16], result = bool }
-  | typeOf Primitives.Char16_LE = { vars = [], args = vector [char16, char16], result = bool }
-  | typeOf Primitives.Char16_GT = { vars = [], args = vector [char16, char16], result = bool }
-  | typeOf Primitives.Char16_GE = { vars = [], args = vector [char16, char16], result = bool }
-  | typeOf (Primitives.Char16_ord Primitives.INT) = { vars = [], args = vector [char16], result = int }
-  | typeOf (Primitives.Char16_ord Primitives.I32) = { vars = [], args = vector [char16], result = int32 }
-  | typeOf (Primitives.Char16_ord Primitives.I54) = { vars = [], args = vector [char16], result = int54 }
-  | typeOf (Primitives.Char16_ord Primitives.I64) = { vars = [], args = vector [char16], result = int64 }
-  | typeOf (Primitives.Char16_ord Primitives.INT_INF) = { vars = [], args = vector [char16], result = intInf }
-  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], result = char16 }
-  | typeOf (Primitives.Char16_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], result = char16 }
-  | typeOf (Primitives.Char16_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], result = char16 }
-  | typeOf (Primitives.Char16_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], result = char16 }
-  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], result = char16 }
-  | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], result = bool }
-  | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], result = bool }
-  | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], result = bool }
-  | typeOf Primitives.String_GT = { vars = [], args = vector [string, string], result = bool }
-  | typeOf Primitives.String_GE = { vars = [], args = vector [string, string], result = bool }
-  | typeOf Primitives.String_HAT = { vars = [], args = vector [string, string], result = string }
-  | typeOf (Primitives.String_size Primitives.INT) = { vars = [], args = vector [string], result = int }
-  | typeOf (Primitives.String_size Primitives.I32) = { vars = [], args = vector [string], result = int32 }
-  | typeOf (Primitives.String_size Primitives.I54) = { vars = [], args = vector [string], result = int54 }
-  | typeOf (Primitives.String_size Primitives.I64) = { vars = [], args = vector [string], result = int64 }
-  | typeOf (Primitives.String_size Primitives.INT_INF) = { vars = [], args = vector [string], result = intInf }
-  | typeOf Primitives.String_str = { vars = [], args = vector [char], result = string }
-  | typeOf Primitives.String16_EQUAL = { vars = [], args = vector [string16, string16], result = bool }
-  | typeOf Primitives.String16_LT = { vars = [], args = vector [string16, string16], result = bool }
-  | typeOf Primitives.String16_LE = { vars = [], args = vector [string16, string16], result = bool }
-  | typeOf Primitives.String16_GT = { vars = [], args = vector [string16, string16], result = bool }
-  | typeOf Primitives.String16_GE = { vars = [], args = vector [string16, string16], result = bool }
-  | typeOf Primitives.String16_HAT = { vars = [], args = vector [string16, string16], result = string16 }
-  | typeOf (Primitives.String16_size Primitives.INT) = { vars = [], args = vector [string16], result = int }
-  | typeOf (Primitives.String16_size Primitives.I32) = { vars = [], args = vector [string16], result = int32 }
-  | typeOf (Primitives.String16_size Primitives.I54) = { vars = [], args = vector [string16], result = int54 }
-  | typeOf (Primitives.String16_size Primitives.I64) = { vars = [], args = vector [string16], result = int64 }
-  | typeOf (Primitives.String16_size Primitives.INT_INF) = { vars = [], args = vector [string16], result = intInf }
-  | typeOf Primitives.String16_str = { vars = [], args = vector [char16], result = string16 }
-  | typeOf Primitives.IntInf_andb = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], result = intInf }
-  | typeOf Primitives.IntInf_notb = { vars = [], args = vector [intInf], result = intInf }
-  | typeOf (Primitives.Vector_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int }
-  | typeOf (Primitives.Vector_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int32 }
-  | typeOf (Primitives.Vector_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int54 }
-  | typeOf (Primitives.Vector_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = int64 }
-  | typeOf (Primitives.Vector_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], result = intInf }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf, listOf (tyA)], result = vectorOf (tyA) }
-  | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), arrayOf (tyA)], result = bool }
-  | typeOf (Primitives.Array_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int }
-  | typeOf (Primitives.Array_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int32 }
-  | typeOf (Primitives.Array_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int54 }
-  | typeOf (Primitives.Array_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = int64 }
-  | typeOf (Primitives.Array_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], result = intInf }
-  | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [tyA], result = tyB }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int32], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int54], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int64], result = tyA }
-  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), intInf], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf], result = tyA }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64, tyA], result = unit }
-  | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf, tyA], result = unit }
-  | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], result = bool }
-  | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], result = promptTagOf (tyA) }
-  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], result = tyA }
-  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], result = tyA }
-  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], result = tyB }
-  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyB, tyA), tyA], result = tyB }
-  | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], result = tyA }
-  | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], result = unit }
-  | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], result = bool }
-  | typeOf Primitives.Lua_EQUAL = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_NOTEQUAL = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_LT = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_LE = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_GT = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_GE = { vars = [], args = vector [LuaValue, LuaValue], result = bool }
-  | typeOf Primitives.Lua_PLUS = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_MINUS = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_TIMES = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_DIVIDE = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_INTDIV = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_MOD = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_pow = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_negate = { vars = [], args = vector [LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_andb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_orb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_xorb = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_notb = { vars = [], args = vector [LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_LSHIFT = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_RSHIFT = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_concat = { vars = [], args = vector [LuaValue, LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_length = { vars = [], args = vector [LuaValue], result = LuaValue }
-  | typeOf Primitives.Lua_isFalsy = { vars = [], args = vector [LuaValue], result = bool }
-  | typeOf Primitives.Lua_call = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = vectorOf (LuaValue) }
-  | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = LuaValue }
-  | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = pairOf (LuaValue, LuaValue) }
-  | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], result = tupleOf [LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = vectorOf (LuaValue) }
-  | typeOf Primitives.Lua_method1 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = LuaValue }
-  | typeOf Primitives.Lua_method2 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = pairOf (LuaValue, LuaValue) }
-  | typeOf Primitives.Lua_method3 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], result = tupleOf [LuaValue, LuaValue, LuaValue] }
-  | typeOf Primitives.Lua_global = { vars = [], args = vector [string], result = LuaValue }
-  | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], result = unit }
-  | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], result = LuaValue }
-  | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], result = unit }
-  | typeOf Primitives.JavaScript_EQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_NOTEQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_LT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_LE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_GT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_GE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_PLUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_MINUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_TIMES = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_DIVIDE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_MOD = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_negate = { vars = [], args = vector [JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_andb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_orb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_xorb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_notb = { vars = [], args = vector [JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_LSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_RSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], result = bool }
-  | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], result = string16 }
-  | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_setGlobal = { vars = [], args = vector [string16, JavaScriptValue], result = unit }
-  | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], result = JavaScriptValue }
-  | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], result = JavaScriptValue }
+fun typeOf Primitives.EQUAL = { vars = [(tyVarEqA, IsEqType)], args = vector [tyEqA, tyEqA], results = [bool] }
+  | typeOf Primitives.call2 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained)], args = vector [function2Of (tyA, tyB, tyC), tyB, tyC], results = [tyA] }
+  | typeOf Primitives.call3 = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained), (tyVarC, Unconstrained), (tyVarD, Unconstrained)], args = vector [function3Of (tyA, tyB, tyC, tyD), tyB, tyC, tyD], results = [tyA] }
+  | typeOf Primitives.List_cons = { vars = [(tyVarA, Unconstrained)], args = vector [tyA, listOf (tyA)], results = [listOf (tyA)] }
+  | typeOf Primitives.List_null = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [bool] }
+  | typeOf Primitives.List_unsafeHead = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [tyA] }
+  | typeOf Primitives.List_unsafeTail = { vars = [(tyVarA, Unconstrained)], args = vector [listOf (tyA)], results = [listOf (tyA)] }
+  | typeOf Primitives.Ref_ref = { vars = [(tyVarA, Unconstrained)], args = vector [tyA], results = [refOf (tyA)] }
+  | typeOf Primitives.Ref_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), refOf (tyA)], results = [bool] }
+  | typeOf Primitives.Ref_set = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA), tyA], results = [] }
+  | typeOf Primitives.Ref_read = { vars = [(tyVarA, Unconstrained)], args = vector [refOf (tyA)], results = [tyA] }
+  | typeOf Primitives.Bool_EQUAL = { vars = [], args = vector [bool, bool], results = [bool] }
+  | typeOf Primitives.Bool_not = { vars = [], args = vector [bool], results = [bool] }
+  | typeOf (Primitives.Int_EQUAL Primitives.INT) = { vars = [], args = vector [int, int], results = [bool] }
+  | typeOf (Primitives.Int_EQUAL Primitives.I32) = { vars = [], args = vector [int32, int32], results = [bool] }
+  | typeOf (Primitives.Int_EQUAL Primitives.I54) = { vars = [], args = vector [int54, int54], results = [bool] }
+  | typeOf (Primitives.Int_EQUAL Primitives.I64) = { vars = [], args = vector [int64, int64], results = [bool] }
+  | typeOf (Primitives.Int_EQUAL Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [bool] }
+  | typeOf (Primitives.Int_PLUS Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_PLUS Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_PLUS Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_PLUS Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_PLUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_PLUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_MINUS Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_MINUS Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_MINUS Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_MINUS Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_MINUS Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_MINUS_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_TIMES Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_TIMES Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_TIMES Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_TIMES Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_TIMES Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_TIMES_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_div Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_div Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_div Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_div Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_div Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_div_unchecked Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_div_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_div_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_div_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_div_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_mod Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_mod Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_mod Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_mod Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_mod Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_mod_unchecked Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_mod_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_mod_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_mod_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_mod_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_quot Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_quot Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_quot Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_quot Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_quot Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_quot_unchecked Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_quot_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_quot_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_quot_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_quot_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_rem Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_rem Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_rem Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_rem Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_rem Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_rem_unchecked Primitives.INT) = { vars = [], args = vector [int, int], results = [int] }
+  | typeOf (Primitives.Int_rem_unchecked Primitives.I32) = { vars = [], args = vector [int32, int32], results = [int32] }
+  | typeOf (Primitives.Int_rem_unchecked Primitives.I54) = { vars = [], args = vector [int54, int54], results = [int54] }
+  | typeOf (Primitives.Int_rem_unchecked Primitives.I64) = { vars = [], args = vector [int64, int64], results = [int64] }
+  | typeOf (Primitives.Int_rem_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf (Primitives.Int_TILDE Primitives.INT) = { vars = [], args = vector [int], results = [int] }
+  | typeOf (Primitives.Int_TILDE Primitives.I32) = { vars = [], args = vector [int32], results = [int32] }
+  | typeOf (Primitives.Int_TILDE Primitives.I54) = { vars = [], args = vector [int54], results = [int54] }
+  | typeOf (Primitives.Int_TILDE Primitives.I64) = { vars = [], args = vector [int64], results = [int64] }
+  | typeOf (Primitives.Int_TILDE Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT) = { vars = [], args = vector [int], results = [int] }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I32) = { vars = [], args = vector [int32], results = [int32] }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [int54] }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [int64] }
+  | typeOf (Primitives.Int_TILDE_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT) = { vars = [], args = vector [int], results = [int] }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I32) = { vars = [], args = vector [int32], results = [int32] }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I54) = { vars = [], args = vector [int54], results = [int54] }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.I64) = { vars = [], args = vector [int64], results = [int64] }
+  | typeOf (Primitives.Int_TILDE_wrapping Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Int_abs Primitives.INT) = { vars = [], args = vector [int], results = [int] }
+  | typeOf (Primitives.Int_abs Primitives.I32) = { vars = [], args = vector [int32], results = [int32] }
+  | typeOf (Primitives.Int_abs Primitives.I54) = { vars = [], args = vector [int54], results = [int54] }
+  | typeOf (Primitives.Int_abs Primitives.I64) = { vars = [], args = vector [int64], results = [int64] }
+  | typeOf (Primitives.Int_abs Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Int_LT Primitives.INT) = { vars = [], args = vector [int, int], results = [bool] }
+  | typeOf (Primitives.Int_LT Primitives.I32) = { vars = [], args = vector [int32, int32], results = [bool] }
+  | typeOf (Primitives.Int_LT Primitives.I54) = { vars = [], args = vector [int54, int54], results = [bool] }
+  | typeOf (Primitives.Int_LT Primitives.I64) = { vars = [], args = vector [int64, int64], results = [bool] }
+  | typeOf (Primitives.Int_LT Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [bool] }
+  | typeOf (Primitives.Int_LE Primitives.INT) = { vars = [], args = vector [int, int], results = [bool] }
+  | typeOf (Primitives.Int_LE Primitives.I32) = { vars = [], args = vector [int32, int32], results = [bool] }
+  | typeOf (Primitives.Int_LE Primitives.I54) = { vars = [], args = vector [int54, int54], results = [bool] }
+  | typeOf (Primitives.Int_LE Primitives.I64) = { vars = [], args = vector [int64, int64], results = [bool] }
+  | typeOf (Primitives.Int_LE Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [bool] }
+  | typeOf (Primitives.Int_GT Primitives.INT) = { vars = [], args = vector [int, int], results = [bool] }
+  | typeOf (Primitives.Int_GT Primitives.I32) = { vars = [], args = vector [int32, int32], results = [bool] }
+  | typeOf (Primitives.Int_GT Primitives.I54) = { vars = [], args = vector [int54, int54], results = [bool] }
+  | typeOf (Primitives.Int_GT Primitives.I64) = { vars = [], args = vector [int64, int64], results = [bool] }
+  | typeOf (Primitives.Int_GT Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [bool] }
+  | typeOf (Primitives.Int_GE Primitives.INT) = { vars = [], args = vector [int, int], results = [bool] }
+  | typeOf (Primitives.Int_GE Primitives.I32) = { vars = [], args = vector [int32, int32], results = [bool] }
+  | typeOf (Primitives.Int_GE Primitives.I54) = { vars = [], args = vector [int54, int54], results = [bool] }
+  | typeOf (Primitives.Int_GE Primitives.I64) = { vars = [], args = vector [int64, int64], results = [bool] }
+  | typeOf (Primitives.Int_GE Primitives.INT_INF) = { vars = [], args = vector [intInf, intInf], results = [bool] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT)) = { vars = [], args = vector [int], results = [int] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I32)) = { vars = [], args = vector [int], results = [int32] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I54)) = { vars = [], args = vector [int], results = [int54] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.I64)) = { vars = [], args = vector [int], results = [int64] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT, Primitives.INT_INF)) = { vars = [], args = vector [int], results = [intInf] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT)) = { vars = [], args = vector [int32], results = [int] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I32)) = { vars = [], args = vector [int32], results = [int32] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I54)) = { vars = [], args = vector [int32], results = [int54] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.I64)) = { vars = [], args = vector [int32], results = [int64] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I32, Primitives.INT_INF)) = { vars = [], args = vector [int32], results = [intInf] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT)) = { vars = [], args = vector [int54], results = [int] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I32)) = { vars = [], args = vector [int54], results = [int32] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I54)) = { vars = [], args = vector [int54], results = [int54] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.I64)) = { vars = [], args = vector [int54], results = [int64] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I54, Primitives.INT_INF)) = { vars = [], args = vector [int54], results = [intInf] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT)) = { vars = [], args = vector [int64], results = [int] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I32)) = { vars = [], args = vector [int64], results = [int32] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I54)) = { vars = [], args = vector [int64], results = [int54] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.I64)) = { vars = [], args = vector [int64], results = [int64] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.I64, Primitives.INT_INF)) = { vars = [], args = vector [int64], results = [intInf] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT)) = { vars = [], args = vector [intInf], results = [int] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I32)) = { vars = [], args = vector [intInf], results = [int32] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I54)) = { vars = [], args = vector [intInf], results = [int54] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.I64)) = { vars = [], args = vector [intInf], results = [int64] }
+  | typeOf (Primitives.Int_toInt_unchecked (Primitives.INT_INF, Primitives.INT_INF)) = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Word_EQUAL Primitives.WORD) = { vars = [], args = vector [word, word], results = [bool] }
+  | typeOf (Primitives.Word_EQUAL Primitives.W32) = { vars = [], args = vector [word32, word32], results = [bool] }
+  | typeOf (Primitives.Word_EQUAL Primitives.W64) = { vars = [], args = vector [word64, word64], results = [bool] }
+  | typeOf (Primitives.Word_PLUS Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_PLUS Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_PLUS Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_MINUS Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_MINUS Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_MINUS Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_TIMES Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_TIMES Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_TIMES Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_TILDE Primitives.WORD) = { vars = [], args = vector [word], results = [word] }
+  | typeOf (Primitives.Word_TILDE Primitives.W32) = { vars = [], args = vector [word32], results = [word32] }
+  | typeOf (Primitives.Word_TILDE Primitives.W64) = { vars = [], args = vector [word64], results = [word64] }
+  | typeOf (Primitives.Word_div Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_div Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_div Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_mod Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_mod Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_mod Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_div_unchecked Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_div_unchecked Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_div_unchecked Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_mod_unchecked Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_mod_unchecked Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_mod_unchecked Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_LT Primitives.WORD) = { vars = [], args = vector [word, word], results = [bool] }
+  | typeOf (Primitives.Word_LT Primitives.W32) = { vars = [], args = vector [word32, word32], results = [bool] }
+  | typeOf (Primitives.Word_LT Primitives.W64) = { vars = [], args = vector [word64, word64], results = [bool] }
+  | typeOf (Primitives.Word_LE Primitives.WORD) = { vars = [], args = vector [word, word], results = [bool] }
+  | typeOf (Primitives.Word_LE Primitives.W32) = { vars = [], args = vector [word32, word32], results = [bool] }
+  | typeOf (Primitives.Word_LE Primitives.W64) = { vars = [], args = vector [word64, word64], results = [bool] }
+  | typeOf (Primitives.Word_GT Primitives.WORD) = { vars = [], args = vector [word, word], results = [bool] }
+  | typeOf (Primitives.Word_GT Primitives.W32) = { vars = [], args = vector [word32, word32], results = [bool] }
+  | typeOf (Primitives.Word_GT Primitives.W64) = { vars = [], args = vector [word64, word64], results = [bool] }
+  | typeOf (Primitives.Word_GE Primitives.WORD) = { vars = [], args = vector [word, word], results = [bool] }
+  | typeOf (Primitives.Word_GE Primitives.W32) = { vars = [], args = vector [word32, word32], results = [bool] }
+  | typeOf (Primitives.Word_GE Primitives.W64) = { vars = [], args = vector [word64, word64], results = [bool] }
+  | typeOf (Primitives.Word_notb Primitives.WORD) = { vars = [], args = vector [word], results = [word] }
+  | typeOf (Primitives.Word_notb Primitives.W32) = { vars = [], args = vector [word32], results = [word32] }
+  | typeOf (Primitives.Word_notb Primitives.W64) = { vars = [], args = vector [word64], results = [word64] }
+  | typeOf (Primitives.Word_andb Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_andb Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_andb Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_orb Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_orb Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_orb Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_xorb Primitives.WORD) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_xorb Primitives.W32) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_xorb Primitives.W64) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word, word32], results = [word] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word, word64], results = [word] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32, word], results = [word32] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32, word64], results = [word32] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], results = [word64] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], results = [word64] }
+  | typeOf (Primitives.Word_LSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.WORD)) = { vars = [], args = vector [word, word], results = [word] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.W32)) = { vars = [], args = vector [word, word32], results = [word] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.WORD, Primitives.W64)) = { vars = [], args = vector [word, word64], results = [word] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.WORD)) = { vars = [], args = vector [word32, word], results = [word32] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.W32)) = { vars = [], args = vector [word32, word32], results = [word32] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W32, Primitives.W64)) = { vars = [], args = vector [word32, word64], results = [word32] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.WORD)) = { vars = [], args = vector [word64, word], results = [word64] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W32)) = { vars = [], args = vector [word64, word32], results = [word64] }
+  | typeOf (Primitives.Word_RSHIFT_unchecked (Primitives.W64, Primitives.W64)) = { vars = [], args = vector [word64, word64], results = [word64] }
+  | typeOf Primitives.Real_PLUS = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_MINUS = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_TIMES = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_DIVIDE = { vars = [], args = vector [real, real], results = [real] }
+  | typeOf Primitives.Real_TILDE = { vars = [], args = vector [real], results = [real] }
+  | typeOf Primitives.Real_LT = { vars = [], args = vector [real, real], results = [bool] }
+  | typeOf Primitives.Real_LE = { vars = [], args = vector [real, real], results = [bool] }
+  | typeOf Primitives.Real_GT = { vars = [], args = vector [real, real], results = [bool] }
+  | typeOf Primitives.Real_GE = { vars = [], args = vector [real, real], results = [bool] }
+  | typeOf Primitives.Char_EQUAL = { vars = [], args = vector [char, char], results = [bool] }
+  | typeOf Primitives.Char_LT = { vars = [], args = vector [char, char], results = [bool] }
+  | typeOf Primitives.Char_LE = { vars = [], args = vector [char, char], results = [bool] }
+  | typeOf Primitives.Char_GT = { vars = [], args = vector [char, char], results = [bool] }
+  | typeOf Primitives.Char_GE = { vars = [], args = vector [char, char], results = [bool] }
+  | typeOf (Primitives.Char_ord Primitives.INT) = { vars = [], args = vector [char], results = [int] }
+  | typeOf (Primitives.Char_ord Primitives.I32) = { vars = [], args = vector [char], results = [int32] }
+  | typeOf (Primitives.Char_ord Primitives.I54) = { vars = [], args = vector [char], results = [int54] }
+  | typeOf (Primitives.Char_ord Primitives.I64) = { vars = [], args = vector [char], results = [int64] }
+  | typeOf (Primitives.Char_ord Primitives.INT_INF) = { vars = [], args = vector [char], results = [intInf] }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], results = [char] }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], results = [char] }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char] }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char] }
+  | typeOf (Primitives.Char_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char] }
+  | typeOf Primitives.Char16_EQUAL = { vars = [], args = vector [char16, char16], results = [bool] }
+  | typeOf Primitives.Char16_LT = { vars = [], args = vector [char16, char16], results = [bool] }
+  | typeOf Primitives.Char16_LE = { vars = [], args = vector [char16, char16], results = [bool] }
+  | typeOf Primitives.Char16_GT = { vars = [], args = vector [char16, char16], results = [bool] }
+  | typeOf Primitives.Char16_GE = { vars = [], args = vector [char16, char16], results = [bool] }
+  | typeOf (Primitives.Char16_ord Primitives.INT) = { vars = [], args = vector [char16], results = [int] }
+  | typeOf (Primitives.Char16_ord Primitives.I32) = { vars = [], args = vector [char16], results = [int32] }
+  | typeOf (Primitives.Char16_ord Primitives.I54) = { vars = [], args = vector [char16], results = [int54] }
+  | typeOf (Primitives.Char16_ord Primitives.I64) = { vars = [], args = vector [char16], results = [int64] }
+  | typeOf (Primitives.Char16_ord Primitives.INT_INF) = { vars = [], args = vector [char16], results = [intInf] }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT) = { vars = [], args = vector [int], results = [char16] }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I32) = { vars = [], args = vector [int32], results = [char16] }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I54) = { vars = [], args = vector [int54], results = [char16] }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.I64) = { vars = [], args = vector [int64], results = [char16] }
+  | typeOf (Primitives.Char16_chr_unchecked Primitives.INT_INF) = { vars = [], args = vector [intInf], results = [char16] }
+  | typeOf Primitives.String_EQUAL = { vars = [], args = vector [string, string], results = [bool] }
+  | typeOf Primitives.String_LT = { vars = [], args = vector [string, string], results = [bool] }
+  | typeOf Primitives.String_LE = { vars = [], args = vector [string, string], results = [bool] }
+  | typeOf Primitives.String_GT = { vars = [], args = vector [string, string], results = [bool] }
+  | typeOf Primitives.String_GE = { vars = [], args = vector [string, string], results = [bool] }
+  | typeOf Primitives.String_HAT = { vars = [], args = vector [string, string], results = [string] }
+  | typeOf (Primitives.String_size Primitives.INT) = { vars = [], args = vector [string], results = [int] }
+  | typeOf (Primitives.String_size Primitives.I32) = { vars = [], args = vector [string], results = [int32] }
+  | typeOf (Primitives.String_size Primitives.I54) = { vars = [], args = vector [string], results = [int54] }
+  | typeOf (Primitives.String_size Primitives.I64) = { vars = [], args = vector [string], results = [int64] }
+  | typeOf (Primitives.String_size Primitives.INT_INF) = { vars = [], args = vector [string], results = [intInf] }
+  | typeOf Primitives.String_str = { vars = [], args = vector [char], results = [string] }
+  | typeOf Primitives.String16_EQUAL = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.String16_LT = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.String16_LE = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.String16_GT = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.String16_GE = { vars = [], args = vector [string16, string16], results = [bool] }
+  | typeOf Primitives.String16_HAT = { vars = [], args = vector [string16, string16], results = [string16] }
+  | typeOf (Primitives.String16_size Primitives.INT) = { vars = [], args = vector [string16], results = [int] }
+  | typeOf (Primitives.String16_size Primitives.I32) = { vars = [], args = vector [string16], results = [int32] }
+  | typeOf (Primitives.String16_size Primitives.I54) = { vars = [], args = vector [string16], results = [int54] }
+  | typeOf (Primitives.String16_size Primitives.I64) = { vars = [], args = vector [string16], results = [int64] }
+  | typeOf (Primitives.String16_size Primitives.INT_INF) = { vars = [], args = vector [string16], results = [intInf] }
+  | typeOf Primitives.String16_str = { vars = [], args = vector [char16], results = [string16] }
+  | typeOf Primitives.IntInf_andb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf Primitives.IntInf_orb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf Primitives.IntInf_xorb = { vars = [], args = vector [intInf, intInf], results = [intInf] }
+  | typeOf Primitives.IntInf_notb = { vars = [], args = vector [intInf], results = [intInf] }
+  | typeOf (Primitives.Vector_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [int] }
+  | typeOf (Primitives.Vector_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [int32] }
+  | typeOf (Primitives.Vector_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [int54] }
+  | typeOf (Primitives.Vector_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [int64] }
+  | typeOf (Primitives.Vector_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA)], results = [intInf] }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [int, listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [int32, listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [int54, listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [int64, listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf (Primitives.Vector_unsafeFromListRevN Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [intInf, listOf (tyA)], results = [vectorOf (tyA)] }
+  | typeOf Primitives.Array_EQUAL = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), arrayOf (tyA)], results = [bool] }
+  | typeOf (Primitives.Array_length Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [int] }
+  | typeOf (Primitives.Array_length Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [int32] }
+  | typeOf (Primitives.Array_length Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [int54] }
+  | typeOf (Primitives.Array_length Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [int64] }
+  | typeOf (Primitives.Array_length Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA)], results = [intInf] }
+  | typeOf Primitives.Unsafe_cast = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [tyA], results = [tyB] }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int32], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int54], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), int64], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Vector_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [vectorOf (tyA), intInf], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_sub Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf], results = [tyA] }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.INT) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int, tyA], results = [] }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I32) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int32, tyA], results = [] }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I54) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int54, tyA], results = [] }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.I64) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), int64, tyA], results = [] }
+  | typeOf (Primitives.Unsafe_Array_update Primitives.INT_INF) = { vars = [(tyVarA, Unconstrained)], args = vector [arrayOf (tyA), intInf, tyA], results = [] }
+  | typeOf Primitives.Exception_instanceof = { vars = [], args = vector [exn, exntag], results = [bool] }
+  | typeOf Primitives.DelimCont_newPromptTag = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [promptTagOf (tyA)] }
+  | typeOf Primitives.DelimCont_pushPrompt = { vars = [(tyVarA, Unconstrained)], args = vector [promptTagOf (tyA), function1Of (tyA, unit)], results = [tyA] }
+  | typeOf Primitives.DelimCont_withSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [promptTagOf (tyB), function1Of (tyB, subcontOf (tyA, tyB))], results = [tyA] }
+  | typeOf Primitives.DelimCont_pushSubCont = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [subcontOf (tyA, tyB), function1Of (tyA, unit)], results = [tyB] }
+  | typeOf Primitives.assumeDiscardable = { vars = [(tyVarA, Unconstrained), (tyVarB, Unconstrained)], args = vector [function1Of (tyB, tyA), tyA], results = [tyB] }
+  | typeOf Primitives.unreachable = { vars = [(tyVarA, Unconstrained)], args = vector [], results = [tyA] }
+  | typeOf Primitives.Lua_sub = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_set = { vars = [], args = vector [LuaValue, LuaValue, LuaValue], results = [] }
+  | typeOf Primitives.Lua_isNil = { vars = [], args = vector [LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_EQUAL = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_NOTEQUAL = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_LT = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_LE = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_GT = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_GE = { vars = [], args = vector [LuaValue, LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_PLUS = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_MINUS = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_TIMES = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_DIVIDE = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_INTDIV = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_MOD = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_pow = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_negate = { vars = [], args = vector [LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_andb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_orb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_xorb = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_notb = { vars = [], args = vector [LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_LSHIFT = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_RSHIFT = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_concat = { vars = [], args = vector [LuaValue, LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_length = { vars = [], args = vector [LuaValue], results = [LuaValue] }
+  | typeOf Primitives.Lua_isFalsy = { vars = [], args = vector [LuaValue], results = [bool] }
+  | typeOf Primitives.Lua_call = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [vectorOf (LuaValue)] }
+  | typeOf Primitives.Lua_call1 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue] }
+  | typeOf Primitives.Lua_call2 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_call3 = { vars = [], args = vector [LuaValue, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [vectorOf (LuaValue)] }
+  | typeOf Primitives.Lua_method1 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue] }
+  | typeOf Primitives.Lua_method2 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_method3 = { vars = [], args = vector [LuaValue, string, vectorOf (LuaValue)], results = [LuaValue, LuaValue, LuaValue] }
+  | typeOf Primitives.Lua_global = { vars = [], args = vector [string], results = [LuaValue] }
+  | typeOf Primitives.Lua_setGlobal = { vars = [], args = vector [string, LuaValue], results = [] }
+  | typeOf Primitives.Lua_newTable = { vars = [], args = vector [], results = [LuaValue] }
+  | typeOf Primitives.JavaScript_sub = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_set = { vars = [], args = vector [JavaScriptValue, JavaScriptValue, JavaScriptValue], results = [] }
+  | typeOf Primitives.JavaScript_EQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_NOTEQUAL = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_LT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_LE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_GT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_GE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_PLUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_MINUS = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_TIMES = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_DIVIDE = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_MOD = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_negate = { vars = [], args = vector [JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_andb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_orb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_xorb = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_notb = { vars = [], args = vector [JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_LSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_RSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_URSHIFT = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_EXP = { vars = [], args = vector [JavaScriptValue, JavaScriptValue], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_isFalsy = { vars = [], args = vector [JavaScriptValue], results = [bool] }
+  | typeOf Primitives.JavaScript_typeof = { vars = [], args = vector [JavaScriptValue], results = [string16] }
+  | typeOf Primitives.JavaScript_global = { vars = [], args = vector [string16], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_setGlobal = { vars = [], args = vector [string16, JavaScriptValue], results = [] }
+  | typeOf Primitives.JavaScript_call = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_method = { vars = [], args = vector [JavaScriptValue, string16, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
+  | typeOf Primitives.JavaScript_new = { vars = [], args = vector [JavaScriptValue, vectorOf (JavaScriptValue)], results = [JavaScriptValue] }
 end;

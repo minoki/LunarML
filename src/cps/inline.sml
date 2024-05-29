@@ -347,13 +347,14 @@ fun simplifySimpleExp (_ : env, C.Record _) = NOT_SIMPLIFIED
   | simplifySimpleExp (_, C.Abs { contParam = _, params = _, body = _, attr = _ }) = NOT_SIMPLIFIED (* TODO: Try eta conversion *)
 and simplifyDec (ctx : Context) (dec, (env, cenv, subst, csubst, acc : C.Dec list))
     = case dec of
-          C.ValDec { exp, result } =>
+          C.ValDec { exp, results } =>
           let val exp = CpsSimplify.substSimpleExp (subst, csubst, exp)
           in case simplifySimpleExp (env, exp) of
                  VALUE v => let val () = #simplificationOccurred ctx := true
-                                val subst = case result of
-                                                SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
-                                              | NONE => subst
+                                val subst = case results of
+                                                [SOME result] => TypedSyntax.VIdMap.insert (subst, result, v)
+                                              | [NONE] => subst
+                                              | _ => subst (* should not occur *)
                             in (env, cenv, subst, csubst, acc)
                             end
                | simplified =>
@@ -364,29 +365,29 @@ and simplifyDec (ctx : Context) (dec, (env, cenv, subst, csubst, acc : C.Dec lis
                      val exp = case simplified of
                                    SIMPLE_EXP exp => exp
                                  | _ => exp
-                 in case (exp, result) of
-                        (C.Abs { contParam, params, body, attr }, SOME result) =>
+                 in case (exp, results) of
+                        (C.Abs { contParam, params, body, attr }, [SOME result]) =>
                         let val body = simplifyCExp (ctx, env, cenv, subst, csubst, body)
                             val exp = C.Abs { contParam = contParam, params = params, body = body, attr = attr }
                             val env = TypedSyntax.VIdMap.insert (env, result, { exp = if CpsSimplify.sizeOfCExp (body, 10) >= 0 then (* Inline small functions *) SOME exp else NONE (*, isDiscardableFunction = isDiscardableExp (env, body) *) })
                             val dec = C.ValDec { exp = exp
-                                               , result = SOME result
+                                               , results = [SOME result]
                                                }
                         in (env, cenv, subst, csubst, dec :: acc)
                         end
-                      | _ => (case (C.isDiscardable exp, result) of
-                                  (true, NONE) => (env, cenv, subst, csubst, acc)
-                                | (_, SOME result) => let val dec = C.ValDec { exp = exp
-                                                                             , result = SOME result
-                                                                             }
-                                                          val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp (*, isDiscardableFunction = false *) })
-                                                      in (env, cenv, subst, csubst, dec :: acc)
-                                                      end
-                                | (false, NONE) => let val dec = C.ValDec { exp = exp
-                                                                          , result = NONE
-                                                                          }
-                                                   in (env, cenv, subst, csubst, dec :: acc)
-                                                   end
+                      | _ => (case (C.isDiscardable exp, results) of
+                                  (true, [NONE]) => (env, cenv, subst, csubst, acc)
+                                | (_, [SOME result]) => let val dec = C.ValDec { exp = exp
+                                                                               , results = [SOME result]
+                                                                               }
+                                                            val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp (*, isDiscardableFunction = false *) })
+                                                        in (env, cenv, subst, csubst, dec :: acc)
+                                                        end
+                                | _ => let val dec = C.ValDec { exp = exp
+                                                              , results = results
+                                                              }
+                                       in (env, cenv, subst, csubst, dec :: acc)
+                                       end
                              )
                  end
           end

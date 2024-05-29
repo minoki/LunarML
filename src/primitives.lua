@@ -50,94 +50,94 @@ do
   local subcont = function(ty1, ty2) return {string_format("subcontOf (%s, %s)", ty1[1], ty2[1])} end
   local function Binary(a, b)
     return function(result)
-      return { vars = {}, args = {a, b}, result = result }
+      return { vars = {}, args = {a, b}, results = {result} }
     end
   end
   local function HomoUnary(a)
-    return { vars = {}, args = {a}, result = a }
+    return { vars = {}, args = {a}, results = {a} }
   end
   local function HomoBinary(a)
-    return { vars = {}, args = {a, a}, result = a }
+    return { vars = {}, args = {a, a}, results = {a} }
   end
   local function Compare(a)
-    return { vars = {}, args = {a, a}, result = bool }
+    return { vars = {}, args = {a, a}, results = {bool} }
   end
 
   PRIMITIVES = {
     {
       name = "=",
       srcname = "EQUAL",
-      type = { vars = {TV.eqA}, args = {TV.eqA, TV.eqA}, result = bool },
+      type = { vars = {TV.eqA}, args = {TV.eqA, TV.eqA}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "call2",
       srcname = "call2",
-      type = { vars = {TV.a, TV.b, TV.c}, args = {function2(TV.a, TV.b, TV.c), TV.b, TV.c}, result = TV.a },
+      type = { vars = {TV.a, TV.b, TV.c}, args = {function2(TV.a, TV.b, TV.c), TV.b, TV.c}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "call3",
       srcname = "call3",
-      type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function3(TV.a, TV.b, TV.c, TV.d), TV.b, TV.c, TV.d}, result = TV.a },
+      type = { vars = {TV.a, TV.b, TV.c, TV.d}, args = {function3(TV.a, TV.b, TV.c, TV.d), TV.b, TV.c, TV.d}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "List.::",
       srcname = "List_cons",
-      type = { vars = {TV.a}, args = {TV.a, list(TV.a)}, result = list(TV.a) },
+      type = { vars = {TV.a}, args = {TV.a, list(TV.a)}, results = {list(TV.a)} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "List.null",
       srcname = "List_null",
-      type = { vars = {TV.a}, args = {list(TV.a)}, result = bool },
+      type = { vars = {TV.a}, args = {list(TV.a)}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "List.unsafeHead",
       srcname = "List_unsafeHead",
-      type = { vars = {TV.a}, args = {list(TV.a)}, result = TV.a },
+      type = { vars = {TV.a}, args = {list(TV.a)}, results = {TV.a} },
       mayraise = false, -- partial
       discardable = true,
     },
     {
       name = "List.unsafeTail",
       srcname = "List_unsafeTail",
-      type = { vars = {TV.a}, args = {list(TV.a)}, result = list(TV.a) },
+      type = { vars = {TV.a}, args = {list(TV.a)}, results = {list(TV.a)} },
       mayraise = false, -- partial
       discardable = true,
     },
     {
       name = "Ref.ref",
       srcname = "Ref_ref",
-      type = { vars = {TV.a}, args = {TV.a}, result = ref(TV.a) },
+      type = { vars = {TV.a}, args = {TV.a}, results = {ref(TV.a)} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Ref.=",
       srcname = "Ref_EQUAL",
-      type = { vars = {TV.a}, args = {ref(TV.a), ref(TV.a)}, result = bool },
+      type = { vars = {TV.a}, args = {ref(TV.a), ref(TV.a)}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Ref.:=",
       srcname = "Ref_set",
-      type = { vars = {TV.a}, args = {ref(TV.a), TV.a}, result = unit },
+      type = { vars = {TV.a}, args = {ref(TV.a), TV.a}, results = {} },
       mayraise = false,
       discardable = false,
     },
     {
       name = "Ref.!",
       srcname = "Ref_read",
-      type = { vars = {TV.a}, args = {ref(TV.a)}, result = TV.a },
+      type = { vars = {TV.a}, args = {ref(TV.a)}, results = {TV.a} },
       mayraise = false,
       discardable = true,
     },
@@ -319,7 +319,7 @@ do
     {
       name = "Int{i}.toInt{i}.unchecked",
       srcname = "Int_toInt_unchecked",
-      type = { vars = {}, args = {intA}, result = intB },
+      type = { vars = {}, args = {intA}, results = {intB} },
       mayraise = false,
       discardable = true,
     },
@@ -445,14 +445,14 @@ do
     { -- the amount must be less than wordSize
       name = "Word{w}.<<.unchecked{.w}",
       srcname = "Word_LSHIFT_unchecked",
-      type = { vars = {}, args = {wordA, wordB}, result = wordA },
+      type = { vars = {}, args = {wordA, wordB}, results = {wordA} },
       mayraise = false,
       discardable = true,
     },
     { -- the amount must be less than wordSize
       name = "Word{w}.>>.unchecked{.w}",
       srcname = "Word_RSHIFT_unchecked",
-      type = { vars = {}, args = {wordA, wordB}, result = wordA },
+      type = { vars = {}, args = {wordA, wordB}, results = {wordA} },
       mayraise = false,
       discardable = true,
     },
@@ -557,14 +557,14 @@ do
     {
       name = "Char.ord{.i}",
       srcname = "Char_ord",
-      type = { vars = {}, args = {char}, result = intA },
+      type = { vars = {}, args = {char}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Char.chr.unchecked{.i}",
       srcname = "Char_chr_unchecked",
-      type = { vars = {}, args = {intA}, result = char },
+      type = { vars = {}, args = {intA}, results = {char} },
       mayraise = false,
       discardable = true,
     },
@@ -606,14 +606,14 @@ do
     {
       name = "Char16.ord{.i}",
       srcname = "Char16_ord",
-      type = { vars = {}, args = {char16}, result = intA },
+      type = { vars = {}, args = {char16}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Char16.chr.unchecked{.i}",
       srcname = "Char16_chr_unchecked",
-      type = { vars = {}, args = {intA}, result = char16 },
+      type = { vars = {}, args = {intA}, results = {char16} },
       mayraise = false,
       discardable = true,
     },
@@ -662,14 +662,14 @@ do
     {
       name = "String.size{.i}",
       srcname = "String_size",
-      type = { vars = {}, args = {string}, result = intA },
+      type = { vars = {}, args = {string}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "String.str",
       srcname = "String_str",
-      type = { vars = {}, args = {char}, result = string },
+      type = { vars = {}, args = {char}, results = {string} },
       mayraise = false,
       discardable = true,
     },
@@ -718,14 +718,14 @@ do
     {
       name = "String16.size{.i}",
       srcname = "String16_size",
-      type = { vars = {}, args = {string16}, result = intA },
+      type = { vars = {}, args = {string16}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "String16.str",
       srcname = "String16_str",
-      type = { vars = {}, args = {char16}, result = string16 },
+      type = { vars = {}, args = {char16}, results = {string16} },
       mayraise = false,
       discardable = true,
     },
@@ -760,105 +760,105 @@ do
     {
       name = "Vector.length{.i}",
       srcname = "Vector_length",
-      type = { vars = {TV.a}, args = {vector(TV.a)}, result = intA },
+      type = { vars = {TV.a}, args = {vector(TV.a)}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Vector.unsafeFromListRevN{.i}",
       srcname = "Vector_unsafeFromListRevN",
-      type = { vars = {TV.a}, args = {intA, list(TV.a)}, result = vector(TV.a) },
+      type = { vars = {TV.a}, args = {intA, list(TV.a)}, results = {vector(TV.a)} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Array.=",
       srcname = "Array_EQUAL",
-      type = { vars = {TV.a}, args = {array(TV.a), array(TV.a)}, result = bool },
+      type = { vars = {TV.a}, args = {array(TV.a), array(TV.a)}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Array.length{.i}",
       srcname = "Array_length",
-      type = { vars = {TV.a}, args = {array(TV.a)}, result = intA },
+      type = { vars = {TV.a}, args = {array(TV.a)}, results = {intA} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Unsafe.cast",
       srcname = "Unsafe_cast",
-      type = { vars = {TV.a, TV.b}, args = {TV.a}, result = TV.b },
+      type = { vars = {TV.a, TV.b}, args = {TV.a}, results = {TV.b} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Unsafe.Vector.sub{.i}",
       srcname = "Unsafe_Vector_sub",
-      type = { vars = {TV.a}, args = {vector(TV.a), intA}, result = TV.a },
+      type = { vars = {TV.a}, args = {vector(TV.a), intA}, results = {TV.a} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Unsafe.Array.sub{.i}",
       srcname = "Unsafe_Array_sub",
-      type = { vars = {TV.a}, args = {array(TV.a), intA}, result = TV.a },
+      type = { vars = {TV.a}, args = {array(TV.a), intA}, results = {TV.a} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Unsafe.Array.update{.i}",
       srcname = "Unsafe_Array_update",
-      type = { vars = {TV.a}, args = {array(TV.a), intA, TV.a}, result = unit },
+      type = { vars = {TV.a}, args = {array(TV.a), intA, TV.a}, results = {} },
       mayraise = false,
       discardable = false,
     },
     {
       name = "Exception.instanceof",
       srcname = "Exception_instanceof",
-      type = { vars = {}, args = {exn, exntag}, result = bool },
+      type = { vars = {}, args = {exn, exntag}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "DelimCont.newPromptTag",
       srcname = "DelimCont_newPromptTag",
-      type = { vars = {TV.a}, args = {}, result = promptTag(TV.a) },
+      type = { vars = {TV.a}, args = {}, results = {promptTag(TV.a)} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "DelimCont.pushPrompt",
       srcname = "DelimCont_pushPrompt",
-      type = { vars = {TV.a}, args = {promptTag(TV.a), function1(TV.a, unit)}, result = TV.a },
+      type = { vars = {TV.a}, args = {promptTag(TV.a), function1(TV.a, unit)}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "DelimCont.withSubCont",
       srcname = "DelimCont_withSubCont",
-      type = { vars = {TV.a, TV.b}, args = {promptTag(TV.b), function1(TV.b, subcont(TV.a, TV.b))}, result = TV.a },
+      type = { vars = {TV.a, TV.b}, args = {promptTag(TV.b), function1(TV.b, subcont(TV.a, TV.b))}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "DelimCont.pushSubCont",
       srcname = "DelimCont_pushSubCont",
-      type = { vars = {TV.a, TV.b}, args = {subcont(TV.a, TV.b), function1(TV.a, unit)}, result = TV.b },
+      type = { vars = {TV.a, TV.b}, args = {subcont(TV.a, TV.b), function1(TV.a, unit)}, results = {TV.b} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "assumeDiscardable",
       srcname = "assumeDiscardable",
-      type = { vars = {TV.a, TV.b}, args = {function1(TV.b, TV.a), TV.a}, result = TV.b },
+      type = { vars = {TV.a, TV.b}, args = {function1(TV.b, TV.a), TV.a}, results = {TV.b} },
       mayraise = true,
       discardable = true,
     },
     {
       name = "unreachable",
       srcname = "unreachable",
-      type = { vars = {TV.a}, args = {}, result = TV.a },
+      type = { vars = {TV.a}, args = {}, results = {TV.a} },
       mayraise = true,
       discardable = false,
     },
@@ -876,14 +876,14 @@ do
     {
       name = "Lua.set",
       srcname = "Lua_set",
-      type = { vars = {}, args = {LuaValue, LuaValue, LuaValue}, result = unit },
+      type = { vars = {}, args = {LuaValue, LuaValue, LuaValue}, results = {} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.isNil",
       srcname = "Lua_isNil",
-      type = { vars = {}, args = {LuaValue}, result = bool },
+      type = { vars = {}, args = {LuaValue}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
@@ -1044,84 +1044,84 @@ do
     {
       name = "Lua.isFalsy",
       srcname = "Lua_isFalsy",
-      type = { vars = {}, args = {LuaValue}, result = bool },
+      type = { vars = {}, args = {LuaValue}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "Lua.call",
       srcname = "Lua_call",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = vector(LuaValue) },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {vector(LuaValue)} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call1",
       srcname = "Lua_call1",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = LuaValue },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call2",
       srcname = "Lua_call2",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = pair(LuaValue, LuaValue) },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.call3",
       srcname = "Lua_call3",
-      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, result = tuple{LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method",
       srcname = "Lua_method",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = vector(LuaValue) },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {vector(LuaValue)} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method1",
       srcname = "Lua_method1",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = LuaValue },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method2",
       srcname = "Lua_method2",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = pair(LuaValue, LuaValue) },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.method3",
       srcname = "Lua_method3",
-      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, result = tuple{LuaValue, LuaValue, LuaValue} },
+      type = { vars = {}, args = {LuaValue, string, vector(LuaValue)}, results = {LuaValue, LuaValue, LuaValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "Lua.global",
       srcname = "Lua_global",
-      type = { vars = {}, args = {string}, result = LuaValue },
+      type = { vars = {}, args = {string}, results = {LuaValue} },
       mayraise = false, -- assume that __index is not set on the global table
       discardable = true, -- assume that __index is not set on the global table
     },
     {
       name = "Lua.setGlobal",
       srcname = "Lua_setGlobal",
-      type = { vars = {}, args = {string, LuaValue}, result = unit },
+      type = { vars = {}, args = {string, LuaValue}, results = {} },
       mayraise = false, -- assume that __newindex is not set on the global table
       discardable = false,
     },
     {
       name = "Lua.newTable",
       srcname = "Lua_newTable",
-      type = { vars = {}, args = {}, result = LuaValue },
+      type = { vars = {}, args = {}, results = {LuaValue} },
       mayraise = false,
       discardable = true,
     },
@@ -1139,7 +1139,7 @@ do
     {
       name = "JavaScript.set",
       srcname = "JavaScript_set",
-      type = { vars = {}, args = {JSValue, JSValue, JSValue}, result = unit },
+      type = { vars = {}, args = {JSValue, JSValue, JSValue}, results = {} },
       mayraise = true,
       discardable = false,
     },
@@ -1286,49 +1286,49 @@ do
     {
       name = "JavaScript.isFalsy",
       srcname = "JavaScript_isFalsy",
-      type = { vars = {}, args = {JSValue}, result = bool },
+      type = { vars = {}, args = {JSValue}, results = {bool} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "JavaScript.typeof",
       srcname = "JavaScript_typeof",
-      type = { vars = {}, args = {JSValue}, result = string16 },
+      type = { vars = {}, args = {JSValue}, results = {string16} },
       mayraise = false,
       discardable = true,
     },
     {
       name = "JavaScript.global",
       srcname = "JavaScript_global",
-      type = { vars = {}, args = {string16}, result = JSValue },
+      type = { vars = {}, args = {string16}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.setGlobal",
       srcname = "JavaScript_setGlobal",
-      type = { vars = {}, args = {string16, JSValue}, result = unit },
+      type = { vars = {}, args = {string16, JSValue}, results = {} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.call",
       srcname = "JavaScript_call",
-      type = { vars = {}, args = {JSValue, vector(JSValue)}, result = JSValue },
+      type = { vars = {}, args = {JSValue, vector(JSValue)}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.method",
       srcname = "JavaScript_method",
-      type = { vars = {}, args = {JSValue, string16, vector(JSValue)}, result = JSValue },
+      type = { vars = {}, args = {JSValue, string16, vector(JSValue)}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
     {
       name = "JavaScript.new",
       srcname = "JavaScript_new",
-      type = { vars = {}, args = {JSValue, vector(JSValue)}, result = JSValue },
+      type = { vars = {}, args = {JSValue, vector(JSValue)}, results = {JSValue} },
       mayraise = true,
       discardable = false,
     },
@@ -1560,6 +1560,21 @@ f:write [[
     end
 ]]
 
+
+for i, p in ipairs(PRIMITIVES) do
+  local head
+  if i == 1 then
+    head = "fun returnArity "
+  else
+    head = "  | returnArity "
+  end
+  if p.name:find("{%.?%a}") then
+    f:write(string.format("%s(%s _) = %d\n", head, p.srcname, #p.type.results))
+  else
+    f:write(string.format("%s%s = %d\n", head, p.srcname, #p.type.results))
+  end
+end
+
 f:write[[
 end;
 
@@ -1609,7 +1624,7 @@ functor TypeOfPrimitives (type ty
                           val Unconstrained : constraint
                           val IsEqType : constraint
                          ) : sig
-                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, result : ty }
+                               val typeOf : Primitives.PrimOp -> { vars : (tv * constraint) list, args : ty vector, results : ty list }
                              end = struct
 ]]
 
@@ -1644,8 +1659,11 @@ for i, p in ipairs(PRIMITIVES) do
       for _, t in ipairs(p.type.args) do
         table.insert(argTypes, t[1])
       end
-      local resultType = p.type.result[1]
-      f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+      local resultTypes = {}
+      for _, t in ipairs(p.type.results) do
+        table.insert(resultTypes, t[1])
+      end
+      f:write(string.format("%sPrimitives.%s = { vars = [%s], args = vector [%s], results = [%s] }\n", head, p.srcname, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), table.concat(resultTypes, ", ")))
     else
       local actualInt, actualIntB, actualWord, actualWordB
       for _, u in ipairs(pr) do
@@ -1679,17 +1697,19 @@ for i, p in ipairs(PRIMITIVES) do
           table.insert(argTypes, t[1])
         end
       end
-      local resultType
-      if p.type.result[1] == "intA" then
-        resultType = actualInt
-      elseif p.type.result[1] == "intB" then
-        resultType = actualIntB
-      elseif p.type.result[1] == "wordA" then
-        resultType = actualWord
-      elseif p.type.result[1] == "wordB" then
-        resultType = actualWordB
-      else
-        resultType = p.type.result[1]
+      local resultTypes = {}
+      for _, t in ipairs(p.type.results) do
+        if t[1] == "intA" then
+          table.insert(resultTypes, actualInt)
+        elseif t[1] == "intB" then
+          table.insert(resultTypes, actualIntB)
+        elseif t[1] == "wordA" then
+          table.insert(resultTypes, actualWord)
+        elseif t[1] == "wordB" then
+          table.insert(resultTypes, actualWordB)
+        else
+          table.insert(resultTypes, t[1])
+        end
       end
       local a = {}
       for k, t in ipairs(pr) do
@@ -1699,7 +1719,7 @@ for i, p in ipairs(PRIMITIVES) do
       if #a > 1 then
         aa = "(" .. aa .. ")"
       end
-      f:write(string.format("%s(Primitives.%s %s) = { vars = [%s], args = vector [%s], result = %s }\n", head, p.srcname, aa, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), resultType))
+      f:write(string.format("%s(Primitives.%s %s) = { vars = [%s], args = vector [%s], results = [%s] }\n", head, p.srcname, aa, table.concat(typeVariables, ", "), table.concat(argTypes, ", "), table.concat(resultTypes, ", ")))
     end
   end
 end

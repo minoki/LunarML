@@ -272,10 +272,8 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                  | discardable (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
                fun impure (NONE, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (ExpStat exp, revStats))
                  | impure (SOME result, exp) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, exp) :: revStats)
-               fun action (NONE, stmt) = doDecs (ctx, env, defaultCont, decs, finalExp, stmt :: revStats)
-                 | action (SOME result, stmt) = doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.ConstExp L.Nil) :: stmt :: revStats)
            in case dec of
-                  C.ValDec { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result } =>
+                  C.ValDec { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, results = [result] } =>
                   let val exp = if Numeric.Notation.isNegative x then
                                     case (#targetLuaVersion ctx, Numeric.Notation.isNegativeZero x) of
                                         (LUAJIT, true) => L.VarExp (L.PredefinedId "NEGATIVE_ZERO")
@@ -284,33 +282,33 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                     L.ConstExp (L.Numeral (Numeric.Notation.toString "-" x))
                   in pure (result, exp)
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, results = [result] } =>
                   pure (result, L.ConstExp L.Nil)
-                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, results = [result] } =>
                   let fun doFields (_, []) = []
                         | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
                   in pure (result, L.CallExp (L.VarExp (L.PredefinedId "_list"), vector [L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs)))]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, results = [result] } =>
                   let fun doFields (_, []) = []
                         | doFields (i, y :: ys) = (L.IntKey i, doValue ctx y) :: doFields (i + 1, ys)
                   in pure (result, L.TableExp (vector ((L.StringKey "n", L.ConstExp (L.Numeral (Int.toString (List.length xs)))) :: doFields (1, xs))))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsStringOp info, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsStringOp info, tyargs = _, args = [exp] }, results = [result] } =>
                   (case #representation info of
                        Syntax.REP_BOXED => pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "tag")))
                      | Syntax.REP_ENUM => pure (result, doValue ctx exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataTagAsStringOp"
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, results = [result] } =>
                   (case #representation info of
                        Syntax.REP_BOXED => pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload")))
                      | Syntax.REP_ALIAS => pure (result, doValue ctx exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataPayloadOp"
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, results = [result] } =>
                   pure (result, L.IndexExp (doValue ctx exp, L.ConstExp (L.LiteralString "payload")))
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, results = [result] } =>
                   let val tag = #tag info
                   in case #representation info of
                          Syntax.REP_BOXED => pure (result, L.TableExp (vector [(L.StringKey "tag", L.ConstExp (L.LiteralString tag))]))
@@ -318,7 +316,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Syntax.REP_UNIT => pure (result, L.ConstExp L.Nil)
                        | _ => raise CodeGenError "unexpected datatype representation for ConstructValOp"
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, results = [result] } =>
                   let val tag = #tag info
                       val payload = doValue ctx payload
                   in case #representation info of
@@ -326,16 +324,16 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Syntax.REP_ALIAS => pure (result, payload)
                        | _ => raise CodeGenError "unexpected datatype representation for ConstructValWithPayloadOp"
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, results = [result] } =>
                   let val tag = doValue ctx tag
                   in pure (result, L.TableExp (vector [(L.StringKey "tag", tag)]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, results = [result] } =>
                   let val tag = doValue ctx tag
                       val payload = doValue ctx payload
                   in pure (result, L.TableExp (vector [(L.StringKey "tag", tag), (L.StringKey "payload", payload)]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp ({ start as { file, line, column }, ... }), tyargs = _, args = [exp] }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp ({ start as { file, line, column }, ... }), tyargs = _, args = [exp] }, results = _ } =>
                   let val exp = doValue ctx exp
                       val locationInfo = if start = SourcePos.nullPos then
                                              L.ConstExp L.Nil
@@ -343,31 +341,45 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                              L.ConstExp (L.LiteralString (OS.Path.file file ^ ":" ^ Int.toString line ^ ":" ^ Int.toString column))
                   in List.rev (L.CallStat (L.VarExp (L.PredefinedId "_raise"), vector [exp, locationInfo]) :: revStats) (* discard continuation *)
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, result } =>
-                  let fun doUnary f = case args of
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, results } =>
+                  let fun action ([], stmt) = doDecs (ctx, env, defaultCont, decs, finalExp, stmt :: revStats)
+                        | action (_ :: _, stmt) = raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": unexpected number of results for an action")
+                      fun doUnary f = case args of
                                           [a] => f (doValue ctx a)
                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doUnaryExp (f, purity) = doUnary (fn a =>
-                                                               case purity of
-                                                                   PURE => pure (result, f a)
-                                                                 | DISCARDABLE => discardable (result, f a)
-                                                                 | IMPURE => impure (result, f a)
+                                                               case results of
+                                                                   [result] =>
+                                                                   (case purity of
+                                                                        PURE => pure (result, f a)
+                                                                      | DISCARDABLE => discardable (result, f a)
+                                                                      | IMPURE => impure (result, f a)
+                                                                   )
+                                                                 | _ => raise CodeGenError "unexpected number of results"
                                                            )
                       fun doBinaryRaw f = case args of
                                               [a, b] => f (a, b)
                                             | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doBinary f = doBinaryRaw (fn (a, b) => f (doValue ctx a, doValue ctx b))
                       fun doBinaryExpRaw (f, purity) = doBinaryRaw (fn (a, b) =>
-                                                                       case purity of
-                                                                           PURE => pure (result, f (a, b))
-                                                                         | DISCARDABLE => discardable (result, f (a, b))
-                                                                         | IMPURE => impure (result, f (a, b))
+                                                                       case results of
+                                                                           [result] =>
+                                                                           (case purity of
+                                                                                PURE => pure (result, f (a, b))
+                                                                              | DISCARDABLE => discardable (result, f (a, b))
+                                                                              | IMPURE => impure (result, f (a, b))
+                                                                           )
+                                                                         | _ => raise CodeGenError "unexpected number of results"
                                                                    )
                       fun doBinaryExp (f, purity) = doBinary (fn (a, b) =>
-                                                                 case purity of
-                                                                     PURE => pure (result, f (a, b))
-                                                                   | DISCARDABLE => discardable (result, f (a, b))
-                                                                   | IMPURE => impure (result, f (a, b))
+                                                                 case results of
+                                                                     [result] =>
+                                                                     (case purity of
+                                                                          PURE => pure (result, f (a, b))
+                                                                        | DISCARDABLE => discardable (result, f (a, b))
+                                                                        | IMPURE => impure (result, f (a, b))
+                                                                     )
+                                                                   | _ => raise CodeGenError "unexpected number of results"
                                                              )
                       fun doBinaryOp (binop, purity) = doBinaryExp (fn (a, b) => L.BinExp (binop, a, b), purity)
                       fun doTernary f = case args of
@@ -375,7 +387,9 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                   in case prim of
                          Primitives.call2 => doTernary (fn (f, a0, a1) =>
-                                                           impure (result, L.CallExp (f, vector [a0, a1]))
+                                                           case results of
+                                                               [result] => impure (result, L.CallExp (f, vector [a0, a1]))
+                                                             | _ => raise CodeGenError "unexpected number of results"
                                                        )
                        | Primitives.List_cons => doBinaryExp (fn (x, xs) => L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)]), PURE)
                        | Primitives.List_null => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
@@ -389,7 +403,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Ref_EQUAL => doBinaryOp (L.EQUAL, PURE)
                        | Primitives.Ref_set => doBinary (fn (a, b) =>
                                                             (* REPRESENTATION_OF_REF *)
-                                                            action (result, L.AssignStat ([L.IndexExp (a, L.ConstExp (L.Numeral "1"))], [b]))
+                                                            action (results, L.AssignStat ([L.IndexExp (a, L.ConstExp (L.Numeral "1"))], [b]))
                                                         )
                        | Primitives.Ref_read => doUnaryExp ( fn a =>
                                                                 (* REPRESENTATION_OF_REF *)
@@ -710,12 +724,12 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Unsafe_Vector_sub _ => doBinaryExp (fn (vec, i) => L.IndexExp (vec, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), PURE)
                        | Primitives.Unsafe_Array_sub _ => doBinaryExp (fn (arr, i) => L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1"))), IMPURE)
                        | Primitives.Unsafe_Array_update _ => doTernary (fn (arr, i, v) =>
-                                                                           action (result, L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]))
+                                                                           action (results, L.AssignStat ([L.IndexExp (arr, L.BinExp (L.PLUS, i, L.ConstExp (L.Numeral "1")))], [v]))
                                                                        )
                        | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => L.CallExp (L.VarExp (L.PredefinedId "__exn_instanceof"), vector [e, tag]), PURE)
                        | Primitives.Lua_sub => doBinaryExp (fn (a, b) => L.IndexExp (a, b), IMPURE)
                        | Primitives.Lua_set => doTernary (fn (a, b, c) =>
-                                                             action (result, L.AssignStat ([L.IndexExp (a, b)], [c]))
+                                                             action (results, L.AssignStat ([L.IndexExp (a, b)], [c]))
                                                          )
                        | Primitives.Lua_isNil => doUnaryExp (fn a => L.BinExp (L.EQUAL, a, L.ConstExp L.Nil), PURE)
                        | Primitives.Lua_EQUAL => doBinaryOp (L.EQUAL, IMPURE)
@@ -743,40 +757,53 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                        | Primitives.Lua_isFalsy => doUnaryExp (fn a => L.UnaryExp (L.NOT, a), PURE)
                        | Primitives.Lua_call => doBinary (fn (f, args) =>
                                                              let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                             in case result of
-                                                                    SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, arg)])) :: revStats)
-                                                                  | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (f, arg) :: revStats)
+                                                             in case results of
+                                                                    [SOME result] => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (f, arg)])) :: revStats)
+                                                                  | [NONE] => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (f, arg) :: revStats)
+                                                                  | _ => raise CodeGenError "unexpected number of results"
                                                              end
                                                          )
                        | Primitives.Lua_call1 => doBinary (fn (f, args) =>
                                                               let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                              in impure (result, L.CallExp (f, arg))
+                                                              in case results of
+                                                                     [result] => impure (result, L.CallExp (f, arg))
+                                                                   | _ => raise CodeGenError "unexpected number of results"
                                                               end
                                                           )
                        | Primitives.Lua_call2 => doBinary (fn (f, args) =>
                                                               let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                  val stmts = case result of
-                                                                                  NONE => [L.CallStat (f, arg)]
-                                                                                | SOME result => let val r0 = genSym ctx
-                                                                                                     val r1 = genSym ctx
-                                                                                                 in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (f, arg)])
-                                                                                                    , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
-                                                                                                    ]
-                                                                                                 end
+                                                                  val stmts = case results of
+                                                                                  [NONE, NONE] => [L.CallStat (f, arg)]
+                                                                                | [r0, r1] =>
+                                                                                  let val r0 = case r0 of
+                                                                                                   SOME r => r
+                                                                                                 | NONE => genSym ctx
+                                                                                      val r1 = case r1 of
+                                                                                                   SOME r => r
+                                                                                                 | NONE => genSym ctx
+                                                                                  in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (f, arg)])]
+                                                                                  end
+                                                                                | _ => raise CodeGenError "unexpected number of results"
                                                               in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                               end
                                                           )
                        | Primitives.Lua_call3 => doBinary (fn (f, args) =>
                                                               let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                  val stmts = case result of
-                                                                                  NONE => [L.CallStat (f, arg)]
-                                                                                | SOME result => let val r0 = genSym ctx
-                                                                                                     val r1 = genSym ctx
-                                                                                                     val r2 = genSym ctx
-                                                                                                 in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (f, arg)])
-                                                                                                    , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
-                                                                                                    ]
-                                                                                                 end
+                                                                  val stmts = case results of
+                                                                                  [NONE, NONE, NONE] => [L.CallStat (f, arg)]
+                                                                                | [r0, r1, r2] =>
+                                                                                  let val r0 = case r0 of
+                                                                                                   SOME r => r
+                                                                                                 | NONE => genSym ctx
+                                                                                      val r1 = case r1 of
+                                                                                                   SOME r => r
+                                                                                                 | NONE => genSym ctx
+                                                                                      val r2 = case r2 of
+                                                                                                   SOME r => r
+                                                                                                 | NONE => genSym ctx
+                                                                                  in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (f, arg)])]
+                                                                                  end
+                                                                                | _ => raise CodeGenError "unexpected number of results"
                                                               in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                               end
                                                           )
@@ -790,14 +817,16 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                                                                   | _ => NONE
                                                                 in case name' of
                                                                        SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                    in case result of
-                                                                                           SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (obj, name, arg)])) :: revStats)
-                                                                                         | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
+                                                                                    in case results of
+                                                                                           [SOME result] => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (obj, name, arg)])) :: revStats)
+                                                                                         | [NONE] => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
+                                                                                         | _ => raise CodeGenError "unexpected number of results"
                                                                                     end
                                                                      | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                               in case result of
-                                                                                      SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (L.IndexExp (obj, rawName), arg)])) :: revStats)
-                                                                                    | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
+                                                                               in case results of
+                                                                                      [SOME result] => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (L.IndexExp (obj, rawName), arg)])) :: revStats)
+                                                                                    | [NONE] => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
+                                                                                    | _ => raise CodeGenError "unexpected number of results"
                                                                                end
                                                                 end
                                                             )
@@ -811,14 +840,16 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                                                                    | _ => NONE
                                                                  in case name' of
                                                                         SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                     in case result of
-                                                                                            SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.MethodExp (obj, name, arg)) :: revStats)
-                                                                                          | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
+                                                                                     in case results of
+                                                                                            [SOME result] => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.MethodExp (obj, name, arg)) :: revStats)
+                                                                                          | [NONE] => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (obj, name, arg) :: revStats)
+                                                                                          | _ => raise CodeGenError "unexpected number of results"
                                                                                      end
                                                                       | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                in case result of
-                                                                                       SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.IndexExp (obj, rawName), arg)) :: revStats)
-                                                                                     | NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
+                                                                                in case results of
+                                                                                       [SOME result] => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.IndexExp (obj, rawName), arg)) :: revStats)
+                                                                                     | [NONE] => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (L.IndexExp (obj, rawName), arg) :: revStats)
+                                                                                     | _ => raise CodeGenError "unexpected number of results"
                                                                                 end
                                                                  end
                                                              )
@@ -832,24 +863,32 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                                                                    | _ => NONE
                                                                      val stmts = case name' of
                                                                                      SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                                  in case result of
-                                                                                                         SOME result => let val r0 = genSym ctx
-                                                                                                                            val r1 = genSym ctx
-                                                                                                                        in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.MethodExp (obj, name, arg)])
-                                                                                                                           , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
-                                                                                                                           ]
-                                                                                                                        end
-                                                                                                       | NONE => [L.MethodStat (obj, name, arg)]
+                                                                                                  in case results of
+                                                                                                         [NONE, NONE] => [L.MethodStat (obj, name, arg)]
+                                                                                                       | [r0, r1] =>
+                                                                                                         let val r0 = case r0 of
+                                                                                                                          SOME r => r
+                                                                                                                        | NONE => genSym ctx
+                                                                                                             val r1 = case r1 of
+                                                                                                                          SOME r => r
+                                                                                                                        | NONE => genSym ctx
+                                                                                                         in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.MethodExp (obj, name, arg)])]
+                                                                                                         end
+                                                                                                       | _ => raise CodeGenError "unexpected number of results"
                                                                                                   end
                                                                                    | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                             in case result of
-                                                                                                    SOME result => let val r0 = genSym ctx
-                                                                                                                       val r1 = genSym ctx
-                                                                                                                   in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (L.IndexExp (obj, rawName), arg)])
-                                                                                                                      , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
-                                                                                                                      ]
-                                                                                                                   end
-                                                                                                  | NONE => [L.CallStat (L.IndexExp (obj, rawName), arg)]
+                                                                                             in case results of
+                                                                                                    [NONE, NONE] => [L.CallStat (L.IndexExp (obj, rawName), arg)]
+                                                                                                  | [r0, r1] =>
+                                                                                                    let val r0 = case r0 of
+                                                                                                                     SOME r => r
+                                                                                                                   | NONE => genSym ctx
+                                                                                                        val r1 = case r1 of
+                                                                                                                     SOME r => r
+                                                                                                                   | NONE => genSym ctx
+                                                                                                    in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (L.IndexExp (obj, rawName), arg)])]
+                                                                                                    end
+                                                                                                  | _ => raise CodeGenError "unexpected number of results"
                                                                                              end
                                                                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                                  end
@@ -864,26 +903,38 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                                                                    | _ => NONE
                                                                      val stmts = case name' of
                                                                                      SOME name => let val arg = vector [L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                                  in case result of
-                                                                                                         SOME result => let val r0 = genSym ctx
-                                                                                                                            val r1 = genSym ctx
-                                                                                                                            val r2 = genSym ctx
-                                                                                                                        in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.MethodExp (obj, name, arg)])
-                                                                                                                           , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
-                                                                                                                           ]
-                                                                                                                        end
-                                                                                                       | NONE => [L.MethodStat (obj, name, arg)]
+                                                                                                  in case results of
+                                                                                                         [NONE, NONE, NONE] => [L.MethodStat (obj, name, arg)]
+                                                                                                       | [r0, r1, r2] =>
+                                                                                                         let val r0 = case r0 of
+                                                                                                                          SOME r => r
+                                                                                                                        | NONE => genSym ctx
+                                                                                                             val r1 = case r1 of
+                                                                                                                          SOME r => r
+                                                                                                                        | NONE => genSym ctx
+                                                                                                             val r2 = case r2 of
+                                                                                                                          SOME r => r
+                                                                                                                        | NONE => genSym ctx
+                                                                                                         in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.MethodExp (obj, name, arg)])]
+                                                                                                         end
+                                                                                                       | _ => raise CodeGenError "unexpected number of results"
                                                                                                   end
                                                                                    | NONE => let val arg = vector [obj, L.CallExp (L.VarExp (L.PredefinedId "table_unpack"), vector [args, L.ConstExp (L.Numeral "1"), L.IndexExp (args, L.ConstExp (L.LiteralString "n"))])]
-                                                                                             in case result of
-                                                                                                    SOME result => let val r0 = genSym ctx
-                                                                                                                       val r1 = genSym ctx
-                                                                                                                       val r2 = genSym ctx
-                                                                                                                   in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (L.IndexExp (obj, rawName), arg)])
-                                                                                                                      , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
-                                                                                                                      ]
-                                                                                                                   end
-                                                                                                  | NONE => [L.CallStat (L.IndexExp (obj, rawName), arg)]
+                                                                                             in case results of
+                                                                                                    [NONE, NONE, NONE] => [L.CallStat (L.IndexExp (obj, rawName), arg)]
+                                                                                                  | [r0, r1, r2] =>
+                                                                                                    let val r0 = case r0 of
+                                                                                                                     SOME r => r
+                                                                                                                   | NONE => genSym ctx
+                                                                                                        val r1 = case r1 of
+                                                                                                                     SOME r => r
+                                                                                                                   | NONE => genSym ctx
+                                                                                                        val r2 = case r2 of
+                                                                                                                     SOME r => r
+                                                                                                                   | NONE => genSym ctx
+                                                                                                    in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (L.IndexExp (obj, rawName), arg)])]
+                                                                                                    end
+                                                                                                  | _ => raise CodeGenError "unexpected number of results"
                                                                                              end
                                                                  in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                                                                  end
@@ -898,104 +949,132 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                                                                                   LUA5_3 => L.IndexExp (L.VarExp (L.PredefinedId "_ENV"), name)
                                                                                 | LUAJIT => L.IndexExp (L.VarExp (L.PredefinedId "_G"), name)
                                                                       val stmt = L.AssignStat ([t], [value])
-                                                                  in action (result, stmt)
+                                                                  in action (results, stmt)
                                                                   end
                                                               )
-                       | Primitives.Lua_newTable => discardable (result, L.TableExp (vector []))
-                       | Primitives.DelimCont_newPromptTag => discardable (result, L.TableExp (vector []))
+                       | Primitives.Lua_newTable => (case results of
+                                                         [result] => discardable (result, L.TableExp (vector []))
+                                                       | _ => raise CodeGenError "unexpected number of results"
+                                                    )
+                       | Primitives.DelimCont_newPromptTag => (case results of
+                                                                   [result] => discardable (result, L.TableExp (vector []))
+                                                                 | _ => raise CodeGenError "unexpected number of results"
+                                                              )
                        | Primitives.assumeDiscardable => doBinaryExp (fn (f, arg) => L.CallExp (f, vector [arg]), IMPURE)
                        | _ => raise CodeGenError ("primop " ^ Primitives.toString prim  ^ " is not supported on Lua backend")
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCallOp, tyargs = _, args = f :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCallOp, tyargs = _, args = f :: args }, results = [result] } =>
                   (case result of
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])) :: revStats)
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall1Op, tyargs = _, args = f :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall1Op, tyargs = _, args = f :: args }, results = [result] } =>
                   (case result of
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))) :: revStats)
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall2Op, tyargs = _, args = f :: args }, result } =>
-                  let val stmts = case result of
-                                      NONE => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
-                                    | SOME result => let val r0 = genSym ctx
-                                                         val r1 = genSym ctx
-                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])
-                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
-                                                        ]
-                                                     end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall2Op, tyargs = _, args = f :: args }, results } =>
+                  let val stmts = case results of
+                                      [NONE, NONE] => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
+                                    | [r0, r1] =>
+                                      let val r0 = case r0 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r1 = case r1 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                      in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])]
+                                      end
+                                    | _ => raise CodeGenError "unexpected number of results"
                   in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall3Op, tyargs = _, args = f :: args }, result } =>
-                  let val stmts = case result of
-                                      NONE => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
-                                    | SOME result => let val r0 = genSym ctx
-                                                         val r1 = genSym ctx
-                                                         val r2 = genSym ctx
-                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])
-                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
-                                                        ]
-                                                     end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaCall3Op, tyargs = _, args = f :: args }, results } =>
+                  let val stmts = case results of
+                                      [NONE, NONE, NONE] => [L.CallStat (doValue ctx f, Vector.map (doValue ctx) (vector args))]
+                                    | [r0, r1, r2] =>
+                                      let val r0 = case r0 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r1 = case r1 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r2 = case r2 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                      in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.CallExp (doValue ctx f, Vector.map (doValue ctx) (vector args))])]
+                                      end
+                                    | _ => raise CodeGenError "unexpected number of results"
                   in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethodOp name, tyargs = _, args = obj :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethodOp name, tyargs = _, args = obj :: args }, results = [result] } =>
                   (case result of
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.CallExp (L.VarExp (L.PredefinedId "table_pack"), vector [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])) :: revStats)
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod1Op name, tyargs = _, args = obj :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod1Op name, tyargs = _, args = obj :: args }, results = [result] } =>
                   (case result of
                        NONE => doDecs (ctx, env, defaultCont, decs, finalExp, L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args)) :: revStats)
                      | SOME result => doDecs (ctx, env, defaultCont, decs, finalExp, L.ConstStat (result, L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))) :: revStats)
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod2Op name, tyargs = _, args = obj :: args }, result } =>
-                  let val stmts = case result of
-                                      NONE => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
-                                    | SOME result => let val r0 = genSym ctx
-                                                         val r1 = genSym ctx
-                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])
-                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1))]))
-                                                        ]
-                                                     end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod2Op name, tyargs = _, args = obj :: args }, results } =>
+                  let val stmts = case results of
+                                      [NONE, NONE] => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
+                                    | [r0, r1] =>
+                                      let val r0 = case r0 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r1 = case r1 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                      in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])]
+                                      end
+                                    | _ => raise CodeGenError "unexpected number of results"
                   in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod3Op name, tyargs = _, args = obj :: args }, result } =>
-                  let val stmts = case result of
-                                      NONE => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
-                                    | SOME result => let val r0 = genSym ctx
-                                                         val r1 = genSym ctx
-                                                         val r2 = genSym ctx
-                                                     in [ L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])
-                                                        , L.ConstStat (result, L.TableExp (vector [(L.IntKey 1, L.VarExp (L.UserDefinedId r0)), (L.IntKey 2, L.VarExp (L.UserDefinedId r1)), (L.IntKey 3, L.VarExp (L.UserDefinedId r2))]))
-                                                        ]
-                                                     end
+                | C.ValDec { exp = C.PrimOp { primOp = F.LuaMethod3Op name, tyargs = _, args = obj :: args }, results } =>
+                  let val stmts = case results of
+                                      [NONE, NONE, NONE] => [L.MethodStat (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))]
+                                    | [r0, r1, r2] =>
+                                      let val r0 = case r0 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r1 = case r1 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                          val r2 = case r2 of
+                                                       SOME r => r
+                                                     | NONE => genSym ctx
+                                      in [L.LocalStat ([(r0, L.CONST), (r1, L.CONST), (r2, L.CONST)], [L.MethodExp (doValue ctx obj, name, Vector.map (doValue ctx) (vector args))])]
+                                      end
+                                    | _ => raise CodeGenError "unexpected number of results"
                   in doDecs (ctx, env, defaultCont, decs, finalExp, List.revAppend (stmts, revStats))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = _ }, results = _ } =>
                   raise CodeGenError "JsCallOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = _ }, results = _ } =>
                   raise CodeGenError "JsMethodOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = _ }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = _ }, results = _ } =>
                   raise CodeGenError "JsNewOp is not supported on Lua backend"
-                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, results = _ } =>
                   raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " not implemented yet")
-                | C.ValDec { exp = C.Record fields, result } => (* non-empty record *)
+                | C.ValDec { exp = C.Record fields, results = [result] } => (* non-empty record *)
                   let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (LabelToTableKey label, doValue ctx v) :: acc) [] fields
                   in pure (result, L.TableExp (vector fields))
                   end
-                | C.ValDec { exp = C.ExnTag { name, payloadTy = _ }, result } =>
+                | C.ValDec { exp = C.ExnTag { name, payloadTy = _ }, results = [result] } =>
                   discardable (result, L.TableExp (vector [(L.IntKey 1, L.ConstExp (L.LiteralString name))]))
-                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, result } =>
+                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, results = [result] } =>
                   let val label = case label of
                                       Syntax.NumericLabel n => L.ConstExp (L.Numeral (Int.toString n))
                                     | Syntax.IdentifierLabel s => L.ConstExp (L.LiteralString s)
                   in pure (result, L.IndexExp (doValue ctx record, label))
                   end
-                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, result } =>
+                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, results = [result] } =>
                   let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }
                   in pure (result, L.FunctionExp (Vector.map (fn vid => VIdToLua (ctx, vid)) (vector params), vector (doCExp (ctx, env', SOME contParam, body))))
                   end
+                | C.ValDec { exp = _, results = [] } => raise CodeGenError "unexpected number of results"
+                | C.ValDec { exp = _, results = _ :: _ :: _ } => raise CodeGenError "unexpected number of results"
                 | C.RecDec defs =>
                   let val (decs', assignments) = List.foldr (fn ({ name, contParam, params, body, attr = _ }, (decs, assignments)) =>
                                                                 let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN) }

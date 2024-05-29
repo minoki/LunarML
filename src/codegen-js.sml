@@ -249,10 +249,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                  | discardable (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
                fun impure (NONE, exp) = doDecs (ctx, env, decs, finalExp, J.ExpStat exp :: revStats)
                  | impure (SOME result, exp) = doDecs (ctx, env, decs, finalExp, ConstStat (result, exp) :: revStats)
-               fun action (NONE, stmt) = doDecs (ctx, env, decs, finalExp, stmt :: revStats)
-                 | action (SOME result, stmt) = doDecs (ctx, env, decs, finalExp, ConstStat (result, J.UndefinedExp) :: stmt :: revStats)
            in case dec of
-                  C.ValDec { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, result } =>
+                  C.ValDec { exp = C.PrimOp { primOp = F.RealConstOp x, tyargs = _, args = _ }, results = [result] } =>
                   let val exp = let val y = Numeric.toDecimal { nominal_format = Numeric.binary64, target_format = Numeric.binary64 } x
                                     (* JavaScript does not support hexadecimal floating-point literals *)
                                 in case y of
@@ -264,27 +262,27 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                 end
                   in pure (result, exp)
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = [] }, results = [result] } =>
                   pure (result, J.ConstExp J.Null)
-                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ListOp, tyargs = _, args = xs }, results = [result] } =>
                   pure (result, J.CallExp (J.VarExp (J.PredefinedId "_list"), vector [J.ArrayExp (Vector.map (doValue (ctx, env)) (vector xs))]))
-                | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.VectorOp, tyargs = _, args = xs }, results = [result] } =>
                   pure (result, J.ArrayExp (Vector.map (doValue (ctx, env)) (vector xs)))
-                | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsString16Op info, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.DataTagAsString16Op info, tyargs = _, args = [exp] }, results = [result] } =>
                   (case #representation info of
                        Syntax.REP_BOXED => pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "tag")))
                      | Syntax.REP_ENUM => pure (result, doValue (ctx, env) exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataTagAsString16Op"
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.DataPayloadOp info, tyargs = _, args = [exp] }, results = [result] } =>
                   (case #representation info of
                        Syntax.REP_BOXED => pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "payload")))
                      | Syntax.REP_ALIAS => pure (result, doValue (ctx, env) exp)
                      | _ => raise CodeGenError "unexpected datatype representation for DataPayloadOp"
                   )
-                | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ExnPayloadOp, tyargs = _, args = [exp] }, results = [result] } =>
                   pure (result, J.IndexExp (doValue (ctx, env) exp, J.ConstExp (J.asciiStringAsWide "payload")))
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValOp info, tyargs = _, args = [] }, results = [result] } =>
                   let val tag = #tag info
                   in case #representation info of
                          Syntax.REP_BOXED => pure (result, J.ObjectExp (vector [(J.StringKey "tag", J.ConstExp (J.asciiStringAsWide tag))]))
@@ -292,7 +290,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Syntax.REP_UNIT => pure (result, J.ConstExp J.Null)
                        | _ => raise CodeGenError "unexpected datatype representation for ConstructValOp"
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructValWithPayloadOp info, tyargs = _, args = [payload] }, results = [result] } =>
                   let val tag = #tag info
                       val payload = doValue (ctx, env) payload
                   in case #representation info of
@@ -300,44 +298,58 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Syntax.REP_ALIAS => pure (result, payload)
                        | _ => raise CodeGenError "unexpected datatype representation for ConstructValWithPayloadOp"
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnOp, tyargs = _, args = [tag] }, results = [result] } =>
                   let val tag = doValue (ctx, env) tag
                   in pure (result, J.NewExp (tag, vector []))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.ConstructExnWithPayloadOp, tyargs = _, args = [tag, payload] }, results = [result] } =>
                   let val tag = doValue (ctx, env) tag
                       val payload = doValue (ctx, env) payload
                   in pure (result, J.NewExp (tag, vector [payload]))
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (_ (* span as { start as { file, line, column }, ... } *)), tyargs = _, args = [exp] }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.RaiseOp (_ (* span as { start as { file, line, column }, ... } *)), tyargs = _, args = [exp] }, results = _ } =>
                   List.rev (J.ThrowStat (doValue (ctx, env) exp) :: revStats) (* TODO: location information *)
-                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, result } =>
-                  let fun doNullary f = case args of
+                | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall prim, tyargs = _, args }, results } =>
+                  let fun action ([], stmt) = doDecs (ctx, env, decs, finalExp, stmt :: revStats)
+                        | action (_ :: _, stmt) = raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": unexpected number of results for an action")
+                      fun doNullary f = case args of
                                             [] => f ()
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doNullaryExp (f, purity) = doNullary (fn () =>
-                                                                   case purity of
-                                                                       PURE => pure (result, f ())
-                                                                     | DISCARDABLE => discardable (result, f ())
-                                                                     | IMPURE => impure (result, f ())
+                                                                   case results of
+                                                                       [result] =>
+                                                                       (case purity of
+                                                                            PURE => pure (result, f ())
+                                                                          | DISCARDABLE => discardable (result, f ())
+                                                                          | IMPURE => impure (result, f ())
+                                                                       )
+                                                                     | _ => raise CodeGenError "unexpected number of results"
                                                                )
                       fun doUnary f = case args of
                                           [a] => f (doValue (ctx, env) a)
                                         | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doUnaryExp (f, purity) = doUnary (fn a =>
-                                                               case purity of
-                                                                   PURE => pure (result, f a)
-                                                                 | DISCARDABLE => discardable (result, f a)
-                                                                 | IMPURE => impure (result, f a)
+                                                               case results of
+                                                                   [result] =>
+                                                                   (case purity of
+                                                                        PURE => pure (result, f a)
+                                                                      | DISCARDABLE => discardable (result, f a)
+                                                                      | IMPURE => impure (result, f a)
+                                                                   )
+                                                                 | _ => raise CodeGenError "unexpected number of results"
                                                            )
                       fun doBinary f = case args of
                                            [a, b] => f (doValue (ctx, env) a, doValue (ctx, env) b)
                                          | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                       fun doBinaryExp (f, purity) = doBinary (fn (a, b) =>
-                                                                 case purity of
-                                                                     PURE => pure (result, f (a, b))
-                                                                   | DISCARDABLE => discardable (result, f (a, b))
-                                                                   | IMPURE => impure (result, f (a, b))
+                                                                 case results of
+                                                                   [result] =>
+                                                                   (case purity of
+                                                                        PURE => pure (result, f (a, b))
+                                                                      | DISCARDABLE => discardable (result, f (a, b))
+                                                                      | IMPURE => impure (result, f (a, b))
+                                                                   )
+                                                                  | _ => raise CodeGenError "unexpected number of results"
                                                              )
                       fun doBinaryOp (binop, pure) = doBinaryExp (fn (a, b) => J.BinExp (binop, a, b), pure)
                       fun doTernary f = case args of
@@ -345,7 +357,9 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                           | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ ": invalid number of arguments")
                   in case prim of
                          Primitives.call2 => doTernary (fn (f, a0, a1) =>
-                                                           impure (result, J.CallExp (f, vector [a0, a1]))
+                                                           case results of
+                                                               [result] => impure (result, J.CallExp (f, vector [a0, a1]))
+                                                             | _ => raise CodeGenError "unexpected number of results"
                                                        )
                        | Primitives.List_cons => doBinaryExp (fn (x, xs) => J.ArrayExp (vector [x, xs]), PURE)
                        | Primitives.List_null => doUnaryExp (fn a => J.BinExp (J.EQUAL, a, J.ConstExp J.Null), PURE)
@@ -358,7 +372,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                                           )
                        | Primitives.Ref_EQUAL => doBinaryOp (J.EQUAL, PURE)
                        | Primitives.Ref_set => doBinary (fn (a, b) =>
-                                                            action (result, J.AssignStat (J.IndexExp (a, J.ConstExp (J.Numeral "0")), b))
+                                                            action (results, J.AssignStat (J.IndexExp (a, J.ConstExp (J.Numeral "0")), b))
                                                         ) (* REPRESENTATION_OF_REF *)
                        | Primitives.Ref_read => doUnaryExp (fn a => J.IndexExp (a, J.ConstExp (J.Numeral "0")), DISCARDABLE) (* REPRESENTATION_OF_REF *)
                        | Primitives.Bool_EQUAL => doBinaryOp (J.EQUAL, PURE)
@@ -477,12 +491,12 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Primitives.Unsafe_Vector_sub Primitives.I54 => doBinaryExp (fn (vec, i) => J.IndexExp (vec, i), PURE)
                        | Primitives.Unsafe_Array_sub Primitives.I54 => doBinaryExp (fn (arr, i) => J.IndexExp (arr, i), DISCARDABLE)
                        | Primitives.Unsafe_Array_update Primitives.I54 => doTernary (fn (arr, i, v) =>
-                                                                                        action (result, J.AssignStat (J.IndexExp (arr, i), v))
+                                                                                        action (results, J.AssignStat (J.IndexExp (arr, i), v))
                                                                                     )
                        | Primitives.Exception_instanceof => doBinaryExp (fn (e, tag) => J.BinExp (J.INSTANCEOF, e, tag), PURE)
                        | Primitives.JavaScript_sub => doBinaryExp (fn (a, b) => J.IndexExp (a, b), IMPURE)
                        | Primitives.JavaScript_set => doTernary (fn (a, b, c) =>
-                                                                    action (result, J.AssignStat (J.IndexExp (a, b), c))
+                                                                    action (results, J.AssignStat (J.IndexExp (a, b), c))
                                                                 )
                        | Primitives.JavaScript_EQUAL => doBinaryOp (J.EQUAL, PURE)
                        | Primitives.JavaScript_NOTEQUAL => doBinaryOp (J.NOTEQUAL, PURE)
@@ -508,29 +522,35 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        | Primitives.JavaScript_typeof => doUnaryExp (fn a => J.UnaryExp (J.TYPEOF, a), PURE)
                        | Primitives.JavaScript_global => doUnaryExp (fn a => J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), a), DISCARDABLE)
                        | Primitives.JavaScript_setGlobal => doBinary (fn (name, value) =>
-                                                                         action (result, J.AssignStat (J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), name), value))
+                                                                         action (results, J.AssignStat (J.IndexExp (J.VarExp (J.PredefinedId "globalThis"), name), value))
                                                                      )
                        | Primitives.JavaScript_call => doBinary (fn (f, args) =>
-                                                                    impure (result, J.MethodExp (f, "apply", vector [J.UndefinedExp, args]))
+                                                                    case results of
+                                                                        [result] => impure (result, J.MethodExp (f, "apply", vector [J.UndefinedExp, args]))
+                                                                      | _ => raise CodeGenError "unexpected number of results"
                                                                 )
                        | Primitives.JavaScript_method => doTernary (fn (obj, method, args) =>
-                                                                       impure (result, J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args]))
+                                                                       case results of
+                                                                           [result] => impure (result, J.MethodExp (J.IndexExp (obj, method), "apply", vector [obj, args]))
+                                                                         | _ => raise CodeGenError "unexpected number of results"
                                                                    )
                        | Primitives.JavaScript_new => doBinary (fn (ctor, args) =>
-                                                                   impure (result, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args]))
+                                                                   case results of
+                                                                       [result] => impure (result, J.MethodExp (J.VarExp (J.PredefinedId "Reflect"), "construct", vector [ctor, args]))
+                                                                     | _ => raise CodeGenError "unexpected number of results"
                                                                )
                        | Primitives.DelimCont_newPromptTag => doNullaryExp (fn () => J.NewExp (J.VarExp (J.PredefinedId "_PromptTag"), vector []), DISCARDABLE)
                        | _ => raise CodeGenError ("primop " ^ Primitives.toString prim ^ " is not supported on JavaScript backend")
                   end
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsCallOp, tyargs = _, args = f :: args }, results = [result] } =>
                   impure (result, J.CallExp (doValue (ctx, env) f, Vector.map (doValue (ctx, env)) (vector args)))
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = obj :: name :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsMethodOp, tyargs = _, args = obj :: name :: args }, results = [result] } =>
                   impure (result, J.CallExp (J.IndexExp (doValue (ctx, env) obj, doValue (ctx, env) name), Vector.map (doValue (ctx, env)) (vector args)))
-                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, result } =>
+                | C.ValDec { exp = C.PrimOp { primOp = F.JsNewOp, tyargs = _, args = ctor :: args }, results = [result] } =>
                   impure (result, J.NewExp (doValue (ctx, env) ctor, Vector.map (doValue (ctx, env)) (vector args)))
-                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, result = _ } =>
+                | C.ValDec { exp = C.PrimOp { primOp, tyargs = _, args = _ }, results = _ } =>
                   raise CodeGenError ("primop " ^ Printer.build (FPrinter.doPrimOp primOp) ^ " is not supported on JavaScript backend")
-                | C.ValDec { exp = C.Record fields, result } =>
+                | C.ValDec { exp = C.Record fields, results = [result] } =>
                   let val fields = Syntax.LabelMap.foldri (fn (label, v, acc) => (label, doValue (ctx, env) v) :: acc) [] fields
                       fun isTuple (_, []) = true
                         | isTuple (i, (Syntax.NumericLabel n, _) :: xs) = i = n andalso isTuple (i + 1, xs)
@@ -541,7 +561,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                                     J.ObjectExp (vector (List.map (fn (label, exp) => (LabelToObjectKey label, exp)) fields))
                   in pure (result, exp)
                   end
-                | C.ValDec { exp = C.ExnTag { name, payloadTy }, result } =>
+                | C.ValDec { exp = C.ExnTag { name, payloadTy }, results = [result] } =>
                   (case result of
                        SOME result =>
                        let val stmts = [ let val value = case payloadTy of
@@ -555,13 +575,13 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                        end
                      | NONE => doDecs (ctx, env, decs, finalExp, revStats)
                   )
-                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, result } =>
+                | C.ValDec { exp = C.Projection { label, record, fieldTypes = _ }, results = [result] } =>
                   let val label = case label of
                                       Syntax.NumericLabel n => J.ConstExp (J.Numeral (Int.toString (n - 1))) (* non-negative *)
                                     | Syntax.IdentifierLabel s => J.ConstExp (J.asciiStringAsWide s)
                   in pure (result, J.IndexExp (doValue (ctx, env) record, label))
                   end
-                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, result } =>
+                | C.ValDec { exp = C.Abs { contParam, params, body, attr = _ }, results = [result] } =>
                   (case #style ctx of
                        DIRECT_STYLE => if CpsAnalyze.escapes (#contEscapeMap ctx, contParam) then
                                             let val env' = { continuations = C.CVarMap.singleton (contParam, RETURN_TRAMPOLINE), subst = #subst env }
@@ -577,6 +597,8 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                               in pure (result, J.FunctionExp (vector (CVarToJs contParam :: List.map (VIdToJs ctx) params), vector (doCExp ctx env' body)))
                               end
                   )
+                | C.ValDec { exp = _, results = [] } => raise CodeGenError "unexpected number of results"
+                | C.ValDec { exp = _, results = _ :: _ :: _ } => raise CodeGenError "unexpected number of results"
                 | C.RecDec defs =>
                   (case #style ctx of
                        DIRECT_STYLE =>

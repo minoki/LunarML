@@ -78,19 +78,20 @@ fun simplifySimpleExp (usage, env, C.PrimOp { primOp, tyargs = _, args })
   | simplifySimpleExp (_, _, _) = NOT_SIMPLIFIED
 and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, subst, csubst, acc : C.Dec list))
     = case dec of
-          C.ValDec { exp, result } =>
+          C.ValDec { exp, results } =>
           let val exp = CpsSimplify.substSimpleExp (subst, csubst, exp)
-              val result = case result of
-                               SOME name => if CpsDeadCodeAnalysis.isUsed (#dead_code_analysis ctx, name) then
-                                                result
-                                            else
-                                                NONE
-                             | NONE => NONE
+              val results = List.map (fn result as SOME name => if CpsDeadCodeAnalysis.isUsed (#dead_code_analysis ctx, name) then
+                                                                    result
+                                                                else
+                                                                    NONE
+                                     | NONE => NONE
+                                     ) results
           in case simplifySimpleExp (#usage ctx, env, exp) of
                  VALUE v => let val () = #simplificationOccurred (#base ctx) := true
-                                val subst = case result of
-                                                SOME result => TypedSyntax.VIdMap.insert (subst, result, v)
-                                              | NONE => subst
+                                val subst = case results of
+                                                [SOME result] => TypedSyntax.VIdMap.insert (subst, result, v)
+                                              | [NONE] => subst
+                                              | _ => subst (* should not occur *)
                             in (env, cenv, subst, csubst, acc)
                             end
                | simplified =>
@@ -101,8 +102,8 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                      val exp = case simplified of
                                    SIMPLE_EXP exp => exp
                                  | _ => exp
-                 in case (exp, result) of
-                        (C.Abs { contParam, params, body, attr }, SOME result) =>
+                 in case (exp, results) of
+                        (C.Abs { contParam, params, body, attr }, [SOME result]) =>
                         (case CpsUsageAnalysis.getValueUsage (#usage ctx, result) of
                              { call = NEVER, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } => (env, cenv, subst, csubst, acc)
                            | { call = ONCE, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } =>
@@ -126,7 +127,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                             | (_, ELIMINATE, acc) => acc
                                                                             | (_, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                             ) [] (params, paramTransforms)
-                                             val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), result = SOME p } :: decs
+                                             val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), results = [SOME p] } :: decs
                                                                          | (_, KEEP, decs) => decs
                                                                          | (_, ELIMINATE, decs) => decs
                                                                          ) [] (params, paramTransforms)
@@ -143,7 +144,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                                        | (p, UNPACK fields, (decs, args)) =>
                                                                                                          List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                                         let val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
-                                                                                                                                               , result = SOME v
+                                                                                                                                               , results = [SOME v]
                                                                                                                                                }
                                                                                                                         in (dec :: decs, C.Var v :: args)
                                                                                                                         end
@@ -162,7 +163,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                end
                                              val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME wrapperBody, isDiscardableFunction = CpsSimplify.isDiscardableExp (env, body) })
                                              val dec = C.ValDec { exp = exp
-                                                                , result = SOME result'
+                                                                , results = [SOME result']
                                                                 }
                                          in (env, cenv, subst, csubst, dec :: acc)
                                          end
@@ -170,25 +171,25 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                      val exp = C.Abs { contParam = contParam, params = params, body = body, attr = attr }
                                                      val env = TypedSyntax.VIdMap.insert (env, result, { exp = NONE, isDiscardableFunction = CpsSimplify.isDiscardableExp (env, body) })
                                                      val dec = C.ValDec { exp = exp
-                                                                        , result = SOME result
+                                                                        , results = [SOME result]
                                                                         }
                                                  in (env, cenv, subst, csubst, dec :: acc)
                                                  end
                                   end
                         )
-                      | _ => (case (C.isDiscardable exp, result) of
-                                  (true, NONE) => (env, cenv, subst, csubst, acc)
-                                | (_, SOME result) => let val dec = C.ValDec { exp = exp
-                                                                             , result = SOME result
-                                                                             }
-                                                          val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp, isDiscardableFunction = false })
-                                                      in (env, cenv, subst, csubst, dec :: acc)
-                                                      end
-                                | (false, NONE) => let val dec = C.ValDec { exp = exp
-                                                                          , result = NONE
-                                                                          }
-                                                   in (env, cenv, subst, csubst, dec :: acc)
-                                                   end
+                      | _ => (case (C.isDiscardable exp, results) of
+                                  (true, [NONE]) => (env, cenv, subst, csubst, acc)
+                                | (_, [SOME result]) => let val dec = C.ValDec { exp = exp
+                                                                               , results = [SOME result]
+                                                                               }
+                                                            val env = TypedSyntax.VIdMap.insert (env, result, { exp = SOME exp, isDiscardableFunction = false })
+                                                        in (env, cenv, subst, csubst, dec :: acc)
+                                                        end
+                                | _ => let val dec = C.ValDec { exp = exp
+                                                              , results = results
+                                                              }
+                                       in (env, cenv, subst, csubst, dec :: acc)
+                                       end
                              )
                  end
           end
@@ -215,7 +216,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                   | (_, ELIMINATE, acc) => acc
                                                                   | (_, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                   ) [] (params, paramTransforms)
-                                   val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), result = SOME p } :: decs
+                                   val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), results = [SOME p] } :: decs
                                                                | (_, KEEP, decs) => decs
                                                                | (_, ELIMINATE, decs) => decs
                                                                ) [] (params, paramTransforms)
@@ -231,7 +232,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                            List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                           let val v = CpsSimplify.renewVId (#base ctx, v)
                                                                                                               val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
-                                                                                                                                 , result = SOME v
+                                                                                                                                 , results = [SOME v]
                                                                                                                                  }
                                                                                                           in (dec :: decs, C.Var v :: args)
                                                                                                           end
@@ -288,7 +289,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                        in if TypedSyntax.VIdSet.member (dests, vid) then
                                                                               C.RecDec [def]
                                                                           else
-                                                                              C.ValDec { exp = C.Abs { contParam = contParam, params = params, body = body, attr = attr }, result = SOME name }
+                                                                              C.ValDec { exp = C.Abs { contParam = contParam, params = params, body = body, attr = attr }, results = [SOME name] }
                                                                        end
                                                             | scc => C.RecDec (List.map (fn vid => #def (TypedSyntax.VIdMap.lookup (map, vid))) scc)
                                             in dec :: decs
@@ -331,7 +332,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                              | (SOME _, UNPACK fields, acc) => List.map #1 fields @ acc
                                                              | (NONE, _, acc) => acc
                                                              ) [] (params, paramTransforms)
-                              val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), result = p } :: decs
+                              val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), results = [p] } :: decs
                                                           | (_, KEEP, decs) => decs
                                                           | (_, ELIMINATE, decs) => decs
                                                           ) [] (params, paramTransforms)
@@ -347,7 +348,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                           List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                          let val v = CpsSimplify.renewVId (#base ctx, v)
                                                                                                              val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
-                                                                                                                                , result = SOME v
+                                                                                                                                , results = [SOME v]
                                                                                                                                 }
                                                                                                          in (dec :: decs, C.Var v :: args)
                                                                                                          end
@@ -410,7 +411,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                   | (SOME _, UNPACK fields, acc) => List.map #1 fields @ acc
                                                                   | (NONE, _, acc) => acc
                                                                   ) [] (params, paramTransforms)
-                                   val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), result = p } :: decs
+                                   val decs = ListPair.foldrEq (fn (p, UNPACK fields, decs) => C.ValDec { exp = C.Record (List.foldl (fn ((fieldVar, label), map) => Syntax.LabelMap.insert (map, label, C.Var fieldVar)) Syntax.LabelMap.empty fields), results = [p] } :: decs
                                                                | (_, KEEP, decs) => decs
                                                                | (_, ELIMINATE, decs) => decs
                                                                ) [] (params, paramTransforms)
@@ -425,7 +426,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                            List.foldr (fn ((v, label), (decs, args)) =>
                                                                                                           let val v = CpsSimplify.renewVId (#base ctx, v)
                                                                                                               val dec = C.ValDec { exp = C.Projection { label = label, record = C.Var p, fieldTypes = Syntax.LabelMap.empty (* dummy *) }
-                                                                                                                                 , result = SOME v
+                                                                                                                                 , results = [SOME v]
                                                                                                                                  }
                                                                                                           in (dec :: decs, C.Var v :: args)
                                                                                                           end
