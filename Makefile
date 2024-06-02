@@ -51,7 +51,7 @@ sources = \
   src/cps.sml \
   src/cps/uncurry.sml \
   src/cps/inline.sml \
-  src/cps/dead-code.sml \
+  src/cps/misc.sml \
   src/lua-syntax.sml \
   src/lua-transform.sml \
   src/codegen-lua.sml \

@@ -42,7 +42,7 @@ lua-syntax.sml
 cps.sml
 cps/uncurry.sml
 cps/inline.sml
-cps/dead-code.sml
+cps/misc.sml
 lua-transform.sml
 codegen-lua.sml
 js-syntax.sml

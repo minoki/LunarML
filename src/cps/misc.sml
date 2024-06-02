@@ -10,7 +10,7 @@
  *  * Unpack tuple parameters,
  *  * Eliminate constant ref-cells.
  *)
-structure CpsDeadCodeElimination : sig
+structure CpsMiscOptimization : sig
               val goCExp : CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
           end = struct
 local structure F = FSyntax
