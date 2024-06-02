@@ -475,33 +475,41 @@ and simplifyCExp (ctx : Context, env : CpsSimplify.value_info TypedSyntax.VIdMap
           in case applied of
                  C.Var applied =>
                  (case TypedSyntax.VIdMap.find (env, applied) of
-                      SOME { exp = SOME (C.Abs { contParam, params, body, attr = _ }), ... } =>
-                      let val () = #simplificationOccurred (#base ctx) := true
-                          val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
-                          val csubst = C.CVarMap.insert (csubst, contParam, cont)
-                          val canOmitAlphaConversion = case CpsUsageAnalysis.getValueUsage (#usage ctx, applied) of
-                                                           { call = ONCE, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } =>
-                                                           (case CpsUsageAnalysis.getValueUsage (#rec_usage ctx, applied) of
-                                                                { call = NEVER, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } => true
-                                                              | _ => false
-                                                           )
-                                                         | _ => false
-                      in if canOmitAlphaConversion then
-                             CpsSimplify.substCExp (subst, csubst, body) (* no alpha conversion *)
-                         else
-                             CpsSimplify.alphaConvert (#base ctx, subst, csubst, body)
+                      SOME { exp, isDiscardableFunction } =>
+                      let val isDiscardable = if isDiscardableFunction then
+                                                  case C.CVarMap.find (cenv, cont) of
+                                                      SOME (params, _) => if List.exists Option.isSome params then
+                                                                              NONE
+                                                                          else
+                                                                              SOME params
+                                                    | _ => NONE
+                                              else
+                                                  NONE
+                      in case isDiscardable of
+                             SOME params => ( #simplificationOccurred (#base ctx) := true
+                                            ; C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
+                                            )
+                           | NONE =>
+                             case exp of
+                                 SOME (C.Abs { contParam, params, body, attr = _ }) =>
+                                 let val () = #simplificationOccurred (#base ctx) := true
+                                     val subst = ListPair.foldlEq (fn (p, a, subst) => TypedSyntax.VIdMap.insert (subst, p, a)) subst (params, args)
+                                     val csubst = C.CVarMap.insert (csubst, contParam, cont)
+                                     val canOmitAlphaConversion = case CpsUsageAnalysis.getValueUsage (#usage ctx, applied) of
+                                                                      { call = ONCE, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } =>
+                                                                      (case CpsUsageAnalysis.getValueUsage (#rec_usage ctx, applied) of
+                                                                           { call = NEVER, project = NEVER, ref_read = NEVER, ref_write = NEVER, other = NEVER, returnConts = _, labels = _ } => true
+                                                                         | _ => false
+                                                                      )
+                                                                    | _ => false
+                                 in if canOmitAlphaConversion then
+                                        CpsSimplify.substCExp (subst, csubst, body) (* no alpha conversion *)
+                                    else
+                                        CpsSimplify.alphaConvert (#base ctx, subst, csubst, body)
+                                 end
+                               | _ => C.App { applied = C.Var applied, cont = cont, args = args }
                       end
-                    | SOME { exp = _, isDiscardableFunction = true } =>
-                      (case C.CVarMap.find (cenv, cont) of
-                           SOME (params, _) => if not (List.exists Option.isSome params) then
-                                                   ( #simplificationOccurred (#base ctx) := true
-                                                   ; C.AppCont { applied = cont, args = List.map (fn _ => C.Unit (* dummy *)) params }
-                                                   )
-                                               else
-                                                   C.App { applied = C.Var applied, cont = cont, args = args }
-                         | _ => C.App { applied = C.Var applied, cont = cont, args = args }
-                      )
-                    | _ => C.App { applied = C.Var applied, cont = cont, args = args }
+                    | NONE => C.App { applied = C.Var applied, cont = cont, args = args }
                  )
                | _ => C.App { applied = applied, cont = cont, args = args } (* should not occur *)
           end
