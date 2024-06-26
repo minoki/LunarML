@@ -421,7 +421,7 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
           let val (env, cenv, subst, csubst, revDecs) = List.foldl (simplifyDec ctx) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, cont))
           end
-        | C.App { applied, cont, args } =>
+        | C.App { applied, cont, args, attr } =>
           let val applied = CpsSimplify.substValue subst applied
               val cont = CpsSimplify.substCVar csubst cont
               val args = List.map (CpsSimplify.substValue subst) args
@@ -446,9 +446,9 @@ and simplifyCExp (ctx : Context, env : value_info TypedSyntax.VIdMap.map, cenv :
                          | _ => C.App { applied = C.Var applied, cont = cont, args = args }
                       )
 *)
-                    | _ => C.App { applied = C.Var applied, cont = cont, args = args }
+                    | _ => C.App { applied = C.Var applied, cont = cont, args = args, attr = attr }
                  )
-               | _ => C.App { applied = applied, cont = cont, args = args } (* should not occur *)
+               | _ => C.App { applied = applied, cont = cont, args = args, attr = attr } (* should not occur *)
           end
         | C.AppCont { applied, args } =>
           let val applied = CpsSimplify.substCVar csubst applied

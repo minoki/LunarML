@@ -30,7 +30,7 @@ fun doUncurry (ctx, name, exp, acc)
               val workerDec = C.ValDec { exp = C.Abs { contParam = k, params = params @ List.concat pp, body = body, attr = { isWrapper = false } }, results = [SOME workerName] }
               val params' = List.map (fn p => CpsSimplify.renewVId (ctx, p)) params
               val pp' = List.map (List.map (fn p => CpsSimplify.renewVId (ctx, p))) pp
-              fun mkWrapper (k, []) = C.App { applied = C.Var workerName, cont = k, args = List.map C.Var (params' @ List.concat pp') }
+              fun mkWrapper (k, []) = C.App { applied = C.Var workerName, cont = k, args = List.map C.Var (params' @ List.concat pp'), attr = {} }
                 | mkWrapper (k, params :: pp) = let val name = CpsSimplify.renewVId (ctx, name)
                                                     val l = CpsSimplify.genContSym ctx
                                                 in C.Let { decs = [C.ValDec { exp = C.Abs { contParam = l, params = params, body = mkWrapper (l, pp), attr = { isWrapper = true } }, results = [SOME name] }]

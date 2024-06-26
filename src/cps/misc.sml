@@ -156,6 +156,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                                        , cont = C.App { applied = C.Var result'
                                                                                                       , cont = k
                                                                                                       , args = args
+                                                                                                      , attr = {}
                                                                                                       }
                                                                                        }
                                                                         , attr = { isWrapper = true }
@@ -244,6 +245,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                                                                          , cont = C.App { applied = C.Var name'
                                                                                         , cont = k
                                                                                         , args = args
+                                                                                        , attr = {}
                                                                                         }
                                                                          }
                                                           , attr = { isWrapper = true }
@@ -260,7 +262,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                       = if C.CVarSet.member (#returnConts (CpsUsageAnalysis.getValueUsage (#rec_usage ctx, name)), contParam) then
                             let val loop = CpsSimplify.genContSym (#base ctx)
                                 val params' = List.map (fn v => CpsSimplify.renewVId (#base ctx, v)) params
-                                val body' = C.recurseCExp (fn call as C.App { applied = C.Var applied, cont, args } =>
+                                val body' = C.recurseCExp (fn call as C.App { applied = C.Var applied, cont, args, attr = _ } =>
                                                               if applied = name andalso cont = contParam then
                                                                   C.AppCont { applied = loop, args = args }
                                                               else
@@ -468,7 +470,7 @@ and simplifyCExp (ctx : Context, env : CpsSimplify.value_info TypedSyntax.VIdMap
               val (env, cenv, subst, csubst, revDecs) = List.foldl (simplifyDec (ctx, appliedCont)) (env, cenv, subst, csubst, []) decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, env, cenv, subst, csubst, cont))
           end
-        | C.App { applied, cont, args } =>
+        | C.App { applied, cont, args, attr } =>
           let val applied = CpsSimplify.substValue subst applied
               val cont = CpsSimplify.substCVar csubst cont
               val args = List.map (CpsSimplify.substValue subst) args
@@ -507,11 +509,11 @@ and simplifyCExp (ctx : Context, env : CpsSimplify.value_info TypedSyntax.VIdMap
                                     else
                                         CpsSimplify.alphaConvert (#base ctx, subst, csubst, body)
                                  end
-                               | _ => C.App { applied = C.Var applied, cont = cont, args = args }
+                               | _ => C.App { applied = C.Var applied, cont = cont, args = args, attr = attr }
                       end
-                    | NONE => C.App { applied = C.Var applied, cont = cont, args = args }
+                    | NONE => C.App { applied = C.Var applied, cont = cont, args = args, attr = attr }
                  )
-               | _ => C.App { applied = applied, cont = cont, args = args } (* should not occur *)
+               | _ => C.App { applied = applied, cont = cont, args = args, attr = attr } (* should not occur *)
           end
         | C.AppCont { applied, args } =>
           let val applied = CpsSimplify.substCVar csubst applied

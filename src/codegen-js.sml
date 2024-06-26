@@ -638,7 +638,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
                          end
                      else
                          case (decs, finalExp, params) of
-                             ([], C.App { applied, cont, args }, [SOME result]) =>
+                             ([], C.App { applied, cont, args, attr = _ }, [SOME result]) =>
                              if cont = name then
                                  List.revAppend (revStats, ConstStat (result, J.CallExp (doValue (ctx, env) applied, Vector.map (doValue (ctx, env)) (vector args))) :: doCExp ctx env body)
                              else
@@ -793,7 +793,7 @@ fun doDecs (ctx, env, decs, finalExp, revStats)
       )
 and doCExp (ctx : Context) (env : Env) (C.Let { decs, cont }) : J.Stat list
     = doDecs (ctx, env, decs, cont, [])
-  | doCExp ctx env (C.App { applied, cont, args })
+  | doCExp ctx env (C.App { applied, cont, args, attr = _ })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (TAILCALL k) => [ J.ReturnStat (SOME (J.ArrayExp (vector [J.ConstExp J.False, doValue (ctx, env) applied, J.ArrayExp (vector (doCVar k :: List.map (doValue (ctx, env)) args))]))) ] (* continuation passing style *)
          | SOME (BREAK_TO { label, which, params = [p] }) => let val setWhich = case which of

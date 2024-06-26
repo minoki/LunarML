@@ -1087,11 +1087,12 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
                   end
                 | C.ContDec { name, params, body } =>
                   (case (decs, finalExp) of
-                       ([], C.App { applied, cont, args }) => if cont = name then
-                                                                  List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
-                                                                                            :: doCExp (ctx, env, defaultCont, body))
-                                                              else
-                                                                  List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp)) (* dead continuation elimination *)
+                       ([], C.App { applied, cont, args, attr = _ }) =>
+                       if cont = name then
+                           List.revAppend (revStats, L.LocalStat (List.map (fn SOME p => (p, L.CONST) | NONE => (genSym ctx, L.CONST)) params, [L.CallExp (doValue ctx applied, Vector.map (doValue ctx) (vector args))])
+                                                     :: doCExp (ctx, env, defaultCont, body))
+                       else
+                           List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp)) (* dead continuation elimination *)
                      | _ => let val label = doLabel name
                                 val env' = { continuations = C.CVarMap.insert (#continuations env, name, GOTO { label = label, params = List.map (Option.map (fn p => VIdToLua (ctx, p))) params })
                                            }
@@ -1162,7 +1163,7 @@ fun doDecs (ctx, env, defaultCont, decs, finalExp, revStats : L.Stat list)
       )
 and doCExp (ctx : Context, env : Env, defaultCont : C.CVar option, C.Let { decs, cont })
     = doDecs (ctx, env, defaultCont, decs, cont, [])
-  | doCExp (ctx, env, _, C.App { applied, cont, args })
+  | doCExp (ctx, env, _, C.App { applied, cont, args, attr = _ })
     = (case C.CVarMap.find (#continuations env, cont) of
            SOME (GOTO { label, params }) =>
            let val callAndAssign = if List.exists Option.isSome params then

@@ -28,6 +28,7 @@ structure CSyntax :> sig
                              | StringConst of string
                              | String16Const of int vector
               type AbsAttr = { isWrapper : bool }
+              type AppAttr = {}
               datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty list, args : Value list }
                                  | Record of Value Syntax.LabelMap.map (* non-empty record *)
                                  | ExnTag of { name : string, payloadTy : FSyntax.Ty option }
@@ -39,7 +40,7 @@ structure CSyntax :> sig
                            | RecContDec of (CVar * (Var option) list * CExp) list
                            | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
                    and CExp = Let of { decs : Dec list, cont : CExp }
-                            | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
+                            | App of { applied : Value, cont : CVar, args : Value list, attr : AppAttr } (* tail call *) (* return arity? *)
                             | AppCont of { applied : CVar, args : Value list }
                             | If of { cond : Value
                                     , thenCont : CExp
@@ -91,6 +92,7 @@ datatype Value = Var of Var
                | RealConst of Numeric.float_notation
 *)
 type AbsAttr = { isWrapper : bool }
+type AppAttr = {}
 datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty list, args : Value list }
                    | Record of Value Syntax.LabelMap.map (* non-empty record *)
                    | ExnTag of { name : string, payloadTy : FSyntax.Ty option }
@@ -102,7 +104,7 @@ datatype SimpleExp = PrimOp of { primOp : FSyntax.PrimOp, tyargs : FSyntax.Ty li
              | RecContDec of (CVar * (Var option) list * CExp) list
              | ESImportDec of { pure : bool, specs : (Syntax.ESImportName * Var) list, moduleName : string }
      and CExp = Let of { decs : Dec list, cont : CExp }
-              | App of { applied : Value, cont : CVar, args : Value list } (* tail call *) (* return arity? *)
+              | App of { applied : Value, cont : CVar, args : Value list, attr : AppAttr } (* tail call *) (* return arity? *)
               | AppCont of { applied : CVar, args : Value list }
               | If of { cond : Value
                       , thenCont : CExp
@@ -247,7 +249,7 @@ and freeVarsInDec (ValDec { exp, results }, (bound, acc))
 and freeVarsInExp (bound, Let { decs, cont }, acc) = let val (bound, acc) = List.foldl freeVarsInDec (bound, acc) decs
                                                      in freeVarsInExp (bound, cont, acc)
                                                      end
-  | freeVarsInExp (bound, App { applied, cont = _, args }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
+  | freeVarsInExp (bound, App { applied, cont = _, args, attr = _ }, acc) = List.foldl (freeVarsInValue bound) (freeVarsInValue bound (applied, acc)) args
   | freeVarsInExp (bound, AppCont { applied = _, args }, acc) = List.foldl (freeVarsInValue bound) acc args
   | freeVarsInExp (bound, If { cond, thenCont, elseCont }, acc) = freeVarsInExp (bound, elseCont, freeVarsInExp (bound, thenCont, freeVarsInValue bound (cond, acc)))
   | freeVarsInExp (bound, Handle { body, handler = (e, h), successfulExitIn = _, successfulExitOut = _ }, acc) = freeVarsInExp (bound, body, freeVarsInExp (TypedSyntax.VIdSet.add (bound, e), h, acc))
@@ -355,7 +357,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                    (fn (revDecs, f) =>
                                        reify (ctx, revDecs, k)
                                              (fn kk =>
-                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushPrompt, cont = kk, args = [p, f] }
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushPrompt, cont = kk, args = [p, f], attr = {} }
                                              )
                                    )
                      )
@@ -366,7 +368,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                    (fn (revDecs, f) =>
                                        reify (ctx, revDecs, k)
                                              (fn kk =>
-                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_withSubCont, cont = kk, args = [p, f] }
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_withSubCont, cont = kk, args = [p, f], attr = {} }
                                              )
                                    )
                      )
@@ -377,7 +379,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                    (fn (revDecs, f) =>
                                        reify (ctx, revDecs, k)
                                              (fn kk =>
-                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushSubCont, cont = kk, args = [subcont, f] }
+                                                 C.App { applied = C.Var InitialEnv.VId_DelimCont_pushSubCont, cont = kk, args = [subcont, f], attr = {} }
                                              )
                                    )
                      )
@@ -516,7 +518,7 @@ and transformX (ctx : Context, env) (exp : F.Exp) (revDecs : C.Dec list, k : con
                                    (fn (revDecs, v) =>
                                        reify (ctx, revDecs, k)
                                              (fn j =>
-                                                 C.App { applied = f, cont = j, args = [v] }
+                                                 C.App { applied = f, cont = j, args = [v], attr = {} }
                                              )
                                    )
                      )
@@ -644,7 +646,7 @@ and goDec g (C.ValDec { exp, results }, acc) = let val s = goSimpleExp (g, exp)
                                                                        ; acc
                                                                        )
 and goExp (g, C.Let { decs, cont }, acc) = goExp (g, cont, List.foldl (goDec g) acc decs)
-  | goExp (_, C.App { applied, cont = _, args }, acc) = List.foldl addValue (addValue (applied, acc)) args
+  | goExp (_, C.App { applied, cont = _, args, attr = _ }, acc) = List.foldl addValue (addValue (applied, acc)) args
   | goExp (_, C.AppCont { applied = _, args }, acc) = List.foldl addValue acc args
   | goExp (g, C.If { cond, thenCont, elseCont }, acc) = goExp (g, elseCont, goExp (g, thenCont, addValue (cond, acc)))
   | goExp (g, C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ }, acc) = goExp (g, body, goExp (g, h, acc))
@@ -890,7 +892,7 @@ and goCExp (env : (usage ref) TypedSyntax.VIdTable.hash_table, renv, cenv : (con
           ( List.app (goDec (env, renv, cenv, crenv)) decs
           ; goCExp (env, renv, cenv, crenv, cont)
           )
-        | C.App { applied, cont, args } =>
+        | C.App { applied, cont, args, attr = _ } =>
           ( useValueAsCallee (env, cont, applied)
           ; useContVarIndirect cenv cont
           ; List.app (useValue env) args
@@ -993,7 +995,7 @@ and sizeOfCExp (e, threshold)
       else
           case e of
               C.Let { decs, cont } => List.foldl sizeOfDec (sizeOfCExp (cont, threshold)) decs
-            | C.App { applied = _, cont = _, args } => threshold - List.length args
+            | C.App { applied = _, cont = _, args, attr = _ } => threshold - List.length args
             | C.AppCont { applied = _, args } => threshold - List.length args
             | C.If { cond = _, thenCont, elseCont } => sizeOfCExp (elseCont, sizeOfCExp (thenCont, threshold - 1))
             | C.Handle { body, handler = (_, h), successfulExitIn = _, successfulExitOut = _ } => sizeOfCExp (body, sizeOfCExp (h, threshold - 1))
@@ -1017,7 +1019,7 @@ and substDec (subst, csubst) = fn C.ValDec { exp, results } => C.ValDec { exp = 
                                 | C.RecContDec defs => C.RecContDec (List.map (fn (f, params, body) => (f, params, substCExp (subst, csubst, body))) defs)
                                 | dec as C.ESImportDec _ => dec
 and substCExp (subst : C.Value TypedSyntax.VIdMap.map, csubst : C.CVar C.CVarMap.map, C.Let { decs, cont }) = C.Let { decs = List.map (substDec (subst, csubst)) decs, cont = substCExp (subst, csubst, cont) }
-  | substCExp (subst, csubst, C.App { applied, cont, args }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, args = List.map (substValue subst) args }
+  | substCExp (subst, csubst, C.App { applied, cont, args, attr }) = C.App { applied = substValue subst applied, cont = substCVar csubst cont, args = List.map (substValue subst) args, attr = attr }
   | substCExp (subst, csubst, C.AppCont { applied, args }) = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
   | substCExp (subst, csubst, C.If { cond, thenCont, elseCont }) = C.If { cond = substValue subst cond, thenCont = substCExp (subst, csubst, thenCont), elseCont = substCExp (subst, csubst, elseCont) }
   | substCExp (subst, csubst, C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut }) = C.Handle { body = substCExp (subst, csubst, body), handler = (e, substCExp (subst, csubst, h)), successfulExitIn = successfulExitIn, successfulExitOut = substCVar csubst successfulExitOut }
@@ -1121,10 +1123,11 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
     = let val (subst', csubst', revDecs) = List.foldl (alphaConvertDec ctx) (subst, csubst, []) decs
       in C.Let { decs = List.rev revDecs, cont = alphaConvert (ctx, subst', csubst', cont) }
       end
-  | alphaConvert (_, subst, csubst, C.App { applied, cont, args })
+  | alphaConvert (_, subst, csubst, C.App { applied, cont, args, attr })
     = C.App { applied = substValue subst applied
             , cont = substCVar csubst cont
             , args = List.map (substValue subst) args
+            , attr = attr
             }
   | alphaConvert (_, subst, csubst, C.AppCont { applied, args })
     = C.AppCont { applied = substCVar csubst applied, args = List.map (substValue subst) args }
@@ -1171,7 +1174,7 @@ and isDiscardableExp (env : value_info TypedSyntax.VIdMap.map, C.Let { decs, con
            SOME env => isDiscardableExp (env, cont)
          | NONE => false
       )
-  | isDiscardableExp (env, C.App { applied = C.Var applied, cont = _, args = _ })
+  | isDiscardableExp (env, C.App { applied = C.Var applied, cont = _, args = _, attr = _ })
     = (case TypedSyntax.VIdMap.find (env, applied) of
            SOME { isDiscardableFunction = true, ... } => true
          | _ => false
@@ -1190,7 +1193,7 @@ fun finalizeDec ctx (dec, (decs, cont))
     = case dec of
           C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs = _, args = [f, arg] }, results = [SOME result] } =>
           let val name = genContSym ctx
-          in ([C.ContDec { name = name, params = [SOME result], body = prependDecs (decs, cont) }], C.App { applied = f, cont = name, args = [arg] })
+          in ([C.ContDec { name = name, params = [SOME result], body = prependDecs (decs, cont) }], C.App { applied = f, cont = name, args = [arg], attr = {} })
           end
         | C.ValDec { exp = C.PrimOp { primOp = F.PrimCall Primitives.assumeDiscardable, tyargs = _, args = _ }, results = _ } =>
           raise Fail "assumeDiscardable: invalid argument"
@@ -1288,7 +1291,7 @@ fun goDec (table, level) (dec, acc)
         | C.ESImportDec _ => acc
 and go (table, level, C.Let { decs, cont }, acc)
     = go (table, level, cont, List.foldl (goDec (table, level)) acc decs)
-  | go (table, level, C.App { applied = _, cont, args = _ }, acc) = escape (table, level, cont, acc)
+  | go (table, level, C.App { applied = _, cont, args = _, attr = _ }, acc) = escape (table, level, cont, acc)
   | go (table, level, C.AppCont { applied, args = _ }, acc) = direct (table, level, applied, acc)
   | go (table, level, C.If { cond = _, thenCont, elseCont }, acc) = go (table, level, elseCont, go (table, level, thenCont, acc))
   | go (table, level, C.Handle { body, handler = (_, h), successfulExitIn, successfulExitOut }, acc)
