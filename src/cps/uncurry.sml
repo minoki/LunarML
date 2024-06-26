@@ -25,7 +25,8 @@ fun tryUncurry (exp as C.Abs { contParam, params, body as C.Let { decs, cont = C
 fun doUncurry (ctx, name, exp, acc)
     = case tryUncurry exp of
           SOME (params :: (pp as _ :: _), k, body) =>
-          let val workerName = CpsSimplify.renewVId (ctx, name)
+          let val () = #simplificationOccurred ctx := true
+              val workerName = CpsSimplify.renewVId (ctx, name)
               val body = simplifyCExp (ctx, body)
               val workerDec = C.ValDec { exp = C.Abs { contParam = k, params = params @ List.concat pp, body = body, attr = { isWrapper = false } }, results = [SOME workerName] }
               val params' = List.map (fn p => CpsSimplify.renewVId (ctx, p)) params

@@ -42,6 +42,7 @@ lua-syntax.sml
 cps.sml
 cps/uncurry.sml
 cps/inline.sml
+cps/decompose-recursive.sml
 cps/misc.sml
 lua-transform.sml
 codegen-lua.sml

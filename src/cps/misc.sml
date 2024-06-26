@@ -5,7 +5,6 @@
 (*
  * This module does:
  *  * Dead code elimination,
- *  * Decompose recursive definitions,
  *  * Convert recursive function to loop,
  *  * Unpack tuple parameters,
  *  * Eliminate constant ref-cells.
@@ -276,27 +275,7 @@ and simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, (env, cenv, s
                             end
                         else
                             def
-                  val defs = List.map tryConvertToLoop defs
-                  val defined = List.foldl (fn ({ name, ... }, set) => TypedSyntax.VIdSet.add (set, name)) TypedSyntax.VIdSet.empty defs
-                  val map = List.foldl (fn (def as { name, body, ... }, map) =>
-                                           TypedSyntax.VIdMap.insert (map, name, { def = def
-                                                                                 , dests = TypedSyntax.VIdSet.intersection (C.freeVarsInExp (TypedSyntax.VIdSet.empty, body, TypedSyntax.VIdSet.empty), defined)
-                                                                                 }
-                                                                     )
-                                       ) TypedSyntax.VIdMap.empty defs
-                  val sccs = TypedSyntax.VIdSCC.components (#dests, map)
-                  val decs = List.foldl (fn (scc, decs) =>
-                                            let val dec = case TypedSyntax.VIdSet.listItems scc of
-                                                              [vid] => let val { def as { name, contParam, params, body, attr }, dests } = TypedSyntax.VIdMap.lookup (map, vid)
-                                                                       in if TypedSyntax.VIdSet.member (dests, vid) then
-                                                                              C.RecDec [def]
-                                                                          else
-                                                                              C.ValDec { exp = C.Abs { contParam = contParam, params = params, body = body, attr = attr }, results = [SOME name] }
-                                                                       end
-                                                            | scc => C.RecDec (List.map (fn vid => #def (TypedSyntax.VIdMap.lookup (map, vid))) scc)
-                                            in dec :: decs
-                                            end
-                                        ) acc sccs
+                  val decs = C.RecDec (List.map tryConvertToLoop defs) :: acc
               in (env, cenv, subst, csubst, decs)
               end
           else
