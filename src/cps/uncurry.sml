@@ -5,9 +5,7 @@
 structure CpsUncurry : sig
               val goCExp : CpsSimplify.Context * CSyntax.CExp -> CSyntax.CExp
           end = struct
-local structure F = FSyntax
-      structure C = CSyntax
-      structure P = Primitives
+local structure C = CSyntax
 in
 (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.CExp) option *)
 fun tryUncurry (exp as C.Abs { contParam, params, body as C.Let { decs, cont = C.AppCont { applied = k, args = [C.Var v] } }, attr = { isWrapper = false } })

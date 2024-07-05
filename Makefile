@@ -49,9 +49,12 @@ sources = \
   src/pattern-match.sml \
   src/ftransform.sml \
   src/cps.sml \
+  src/cps/dead-code.sml \
   src/cps/uncurry.sml \
+  src/cps/loop.sml \
   src/cps/inline.sml \
   src/cps/decompose-recursive.sml \
+  src/cps/unpack-record-parameter.sml \
   src/cps/misc.sml \
   src/lua-syntax.sml \
   src/lua-transform.sml \

@@ -542,4 +542,4 @@ fun goCExp (ctx : CpsSimplify.Context, exp)
       in simplifyCExp (ctx', TypedSyntax.VIdMap.empty, C.CVarMap.empty, TypedSyntax.VIdMap.empty, C.CVarMap.empty, exp)
       end
 end (* local *)
-end; (* structure CpsDeadCodeElimination *)
+end; (* structure CpsMiscOptimization *)

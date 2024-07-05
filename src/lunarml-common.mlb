@@ -40,9 +40,12 @@ pattern-match.sml
 ftransform.sml
 lua-syntax.sml
 cps.sml
+cps/dead-code.sml
 cps/uncurry.sml
+cps/loop.sml
 cps/inline.sml
 cps/decompose-recursive.sml
+cps/unpack-record-parameter.sml
 cps/misc.sml
 lua-transform.sml
 codegen-lua.sml
