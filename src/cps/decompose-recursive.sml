@@ -9,7 +9,7 @@ local structure C = CSyntax
 in
 fun goDec ctx (dec, acc)
     = case dec of
-          C.ValDec { exp = C.Abs { contParam, params, body, attr }, results as [SOME name] } =>
+          C.ValDec { exp = C.Abs { contParam, params, body, attr }, results as [SOME _] } =>
           C.ValDec { exp = C.Abs { contParam = contParam, params = params, body = goCExp (ctx, body), attr = attr }, results = results } :: acc
         | C.ValDec { exp = _, results = _ } => dec :: acc
         | C.RecDec defs =>

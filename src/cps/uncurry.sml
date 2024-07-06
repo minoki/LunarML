@@ -8,7 +8,7 @@ structure CpsUncurry : sig
 local structure C = CSyntax
 in
 (*: val tryUncurry : C.SimpleExp -> ((C.Var list) list * C.CVar * C.CExp) option *)
-fun tryUncurry (exp as C.Abs { contParam, params, body as C.Let { decs, cont = C.AppCont { applied = k, args = [C.Var v] } }, attr = { isWrapper = false } })
+fun tryUncurry (C.Abs { contParam, params, body as C.Let { decs, cont = C.AppCont { applied = k, args = [C.Var v] } }, attr = { isWrapper = false } })
     = (case decs of
            [C.ValDec { exp, results = [SOME f] }] =>
            if contParam = k andalso v = f then

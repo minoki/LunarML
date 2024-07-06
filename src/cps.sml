@@ -946,7 +946,6 @@ structure CpsSimplify :> sig
           end = struct
 local structure F = FSyntax
       structure C = CSyntax
-      structure P = Primitives
       datatype frequency = datatype CpsUsageAnalysis.frequency
 in
 type Context = { nextVId : int ref
@@ -1144,9 +1143,6 @@ and alphaConvert (ctx : Context, subst : C.Value TypedSyntax.VIdMap.map, csubst 
                   }
       end
   | alphaConvert (_, _, _, e as C.Unreachable) = e
-datatype simplify_result = VALUE of C.Value
-                         | SIMPLE_EXP of C.SimpleExp
-                         | NOT_SIMPLIFIED
 type value_info = { exp : C.SimpleExp option, isDiscardableFunction : bool }
 fun isDiscardableDec (dec, env : value_info TypedSyntax.VIdMap.map)
     = case dec of

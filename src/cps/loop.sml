@@ -44,17 +44,17 @@ local
                            else
                                TypedSyntax.VIdTable.insert env (v, ref neverUsed)
     in
-    fun goSimpleExp (env, _, _, C.PrimOp { primOp = _, tyargs = _, args }) = ()
-      | goSimpleExp (env, _, _, C.Record fields) = ()
-      | goSimpleExp (_, _, _, C.ExnTag { name = _, payloadTy = _ }) = ()
-      | goSimpleExp (env, _, results, C.Projection { label, record, fieldTypes = _ }) = ()
-      | goSimpleExp (env, renv, _, C.Abs { contParam, params, body, attr = _ })
+    fun goSimpleExp (_, _, C.PrimOp _) = ()
+      | goSimpleExp (_, _, C.Record _) = ()
+      | goSimpleExp (_, _, C.ExnTag _) = ()
+      | goSimpleExp (_, _, C.Projection _) = ()
+      | goSimpleExp (env, renv, C.Abs { contParam = _, params, body, attr = _ })
         = ( List.app (fn p => add (env, p)) params
           ; goCExp (env, renv, body)
           )
     and goDec (env, renv)
         = fn C.ValDec { exp, results } =>
-             ( goSimpleExp (env, renv, results, exp)
+             ( goSimpleExp (env, renv, exp)
              ; List.app (fn SOME result => add (env, result)
                         | NONE => ()
                         ) results
@@ -70,7 +70,7 @@ local
          ; TypedSyntax.VIdMap.appi (fn (f, v) => TypedSyntax.VIdTable.insert renv (f, v)) recursiveEnv
          ; List.app (fn { name, ... } => TypedSyntax.VIdTable.insert env (name, ref neverUsed)) defs
         end
-      | C.ContDec { name, params, body } =>
+      | C.ContDec { name = _, params, body } =>
         ( List.app (Option.app (fn p => add (env, p))) params
         ; goCExp (env, renv, body)
         )
@@ -86,15 +86,15 @@ local
               ( List.app (goDec (env, renv)) decs
               ; goCExp (env, renv, cont)
               )
-            | C.App { applied, cont, args, attr = _ } =>
+            | C.App { applied, cont, args = _, attr = _ } =>
               ( useValueAsCallee (env, cont, applied)
               )
-            | C.AppCont { applied, args } => ()
-            | C.If { cond, thenCont, elseCont } =>
+            | C.AppCont { applied = _, args = _ } => ()
+            | C.If { cond = _, thenCont, elseCont } =>
               ( goCExp (env, renv, thenCont)
               ; goCExp (env, renv, elseCont)
               )
-            | C.Handle { body, handler = (e, h), successfulExitIn, successfulExitOut } =>
+            | C.Handle { body, handler = (e, h), successfulExitIn = _, successfulExitOut = _ } =>
               ( goCExp (env, renv, body)
               ; add (env, e)
               ; goCExp (env, renv, h)
@@ -117,7 +117,7 @@ in
 type Context = { base : CpsSimplify.Context
                , rec_usage : CpsUsageAnalysis.usage_table
                }
-fun simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, acc : C.Dec list)
+fun simplifyDec (ctx : Context) (dec, acc : C.Dec list)
     = case dec of
           C.ValDec { exp, results } =>
           (case (exp, results) of
@@ -172,10 +172,7 @@ fun simplifyDec (ctx : Context, appliedCont : C.CVar option) (dec, acc : C.Dec l
 and simplifyCExp (ctx : Context, e)
     = case e of
           C.Let { decs, cont } =>
-          let val appliedCont = case cont of
-                                    C.AppCont { applied, args = _ } => SOME applied
-                                  | _ => NONE
-              val revDecs = List.foldl (simplifyDec (ctx, appliedCont)) [] decs
+          let val revDecs = List.foldl (simplifyDec ctx) [] decs
           in CpsTransform.prependRevDecs (revDecs, simplifyCExp (ctx, cont))
           end
         | C.App _ => e

@@ -52,6 +52,7 @@ sources = \
   src/cps/dead-code.sml \
   src/cps/uncurry.sml \
   src/cps/loop.sml \
+  src/cps/ref-cell.sml \
   src/cps/inline.sml \
   src/cps/decompose-recursive.sml \
   src/cps/unpack-record-parameter.sml \
