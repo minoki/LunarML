@@ -450,7 +450,7 @@ val sub = LunarML.assumeDiscardable field (string, "sub")
 val upper = LunarML.assumeDiscardable field (string, "upper")
 end
 structure table = struct
-val concat = LunarML.assumeDiscardable field (table, "concat")
+val concat = _Prim.Lua.Lib.table.concat
 val insert = LunarML.assumeDiscardable field (table, "insert")
 val maxn = LunarML.assumeDiscardable field (table, "maxn")
 val pack = _Prim.Lua.Lib.table.pack

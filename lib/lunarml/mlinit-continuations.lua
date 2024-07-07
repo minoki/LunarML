@@ -46,6 +46,9 @@ local string_format = string.format
 --BEGIN table
 local table = table
 --END
+--BEGIN table_concat: table
+local table_concat = table.concat
+--END
 --BEGIN table_pack: table
 local table_pack = table.pack
 --END

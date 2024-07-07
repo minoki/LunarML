@@ -77,6 +77,7 @@ val builtins
                     ,(VId_Lua_Lib_string_char, "string_char")
                     ,(VId_Lua_Lib_string_format, "string_format")
                     ,(VId_Lua_Lib_table, "table")
+                    ,(VId_Lua_Lib_table_concat, "table_concat")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
                     ]
@@ -130,6 +131,7 @@ val builtinsLuaJIT
                     ,(VId_Lua_Lib_string_char, "string_char")
                     ,(VId_Lua_Lib_string_format, "string_format")
                     ,(VId_Lua_Lib_table, "table")
+                    ,(VId_Lua_Lib_table_concat, "table_concat")
                     ,(VId_Lua_Lib_table_pack, "table_pack")
                     ,(VId_Lua_Lib_table_unpack, "table_unpack")
                     ,(VId_Lua_Lib_bit, "bit")

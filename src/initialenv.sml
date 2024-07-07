@@ -61,6 +61,7 @@ structure InitialEnv :> sig
               val VId_Lua_Lib_string_char : TypedSyntax.VId
               val VId_Lua_Lib_string_format : TypedSyntax.VId
               val VId_Lua_Lib_table : TypedSyntax.VId
+              val VId_Lua_Lib_table_concat : TypedSyntax.VId
               val VId_Lua_Lib_table_pack : TypedSyntax.VId
               val VId_Lua_Lib_table_unpack : TypedSyntax.VId
               val VId_Lua_Lib_bit : TypedSyntax.VId
@@ -193,6 +194,7 @@ val VId_Lua_Lib_string = newVId "_Prim.Lua.Lib.string"
 val VId_Lua_Lib_string_char = newVId "_Prim.Lua.Lib.string.char"
 val VId_Lua_Lib_string_format = newVId "_Prim.Lua.Lib.string.format"
 val VId_Lua_Lib_table = newVId "_Prim.Lua.Lib.table"
+val VId_Lua_Lib_table_concat = newVId "_Prim.Lua.Lib.table.concat"
 val VId_Lua_Lib_table_pack = newVId "_Prim.Lua.Lib.table.pack"
 val VId_Lua_Lib_table_unpack = newVId "_Prim.Lua.Lib.table.unpack"
 val VId_Lua_Lib_bit = newVId "_Prim.Lua.Lib.bit" (* LuaJIT *)
@@ -317,6 +319,7 @@ val initialEnv : Typing.Env
                                            ,("_Prim.Lua.Lib.math.ult", VId_Lua_Lib_math_ult, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.string.char", VId_Lua_Lib_string_char, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.string.format", VId_Lua_Lib_string_format, TypeScheme ([], primTy_Lua_value))
+                                           ,("_Prim.Lua.Lib.table.concat", VId_Lua_Lib_table_concat, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.pack", VId_Lua_Lib_table_pack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.table.unpack", VId_Lua_Lib_table_unpack, TypeScheme ([], primTy_Lua_value))
                                            ,("_Prim.Lua.Lib.bit", VId_Lua_Lib_bit, TypeScheme ([], primTy_Lua_value))

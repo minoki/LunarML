@@ -49,6 +49,9 @@ local table = table
 --BEGIN select
 local select = select
 --END
+--BEGIN table_concat: table
+local table_concat = table.concat
+--END
 --BEGIN table_pack: select
 local table_pack = table.pack or function(...) return { n = select("#", ...), ... } end
 --END
