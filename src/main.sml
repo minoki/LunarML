@@ -92,7 +92,7 @@ fun optimizeCps (_ : { nextVId : int ref, printTimings : bool }) cexp 0 = cexp
                                             }
                                  val cexp = CpsDeadCodeElimination.goCExp (ctx', cexp)
                                  val cexp = CpsUncurry.goCExp (ctx', cexp)
-                                 (* val cexp = CpsUnpackRecordParameter.goCExp (ctx', cexp) *)
+                                 val cexp = CpsUnpackRecordParameter.goCExp (ctx', cexp)
                                  val cexp = CpsLoopOptimization.goCExp (ctx', cexp)
                                  val cexp = CpsDecomposeRecursive.goCExp (ctx', cexp)
                                  val cexp = CpsConstantRefCell.goCExp (ctx', cexp)
