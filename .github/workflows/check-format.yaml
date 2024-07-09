@@ -1,0 +1,26 @@
+on: [push, pull_request]
+name: check-format
+jobs:
+  check-format:
+    name: Check format with smlfmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache smlfmt
+        id: cache-smlfmt
+        uses: actions/cache@v3
+        with:
+          path: ~/.local/bin
+          key: ${{ runner.os }}-smlfmt
+      - if: ${{ steps.cache-smlfmt.outputs.cache-hit != 'true' }}
+        name: Install smlfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install mlton
+          curl -Lo smlfmt.tar.gz https://github.com/shwestrick/smlfmt/archive/refs/tags/v1.1.0.tar.gz
+          tar xf smlfmt.tar.gz
+          make -C smlfmt-1.1.0
+          install -d ~/.local/bin
+          install -m 755 smlfmt-1.1.0/smlfmt ~/.local/bin
+      - name: smlfmt
+        run: make check-format

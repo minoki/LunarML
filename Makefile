@@ -4,6 +4,7 @@ NODE = node
 MKDIR = mkdir -p
 CP = cp -fpR
 INSTALL_EXEC = install -p -m 0755
+SMLFMT = smlfmt
 
 include version.mk
 
@@ -72,8 +73,24 @@ sources = \
   src/main.sml \
   src/main-default.sml
 
+autogen_sources = \
+  src/language-options-record.sml \
+  src/primitives.sml \
+  src/syntax.grm.sig \
+  src/syntax.grm.sml \
+  src/command-line-settings.sml \
+  src/version.sml
+
+formatted_sources = \
+  $(filter-out $(autogen_sources),$(sources)) \
+  src/main-esmod.sml
+
 typecheck: src/lunarml-main.mlb $(sources)
 	mlton -stop tc -default-ann "warnUnused true" $<
+
+.PHONY: check-format
+check-format:
+	$(SMLFMT) --check $(formatted_sources)
 
 bin/lunarml: src/lunarml-main.mlb $(sources)
 	mlton -output $@ $<
