@@ -1,3 +1,13 @@
+## Version 0.2.0 (2024-08-06)
+
+* More work on IO: `PrimIO`/`ImperativeIO`/`TextIO.StreamIO`/`BinIO.StreamIO`
+* Enable dead code elimination for the initialization file
+* Pipe operator in `$(SML_LIB)/basis/pipe.mlb`
+* New documentation
+* JavaScript: `JavaScript.Lib.Map`/`Set`/`WeakMap`/`WeakSet`
+* Lua: Add `Lua.method0`/`method1`/`method2`/`method3`
+* Uncurry optimization
+
 ## Version 0.1.0 (2023-12-17)
 
 Initial release.
