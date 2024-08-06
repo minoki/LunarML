@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM ubuntu:23.04
+FROM ubuntu:24.04
 
 # mlton's binary is only available on amd64
 RUN apt-get update && apt-get install -y mlton make lua5.3 patch
@@ -16,7 +16,7 @@ RUN mkdir -p bin && make
 WORKDIR /work/thirdparty
 RUN make install
 
-FROM ubuntu:23.04
+FROM ubuntu:24.04
 ENV PATH="/opt/lunarml/bin:$PATH"
 COPY --from=0 /work/bin /opt/lunarml/lib/lunarml/bin
 COPY --from=0 /work/lib /opt/lunarml/lib
