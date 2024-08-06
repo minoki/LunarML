@@ -6,10 +6,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Build HTML
-        uses: ammaraskar/sphinx-action@master
+      - name: Setup Rye
+        uses: eifinger/setup-rye@v4
         with:
-          docs-folder: "docs/"
+          enable-cache: true
+          working-directory: 'docs/'
+      - name: Sync dependencies
+        run: rye sync
+        working-directory: ./docs
+      - name: Build HTML
+        run: make -C docs SPHINXBUILD="rye run sphinx-build" html
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
