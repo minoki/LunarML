@@ -1,6 +1,7 @@
 #ifndef LUNARML_VALUE_H
 #define LUNARML_VALUE_H
 
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -100,11 +101,27 @@ struct Closure {
     Value free[];
 };
 
+static inline struct Closure *check_closure(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_CLOSURE);
+    return (struct Closure *)v;
+}
+
 struct Tuple {
     struct GCHeader header; // type=T_TUPLE
     size_t n;
     Value elems[];
 };
+
+static inline struct Tuple *check_tuple(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_TUPLE);
+    return (struct Tuple *)v;
+}
 
 struct Sequence {
     struct GCHeader header; // type=T_VECTOR|T_ARRAY
@@ -112,16 +129,48 @@ struct Sequence {
     Value elems[];
 };
 
+static inline struct Sequence *check_vector(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_VECTOR);
+    return (struct Sequence *)v;
+}
+
+static inline struct Sequence *check_array(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_ARRAY);
+    return (struct Sequence *)v;
+}
+
 struct Data {
     struct GCHeader header; // type=T_DATA
     uint16_t tag;
     Value payload;
 };
 
+static inline struct Data *check_data(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_DATA);
+    return (struct Data *)v;
+}
+
 struct ExceptionTag {
     struct GCHeader header; // type=T_EXCEPTION_TAG
     char name[]; // NUL-terminated
 };
+
+static inline struct ExceptionTag *check_exception_tag(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_EXCEPTION_TAG);
+    return (struct ExceptionTag *)v;
+}
 
 struct Exception {
     struct GCHeader header; // type=T_EXCEPTION
@@ -129,21 +178,57 @@ struct Exception {
     Value payload;
 };
 
+static inline struct Exception *check_exception(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_EXCEPTION);
+    return (struct Exception *)v;
+}
+
 struct MonoSequence {
     struct GCHeader header; // type=T_MONO_SEQUENCE
     size_t n_bytes;
     unsigned char buffer[];
 };
 
+static inline struct MonoSequence *check_mono_sequence(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_MONO_SEQUENCE);
+    return (struct MonoSequence *)v;
+}
+
 struct Ref {
     struct GCHeader header; // type=T_REF
     Value payload;
 };
+
+static inline struct Ref *check_ref(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_REF);
+    return (struct Ref *)v;
+}
 
 struct Cons {
     struct GCHeader header; // type=T_CONS
     Value elem;
     struct Cons *next; // may be NULL
 };
+
+static inline struct Cons *check_list(Value v)
+{
+    if (v == V_NIL) {
+        return NULL;
+    } else {
+        assert((v & 1) == 0 && v != V_EMPTY);
+        struct GCHeader *obj = (struct GCHeader *)v;
+        assert(obj->type == T_CONS);
+        return (struct Cons *)v;
+    }
+}
 
 #endif
