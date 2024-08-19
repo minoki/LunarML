@@ -171,8 +171,7 @@ struct Result run(struct State *state, size_t n_args)
                 uint8_t n_args = *code++;
                 assert(stack_top - current_frame > n_args);
                 Value callee_value = *(stack_top - n_args - 1);
-                assert(get_type(callee_value) == T_CLOSURE);
-                struct Closure *callee = (struct Closure *)callee_value;
+                struct Closure *callee = check_closure(callee_value);
                 struct Code *new_code_object = callee->code;
                 assert(n_args == new_code_object->n_args);
                 assert(control_stack_top - control_stack_bottom < state->control_stack_size);
@@ -202,8 +201,7 @@ struct Result run(struct State *state, size_t n_args)
                 uint8_t n_args = *code++;
                 assert(stack_top - current_frame > n_args);
                 Value callee_value = *(stack_top - n_args - 1);
-                assert(get_type(callee_value) == T_CLOSURE);
-                struct Closure *callee = (struct Closure *)callee_value;
+                struct Closure *callee = check_closure(callee_value);
                 struct Code *new_code_object = callee->code;
                 assert(n_args == new_code_object->n_args);
                 assert(control_stack_top - control_stack_bottom < state->control_stack_size);
@@ -253,8 +251,7 @@ struct Result run(struct State *state, size_t n_args)
                 uint16_t index = lo + hi * 256;
                 assert(stack_top - current_frame >= 1);
                 Value tuple_value = *--stack_top;
-                assert(get_type(tuple_value) == T_TUPLE);
-                struct Tuple *tuple = (struct Tuple *)tuple_value;
+                struct Tuple *tuple = check_tuple(tuple_value);
                 assert(index < tuple->n);
                 *stack_top++ = tuple->elems[index];
                 break;
@@ -284,8 +281,7 @@ struct Result run(struct State *state, size_t n_args)
                 assert(stack_top - current_frame >= 2);
                 Value new_value = *--stack_top;
                 Value closure_value = *(stack_top - 1);
-                assert(get_type(closure_value) == T_CLOSURE);
-                struct Closure *closure = (struct Closure *)closure_value;
+                struct Closure *closure = check_closure(closure_value);
                 assert(index < closure->code->n_frees);
                 closure->free[index] = new_value;
                 break;
@@ -296,9 +292,8 @@ struct Result run(struct State *state, size_t n_args)
                 struct Cons *cons = make_cons(state); // may trigger GC
                 Value next_value = *--stack_top;
                 Value elem = *--stack_top;
-                assert(next_value == V_NIL || get_type(next_value) == T_CONS);
                 cons->elem = elem;
-                cons->next = next_value == V_NIL ? NULL : (struct Cons *)next_value;
+                cons->next = check_list(next_value);
                 *stack_top++ = (Value)cons;
                 break;
             }
