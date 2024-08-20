@@ -40,6 +40,25 @@ struct Tuple *make_tuple(struct State *state, size_t n)
     return obj;
 }
 
+struct Sequence *make_sequence(struct State *state, enum Type type, size_t n)
+{
+    assert(type == T_VECTOR || type == T_ARRAY);
+    struct Sequence *obj = malloc(sizeof(struct Sequence) + sizeof(Value) * n);
+    if (obj == NULL) {
+        fputs("make_sequence: memory allocation failed\n", stderr);
+        exit(1);
+    }
+    obj->header.next = state->objects;
+    obj->header.type = type;
+    obj->header.mark = false;
+    state->objects = (struct GCHeader *)obj;
+    obj->n = n;
+    for (size_t i = 0; i < n; ++i) {
+        obj->elems[i] = V_EMPTY;
+    }
+    return obj;
+}
+
 struct Data *make_data(struct State *state, uint16_t tag)
 {
     struct Data *obj = malloc(sizeof(struct Data));

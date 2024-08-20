@@ -286,6 +286,46 @@ struct Result run(struct State *state, size_t n_args)
                 closure->free[index] = new_value;
                 break;
             }
+        case OP_MAKE_LIST:
+            {
+                uint8_t lo = *code++;
+                uint8_t hi = *code++;
+                uint16_t n = lo + hi * 256;
+                assert(stack_top - current_frame >= n);
+                assert(stack_top - stack_bottom - n < stack_size);
+                Value *cursor = stack_top;
+                Value *init = stack_top - n;
+                struct Cons *xs = NULL; // nil
+                while (cursor != init) {
+                    Value elem = *--cursor;
+                    struct Cons *new_cons = make_cons(state); // may trigger GC
+                    new_cons->elem = elem;
+                    new_cons->next = xs;
+                    *--stack_top = (Value)new_cons;
+                    xs = new_cons;
+                }
+                *stack_top++ = xs == NULL ? V_NIL : (Value)xs;
+                break;
+            }
+        case OP_MAKE_VECTOR:
+            {
+                uint8_t lo = *code++;
+                uint8_t hi = *code++;
+                uint16_t n = lo + hi * 256;
+                assert(stack_top - current_frame >= n);
+                assert(stack_top - stack_bottom - n < stack_size);
+                Value *cursor = stack_top;
+                Value *init = stack_top - n;
+                struct Sequence *vector = make_sequence(state, T_VECTOR, n); // may trigger GC
+                *stack_top++ = (Value)vector;
+                while (cursor != init) {
+                    Value elem = *--cursor;
+                    vector->elems[cursor - init] = elem;
+                }
+                *init = (Value)vector;
+                stack_top = init + 1;
+                break;
+            }
         case OP_CONS:
             {
                 assert(stack_top - current_frame >= 2);
@@ -318,6 +358,23 @@ struct Result run(struct State *state, size_t n_args)
                 *stack_top++ = (Value)data;
                 break;
             }
+        case OP_DATA_TAG:
+            {
+                assert(stack_top - current_frame >= 1);
+                Value v = *--stack_top;
+                struct Data *data = check_data(v);
+                *stack_top++ = (Value)((data->tag << 1) | 1);
+                break;
+            }
+        case OP_DATA_PAYLOAD:
+            {
+                assert(stack_top - current_frame >= 1);
+                Value v = *--stack_top;
+                struct Data *data = check_data(v);
+                assert(data->payload != V_EMPTY);
+                *stack_top++ = data->payload;
+                break;
+            }
         case OP_MAKE_EXCEPTION_WITHOUT_PAYLOAD:
             {
                 assert(stack_top - current_frame >= 1);
@@ -337,6 +394,15 @@ struct Result run(struct State *state, size_t n_args)
                 e->tag = (struct ExceptionTag *)tag;
                 e->payload = *--stack_top;
                 *stack_top++ = (Value)e;
+                break;
+            }
+        case OP_EXCEPTION_PAYLOAD:
+            {
+                assert(stack_top - current_frame >= 1);
+                Value v = *--stack_top;
+                struct Exception *e = check_exception(v);
+                assert(e->payload != V_EMPTY);
+                *stack_top++ = e->payload;
                 break;
             }
         case OP_JUMP:
