@@ -88,6 +88,10 @@ formatted_sources = \
 typecheck: src/lunarml-main.mlb $(sources)
 	mlton -stop tc -default-ann "warnUnused true" $<
 
+.PHONY: format
+format:
+	$(SMLFMT) --force $(formatted_sources)
+
 .PHONY: check-format
 check-format:
 	$(SMLFMT) --check $(formatted_sources)
