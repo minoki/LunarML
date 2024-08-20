@@ -26,6 +26,7 @@ struct State {
 
 struct Closure *make_closure(struct State *state, struct Code *code);
 struct Tuple *make_tuple(struct State *state, size_t n);
+struct Sequence *make_sequence(struct State *state, enum Type type, size_t n);
 struct Data *make_data(struct State *state, uint16_t tag);
 struct Exception *make_exception(struct State *state);
 struct Cons *make_cons(struct State *state);
