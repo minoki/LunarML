@@ -22,8 +22,10 @@ static inline bool is_boxed(Value v)
 enum Type {
     T_EMPTY,
     T_UNBOXED,
-    T_BOXED_INT,
-    T_BOXED_WORD,
+    T_BOXED_INT32,
+    T_BOXED_INT64,
+    T_BOXED_WORD32,
+    T_BOXED_WORD64,
     T_BOXED_REAL32,
     T_BOXED_REAL64,
     T_BIGINT,
@@ -60,7 +62,7 @@ static inline enum Type get_type(Value v)
 }
 
 struct Scalar {
-    struct GCHeader header; // type=T_BOXED_INT|T_BOXED_WORD|T_BOXED_REAL32|T_BOXED_REAL64
+    struct GCHeader header; // type=T_BOXED_INT32|T_BOXED_INT64|T_BOXED_WORD32|T_BOXED_WORD64|T_BOXED_REAL32|T_BOXED_REAL64
     union {
         int64_t i64;
         uint64_t u64;
@@ -69,12 +71,68 @@ struct Scalar {
     };
 };
 
+static inline int32_t check_i32(Value v)
+{
+    if (v & 1) {
+        intptr_t x = (intptr_t)v >> 1; // Assume arithmetic right shift
+        assert(INT32_MIN <= x && x <= INT32_MAX);
+        return (int32_t)x;
+    } else {
+        assert(get_type(v) == T_BOXED_INT32);
+        return (int32_t)((struct Scalar *)v)->i64;
+    }
+}
+
+static inline int64_t check_i64(Value v)
+{
+    if (v & 1) {
+        intptr_t x = (intptr_t)v >> 1; // Assume arithmetic right shift
+        assert(INT64_MIN <= x && x <= INT64_MAX);
+        return (int64_t)x;
+    } else {
+        assert(get_type(v) == T_BOXED_INT64);
+        return ((struct Scalar *)v)->i64;
+    }
+}
+
+static inline uint32_t check_w32(Value v)
+{
+    if (v & 1) {
+        uintptr_t x = (uint32_t)(v >> 1);
+        assert(x <= UINT32_MAX);
+        return (uint32_t)x;
+    } else {
+        assert(get_type(v) == T_BOXED_INT32);
+        return (int32_t)((struct Scalar *)v)->i64;
+    }
+}
+
+static inline uint64_t check_w64(Value v)
+{
+    if (v & 1) {
+        uintptr_t x = (uint32_t)(v >> 1);
+        assert(x <= UINT64_MAX);
+        return (uint32_t)x;
+    } else {
+        assert(get_type(v) == T_BOXED_INT64);
+        return ((struct Scalar *)v)->i64;
+    }
+}
+
 struct BigInt {
     struct GCHeader header; // type=T_BIGINT
     signed char sign; // -1 or 1
     size_t n_limbs;
     uint64_t limbs[];
 };
+
+static inline struct BigInt *check_bigint(Value v)
+{
+    assert((v & 1) == 0 && v != V_EMPTY);
+    struct GCHeader *obj = (struct GCHeader *)v;
+    assert(obj->type == T_BIGINT);
+    return (struct BigInt *)v;
+}
 
 struct Program {
     struct GCHeader header; // type=T_PROGRAM
