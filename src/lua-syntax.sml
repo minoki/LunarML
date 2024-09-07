@@ -335,7 +335,7 @@ struct
     | smlNameToLuaChar x =
         if Char.isAlphaNum x then String.str x
         else raise Fail "smlNameToLua: invalid character"
-  fun smlNameToLua (name) = String.translate smlNameToLuaChar name
+  fun smlNameToLua name = String.translate smlNameToLuaChar name
   val LuaKeywords = StringSet.fromList
     [ "and"
     , "break"
@@ -360,6 +360,7 @@ struct
     , "until"
     , "while"
     ]
+  val LuaReservedNames = StringSet.add (LuaKeywords, "_ENV")
   fun isLuaIdentifier name =
     case CharVectorSlice.getItem (CharVectorSlice.full name) of
       NONE => false
@@ -369,9 +370,228 @@ struct
         (CharVectorSlice.all (fn c => Char.isAlphaNum c orelse c = #"_") xs)
         andalso (not (StringSet.member (LuaKeywords, name)))
 
-  fun IdToLua (LuaSyntax.PredefinedId name) = name
-    | IdToLua (LuaSyntax.UserDefinedId (TypedSyntax.MkVId (name, n))) =
-        smlNameToLua name ^ "_" ^ Int.toString n
+  local structure L = LuaSyntax
+  in
+    fun declare
+      ( vid as TypedSyntax.MkVId (smlName, _)
+      , acc as (unavailableNames, nameMap)
+      ) =
+      (case TypedSyntax.VIdMap.find (nameMap, vid) of
+         SOME _ => acc
+       | NONE =>
+           let
+             val baseName =
+               if isLuaIdentifier smlName then smlName else smlNameToLua smlName
+             fun isAvailable x =
+               not (StringSet.member (unavailableNames, x))
+             fun go i =
+               let val name = baseName ^ "_" ^ Int.toString i
+               in if isAvailable name then name else go (i + 1)
+               end
+             val name = if isAvailable baseName then baseName else go 1
+           in
+             ( StringSet.add (unavailableNames, name)
+             , TypedSyntax.VIdMap.insert (nameMap, vid, name)
+             )
+           end)
+    fun declareId (L.PredefinedId _, acc) = acc
+      | declareId (L.UserDefinedId vid, acc) = declare (vid, acc)
+    (*:
+    val createNameMapForExp : StringSet.set -> LuaSyntax.Exp * string TypedSyntax.VIdMap.map -> string TypedSyntax.VIdMap.map
+    val createNameMapForStat : LuaSyntax.Stat * (StringSet.set * string TypedSyntax.VIdMap.map) -> StringSet.set * string TypedSyntax.VIdMap.map
+     *)
+    fun createNameMapForExp _ (L.ConstExp _, nameMap) = nameMap
+      | createNameMapForExp _ (L.VarExp _, nameMap) = nameMap
+      | createNameMapForExp unavailableNames (L.TableExp elements, nameMap) =
+          Vector.foldl
+            (fn ((_, v), nameMap) =>
+               createNameMapForExp unavailableNames (v, nameMap)) nameMap
+            elements
+      | createNameMapForExp unavailableNames (L.CallExp (f, args), nameMap) =
+          Vector.foldl (createNameMapForExp unavailableNames)
+            (createNameMapForExp unavailableNames (f, nameMap)) args
+      | createNameMapForExp unavailableNames
+          (L.MethodExp (obj, _, args), nameMap) =
+          Vector.foldl (createNameMapForExp unavailableNames)
+            (createNameMapForExp unavailableNames (obj, nameMap)) args
+      | createNameMapForExp unavailableNames
+          (L.FunctionExp (params, body), nameMap) =
+          let
+            val (unavailableNames, nameMap) =
+              Vector.foldl declareId (unavailableNames, nameMap) params
+          in
+            #2
+              (Vector.foldl createNameMapForStat (unavailableNames, nameMap)
+                 body)
+          end
+      | createNameMapForExp unavailableNames (L.BinExp (_, x, y), nameMap) =
+          createNameMapForExp unavailableNames
+            (y, createNameMapForExp unavailableNames (x, nameMap))
+      | createNameMapForExp unavailableNames (L.UnaryExp (_, x), nameMap) =
+          createNameMapForExp unavailableNames (x, nameMap)
+      | createNameMapForExp unavailableNames (L.IndexExp (x, y), nameMap) =
+          createNameMapForExp unavailableNames
+            (y, createNameMapForExp unavailableNames (x, nameMap))
+      | createNameMapForExp unavailableNames (L.SingleValueExp x, nameMap) =
+          createNameMapForExp unavailableNames (x, nameMap)
+    and createNameMapForStat
+          (L.LocalStat (vars, exps), unavailableNamesAndNameMap) =
+          let
+            val (unavailableNames, nameMap) =
+              List.foldl (fn ((vid, _), acc) => declare (vid, acc))
+                unavailableNamesAndNameMap vars
+            val nameMap =
+              List.foldl (createNameMapForExp unavailableNames) nameMap exps
+          in
+            (unavailableNames, nameMap)
+          end
+      | createNameMapForStat
+          (L.AssignStat (lhs, rhs), (unavailableNames, nameMap)) =
+          let
+            val nameMap =
+              List.foldl (createNameMapForExp unavailableNames) nameMap lhs
+          in
+            ( unavailableNames
+            , List.foldl (createNameMapForExp unavailableNames) nameMap rhs
+            )
+          end
+      | createNameMapForStat (L.CallStat (f, args), (unavailableNames, nameMap)) =
+          let
+            val nameMap = createNameMapForExp unavailableNames (f, nameMap)
+          in
+            ( unavailableNames
+            , Vector.foldl (createNameMapForExp unavailableNames) nameMap args
+            )
+          end
+      | createNameMapForStat
+          (L.MethodStat (obj, _, args), (unavailableNames, nameMap)) =
+          let
+            val nameMap = createNameMapForExp unavailableNames (obj, nameMap)
+          in
+            ( unavailableNames
+            , Vector.foldl (createNameMapForExp unavailableNames) nameMap args
+            )
+          end
+      | createNameMapForStat
+          (L.IfStat (cond, then_, else_), (unavailableNames, nameMap)) =
+          let
+            val nameMap = createNameMapForExp unavailableNames (cond, nameMap)
+            val (_, nameMap) =
+              Vector.foldl createNameMapForStat (unavailableNames, nameMap)
+                then_
+          in
+            ( unavailableNames
+            , #2
+                (Vector.foldl createNameMapForStat (unavailableNames, nameMap)
+                   else_)
+            )
+          end
+      | createNameMapForStat (L.ReturnStat values, (unavailableNames, nameMap)) =
+          ( unavailableNames
+          , Vector.foldl (createNameMapForExp unavailableNames) nameMap values
+          )
+      | createNameMapForStat
+          (L.DoStat {loopLike = _, body}, (unavailableNames, nameMap)) =
+          ( unavailableNames
+          , #2
+              (Vector.foldl createNameMapForStat (unavailableNames, nameMap)
+                 body)
+          )
+      | createNameMapForStat (L.GotoStat _, unavailableNamesAndNameMap) =
+          unavailableNamesAndNameMap
+      | createNameMapForStat (L.LabelStat _, unavailableNamesAndNameMap) =
+          unavailableNamesAndNameMap
+    (*:
+    val createLabelMapForExp : StringSet.set -> LuaSyntax.Exp * TypedSyntax.VIdMap.map -> TypedSyntax.VIdMap.map
+    val createLabelMapForStat : StirngSet.set -> LuaSyntax.Stat * TypedSyntax.VIdMap.map -> TypedSyntax.VIdMap.map
+     *)
+    fun createLabelMapForExp _ (L.ConstExp _, labelMap) = labelMap
+      | createLabelMapForExp _ (L.VarExp (L.PredefinedId _), labelMap) =
+          labelMap
+      | createLabelMapForExp _ (L.VarExp (L.UserDefinedId _), labelMap) =
+          labelMap
+      | createLabelMapForExp unavailableLabels (L.TableExp elements, labelMap) =
+          Vector.foldl
+            (fn ((_, v), labelMap) =>
+               createLabelMapForExp unavailableLabels (v, labelMap)) labelMap
+            elements
+      | createLabelMapForExp unavailableLabels (L.CallExp (f, args), labelMap) =
+          Vector.foldl (createLabelMapForExp unavailableLabels)
+            (createLabelMapForExp unavailableLabels (f, labelMap)) args
+      | createLabelMapForExp unavailableLabels
+          (L.MethodExp (obj, _, args), labelMap) =
+          Vector.foldl (createLabelMapForExp unavailableLabels)
+            (createLabelMapForExp unavailableLabels (obj, labelMap)) args
+      | createLabelMapForExp _ (L.FunctionExp (_, body), labelMap) =
+          createLabelMapForBlock (LuaKeywords, labelMap, body)
+      | createLabelMapForExp unavailableLabels (L.BinExp (_, x, y), labelMap) =
+          createLabelMapForExp unavailableLabels
+            (y, createLabelMapForExp unavailableLabels (x, labelMap))
+      | createLabelMapForExp unavailableLabels (L.UnaryExp (_, x), labelMap) =
+          createLabelMapForExp unavailableLabels (x, labelMap)
+      | createLabelMapForExp unavailableLabels (L.IndexExp (x, y), labelMap) =
+          createLabelMapForExp unavailableLabels
+            (y, createLabelMapForExp unavailableLabels (x, labelMap))
+      | createLabelMapForExp unavailableLabels (L.SingleValueExp x, labelMap) =
+          createLabelMapForExp unavailableLabels (x, labelMap)
+    and createLabelMapForStat unavailableLabels
+          (L.LocalStat (_, exps), labelMap) =
+          List.foldl (createLabelMapForExp unavailableLabels) labelMap exps
+      | createLabelMapForStat unavailableLabels
+          (L.AssignStat (lhs, rhs), labelMap) =
+          let
+            val labelMap =
+              List.foldl (createLabelMapForExp unavailableLabels) labelMap lhs
+          in
+            List.foldl (createLabelMapForExp unavailableLabels) labelMap rhs
+          end
+      | createLabelMapForStat unavailableLabels (L.CallStat (f, args), labelMap) =
+          let
+            val labelMap = createLabelMapForExp unavailableLabels (f, labelMap)
+          in
+            Vector.foldl (createLabelMapForExp unavailableLabels) labelMap args
+          end
+      | createLabelMapForStat unavailableLabels
+          (L.MethodStat (obj, _, args), labelMap) =
+          let
+            val labelMap =
+              createLabelMapForExp unavailableLabels (obj, labelMap)
+          in
+            Vector.foldl (createLabelMapForExp unavailableLabels) labelMap args
+          end
+      | createLabelMapForStat unavailableLabels
+          (L.IfStat (cond, then_, else_), labelMap) =
+          let
+            val labelMap =
+              createLabelMapForExp unavailableLabels (cond, labelMap)
+            val labelMap =
+              createLabelMapForBlock (unavailableLabels, labelMap, then_)
+          in
+            createLabelMapForBlock (unavailableLabels, labelMap, else_)
+          end
+      | createLabelMapForStat unavailableLabels (L.ReturnStat values, labelMap) =
+          Vector.foldl (createLabelMapForExp unavailableLabels) labelMap values
+      | createLabelMapForStat unavailableLabels
+          (L.DoStat {loopLike = _, body}, labelMap) =
+          createLabelMapForBlock (unavailableLabels, labelMap, body)
+      | createLabelMapForStat _ (L.GotoStat _, labelMap) =
+          labelMap (* TypedSyntax.VIdMap.inDomain (labelMap, label) should be true *)
+      | createLabelMapForStat _ (L.LabelStat _, labelMap) =
+          labelMap (* TypedSyntax.VIdMap.inDomain (labelMap, label) should be true *)
+    and createLabelMapForBlock (unavailableLabels, labelMap, block) =
+      let
+        fun go (L.LabelStat label, acc) = declareId (label, acc)
+          | go (_, acc) = acc
+        val (unavailableLabels, labelMap) =
+          (Vector.foldl go (unavailableLabels, labelMap) block)
+      in
+        Vector.foldl (createLabelMapForStat unavailableLabels) labelMap block
+      end
+  end
+
+  fun IdToLua (_, LuaSyntax.PredefinedId name) = name
+    | IdToLua (nameMap, LuaSyntax.UserDefinedId vid) =
+        TypedSyntax.VIdMap.lookup (nameMap, vid)
 
   fun toLuaStringLit (s: string) =
     "\""
@@ -463,15 +683,15 @@ struct
   fun buildProgram fragments =
     String.concat (processIndent ([], 0, fragments))
 
-  fun idToFragment id =
-    [Fragment (IdToLua id)]
-  fun vidToFragment id =
-    [Fragment (IdToLua (LuaSyntax.UserDefinedId id))]
+  fun idToFragment nameMap id =
+    [Fragment (IdToLua (nameMap, id))]
+  fun vidToFragment nameMap id =
+    [Fragment (IdToLua (nameMap, LuaSyntax.UserDefinedId id))]
 
   type Exp = {prec: int, exp: Fragment list}
 
   fun paren allowed {prec, exp} =
-    if allowed < prec then [Fragment "("] @ exp @ [Fragment ")"] else exp
+    if allowed < prec then Fragment "(" :: exp @ [Fragment ")"] else exp
 
   datatype BinaryOp =
     InfixOp of (* prec *) int * string
@@ -513,296 +733,323 @@ struct
        NONE => []
      | SOME (x, xss) => Fragment ", " :: x @ commaSepV1 xss)
 
-  fun doExp (LuaSyntax.ConstExp ct) : Exp =
-        (case ct of
-           LuaSyntax.Nil => {prec = 0, exp = [Fragment "nil"]}
-         | LuaSyntax.False => {prec = 0, exp = [Fragment "false"]}
-         | LuaSyntax.True => {prec = 0, exp = [Fragment "true"]}
-         | LuaSyntax.Numeral s =>
-             { prec = 0
-             , exp = [Fragment s]
-             } (* s must not contain negative sign *)
-         | LuaSyntax.LiteralString s =>
-             {prec = 0, exp = [Fragment (toLuaStringLit s)]})
-    | doExp (LuaSyntax.VarExp id) = {prec = ~1, exp = idToFragment id}
-    | doExp (LuaSyntax.TableExp fields) =
-        let
-          fun doFields (i, slice) =
-            case VectorSlice.getItem slice of
-              NONE => []
-            | SOME ((LuaSyntax.IntKey n, value), slice') =>
-                if n = i then
-                  #exp (doExp value) :: doFields (i + 1, slice')
-                else
-                  (Fragment ("[" ^ Int.toString n ^ "] = ")
-                   :: #exp (doExp value))
-                  :: doFields (i, slice') (* TODO: negative index *)
-            | SOME ((LuaSyntax.StringKey key, value), slice') =>
-                if isLuaIdentifier key then
-                  (Fragment (key ^ " = ") :: #exp (doExp value))
-                  :: doFields (i, slice')
-                else
-                  (Fragment ("[" ^ toLuaStringLit key ^ "] = ")
-                   :: #exp (doExp value)) :: doFields (i, slice')
-        in
-          { prec = 0
-          , exp =
-              Fragment "{"
-              ::
-              commaSep (doFields (1, VectorSlice.full fields)) @ [Fragment "}"]
-          }
-        end
-    | doExp (LuaSyntax.CallExp (fnExp, args)) =
-        { prec = ~2
-        , exp =
-            paren ~1 (doExp fnExp)
-            @
-            Fragment "("
-            :: commaSepV (Vector.map (#exp o doExp) args) @ [Fragment ")"]
-        }
-    | doExp (LuaSyntax.MethodExp (self, name, args)) =
-        { prec = ~2
-        , exp =
-            paren ~1 (doExp self)
-            @
-            Fragment (":" ^ name ^ "(")
-            :: commaSepV (Vector.map (#exp o doExp) args) @ [Fragment ")"]
-        }
-    | doExp (LuaSyntax.FunctionExp (args, body)) =
-        { prec = 0
-        , exp =
-            Fragment "function("
-            ::
-            commaSepV (Vector.map idToFragment args)
-            @
-            Fragment ")" :: LineTerminator :: IncreaseIndent
-            :: doBlock body @ [DecreaseIndent, Indent, Fragment "end"]
-        }
-    | doExp (LuaSyntax.BinExp (binOp, exp1, exp2)) =
-        let
-          val exp1 = doExp exp1
-          val exp2 = doExp exp2
-        in
-          case binOpInfo binOp of
-            InfixOp (prec, luaop) =>
-              { prec = prec
-              , exp =
-                  paren prec exp1
-                  @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) exp2
-              }
-          | InfixOpR (prec, luaop) =>
-              { prec = prec
-              , exp =
-                  paren (prec + 1) exp1
-                  @ Fragment (" " ^ luaop ^ " ") :: paren prec exp2
-              }
-        end
-    | doExp (LuaSyntax.UnaryExp (unOp, exp)) =
-        let
-          val unOp =
-            case unOp of
-              LuaSyntax.NEGATE =>
-                (case exp of
-                   LuaSyntax.ConstExp (LuaSyntax.Numeral _) => "-"
-                 | _ => "- ")
-            | LuaSyntax.NOT => "not "
-            | LuaSyntax.LENGTH => "#"
-            | LuaSyntax.BITNOT => "~ "
-        in
-          {prec = 2, exp = Fragment unOp :: paren 2 (doExp exp)}
-        end
-    | doExp (LuaSyntax.IndexExp (exp1, exp2)) =
-        (case exp2 of
-           LuaSyntax.ConstExp (LuaSyntax.LiteralString key) =>
-             if isLuaIdentifier key then
-               {prec = ~1, exp = paren ~1 (doExp exp1) @ [Fragment ("." ^ key)]}
-             else
-               { prec = ~1
-               , exp =
-                   paren ~1 (doExp exp1)
-                   @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
-               }
-         | _ =>
-             { prec = ~1
-             , exp =
-                 paren ~1 (doExp exp1)
-                 @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
-             })
-    | doExp (LuaSyntax.SingleValueExp exp) =
-        {prec = ~1, exp = Fragment "(" :: #exp (doExp exp) @ [Fragment ")"]}
-  and doStat ([], acc) = acc
-    | doStat
-        ( LuaSyntax.AssignStat
-            ( vars as [LuaSyntax.VarExp (LuaSyntax.UserDefinedId name)]
-            , exps as [LuaSyntax.FunctionExp (params, body)]
-            ) :: (rest' as (LuaSyntax.LocalStat ([(name', _)], []) :: rest))
-        , acc
-        ) =
-        if name = name' then
-          (* local f; f = function(...) ... end -> local function f(...) ... end *)
-          doStat
-            ( rest
-            , Indent :: Fragment "local function "
-              ::
-              vidToFragment name
-              @
-              Fragment "("
-              ::
-              commaSepV (Vector.map idToFragment params)
-              @
-              Fragment ")" :: LineTerminator :: IncreaseIndent
-              ::
-              doBlock body
-              @
-              DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator
-              :: acc
-            )
-        else
-          doStat
-            ( rest'
-            , Indent
-              ::
-              commaSep (List.map (#exp o doExp) vars)
-              @
-              Fragment " = "
-              :: commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
-            )
-    | doStat (LuaSyntax.LocalStat (vars, []) :: rest, acc) =
-        doStat
-          ( rest
-          , Indent :: Fragment "local "
-            ::
-            commaSep (List.map (vidToFragment o #1) vars)
-            @ LineTerminator :: acc
-          )
-    | doStat (LuaSyntax.LocalStat (vars, exps) :: rest, acc) =
-        doStat
-          ( rest
-          , Indent :: Fragment "local "
-            ::
-            commaSep (List.map (vidToFragment o #1) vars)
-            @
-            Fragment " = "
-            :: commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
-          )
-    | doStat (LuaSyntax.AssignStat (vars, exps) :: rest, acc) =
-        doStat
-          ( rest
-          , Indent
-            ::
-            commaSep (List.map (#exp o doExp) vars)
-            @
-            Fragment " = "
-            :: commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
-          )
-    | doStat (LuaSyntax.CallStat (fnExp, args) :: rest, acc) =
-        doStat
-          ( rest
-          , Indent
-            ::
-            paren ~1 (doExp fnExp)
-            @
-            Fragment "("
-            ::
-            commaSepV (Vector.map (#exp o doExp) args)
-            @ Fragment ")" :: OptSemicolon :: acc
-          )
-    | doStat (LuaSyntax.MethodStat (self, name, args) :: rest, acc) =
-        doStat
-          ( rest
-          , Indent
-            ::
-            paren ~1 (doExp self)
-            @
-            Fragment (":" ^ name ^ "(")
-            ::
-            commaSepV (Vector.map (#exp o doExp) args)
-            @ Fragment ")" :: OptSemicolon :: acc
-          )
-    | doStat (LuaSyntax.IfStat (cond, thenPart, elsePart) :: rest, acc) =
-        let
-          val thenPart' =
-            Indent :: Fragment "if "
-            ::
-            #exp (doExp cond)
-            @
-            Fragment " then" :: LineTerminator :: IncreaseIndent
-            :: doBlock thenPart @ [DecreaseIndent]
-          fun doElse elsePart =
-            if Vector.length elsePart = 0 then
-              []
-            else
-              let
-                val tryElseIf =
-                  if Vector.length elsePart = 1 then
-                    case Vector.sub (elsePart, 0) of
-                      LuaSyntax.IfStat (cond, thenPart, elsePart) =>
-                        SOME
-                          (Indent :: Fragment "elseif "
-                           ::
-                           #exp (doExp cond)
-                           @
-                           Fragment " then" :: LineTerminator :: IncreaseIndent
-                           ::
-                           doBlock thenPart @ DecreaseIndent :: doElse elsePart)
-                    | _ => NONE
-                  else
-                    NONE
-              in
-                case tryElseIf of
-                  SOME elseIf => elseIf
-                | NONE =>
-                    Indent :: Fragment "else" :: LineTerminator
-                    :: IncreaseIndent :: doBlock elsePart @ [DecreaseIndent]
-              end
-        in
-          doStat
-            ( rest
-            , thenPart' @ doElse elsePart
-              @ Indent :: Fragment "end" :: LineTerminator :: acc
-            )
-        end
-    | doStat (LuaSyntax.ReturnStat exps :: rest, acc) =
-        if Vector.length exps = 0 then
-          doStat (rest, Indent :: Fragment "return" :: LineTerminator :: acc)
-        else
-          doStat
-            ( rest
-            , Indent :: Fragment "return "
-              ::
-              commaSepV (Vector.map (#exp o doExp) exps) @ OptSemicolon :: acc
-            )
-    | doStat (LuaSyntax.DoStat {loopLike = _, body} :: rest, acc) =
-        doStat
-          ( rest
-          , Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent
-            ::
-            doBlock body
-            @
-            DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator :: acc
-          )
-    | doStat (LuaSyntax.GotoStat label :: rest, acc) =
-        doStat
-          ( rest
-          , Indent :: Fragment "goto "
-            :: idToFragment label @ LineTerminator :: acc
-          )
-    | doStat (LuaSyntax.LabelStat label :: rest, acc) =
-        doStat
-          ( rest
-          , Indent :: Fragment "::"
-            :: idToFragment label @ Fragment "::" :: LineTerminator :: acc
-          )
-  and doBlock stats =
+  fun mkWriter (nameMap, labelMap) =
     let
-      val revStats = Vector.foldl (op::) [] stats
+      fun doExp (LuaSyntax.ConstExp ct) : Exp =
+            (case ct of
+               LuaSyntax.Nil => {prec = 0, exp = [Fragment "nil"]}
+             | LuaSyntax.False => {prec = 0, exp = [Fragment "false"]}
+             | LuaSyntax.True => {prec = 0, exp = [Fragment "true"]}
+             | LuaSyntax.Numeral s =>
+                 { prec = 0
+                 , exp = [Fragment s]
+                 } (* s must not contain negative sign *)
+             | LuaSyntax.LiteralString s =>
+                 {prec = 0, exp = [Fragment (toLuaStringLit s)]})
+        | doExp (LuaSyntax.VarExp id) =
+            {prec = ~1, exp = idToFragment nameMap id}
+        | doExp (LuaSyntax.TableExp fields) =
+            let
+              fun doFields (i, slice) =
+                case VectorSlice.getItem slice of
+                  NONE => []
+                | SOME ((LuaSyntax.IntKey n, value), slice') =>
+                    if n = i then
+                      #exp (doExp value) :: doFields (i + 1, slice')
+                    else
+                      (Fragment ("[" ^ Int.toString n ^ "] = ")
+                       :: #exp (doExp value))
+                      :: doFields (i, slice') (* TODO: negative index *)
+                | SOME ((LuaSyntax.StringKey key, value), slice') =>
+                    if isLuaIdentifier key then
+                      (Fragment (key ^ " = ") :: #exp (doExp value))
+                      :: doFields (i, slice')
+                    else
+                      (Fragment ("[" ^ toLuaStringLit key ^ "] = ")
+                       :: #exp (doExp value)) :: doFields (i, slice')
+            in
+              { prec = 0
+              , exp =
+                  Fragment "{"
+                  ::
+                  commaSep (doFields (1, VectorSlice.full fields))
+                  @ [Fragment "}"]
+              }
+            end
+        | doExp (LuaSyntax.CallExp (fnExp, args)) =
+            { prec = ~2
+            , exp =
+                paren ~1 (doExp fnExp)
+                @
+                Fragment "("
+                :: commaSepV (Vector.map (#exp o doExp) args) @ [Fragment ")"]
+            }
+        | doExp (LuaSyntax.MethodExp (self, name, args)) =
+            { prec = ~2
+            , exp =
+                paren ~1 (doExp self)
+                @
+                Fragment (":" ^ name ^ "(")
+                :: commaSepV (Vector.map (#exp o doExp) args) @ [Fragment ")"]
+            }
+        | doExp (LuaSyntax.FunctionExp (args, body)) =
+            { prec = 0
+            , exp =
+                Fragment "function("
+                ::
+                commaSepV (Vector.map (idToFragment nameMap) args)
+                @
+                Fragment ")" :: LineTerminator :: IncreaseIndent
+                :: doBlock body @ [DecreaseIndent, Indent, Fragment "end"]
+            }
+        | doExp (LuaSyntax.BinExp (binOp, exp1, exp2)) =
+            let
+              val exp1 = doExp exp1
+              val exp2 = doExp exp2
+            in
+              case binOpInfo binOp of
+                InfixOp (prec, luaop) =>
+                  { prec = prec
+                  , exp =
+                      paren prec exp1
+                      @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) exp2
+                  }
+              | InfixOpR (prec, luaop) =>
+                  { prec = prec
+                  , exp =
+                      paren (prec + 1) exp1
+                      @ Fragment (" " ^ luaop ^ " ") :: paren prec exp2
+                  }
+            end
+        | doExp (LuaSyntax.UnaryExp (unOp, exp)) =
+            let
+              val unOp =
+                case unOp of
+                  LuaSyntax.NEGATE =>
+                    (case exp of
+                       LuaSyntax.ConstExp (LuaSyntax.Numeral _) => "-"
+                     | _ => "- ")
+                | LuaSyntax.NOT => "not "
+                | LuaSyntax.LENGTH => "#"
+                | LuaSyntax.BITNOT => "~ "
+            in
+              {prec = 2, exp = Fragment unOp :: paren 2 (doExp exp)}
+            end
+        | doExp (LuaSyntax.IndexExp (exp1, exp2)) =
+            (case exp2 of
+               LuaSyntax.ConstExp (LuaSyntax.LiteralString key) =>
+                 if isLuaIdentifier key then
+                   { prec = ~1
+                   , exp = paren ~1 (doExp exp1) @ [Fragment ("." ^ key)]
+                   }
+                 else
+                   { prec = ~1
+                   , exp =
+                       paren ~1 (doExp exp1)
+                       @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
+                   }
+             | _ =>
+                 { prec = ~1
+                 , exp =
+                     paren ~1 (doExp exp1)
+                     @ Fragment "[" :: #exp (doExp exp2) @ [Fragment "]"]
+                 })
+        | doExp (LuaSyntax.SingleValueExp exp) =
+            {prec = ~1, exp = Fragment "(" :: #exp (doExp exp) @ [Fragment ")"]}
+      and doStat ([], acc) = acc
+        | doStat
+            ( LuaSyntax.AssignStat
+                ( vars as [LuaSyntax.VarExp (LuaSyntax.UserDefinedId name)]
+                , exps as [LuaSyntax.FunctionExp (params, body)]
+                ) :: (rest' as (LuaSyntax.LocalStat ([(name', _)], []) :: rest))
+            , acc
+            ) =
+            if name = name' then
+              (* local f; f = function(...) ... end -> local function f(...) ... end *)
+              doStat
+                ( rest
+                , Indent :: Fragment "local function "
+                  ::
+                  vidToFragment nameMap name
+                  @
+                  Fragment "("
+                  ::
+                  commaSepV (Vector.map (idToFragment nameMap) params)
+                  @
+                  Fragment ")" :: LineTerminator :: IncreaseIndent
+                  ::
+                  doBlock body
+                  @
+                  DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator
+                  :: acc
+                )
+            else
+              doStat
+                ( rest'
+                , Indent
+                  ::
+                  commaSep (List.map (#exp o doExp) vars)
+                  @
+                  Fragment " = "
+                  ::
+                  commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
+                )
+        | doStat (LuaSyntax.LocalStat (vars, []) :: rest, acc) =
+            doStat
+              ( rest
+              , Indent :: Fragment "local "
+                ::
+                commaSep (List.map (vidToFragment nameMap o #1) vars)
+                @ LineTerminator :: acc
+              )
+        | doStat (LuaSyntax.LocalStat (vars, exps) :: rest, acc) =
+            doStat
+              ( rest
+              , Indent :: Fragment "local "
+                ::
+                commaSep (List.map (vidToFragment nameMap o #1) vars)
+                @
+                Fragment " = "
+                :: commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
+              )
+        | doStat (LuaSyntax.AssignStat (vars, exps) :: rest, acc) =
+            doStat
+              ( rest
+              , Indent
+                ::
+                commaSep (List.map (#exp o doExp) vars)
+                @
+                Fragment " = "
+                :: commaSep (List.map (#exp o doExp) exps) @ OptSemicolon :: acc
+              )
+        | doStat (LuaSyntax.CallStat (fnExp, args) :: rest, acc) =
+            doStat
+              ( rest
+              , Indent
+                ::
+                paren ~1 (doExp fnExp)
+                @
+                Fragment "("
+                ::
+                commaSepV (Vector.map (#exp o doExp) args)
+                @ Fragment ")" :: OptSemicolon :: acc
+              )
+        | doStat (LuaSyntax.MethodStat (self, name, args) :: rest, acc) =
+            doStat
+              ( rest
+              , Indent
+                ::
+                paren ~1 (doExp self)
+                @
+                Fragment (":" ^ name ^ "(")
+                ::
+                commaSepV (Vector.map (#exp o doExp) args)
+                @ Fragment ")" :: OptSemicolon :: acc
+              )
+        | doStat (LuaSyntax.IfStat (cond, thenPart, elsePart) :: rest, acc) =
+            let
+              val thenPart' =
+                Indent :: Fragment "if "
+                ::
+                #exp (doExp cond)
+                @
+                Fragment " then" :: LineTerminator :: IncreaseIndent
+                :: doBlock thenPart @ [DecreaseIndent]
+              fun doElse elsePart =
+                if Vector.length elsePart = 0 then
+                  []
+                else
+                  let
+                    val tryElseIf =
+                      if Vector.length elsePart = 1 then
+                        case Vector.sub (elsePart, 0) of
+                          LuaSyntax.IfStat (cond, thenPart, elsePart) =>
+                            SOME
+                              (Indent :: Fragment "elseif "
+                               ::
+                               #exp (doExp cond)
+                               @
+                               Fragment " then" :: LineTerminator
+                               :: IncreaseIndent
+                               ::
+                               doBlock thenPart
+                               @ DecreaseIndent :: doElse elsePart)
+                        | _ => NONE
+                      else
+                        NONE
+                  in
+                    case tryElseIf of
+                      SOME elseIf => elseIf
+                    | NONE =>
+                        Indent :: Fragment "else" :: LineTerminator
+                        :: IncreaseIndent :: doBlock elsePart @ [DecreaseIndent]
+                  end
+            in
+              doStat
+                ( rest
+                , thenPart' @ doElse elsePart
+                  @ Indent :: Fragment "end" :: LineTerminator :: acc
+                )
+            end
+        | doStat (LuaSyntax.ReturnStat exps :: rest, acc) =
+            if Vector.length exps = 0 then
+              doStat
+                (rest, Indent :: Fragment "return" :: LineTerminator :: acc)
+            else
+              doStat
+                ( rest
+                , Indent :: Fragment "return "
+                  ::
+                  commaSepV (Vector.map (#exp o doExp) exps)
+                  @ OptSemicolon :: acc
+                )
+        | doStat (LuaSyntax.DoStat {loopLike = _, body} :: rest, acc) =
+            doStat
+              ( rest
+              , Indent :: Fragment "do" :: LineTerminator :: IncreaseIndent
+                ::
+                doBlock body
+                @
+                DecreaseIndent :: Indent :: Fragment "end" :: LineTerminator
+                :: acc
+              )
+        | doStat (LuaSyntax.GotoStat label :: rest, acc) =
+            doStat
+              ( rest
+              , Indent :: Fragment "goto "
+                :: idToFragment labelMap label @ LineTerminator :: acc
+              )
+        | doStat (LuaSyntax.LabelStat label :: rest, acc) =
+            doStat
+              ( rest
+              , Indent :: Fragment "::"
+                ::
+                idToFragment labelMap label
+                @ Fragment "::" :: LineTerminator :: acc
+              )
+      and doBlock stats =
+        let
+          val revStats = Vector.foldl (op::) [] stats
+        in
+          doStat
+            ( revStats
+            , []
+            ) (* Vector.foldr (fn (stat, xs) => doStat stat @ xs) [] stats *)
+        end
     in
-      doStat
-        ( revStats
-        , []
-        ) (* Vector.foldr (fn (stat, xs) => doStat stat @ xs) [] stats *)
+      {doBlock = doBlock}
     end
 
   fun doChunk chunk =
-    buildProgram (doBlock chunk)
+    let
+      val unavailableNames =
+        LuaSyntax.predefinedIdsInBlock (chunk, LuaReservedNames)
+      val (_, nameMap) =
+        Vector.foldl createNameMapForStat
+          (unavailableNames, TypedSyntax.VIdMap.empty) chunk
+      val labelMap =
+        createLabelMapForBlock (LuaKeywords, TypedSyntax.VIdMap.empty, chunk)
+    in
+      buildProgram (#doBlock (mkWriter (nameMap, labelMap)) chunk)
+    end
 end;
