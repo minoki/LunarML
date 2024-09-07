@@ -591,7 +591,10 @@ struct
 
   fun IdToLua (_, LuaSyntax.PredefinedId name) = name
     | IdToLua (nameMap, LuaSyntax.UserDefinedId vid) =
-        TypedSyntax.VIdMap.lookup (nameMap, vid)
+        case TypedSyntax.VIdMap.find (nameMap, vid) of
+          SOME x => x
+        | NONE => raise Fail ("IdToLua " ^ TypedSyntax.print_VId vid)
+  (* "UNDEFINED_" ^ smlNameToLua name ^ "_" ^ Int.toString i *)
 
   fun toLuaStringLit (s: string) =
     "\""

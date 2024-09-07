@@ -142,11 +142,12 @@ struct
             , targetLuaVersion = CodeGenLua.LUA5_3
             , hasDelimitedContinuations = runtime = LUA_CONTINUATIONS
             }
+          val nested = NSyntax.toNested (NSyntax.fromCExp cexp)
           val lua =
             case runtime of
-              LUA_PLAIN => CodeGenLua.doProgram luactx cont cexp
+              LUA_PLAIN => CodeGenLua.doProgram luactx cont nested
             | LUA_CONTINUATIONS =>
-                CodeGenLua.doProgramWithContinuations luactx cont cexp
+                CodeGenLua.doProgramWithContinuations luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val lua =
@@ -202,7 +203,8 @@ struct
             , targetLuaVersion = CodeGenLua.LUAJIT
             , hasDelimitedContinuations = false
             }
-          val lua = CodeGenLua.doProgram luactx cont cexp
+          val nested = NSyntax.toNested (NSyntax.fromCExp cexp)
+          val lua = CodeGenLua.doProgram luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
           val lua =
