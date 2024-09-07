@@ -212,7 +212,7 @@ struct
         [L.CallStat (L.VarExp (L.PredefinedId "_id"), vector [e])]
 
   datatype cont_type =
-    GOTO of {label: L.Id, params: (L.Id option) list}
+    GOTO of {label: TypedSyntax.VId, params: (L.Id option) list}
   | RETURN
   type Env = {continuations: cont_type C.CVarMap.map}
 
@@ -244,7 +244,7 @@ struct
     | NONE => raise CodeGenError "undefined continuation"
 
   fun doLabel cname =
-    L.UserDefinedId (TypedSyntax.MkVId ("cont", C.CVar.toInt cname))
+    TypedSyntax.MkVId ("cont", C.CVar.toInt cname)
 
   fun doValue ctx (C.Var vid) =
         (case VIdToLua (ctx, vid) of
@@ -2950,11 +2950,11 @@ struct
         in
           if C.containsApp thenCont then
             let
-              val thenLabel = L.UserDefinedId (genSymWithName (ctx, "then"))
+              val thenLabel = genSymWithName (ctx, "then")
             in
               if containsNestedBlock elseCont then
                 let
-                  val elseLabel = L.UserDefinedId (genSymWithName (ctx, "else"))
+                  val elseLabel = genSymWithName (ctx, "else")
                 in
                   L.IfStat
                     ( doValue ctx cond

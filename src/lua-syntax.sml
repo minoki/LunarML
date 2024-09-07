@@ -6,7 +6,7 @@ structure LuaSyntax :>
 sig
   datatype TableKey = IntKey of int | StringKey of string
   datatype Id = PredefinedId of string | UserDefinedId of TypedSyntax.VId
-  type Label = Id
+  type Label = TypedSyntax.VId
   structure IdSet: ORD_SET where type Key.ord_key = Id
   structure IdMap: ORD_MAP where type Key.ord_key = Id
   datatype VarAttr = CONST | LATE_INIT | MUTABLE
@@ -76,7 +76,7 @@ end =
 struct
   datatype TableKey = IntKey of int | StringKey of string
   datatype Id = PredefinedId of string | UserDefinedId of TypedSyntax.VId
-  type Label = Id
+  type Label = TypedSyntax.VId
   structure IdKey =
   struct
     type ord_key = Id
@@ -580,7 +580,7 @@ struct
           labelMap (* TypedSyntax.VIdMap.inDomain (labelMap, label) should be true *)
     and createLabelMapForBlock (unavailableLabels, labelMap, block) =
       let
-        fun go (L.LabelStat label, acc) = declareId (label, acc)
+        fun go (L.LabelStat label, acc) = declare (label, acc)
           | go (_, acc) = acc
         val (unavailableLabels, labelMap) =
           (Vector.foldl go (unavailableLabels, labelMap) block)
@@ -1017,14 +1017,14 @@ struct
             doStat
               ( rest
               , Indent :: Fragment "goto "
-                :: idToFragment labelMap label @ LineTerminator :: acc
+                :: vidToFragment labelMap label @ LineTerminator :: acc
               )
         | doStat (LuaSyntax.LabelStat label :: rest, acc) =
             doStat
               ( rest
               , Indent :: Fragment "::"
                 ::
-                idToFragment labelMap label
+                vidToFragment labelMap label
                 @ Fragment "::" :: LineTerminator :: acc
               )
       and doBlock stats =
