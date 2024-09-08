@@ -815,12 +815,12 @@ struct
                   { prec = prec
                   , exp =
                       paren prec exp1
-                      @ Fragment (" " ^ luaop ^ " ") :: paren (prec + 1) exp2
+                      @ Fragment (" " ^ luaop ^ " ") :: paren (prec - 1) exp2
                   }
               | InfixOpR (prec, luaop) =>
                   { prec = prec
                   , exp =
-                      paren (prec + 1) exp1
+                      paren (prec - 1) exp1
                       @ Fragment (" " ^ luaop ^ " ") :: paren prec exp2
                   }
             end
