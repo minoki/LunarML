@@ -382,10 +382,17 @@ struct
            let
              val baseName =
                if isLuaIdentifier smlName then smlName else smlNameToLua smlName
+             val baseName_ =
+               if
+                 String.size baseName = 0
+                 orelse
+                 Char.isDigit (String.sub (baseName, String.size baseName - 1))
+               then baseName ^ "_"
+               else baseName
              fun isAvailable x =
                not (StringSet.member (unavailableNames, x))
              fun go i =
-               let val name = baseName ^ "_" ^ Int.toString i
+               let val name = baseName_ ^ Int.toString i
                in if isAvailable name then name else go (i + 1)
                end
              val name = if isAvailable baseName then baseName else go 1
