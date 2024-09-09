@@ -289,17 +289,21 @@ struct
                      {label = label, record = record, fieldTypes = fieldTypes})
                 (goExp record)
           | goExp (Abs _) = NONE
-        fun goDec (ValDec {exp, results}) =
-              Option.map (fn exp => ValDec {exp = exp, results = results})
+        fun goDecs [] = NONE
+          | goDecs (ValDec {exp, results} :: decs) =
+              Option.map
+                (fn exp => ValDec {exp = exp, results = results} :: decs)
                 (goExp exp)
-          | goDec (RecDec _) = NONE
-          | goDec (ContDec _) = NONE
-          | goDec (RecContDec _) = NONE
-          | goDec (ESImportDec _) = NONE
-        fun goStat (Let {decs = dec :: decs, cont}) =
-              Option.map (fn dec => Let {decs = dec :: decs, cont = cont})
-                (goDec dec)
-          | goStat (Let {decs = [], cont}) = goStat cont
+          | goDecs ((dec as RecDec _) :: decs) =
+              Option.map (fn decs => dec :: decs) (goDecs decs)
+          | goDecs ((dec as ContDec _) :: decs) =
+              Option.map (fn decs => dec :: decs) (goDecs decs)
+          | goDecs ((dec as RecContDec _) :: decs) =
+              Option.map (fn decs => dec :: decs) (goDecs decs)
+          | goDecs (ESImportDec _ :: _) = NONE
+        fun goStat (Let {decs, cont}) =
+              Option.map (fn decs => Let {decs = decs, cont = cont})
+                (goDecs decs)
           | goStat (App {applied, cont, args, attr}) =
               (case goExp applied of
                  SOME applied =>
@@ -326,7 +330,7 @@ struct
           | goStat (Handle _) = NONE
           | goStat Unreachable = NONE
       in
-        {goValue = goValue, goExp = goExp, goDec = goDec, goStat = goStat}
+        {goValue = goValue, goExp = goExp, goDecs = goDecs, goStat = goStat}
       end
     fun canInline (PrimOp {primOp = FSyntax.RaiseOp _, ...}) = false
       | canInline _ = true
@@ -351,11 +355,7 @@ struct
                 , attr = attr
                 }
         and goDecs (_, [], revAcc) = revAcc (* reversed *)
-          | goDecs
-              ( i
-              , ValDec {exp, results as [SOME v]} :: (decs1 as (dec2 :: decs2))
-              , revAcc
-              ) =
+          | goDecs (i, ValDec {exp, results as [SOME v]} :: decs, revAcc) =
               let
                 val exp = goExp exp
               in
@@ -363,17 +363,17 @@ struct
                   canInline exp andalso Analysis.get (usage, v) = Analysis.ONCE
                   andalso i <= DEPTH_LIMIT
                 then
-                  case #goDec (replaceOnce (v, exp)) dec2 of
+                  case #goDecs (replaceOnce (v, exp)) decs of
                     NONE =>
                       goDecs
                         ( 0
-                        , decs1
+                        , decs
                         , ValDec {exp = exp, results = results} :: revAcc
                         )
-                  | SOME dec2' => goDecs (i + 1, dec2' :: decs2, revAcc)
+                  | SOME decs => goDecs (i + 1, decs, revAcc)
                 else
                   goDecs
-                    (0, decs1, ValDec {exp = exp, results = results} :: revAcc)
+                    (0, decs, ValDec {exp = exp, results = results} :: revAcc)
               end
           | goDecs (_, ValDec {exp, results} :: decs, revAcc) =
               goDecs
@@ -411,20 +411,36 @@ struct
           | goDecs (_, (dec as ESImportDec _) :: decs, revAcc) =
               goDecs (0, decs, dec :: revAcc)
         and goStat (Let {decs, cont}) =
-              (case goDecs (0, decs, []) of
-                 revDecs0 as (ValDec {exp, results = [SOME v]} :: revDecs1) =>
-                   if
-                     canInline exp
-                     andalso Analysis.get (usage, v) = Analysis.ONCE
-                   then
-                     case #goStat (replaceOnce (v, exp)) cont of
-                       SOME cont =>
-                         Let {decs = List.rev revDecs1, cont = goStat cont}
-                     | NONE =>
-                         Let {decs = List.rev revDecs0, cont = goStat cont}
-                   else
-                     Let {decs = List.rev revDecs0, cont = goStat cont}
-               | revDecs => Let {decs = List.rev revDecs, cont = goStat cont})
+              let
+                fun searchFirstValDec
+                      (acc, ValDec {exp, results = [SOME v]} :: revDecs) =
+                      SOME (List.revAppend (acc, revDecs), exp, v)
+                  | searchFirstValDec (_, ValDec _ :: _) = NONE
+                  | searchFirstValDec (acc, (dec as RecDec _) :: revDecs) =
+                      searchFirstValDec (dec :: acc, revDecs)
+                  | searchFirstValDec (acc, (dec as ContDec _) :: revDecs) =
+                      searchFirstValDec (dec :: acc, revDecs)
+                  | searchFirstValDec (acc, (dec as RecContDec _) :: revDecs) =
+                      searchFirstValDec (dec :: acc, revDecs)
+                  | searchFirstValDec (_, ESImportDec _ :: _) = NONE
+                  | searchFirstValDec (_, []) = NONE
+                val revDecs0 = goDecs (0, decs, [])
+              in
+                case searchFirstValDec ([], revDecs0) of
+                  SOME (revDecs1, exp, v) =>
+                    if
+                      canInline exp
+                      andalso Analysis.get (usage, v) = Analysis.ONCE
+                    then
+                      case #goStat (replaceOnce (v, exp)) cont of
+                        SOME cont =>
+                          Let {decs = List.rev revDecs1, cont = goStat cont}
+                      | NONE =>
+                          Let {decs = List.rev revDecs0, cont = goStat cont}
+                    else
+                      Let {decs = List.rev revDecs0, cont = goStat cont}
+                | NONE => Let {decs = List.rev revDecs0, cont = goStat cont}
+              end
           | goStat (App {applied, cont, args, attr}) =
               App
                 { applied = goExp applied
