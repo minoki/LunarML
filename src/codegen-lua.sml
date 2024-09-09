@@ -1703,6 +1703,10 @@ struct
             , vector (doCExp (ctx, env', SOME contParam, body))
             )
         end
+    | doExp (ctx, env, N.LogicalAnd (x, y)) =
+        L.BinExp (L.AND, doExp (ctx, env, x), doExp (ctx, env, y))
+    | doExp (ctx, env, N.LogicalOr (x, y)) =
+        L.BinExp (L.OR, doExp (ctx, env, x), doExp (ctx, env, y))
   and doDecs (ctx, env, defaultCont, decs, finalExp, revStats: L.Stat list) =
     (case decs of
        [] => List.revAppend (revStats, doCExp (ctx, env, defaultCont, finalExp))

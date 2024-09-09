@@ -22,6 +22,8 @@ sig
       , body: Stat
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
+  | LogicalAnd of Exp * Exp
+  | LogicalOr of Exp * Exp
   (* TODO: direct-style function application? *)
   and Dec =
     ValDec of {exp: Exp, results: (Var option) list}
@@ -71,6 +73,8 @@ struct
       , body: Stat
       , attr: CSyntax.AbsAttr
       } (* non-recursive function *)
+  | LogicalAnd of Exp * Exp
+  | LogicalOr of Exp * Exp
   and Dec =
     ValDec of {exp: Exp, results: (Var option) list}
   | RecDec of
@@ -206,6 +210,10 @@ struct
           | goExp (ExnTag _) = ()
           | goExp (Projection {record, ...}) = goExp record
           | goExp (Abs {body, ...}) = goStat body
+          | goExp (LogicalAnd (x, y)) =
+              (goExp x; goExp y)
+          | goExp (LogicalOr (x, y)) =
+              (goExp x; goExp y)
         and goDec (ValDec {exp, ...}) = goExp exp
           | goDec (RecDec decs) =
               List.app (fn {body, ...} => goStat body) decs
@@ -289,6 +297,10 @@ struct
                      {label = label, record = record, fieldTypes = fieldTypes})
                 (goExp record)
           | goExp (Abs _) = NONE
+          | goExp (LogicalAnd (x, y)) =
+              Option.map (fn x => LogicalAnd (x, y)) (goExp x)
+          | goExp (LogicalOr (x, y)) =
+              Option.map (fn x => LogicalOr (x, y)) (goExp x)
         fun goDecs [] = NONE
           | goDecs (ValDec {exp, results} :: decs) =
               Option.map
@@ -354,6 +366,10 @@ struct
                 , body = goStat body
                 , attr = attr
                 }
+          | goExp (LogicalAnd (x, y)) =
+              LogicalAnd (goExp x, goExp y)
+          | goExp (LogicalOr (x, y)) =
+              LogicalOr (goExp x, goExp y)
         and goDecs (_, [], revAcc) = revAcc (* reversed *)
           | goDecs (i, ValDec {exp, results as [SOME v]} :: decs, revAcc) =
               let
@@ -434,7 +450,12 @@ struct
                     then
                       case #goStat (replaceOnce (v, exp)) cont of
                         SOME cont =>
-                          Let {decs = List.rev revDecs1, cont = goStat cont}
+                          let
+                            val cont = goStat cont
+                          in
+                            if List.null revDecs1 then cont
+                            else Let {decs = List.rev revDecs1, cont = cont}
+                          end
                       | NONE =>
                           Let {decs = List.rev revDecs0, cont = goStat cont}
                     else
@@ -451,11 +472,52 @@ struct
           | goStat (AppCont {applied, args}) =
               AppCont {applied = applied, args = List.map goExp args}
           | goStat (If {cond, thenCont, elseCont}) =
-              If
-                { cond = goExp cond
-                , thenCont = goStat thenCont
-                , elseCont = goStat elseCont
-                }
+              let
+                val cond = goExp cond
+                val thenCont = goStat thenCont
+                val elseCont = goStat elseCont
+                fun Not
+                      (PrimOp
+                         { primOp = FSyntax.PrimCall Primitives.Bool_not
+                         , tyargs = _
+                         , args = [x]
+                         }) = x
+                  | Not x =
+                      PrimOp
+                        { primOp = FSyntax.PrimCall Primitives.Bool_not
+                        , tyargs = []
+                        , args = [x]
+                        }
+                val toLogicalAndOr =
+                  case (thenCont, elseCont) of
+                    ( AppCont {applied, args = [x]}
+                    , AppCont {applied = applied', args = [y]}
+                    ) =>
+                      if applied = applied' then
+                        case (x, y) of
+                          (Value (C.BoolConst true), Value (C.BoolConst false)) =>
+                            SOME (applied, cond)
+                        | (Value (C.BoolConst false), Value (C.BoolConst true)) =>
+                            SOME (applied, Not cond)
+                        | (_, Value (C.BoolConst true)) =>
+                            SOME (applied, LogicalOr (Not cond, x))
+                        | (_, Value (C.BoolConst false)) =>
+                            SOME (applied, LogicalAnd (cond, x))
+                        | (Value (C.BoolConst true), _) =>
+                            SOME (applied, LogicalOr (cond, y))
+                        | (Value (C.BoolConst false), _) =>
+                            SOME (applied, LogicalAnd (Not cond, y))
+                        | _ => NONE
+                      else
+                        NONE
+                  | _ => NONE
+              in
+                case toLogicalAndOr of
+                  SOME (applied, exp) =>
+                    AppCont {applied = applied, args = [exp]}
+                | NONE =>
+                    If {cond = cond, thenCont = thenCont, elseCont = elseCont}
+              end
           | goStat
               (Handle
                  {body, handler = (e, h), successfulExitIn, successfulExitOut}) =
