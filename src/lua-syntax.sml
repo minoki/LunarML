@@ -831,6 +831,32 @@ struct
                       @ Fragment (" " ^ luaop ^ " ") :: paren prec exp2
                   }
             end
+        | doExp
+            (LuaSyntax.UnaryExp
+               (LuaSyntax.NOT, LuaSyntax.BinExp (LuaSyntax.EQUAL, exp1, exp2))) =
+            let
+              val exp1 = doExp exp1
+              val exp2 = doExp exp2
+              val prec = 10
+            in
+              { prec = prec
+              , exp = paren prec exp1 @ Fragment " ~= " :: paren (prec - 1) exp2
+              }
+            end
+        | doExp
+            (LuaSyntax.UnaryExp
+               ( LuaSyntax.NOT
+               , LuaSyntax.BinExp (LuaSyntax.NOTEQUAL, exp1, exp2)
+               )) =
+            let
+              val exp1 = doExp exp1
+              val exp2 = doExp exp2
+              val prec = 10
+            in
+              { prec = prec
+              , exp = paren prec exp1 @ Fragment " == " :: paren (prec - 1) exp2
+              }
+            end
         | doExp (LuaSyntax.UnaryExp (unOp, exp)) =
             let
               val unOp =
