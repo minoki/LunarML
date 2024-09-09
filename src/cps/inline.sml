@@ -633,6 +633,39 @@ struct
                    NOT_SIMPLIFIED
                else
                  NOT_SIMPLIFIED
+           | ( F.PrimCall (P.Word_andb w)
+             , [C.WordConst (w', x), C.WordConst (w'', y)]
+             ) =>
+               if w = w' andalso w = w'' then
+                 VALUE (C.WordConst (w, IntInf.andb (x, y)))
+               else
+                 NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_andb w), [x as C.WordConst (w', 0), _]) =>
+               if w = w' then VALUE x else NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_andb w), [_, y as C.WordConst (w', 0)]) =>
+               if w = w' then VALUE y else NOT_SIMPLIFIED
+           | ( F.PrimCall (P.Word_orb w)
+             , [C.WordConst (w', x), C.WordConst (w'', y)]
+             ) =>
+               if w = w' andalso w = w'' then
+                 VALUE (C.WordConst (w, IntInf.orb (x, y)))
+               else
+                 NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_orb w), [C.WordConst (w', 0), y]) =>
+               if w = w' then VALUE y else NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_orb w), [x, C.WordConst (w', 0)]) =>
+               if w = w' then VALUE x else NOT_SIMPLIFIED
+           | ( F.PrimCall (P.Word_xorb w)
+             , [C.WordConst (w', x), C.WordConst (w'', y)]
+             ) =>
+               if w = w' andalso w = w'' then
+                 VALUE (C.WordConst (w, IntInf.xorb (x, y)))
+               else
+                 NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_xorb w), [C.WordConst (w', 0), y]) =>
+               if w = w' then VALUE y else NOT_SIMPLIFIED
+           | (F.PrimCall (P.Word_xorb w), [x, C.WordConst (w', 0)]) =>
+               if w = w' then VALUE x else NOT_SIMPLIFIED
            | (F.PrimCall (P.Char_ord w), [C.CharConst c]) =>
                VALUE (C.IntConst (w, Int.toLarge (Char.ord c)))
            | (F.PrimCall (P.Char_chr_unchecked w), [C.IntConst (w', c)]) =>
