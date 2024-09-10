@@ -349,12 +349,18 @@ struct
                fun doFields (_, []) = []
                  | doFields (i, y :: ys) =
                      (L.IntKey i, doExp (ctx, env, y)) :: doFields (i + 1, ys)
+               fun cons (x, xs) =
+                 L.TableExp (vector [(L.IntKey 1, x), (L.IntKey 2, xs)])
              in
-               L.CallExp (L.VarExp (L.PredefinedId "_list"), vector
-                 [L.TableExp (vector
-                    (( L.StringKey "n"
-                     , L.ConstExp (L.Numeral (Int.toString (List.length xs)))
-                     ) :: doFields (1, xs)))])
+               if List.length xs <= 4 then
+                 List.foldr cons (L.ConstExp L.Nil)
+                   (List.map (fn x => doExp (ctx, env, x)) xs)
+               else
+                 L.CallExp (L.VarExp (L.PredefinedId "_list"), vector
+                   [L.TableExp (vector
+                      (( L.StringKey "n"
+                       , L.ConstExp (L.Numeral (Int.toString (List.length xs)))
+                       ) :: doFields (1, xs)))])
              end
          | (F.VectorOp, xs) =>
              let
