@@ -30,6 +30,10 @@ sig
     val initialEnvForLuaJIT: Env
     val doBlock: Context -> Env -> LuaSyntax.Block -> LuaSyntax.Block
   end
+  structure StripUnusedLabels:
+  sig
+    val doBlock: LuaSyntax.Block -> LuaSyntax.Block
+  end
 end =
 struct
   structure L = LuaSyntax
@@ -1218,5 +1222,94 @@ struct
            (fn (stat, (env, acc)) => let val (env, stat) = doStat ctx env stat
                                      in (env, stat :: acc)
                                      end) (env, []) stats))))
+  end
+  structure StripUnusedLabels =
+  struct
+    structure LabelSet = TypedSyntax.VIdSet
+    (*:
+    val usedLabelsExp : L.Exp * LabelSet.set -> LabelSet.set
+    and usedLabelsStat : L.Stat * LabelSet.set -> LabelSet.set
+    and usedLabelsBlock : L.Block * LabelSet.set -> LabelSet.set
+     *)
+    fun usedLabelsExp (L.ConstExp _, acc) = acc
+      | usedLabelsExp (L.VarExp _, acc) = acc
+      | usedLabelsExp (L.TableExp elems, acc) =
+          Vector.foldl (fn ((_, x), acc) => usedLabelsExp (x, acc)) acc elems
+      | usedLabelsExp (L.CallExp (x, args), acc) =
+          Vector.foldl usedLabelsExp (usedLabelsExp (x, acc)) args
+      | usedLabelsExp (L.MethodExp (x, _, args), acc) =
+          Vector.foldl usedLabelsExp (usedLabelsExp (x, acc)) args
+      | usedLabelsExp (L.FunctionExp (_, body), acc) =
+          usedLabelsBlock (body, acc)
+      | usedLabelsExp (L.BinExp (_, x, y), acc) =
+          usedLabelsExp (y, usedLabelsExp (x, acc))
+      | usedLabelsExp (L.UnaryExp (_, x), acc) = usedLabelsExp (x, acc)
+      | usedLabelsExp (L.IndexExp (x, y), acc) =
+          usedLabelsExp (y, usedLabelsExp (x, acc))
+      | usedLabelsExp (L.SingleValueExp x, acc) = usedLabelsExp (x, acc)
+    and usedLabelsStat (L.LocalStat (_, rhs), acc) =
+          List.foldl usedLabelsExp acc rhs
+      | usedLabelsStat (L.AssignStat (lhs, rhs), acc) =
+          List.foldl usedLabelsExp (List.foldl usedLabelsExp acc lhs) rhs
+      | usedLabelsStat (L.CallStat (x, args), acc) =
+          Vector.foldl usedLabelsExp (usedLabelsExp (x, acc)) args
+      | usedLabelsStat (L.MethodStat (x, _, args), acc) =
+          Vector.foldl usedLabelsExp (usedLabelsExp (x, acc)) args
+      | usedLabelsStat (L.IfStat (x, t, e), acc) =
+          usedLabelsBlock (e, usedLabelsBlock (t, usedLabelsExp (x, acc)))
+      | usedLabelsStat (L.ReturnStat xs, acc) =
+          Vector.foldl usedLabelsExp acc xs
+      | usedLabelsStat (L.DoStat {loopLike = _, body}, acc) =
+          usedLabelsBlock (body, acc)
+      | usedLabelsStat (L.GotoStat label, acc) = LabelSet.add (acc, label)
+      | usedLabelsStat (L.LabelStat _, acc) = acc
+    and usedLabelsBlock (block, acc) =
+      Vector.foldl usedLabelsStat acc block
+    fun go used =
+      let
+        fun goExp (x as L.ConstExp _) = x
+          | goExp (x as L.VarExp _) = x
+          | goExp (L.TableExp elems) =
+              L.TableExp (Vector.map (fn (k, v) => (k, goExp v)) elems)
+          | goExp (L.CallExp (x, args)) =
+              L.CallExp (goExp x, Vector.map goExp args)
+          | goExp (L.MethodExp (x, name, args)) =
+              L.MethodExp (goExp x, name, Vector.map goExp args)
+          | goExp (L.FunctionExp (params, body)) =
+              L.FunctionExp (params, goBlock body)
+          | goExp (L.BinExp (p, x, y)) =
+              L.BinExp (p, goExp x, goExp y)
+          | goExp (L.UnaryExp (p, x)) =
+              L.UnaryExp (p, goExp x)
+          | goExp (L.IndexExp (x, y)) =
+              L.IndexExp (goExp x, goExp y)
+          | goExp (L.SingleValueExp x) =
+              L.SingleValueExp (goExp x)
+        and goStat (L.LocalStat (lhs, rhs), acc) =
+              L.LocalStat (lhs, List.map goExp rhs) :: acc
+          | goStat (L.AssignStat (lhs, rhs), acc) =
+              L.AssignStat (List.map goExp lhs, List.map goExp rhs) :: acc
+          | goStat (L.CallStat (x, args), acc) =
+              L.CallStat (goExp x, Vector.map goExp args) :: acc
+          | goStat (L.MethodStat (x, name, args), acc) =
+              L.MethodStat (goExp x, name, Vector.map goExp args) :: acc
+          | goStat (L.IfStat (x, t, e), acc) =
+              L.IfStat (goExp x, goBlock t, goBlock e) :: acc
+          | goStat (L.ReturnStat xs, acc) =
+              L.ReturnStat (Vector.map goExp xs) :: acc
+          | goStat (L.DoStat {loopLike, body}, acc) =
+              L.DoStat {loopLike = loopLike, body = goBlock body} :: acc
+          | goStat (stat as L.GotoStat _, acc) = stat :: acc
+          | goStat (stat as L.LabelStat label, acc) =
+              if LabelSet.member (used, label) then stat :: acc else acc
+        and goBlock block =
+          Vector.fromList (Vector.foldr goStat [] block)
+      in
+        goBlock
+      end
+    fun doBlock block =
+      let val used = usedLabelsBlock (block, LabelSet.empty)
+      in go used block
+      end
   end
 end;

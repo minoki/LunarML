@@ -150,6 +150,7 @@ struct
                 CodeGenLua.doProgramWithContinuations luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
+          val lua = LuaTransform.StripUnusedLabels.doBlock lua
           val lua =
             LuaTransform.InsertDo.doBlock
               (0, lua) (* TODO: pre-declared locals *)
@@ -207,6 +208,7 @@ struct
           val lua = CodeGenLua.doProgram luactx cont nested
           val codegenTime = Time.toMicroseconds
             (#usr (Timer.checkCPUTimer timer))
+          val lua = LuaTransform.StripUnusedLabels.doBlock lua
           val lua =
             LuaTransform.LuaJITFixup.doBlock {nextId = nextId, maxUpvalue = 60}
               lua
