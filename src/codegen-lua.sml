@@ -3069,12 +3069,27 @@ struct
             | containsNestedBlockDec (N.RecContDec _) = true
             | containsNestedBlockDec (N.ESImportDec _) =
                 false (* cannot occur *)
+          fun isSimpleIf (N.If {cond = _, thenCont, elseCont}) =
+                not (containsNestedBlock thenCont) andalso isSimpleIf elseCont
+            | isSimpleIf stat =
+                not (containsNestedBlock stat)
         in
           if N.containsApp thenCont then
             let
               val thenLabel = genSymWithName (ctx, "then")
             in
-              if containsNestedBlock elseCont then
+              if isSimpleIf elseCont then
+                L.IfStat
+                  ( doExp (ctx, env, cond)
+                  , vector [L.GotoStat thenLabel]
+                  , vector (doCExp (ctx, env, NONE, elseCont))
+                  ) :: L.LabelStat thenLabel
+                ::
+                L.makeDoStat
+                  { loopLike = false
+                  , body = doCExp (ctx, env, defaultCont, thenCont)
+                  }
+              else
                 let
                   val elseLabel = genSymWithName (ctx, "else")
                 in
@@ -3090,30 +3105,19 @@ struct
                   L.LabelStat elseLabel
                   :: doCExp (ctx, env, defaultCont, elseCont)
                 end
-              else
-                L.IfStat
-                  ( doExp (ctx, env, cond)
-                  , vector [L.GotoStat thenLabel]
-                  , vector (doCExp (ctx, env, NONE, elseCont))
-                  ) :: L.LabelStat thenLabel
-                ::
-                L.makeDoStat
-                  { loopLike = false
-                  , body = doCExp (ctx, env, defaultCont, thenCont)
-                  }
             end
-          else if containsNestedBlock elseCont then
-            L.IfStat
-              ( doExp (ctx, env, cond)
-              , vector (doCExp (ctx, env, NONE, thenCont))
-              , vector []
-              ) :: doCExp (ctx, env, defaultCont, elseCont)
-          else
+          else if isSimpleIf elseCont then
             [L.IfStat
                ( doExp (ctx, env, cond)
                , vector (doCExp (ctx, env, defaultCont, thenCont))
                , vector (doCExp (ctx, env, defaultCont, elseCont))
                )]
+          else
+            L.IfStat
+              ( doExp (ctx, env, cond)
+              , vector (doCExp (ctx, env, NONE, thenCont))
+              , vector []
+              ) :: doCExp (ctx, env, defaultCont, elseCont)
         end
     | doCExp
         ( ctx
