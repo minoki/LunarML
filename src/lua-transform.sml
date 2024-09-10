@@ -1228,47 +1228,16 @@ struct
       | usedLabelsStat (L.LabelStat _, acc) = acc
     and usedLabelsBlock (block, acc) =
       Vector.foldl usedLabelsStat acc block
-    fun go used =
+    fun doBlock block =
       let
-        fun goExp (x as L.ConstExp _) = x
-          | goExp (x as L.VarExp _) = x
-          | goExp (L.TableExp elems) =
-              L.TableExp (Vector.map (fn (k, v) => (k, goExp v)) elems)
-          | goExp (L.CallExp (x, args)) =
-              L.CallExp (goExp x, Vector.map goExp args)
-          | goExp (L.MethodExp (x, name, args)) =
-              L.MethodExp (goExp x, name, Vector.map goExp args)
-          | goExp (L.FunctionExp (params, body)) =
-              L.FunctionExp (params, goBlock body)
-          | goExp (L.BinExp (p, x, y)) =
-              L.BinExp (p, goExp x, goExp y)
-          | goExp (L.UnaryExp (p, x)) =
-              L.UnaryExp (p, goExp x)
-        and goStat (L.LocalStat (lhs, rhs), acc) =
-              L.LocalStat (lhs, List.map goExp rhs) :: acc
-          | goStat (L.AssignStat (lhs, rhs), acc) =
-              L.AssignStat (List.map goExp lhs, List.map goExp rhs) :: acc
-          | goStat (L.CallStat (x, args), acc) =
-              L.CallStat (goExp x, Vector.map goExp args) :: acc
-          | goStat (L.MethodStat (x, name, args), acc) =
-              L.MethodStat (goExp x, name, Vector.map goExp args) :: acc
-          | goStat (L.IfStat (x, t, e), acc) =
-              L.IfStat (goExp x, goBlock t, goBlock e) :: acc
-          | goStat (L.ReturnStat xs, acc) =
-              L.ReturnStat (Vector.map goExp xs) :: acc
-          | goStat (L.DoStat {loopLike, body}, acc) =
-              L.DoStat {loopLike = loopLike, body = goBlock body} :: acc
-          | goStat (stat as L.GotoStat _, acc) = stat :: acc
-          | goStat (stat as L.LabelStat label, acc) =
+        val used = usedLabelsBlock (block, LabelSet.empty)
+        fun goStat (stat as L.LabelStat label, acc) =
               if LabelSet.member (used, label) then stat :: acc else acc
-        and goBlock block =
+          | goStat (stat, acc) = stat :: acc
+        fun doBlock block =
           Vector.fromList (Vector.foldr goStat [] block)
       in
-        goBlock
-      end
-    fun doBlock block =
-      let val used = usedLabelsBlock (block, LabelSet.empty)
-      in go used block
+        L.recursePost {exp = fn x => x, stat = fn x => x, block = doBlock} block
       end
   end
 end;

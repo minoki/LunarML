@@ -78,6 +78,12 @@ sig
   val makeDoStat: {loopLike: bool, body: Stat list} -> Stat list
   val MultiAssignStat: Id list * Exp list -> Stat list
   val predefinedIdsInBlock: Block * StringSet.set -> StringSet.set
+  val recursePre: {exp: Exp -> Exp, stat: Stat -> Stat, block: Block -> Block}
+                  -> Block
+                  -> Block
+  val recursePost: {exp: Exp -> Exp, stat: Stat -> Stat, block: Block -> Block}
+                   -> Block
+                   -> Block
 end =
 struct
   datatype TableKey = IntKey of int | StringKey of string
@@ -308,6 +314,76 @@ struct
     | predefinedIdsInStat (LabelStat _, acc) = acc
   and predefinedIdsInBlock (block, acc) =
     Vector.foldl predefinedIdsInStat acc block
+  (*: val recursePre : { exp : Exp -> Exp, stat : Stat -> Stat, block : Block -> Block } -> Block -> Block *)
+  fun recursePre {exp = doExp, stat = doStat: Stat -> Stat, block = doBlock} =
+    let
+      fun goExp exp =
+        (case doExp exp of
+           x as ConstExp _ => x
+         | x as VarExp _ => x
+         | TableExp fields =>
+             TableExp (Vector.map (fn (k, v) => (k, goExp v)) fields)
+         | CallExp (x, args) => CallExp (goExp x, Vector.map goExp args)
+         | MethodExp (x, name, args) =>
+             MethodExp (goExp x, name, Vector.map goExp args)
+         | FunctionExp (params, body) => FunctionExp (params, goBlock body)
+         | BinExp (p, x, y) => BinExp (p, goExp x, goExp y)
+         | UnaryExp (p, x) => UnaryExp (p, goExp x))
+      and goStat stat =
+        (case doStat stat of
+           LocalStat (lhs, rhs) => LocalStat (lhs, List.map goExp rhs)
+         | AssignStat (lhs, rhs) =>
+             AssignStat (List.map goExp lhs, List.map goExp rhs)
+         | CallStat (x, args) => CallStat (goExp x, Vector.map goExp args)
+         | MethodStat (x, name, args) =>
+             MethodStat (goExp x, name, Vector.map goExp args)
+         | IfStat (x, y, z) => IfStat (goExp x, goBlock y, goBlock z)
+         | ReturnStat xs => ReturnStat (Vector.map goExp xs)
+         | DoStat {loopLike, body} =>
+             DoStat {loopLike = loopLike, body = goBlock body}
+         | stat as GotoStat _ => stat
+         | stat as LabelStat _ => stat)
+      and goBlock block =
+        Vector.map goStat (doBlock block)
+    in
+      goBlock
+    end
+  (*: val recursePost : { exp : Exp -> Exp, stat : Stat -> Stat, block : Block -> Block } -> Block -> Block *)
+  fun recursePost {exp = doExp, stat = doStat: Stat -> Stat, block = doBlock} =
+    let
+      fun goExp exp =
+        doExp
+          (case exp of
+             x as ConstExp _ => x
+           | x as VarExp _ => x
+           | TableExp fields =>
+               TableExp (Vector.map (fn (k, v) => (k, goExp v)) fields)
+           | CallExp (x, args) => CallExp (goExp x, Vector.map goExp args)
+           | MethodExp (x, name, args) =>
+               MethodExp (goExp x, name, Vector.map goExp args)
+           | FunctionExp (params, body) => FunctionExp (params, goBlock body)
+           | BinExp (p, x, y) => BinExp (p, goExp x, goExp y)
+           | UnaryExp (p, x) => UnaryExp (p, goExp x))
+      and goStat stat =
+        doStat
+          (case stat of
+             LocalStat (lhs, rhs) => LocalStat (lhs, List.map goExp rhs)
+           | AssignStat (lhs, rhs) =>
+               AssignStat (List.map goExp lhs, List.map goExp rhs)
+           | CallStat (x, args) => CallStat (goExp x, Vector.map goExp args)
+           | MethodStat (x, name, args) =>
+               MethodStat (goExp x, name, Vector.map goExp args)
+           | IfStat (x, y, z) => IfStat (goExp x, goBlock y, goBlock z)
+           | ReturnStat xs => ReturnStat (Vector.map goExp xs)
+           | DoStat {loopLike, body} =>
+               DoStat {loopLike = loopLike, body = goBlock body}
+           | stat as GotoStat _ => stat
+           | stat as LabelStat _ => stat)
+      and goBlock block =
+        doBlock (Vector.map goStat block)
+    in
+      goBlock
+    end
 end;
 
 structure LuaWriter :>
